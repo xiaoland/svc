@@ -1,36 +1,26 @@
 # SOP Template: Mode B (Solidify)
 
-## Trigger
+## Role
 
-Use after exploration when enough signal exists to promote stable truths.
+Use when findings must be restated into stable claims, contracts, decisions, or promotion candidates.
+
+This mode often bridges tasks and durable docs, and it may occur multiple times inside the same task.
 
 ## Forbidden
 
-- Do not start coding before durable truth placement is confirmed.
+- Do not start coding while durable ownership is still ambiguous.
+- Do not promote unstable guesses into PRD, TDD, or deployment docs.
 
 ## Read-Do Steps
 
-1. Collect candidate truths from task output.
-2. Classify each truth by owner (PRD, Product TDD, Unit TDD, Deployment, Alignment).
-3. Perform pre-execution restatement.
-4. Propose doc changes for confirmation.
-5. Apply approved durable doc updates.
-
-### Pre-Execution Restatement Contract
-
-- target
-- state/context
-- operation
-- scope
-- invariants
-- likely affected files
-- uncertainty
-
-## Pause Point
-
-Wait for human approval after restatement and before applying updates.
+1. Gather the current findings, evidence, and assumptions.
+2. Decide which truths are stable enough to promote and which must stay in tasks.
+3. Restate the target, scope, invariants, and verification.
+4. Confirm the durable owner for each promoted truth.
+5. Hand off to Execute or return to Explore if ownership is still unclear.
 
 ## Exit Criteria
 
-- Durable docs updated and approved.
-- Execution can safely move to Mode C if coding is needed.
+- Durable ownership is explicit.
+- Verification is explicit.
+- The next edit or implementation step is safe to perform.

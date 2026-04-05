@@ -2,11 +2,14 @@
 
 ## Core Thesis
 
+PRD owns product intent and observable behavior. It is the default durable destination for Intent inputs.
+
 PRD must follow this absolute rule:
 
 - PRD is not upstream domain-driven.
-- PRD is driven by market, business, constraints, and operational pressures.
+- PRD is driven by market, business, constraint, and operational pressures.
 - Domain boundaries are derived inside PRD as a semantic stabilizer, not a prerequisite.
+- Business vocabulary lives in `10-prd/glossary.md`, not in framework meta docs.
 
 This prevents premature hardening around domain models and keeps product intent grounded in real pressure signals.
 
@@ -19,6 +22,7 @@ PRD must use a one-way derivation flow:
 ```text
 10-prd/
 |-- index.md
+|-- glossary.md
 |-- _drivers/
 |   |-- market-and-user-pressures.md
 |   |-- business-and-service-objectives.md
@@ -31,16 +35,24 @@ PRD must use a one-way derivation flow:
 |   |-- rules-and-invariants.md
 |   `-- scope.md
 `-- domain-structure/
-	|-- derived-boundaries.md
-	|-- vocabulary-and-lifecycle.md
-	`-- cross-domain-interactions.md
+    |-- derived-boundaries.md
+    `-- cross-domain-interactions.md
 ```
 
 ## Layer Dependency Rule
 
 - `_drivers/` is always upstream. Every product decision must trace back to pressure signals in this layer.
 - `behavior/` is the core of PRD. It defines externally committed product behavior.
-- `domain-structure/` is derived only. It may organize vocabulary and semantics, but must not push new obligations back into `_drivers/` or `behavior/`.
+- `domain-structure/` is derived only. It may organize boundaries and semantic interactions, but must not push new obligations back into `_drivers/` or `behavior/`.
+- `glossary.md` stabilizes business language for the product layer. It must not redefine framework ontology.
+
+## Intent Route Contract
+
+When work is classified as Intent:
+
+1. Check whether existing product claims would be broken, weakened, or superseded.
+2. Update the relevant drivers and behavior docs before changing technical realization docs.
+3. Link downstream realization only after product truth is stable.
 
 ## Ontology
 
@@ -51,8 +63,9 @@ PRD authors and AI agents must use these terms consistently:
 - Capability: what the product can do
 - Workflow: user or service observable behavior path
 - Domain: semantic boundary derived after drivers and behavior are defined
+- Glossary Term: a business-owned word or phrase whose meaning must stay stable across product discussions
 
-## laim-Centered Evaluation
+## Claim-Centered Evaluation
 
 `behavior/claims.md` is the bridge between business intent and implementation.
 

@@ -1,9 +1,17 @@
 # Task Template: Diagnostics Matrix
 
-## Incident
+## MVT Core
 
-- id:
-- symptom summary:
+- Objective & Hypothesis: identify the root cause of <symptom> and verify the most likely explanation
+- Guardrails Touched: no evidence, no modification; preserve existing product claims until disproven
+- Verification: reproduce or falsify the suspected cause with logs, tests, traces, or other observable evidence
+
+## Perturbation
+
+- signal:
+- input type: Reality
+- active mode: Diagnose
+- governing anchors:
 
 ## Failure Mode Matrix
 
@@ -12,8 +20,15 @@
 | | | | | |
 | | | | | |
 
-## Decision Gate
+## Temporary Assumptions
 
-- can run deployment runbook now: yes/no
-- should switch to mode C fix: yes/no
-- approver:
+- assumption:
+
+## Negotiation Triggers
+
+- stop and ask for help when:
+
+## Promotion Candidates
+
+- local tripwire to add after fix:
+- stable contract or runbook update to promote:

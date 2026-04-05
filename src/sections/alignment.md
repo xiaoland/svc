@@ -12,10 +12,10 @@ Create 15-alignment only when humans and agents repeatedly drift on references, 
 
 - shared addressing formats
 - surface maps
-- controlled operation vocabulary
+- controlled operation vocabulary for coordination only
 - change request templates
 
-It does not own product why, business rules, or runtime topology.
+It does not own product why, business rules, framework ontology, business glossary, or runtime topology.
 
 ## 6.4 Stable Anchor Rule
 

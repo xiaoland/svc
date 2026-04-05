@@ -5,6 +5,7 @@
 ```text
 10-prd/
 |-- index.md
+|-- glossary.md
 |-- _drivers/
 |   |-- market-and-user-pressures.md
 |   |-- business-and-service-objectives.md
@@ -17,9 +18,8 @@
 |   |-- rules-and-invariants.md
 |   `-- scope.md
 `-- domain-structure/
-	|-- derived-boundaries.md
-	|-- vocabulary-and-lifecycle.md
-	`-- cross-domain-interactions.md
+    |-- derived-boundaries.md
+    `-- cross-domain-interactions.md
 ```
 
 ## index.md
@@ -27,6 +27,13 @@
 - one-way derivation statement: Drivers -> Behavior -> Domain Structure
 - scope of this PRD package:
 - links to all sub-files:
+
+## glossary.md
+
+- term:
+- canonical business meaning:
+- user-visible or business lifecycle language:
+- notes on ambiguity with framework terms:
 
 ## _drivers/market-and-user-pressures.md
 
@@ -62,6 +69,7 @@ For each major claim, use this block:
 - evidence expectation:
 - source rationale (links to `_drivers/*`):
 - realization pointers (links to `20-product-tdd/*` or `30-unit-tdd/*`):
+- impact on existing claims:
 
 Default policy:
 
@@ -100,18 +108,13 @@ Default policy:
 - derivation source (drivers/behavior references):
 - boundary intent:
 
-## domain-structure/vocabulary-and-lifecycle.md
-
-- term:
-- canonical meaning:
-- lifecycle states:
-
 ## domain-structure/cross-domain-interactions.md
 
 - interaction pair:
 - semantic contract:
 - shared language:
 
-Guardrail:
+Guardrails:
 
-- domain-structure cannot add new upstream obligations to `_drivers/` or `behavior/`
+- `domain-structure/` cannot add new upstream obligations to `_drivers/` or `behavior/`
+- `glossary.md` owns business vocabulary; framework ontology stays in `00-meta/concepts.md`

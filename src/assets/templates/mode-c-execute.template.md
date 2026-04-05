@@ -1,41 +1,26 @@
 # SOP Template: Mode C (Execute)
 
-## Trigger
+## Role
 
-Use for clear and scoped implementation work with known causality.
+Use when the current slice of work is clear enough to implement or edit safely.
+
+This mode can appear in any input type once ownership and verification are sufficiently clear.
 
 ## Forbidden
 
-- Do not skip local AGENTS and relevant Unit TDD checks.
-- Do not bypass tests for behavior-affecting changes.
+- Do not skip local AGENTS and relevant TDD checks before coding.
+- Do not keep executing when new evidence shows the problem is still not understood.
 
 ## Read-Do Steps
 
-1. Load root dispatcher guidance and matching mode SOP.
-2. Load nearest local AGENTS.md constraints.
-3. Load relevant Unit TDD and Product TDD context.
-4. Perform pre-execution restatement.
-5. Implement tests first when practical.
-6. Implement code changes and run checks.
-
-### Pre-Execution Restatement Contract
-
-Before changing durable docs or code, restate:
-
-- target
-- state/context
-- operation
-- scope
-- invariants
-- likely affected files
-- uncertainty
-
-## Pause Point
-
-If uncertainty remains high after restatement, pause and return to Mode A or Mode B.
+1. Restate the exact change and verification plan.
+2. Load the nearest local AGENTS plus any governing PRD, TDD, or deployment docs.
+3. Implement the smallest safe change for the current slice.
+4. Run checks and compare the result against the declared verification.
+5. If unexpected behavior appears, re-enter Explore or Diagnose instead of guessing.
 
 ## Exit Criteria
 
-- Requested behavior is implemented.
-- Tests and checks pass.
-- No invariant in local AGENTS or TDD docs is violated.
+- The requested change for this slice is implemented.
+- Verification passes.
+- No known invariant is violated.

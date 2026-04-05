@@ -1,28 +1,26 @@
 # SOP Template: Mode D (Diagnose)
 
-## Trigger
+## Role
 
-Use for outages, anomalies, crashes, corruption, or unclear runtime failures.
+Use when observed reality diverges from expectations and evidence must be collected before action.
+
+This mode is common in Reality work, but it can reappear anywhere execution produces unexplained behavior.
 
 ## Forbidden
 
-- Strict read-only: no source code modifications.
-- No guess-first fixes.
+- No evidence, no modification.
+- Do not collapse multiple hypotheses into one guess.
 
 ## Read-Do Steps
 
-1. Collect telemetry (logs, metrics, traces, events).
-2. Establish timeline and blast radius.
-3. Build a failure-mode matrix in tasks/.
-4. Define validation steps for each hypothesis.
-5. Recommend transition: continue diagnosis, execute runbook, or switch to Mode C fix.
-
-## Pause Point
-
-Wait for human decision before any fix action or mitigation run.
+1. Capture the observable symptom, timeline, and blast radius.
+2. Collect logs, metrics, traces, failing tests, or other direct evidence.
+3. Build or update a diagnostics matrix.
+4. Rank hypotheses by evidence quality and missing evidence.
+5. Decide whether the next justified step is more diagnosis, exploration, or execution.
 
 ## Exit Criteria
 
-- Evidence-backed likely causes are ranked.
-- Validation plan is explicit.
-- Next mode and operator action are confirmed.
+- Likely causes are ranked with evidence.
+- Missing evidence is explicit.
+- The next action is justified rather than guessed.

@@ -1,26 +1,25 @@
 # SOP Template: Mode A (Explore)
 
-## Trigger
+## Role
 
-Use when requirement is vague, causality is unclear, or solution space is open.
+Use when key unknowns remain and the solution space must be mapped before safe solidification or execution.
+
+This mode is a working posture, not a durable owner, and it can appear inside any input type.
 
 ## Forbidden
 
-- Do not modify production code.
-- Do not update PRD, Product TDD, or Unit TDD.
+- Do not treat exploration notes as durable truth.
+- Do not let open-ended searching replace a concrete next question.
 
 ## Read-Do Steps
 
-1. Open a task note under tasks/.
-2. Capture hypotheses and unknowns.
-3. Ask clarifying questions and run bounded exploration.
-4. Produce first-principles requirements candidates.
-
-## Pause Point
-
-Wait for human confirmation before transitioning to Mode B.
+1. State the current unknowns and why they block progress.
+2. Record temporary assumptions explicitly.
+3. Run bounded exploration, reading only the smallest useful references.
+4. Reduce the unknowns into candidate decisions, claims, or hypotheses.
+5. Decide whether to stay in Explore, move to Solidify, or return to Diagnose.
 
 ## Exit Criteria
 
-- Key unknowns are reduced.
-- Candidate truths are classified and ready for durable placement decisions.
+- The next decision is framed clearly enough for Solidify or Execute.
+- Remaining uncertainty is explicit rather than hidden.

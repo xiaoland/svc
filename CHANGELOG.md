@@ -13,10 +13,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Typed input taxonomy**: every external perturbation is classified as Intent, Constraint, Reality, or Artifact before any durable update or code change
 - **Minimal viable task protocol**: non-trivial task packets now require Objective & Hypothesis, Guardrails Touched, and Verification anchors
 - **Progressive ontology system**: root AGENTS carries a cheat sheet while `00-meta/concepts.md` becomes the on-demand system dictionary
+- **Mode overlay model**: Explore, Solidify, Execute, and Diagnose remain available as reusable SOPs and mind-patterns that can be revisited within the same task
 
 ### Changed
 
-- **Dispatcher mental model**: routing now follows input type and blast radius instead of ambiguity-only mode dispatch
+- **Dispatcher mental model**: routing now starts from input type and blast radius; Mode Dispatch remains as a secondary SOP layer instead of the sole front-door dispatcher
 - **Business vocabulary boundary**: business terms move to `10-prd/glossary.md`, separate from framework ontology
 - **Reality workflow hardening**: bug work stays evidence-first and records recurrence tripwires in local `AGENTS.md`
 - **Task layer upgrade**: exploration fields are now optional scaffolding rather than mandatory ceremony

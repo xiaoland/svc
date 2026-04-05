@@ -1,5 +1,7 @@
 # Product TDD File Set Template
 
+Use this package when a Constraint input reshapes cross-unit technical contracts or when PRD claims need durable realization memory.
+
 ## unit-topology.md
 
 - units:
@@ -18,6 +20,7 @@
 - consumer:
 - contract schema:
 - compatibility policy:
+- constraining limit or tradeoff:
 
 ## claim-realization-matrix.md
 

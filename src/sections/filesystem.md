@@ -6,21 +6,28 @@ The framework should start minimal and expand only with real pressure.
 
 Use this form as the default startup shape.
 
-- Root AGENTS.md as dispatcher
-- docs/00-meta/ for dynamic protocols
-- docs/10-prd/ for product truth
-- tasks/ as entropy buffer
+- Root AGENTS.md as a typed dispatcher plus ontology cheat sheet
+- docs/00-meta/ for input routes, mode SOPs, and the on-demand concept dictionary
+- docs/10-prd/ for product truth and business glossary
+- tasks/ as the entropy buffer
 
 ```text
 /
 |-- AGENTS.md
 |-- docs/
 |   |-- 00-meta/
+|   |   |-- input-intent.md
+|   |   |-- input-constraint.md
+|   |   |-- input-reality.md
+|   |   |-- input-artifact.md
 |   |   |-- mode-a-explore.md
 |   |   |-- mode-b-solidify.md
 |   |   |-- mode-c-execute.md
-|   |   `-- mode-d-diagnose.md
+|   |   |-- mode-d-diagnose.md
+|   |   `-- concepts.md
 |   `-- 10-prd/
+|       |-- index.md
+|       `-- glossary.md
 `-- tasks/
 ```
 
@@ -32,13 +39,14 @@ Expand only when complexity justifies additional durable memory.
 - docs/20-product-tdd/
 - docs/30-unit-tdd/
 - docs/40-deployment/
-- src/**/AGENTS.md for local tactical hazards
+- src/**/AGENTS.md for local tactical hazards and recurrence tripwires
 
-Under docs/10-prd/, use the v9.4 PRD shape:
+Under docs/10-prd/, use the v9.5 PRD shape:
 
-- _drivers/ as upstream pressure sources
-- behavior/ as core product commitments
-- domain-structure/ as derived semantic stabilization
+- `_drivers/` as upstream pressure sources
+- `behavior/` as core product commitments
+- `domain-structure/` as derived semantic stabilization
+- `glossary.md` as the business-owned vocabulary boundary
 
 ```text
 /
@@ -53,15 +61,22 @@ Under docs/10-prd/, use the v9.4 PRD shape:
 |-- tasks/
 `-- src/
     `-- a-module/
-        |-- AGENTS.md             # for local tactical hazards
+        |-- AGENTS.md             # for local tactical hazards and tripwires
         ...
 ```
 
 ```text
 docs/10-prd/
 |-- index.md
+|-- glossary.md
 |-- _drivers/
 |-- behavior/
 `-- domain-structure/
 ```
 
+Notes:
+
+- `docs/00-meta/concepts.md` owns framework ontology only.
+- `docs/10-prd/glossary.md` owns business/domain language only.
+- Input route docs and mode SOPs are orthogonal: route decides ownership, mode decides how to work.
+- Task filenames are flexible, but every non-trivial task note must include the MVT anchors.

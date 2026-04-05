@@ -20,7 +20,14 @@
 
 - Fragile seam: <description>
 - Failure symptom: <description>
+- Safe mutation pattern: <description>
 - Safe guardrail: <test/check/assertion>
+
+## Tripwires
+
+- Recurrence signal: <what symptom should alert future agents>
+- Required early warning: <test/assert/log/check>
+- Escalate when: <condition that should stop local guessing>
 
 ## Local Navigation Handles
 
