@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.build_monolith import MonolithBuilder
+from src.tools.build_monolith import MonolithBuilder
 
 
 class BuildMonolithTests(unittest.TestCase):
