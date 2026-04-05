@@ -13,5 +13,5 @@ build-backend = "pdm.backend"
 distribution = false
 
 [tool.pdm.scripts]
-build-monolith = "python -m doc_tools.build_monolith"
+build-monolith = "python -m src.tools.build_monolith"
 test = "python -m unittest discover -s tests -p 'test_*.py'"
