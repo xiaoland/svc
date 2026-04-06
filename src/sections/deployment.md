@@ -4,7 +4,7 @@ Deployment docs exist only when runtime and operational truth becomes non-trivia
 
 Keep this layer tightly operational and evidence-oriented.
 
-In v9.5, Deployment is most relevant during Reality work:
+In v9.6, Deployment is most relevant during Reality work:
 
 - use logs, metrics, traces, and runbooks as evidence inputs
 - keep mitigations and rollback procedures here

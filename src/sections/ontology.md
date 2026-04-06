@@ -6,7 +6,7 @@ The framework uses layered ontology access so agents get guardrails without payi
 
 Root AGENTS.md should carry only the minimum ontology needed for zero-shot orientation:
 
-- Unit: a logical technical boundary and ownership surface; it is not the same thing as a folder.
+- Unit: a logical technical boundary and ownership surface; it is not the same thing as a folder or necessarily the same thing as a repo.
 - PRD (`10-prd/`): owns business intent and observable behavior, never implementation mechanics.
 - Product TDD (`20-product-tdd/`): owns cross-unit technical contracts and system topology.
 - Unit TDD (`30-unit-tdd/`): owns a unit's internal logic architecture and internal contracts.
@@ -28,6 +28,8 @@ Default behavior:
 
 - do not preload the concept dictionary into every task
 - summarize only the needed concepts into the active task packet
+
+Topology-specific terms such as Hub, Spoke, or shared mounts should be loaded only when a topology extension is actually active.
 
 ## Business Vocabulary Isolation
 

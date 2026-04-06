@@ -35,6 +35,7 @@ Read the following documents when needed and keep them current:
 - `**/*/AGENTS.md`: when touching a directory, recursively inspect that directory and parents for local AGENTS.md. Local constraints are additive and may override generic defaults for that subtree. Add local `AGENTS.md` under complex modules when local constraints or tripwires are needed.
 
 > When implementation reveals reusable knowledge, promote it into durable docs.
+> If the repo uses a topology extension, add that extension's read paths and SOPs locally instead of bloating the default template.
 
 ## Operating Model
 
@@ -42,9 +43,10 @@ Read the following documents when needed and keep them current:
 2. Identify the owning layer and open a task packet for non-trivial work.
 3. Choose the active mode for this slice of work: Explore, Solidify, Execute, or Diagnose.
 4. Load only the route doc, mode SOP, and governing anchors needed for this work.
-5. Execute and verify.
-6. Re-enter a different mode if the evidence state changes.
-7. Promote only stable truths after verification.
+5. Load topology-extension guidance only when the repo shape actually requires it.
+6. Execute and verify.
+7. Re-enter a different mode if the evidence state changes.
+8. Promote only stable truths after verification.
 
 ### Typed Input Guide
 

@@ -28,6 +28,14 @@
 5. Move business vocabulary ownership from `10-prd/domain-structure/vocabulary-and-lifecycle.md` to `10-prd/glossary.md`.
 6. Require Reality workflows to stay evidence-first and record recurrence tripwires in the nearest local `AGENTS.md` when warranted.
 
+## v9.5 -> v9.6
+
+1. Keep mono-repo as the default startup shape and default cognitive model.
+2. Add multi-repo only as a pressure-driven topology extension when shared truth no longer fits one repo cleanly.
+3. Move Hub/Spoke, shared mounts, source-first mutation, and freshness rules into that optional extension instead of default templates.
+4. Keep the 20/30 boundary sharp in both topologies: cross-unit contracts stay in Product TDD; one-unit internals stay in Unit TDD or local `AGENTS.md`.
+5. Use a dedicated shared-doc skill to absorb submodule safety complexity when the multi-repo extension is active.
+
 ### Related Assets
 
 - [Root AGENTS Template](../assets/templates/AGENTS.root.template.md)

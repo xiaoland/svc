@@ -2,6 +2,8 @@
 
 The framework should start minimal and expand only with real pressure.
 
+Single-repo remains the default startup shape. Topology extensions should be added only when one product truly outgrows one codebase or one worktree.
+
 ## Minimal Form
 
 Use this form as the default startup shape.
@@ -31,7 +33,7 @@ Use this form as the default startup shape.
 `-- tasks/
 ```
 
-## Expanded Form
+## Expanded Single-Repo Form
 
 Expand only when complexity justifies additional durable memory.
 
@@ -41,7 +43,7 @@ Expand only when complexity justifies additional durable memory.
 - docs/40-deployment/
 - src/**/AGENTS.md for local tactical hazards and recurrence tripwires
 
-Under docs/10-prd/, use the v9.5 PRD shape:
+Under docs/10-prd/, use the v9.6 PRD shape:
 
 - `_drivers/` as upstream pressure sources
 - `behavior/` as core product commitments
@@ -80,3 +82,11 @@ Notes:
 - `docs/10-prd/glossary.md` owns business/domain language only.
 - Input route docs and mode SOPs are orthogonal: route decides ownership, mode decides how to work.
 - Task filenames are flexible, but every non-trivial task note must include the MVT anchors.
+
+## Optional Topology Extensions
+
+The startup shapes above remain the default mono-repo model.
+
+If one product spans multiple repositories and shared truth would otherwise be copied or drift, add a topology extension rather than replacing the default model wholesale.
+
+For the multi-repo variant, see [Optional Multi-Repo Extension](multi-repo.md).
