@@ -56,4 +56,4 @@
   - Reframe multi-repo from "new default posture" to "pressure-driven optional extension".
   - Narrow `edit-svc-shared-docs` so its main job is protecting Spoke agents from unsafe submodule edits and reducing Git submodule complexity.
 - final outcome:
-  - Pending redesign of the current v9.6 draft so mono-repo remains the default and multi-repo becomes progressively loaded.
+  - v9.6 redesigned so mono-repo remains the default path, multi-repo moves into an optional extension, and `edit-svc-shared-docs` is narrowed to submodule-safe shared-doc editing.

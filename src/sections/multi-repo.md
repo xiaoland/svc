@@ -2,7 +2,7 @@
 
 Multi-repo is a pressure-driven topology extension, not the default SVC posture.
 
-Load this extension only when one product spans multiple repositories and shared truth would otherwise be copied, drift, or force agents to leave the local worktree constantly.
+Load this extension only when one product spans multiple repositories and shared truth would otherwise be duplicated, drift, or force repeated repo switching.
 
 ## Admission Rule
 
@@ -10,7 +10,7 @@ Adopt the multi-repo extension only when all are true:
 
 1. one product or system spans multiple repos
 2. shared PRD, shared meta rules, or shared cross-unit contracts would otherwise be duplicated
-3. the team is willing to accept explicit shared-ref freshness and mutation discipline
+3. the team is willing to enforce shared-ref freshness and mutation discipline
 
 If these conditions are not present, stay mono-repo.
 
@@ -67,7 +67,7 @@ When Spoke execution discovers a missing shared rule:
 
 Never mix Hub doc edits, Spoke shared-ref bumps, and Spoke-local code changes in one commit.
 
-When available, use the repo skill `edit-svc-shared-docs` to reduce submodule editing risk and protect Spoke agents from unsafe shared-doc edits.
+Use the repo skill `edit-svc-shared-docs` when available. Its job is to reduce submodule editing risk and protect Spoke agents from unsafe shared-doc edits.
 
 ## Shared vs Local Boundary
 

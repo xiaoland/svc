@@ -48,5 +48,6 @@ That keeps the 90 percent path simple while still giving the 10 percent path a f
 
 ## Verification Snapshot
 
-- Current implementation is being revised because the first v9.6 draft pushed multi-repo too far into the default path.
-- The next draft should verify that mono-repo defaults stay light while multi-repo remains fully supported through optional extension rules and the dedicated skill.
+- `pdm run build-monolith` passed after the redesign.
+- `pdm run test` passed after the redesign.
+- The current draft keeps mono-repo in the default path and moves multi-repo detail into an optional extension plus the dedicated skill.

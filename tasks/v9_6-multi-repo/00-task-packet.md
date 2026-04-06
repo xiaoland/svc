@@ -21,4 +21,4 @@
 
 - key findings: Current v9.5 lacks an explicit hub/spoke topology, a shared-doc mutation protocol, a freshness contract, and a multi-repo interpretation of the `20-product-tdd` versus `30-unit-tdd` boundary, but it already works well as a mono-repo default.
 - decisions made: Capture the current synthesis and objections inside this task container before further framework edits, and reframe multi-repo as an optional extension rather than a universal default.
-- final outcome: Pending redesign and recommit.
+- final outcome: Redesign implemented; pending commit and later prose-tightening pass.

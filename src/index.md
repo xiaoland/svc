@@ -1,7 +1,7 @@
 # Sustainable Vibe Coding Framework v9.6
 
 > Version: v9.6
-> Last edit on: 2026-04-06T11:04+08:00
+> Last edit on: 2026-04-06T11:46+08:00
 
 Sustainable Vibe Coding exists to make AI-assisted software development maintainable for a small team or a one-person company.
 
@@ -16,7 +16,7 @@ The framework stays intentionally small:
 - Tasks absorb volatility, but non-trivial work still carries minimal guardrails.
 - Concepts load progressively: cheat sheet first, full dictionary only on demand.
 - Mode Dispatch is reusable SOP overlays rather than the only dispatcher.
-- Topology extensions are pressure-driven: mono-repo stays default, and multi-repo loads only when one product truly outgrows one repo.
+- Topology extensions are pressure-driven: keep mono-repo as default; load multi-repo only when one product outgrows one repo.
 
 Its core job is to help humans and agents answer:
 
@@ -26,7 +26,7 @@ Its core job is to help humans and agents answer:
 - what runtime truths matter operationally
 - how to align at the correct level of granularity when natural language alone is not enough
 - what should stay ephemeral in tasks rather than being promoted into durable docs
-- how to extend the default mono-repo model only when topology pressure justifies it
+- how to extend mono-repo only when topology pressure requires it
 - how to classify incoming work before choosing a document owner or mutation path
 - how to explore ambiguous work without drifting away from core guardrails
 - how to keep core ontology available without bloating the context window
@@ -48,7 +48,7 @@ Its core job is to help humans and agents answer:
 - what runtime truths matter operationally
 - how to align at the correct level of granularity when natural language alone is not enough
 - what should stay ephemeral in tasks rather than being promoted into durable docs
-- how to extend the default mono-repo model only when topology pressure justifies it
+- how to extend mono-repo only when topology pressure requires it
 - how to route work by input type before choosing the current SOP
 - how to keep exploration bounded without killing creativity
 - how to colocate complexity-dissolving memory as close to target code as possible
@@ -68,8 +68,8 @@ Its core job is to help humans and agents answer:
 - Do not build a second software system out of docs: documentation is support structure, not a parallel runtime.
 - Alignment docs are coordination artifacts, not a new truth layer: an alignment pack may be justified when drift repeats due to references, naming, or granularity mismatch.
 - Pacing layers protect clarity: slow logical boundaries must be decoupled from fast physical code directories.
-- Topology extensions load progressively: mono-repo remains the default path, and extension-specific protocols should be loaded only when the repository shape actually requires them.
-- Multi-repo is an optional extension, not a new default posture: when one product spans multiple repos, add explicit Hub/Spoke rules without pushing `docs/_shared/` and shared-ref workflows onto ordinary mono-repo work.
+- Topology extensions load progressively: keep mono-repo as default; load extension protocols only when the repo shape requires them.
+- Multi-repo is optional: add Hub/Spoke rules only when one product spans repos; do not push `docs/_shared` workflows onto mono-repo by default.
 
 ## Front-Door Execution Loop
 
@@ -77,7 +77,7 @@ Its core job is to help humans and agents answer:
 2. Identify the owning layer and blast radius before choosing how to work.
 3. For non-trivial work, open a task packet with the three MVT anchors.
 4. Select the current mode overlay: Explore, Solidify, Execute, or Diagnose. Revisit modes as the task evolves.
-5. Load only the governing anchors needed for this route, mode, and active topology: PRD, Product TDD, Unit TDD, local AGENTS, deployment runbooks, glossary, concepts, and any extension-specific SOPs that actually apply.
+5. Load only the anchors needed for this route, mode, and active topology (if any): PRD, Product TDD, Unit TDD, local AGENTS, deployment runbooks, glossary, concepts, and any extension SOPs that apply.
 6. Make changes only inside the owning layer for that truth.
 7. Promote new knowledge only when it passes the promotion test.
 
@@ -95,7 +95,7 @@ Its core job is to help humans and agents answer:
 > Product truth and implementation truth remain separate by design.
 > Unit TDD and Local AGENTS are complementary, not substitutes.
 > Input type decides ownership; mode decides the current working posture.
-> Mono-repo stays the default startup shape; topology extensions such as multi-repo should be loaded only when real pressure demands them.
+> Mono-repo stays the default startup shape; topology extensions such as multi-repo load only when real pressure demands them.
 
 ### Pacing Layers Map
 
@@ -113,7 +113,7 @@ Rule of thumb:
 - If truth should survive directory refactors, put it in Structure.
 - If truth protects a fragile local seam, keep it near code in Stuff.
 - If truth is still exploratory, keep it in Tasks until stability is proven.
-- If topology pressure appears, extend the default model incrementally instead of replacing it wholesale.
+- If topology pressure appears, extend the default model incrementally rather than replacing it wholesale.
 - If ownership is unclear, do not let mode selection hide that ambiguity; resolve the route first.
 
 ## Section Index
@@ -141,7 +141,7 @@ Rule of thumb:
 - Using docs to compensate for missing tests: if correctness can be guarded mechanically, prefer that.
 - Creating doc families before pain exists: start minimal and grow on evidence.
 - Documenting known-knowns: do not store facts that are easier to read directly from code.
-- Loading topology extensions by default: do not make mono-repo users think about Hub/Spoke, `docs/_shared/`, or shared-ref workflows unless the repo actually uses them.
+- Loading topology extensions by default: do not make mono-repo users carry Hub/Spoke or `docs/_shared` workflows unless the repo actually uses them.
 - Bypassing the task layer: do not update PRD or code from vague prompts without a bounded task packet.
 - Fixing bugs without evidence: Reality work stays read-first until root cause is justified.
 
