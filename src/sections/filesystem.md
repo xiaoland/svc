@@ -43,7 +43,7 @@ Expand only when complexity justifies additional durable memory.
 - docs/40-deployment/
 - src/**/AGENTS.md for local tactical hazards and recurrence tripwires
 
-Under docs/10-prd/, use the v9.6 PRD shape:
+Under docs/10-prd/, use this shape:
 
 - `_drivers/` as upstream pressure sources
 - `behavior/` as core product commitments

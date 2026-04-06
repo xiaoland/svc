@@ -1,7 +1,7 @@
-# Sustainable Vibe Coding Framework v9.6
+# Sustainable Vibe Coding Framework v9.7
 
-> Version: v9.6
-> Last edit on: 2026-04-06T11:46+08:00
+> Version: v9.7
+> Last edit on: 2026-04-06T20:39+08:00
 
 Sustainable Vibe Coding exists to make AI-assisted software development maintainable for a small team or a one-person company.
 
@@ -66,7 +66,8 @@ Its core job is to help humans and agents answer:
 - Progressive ontology beats full-context dumping: keep only a cheat sheet in root AGENTS and load `00-meta/concepts.md` only when classification or boundary language becomes ambiguous.
 - Docs are for expensive unknowns: a durable doc should exist only when future humans or agents would otherwise make costly mistakes.
 - Do not build a second software system out of docs: documentation is support structure, not a parallel runtime.
-- Alignment docs are coordination artifacts, not a new truth layer: an alignment pack may be justified when drift repeats due to references, naming, or granularity mismatch.
+- Alignment docs are coordination artifacts, not a new truth layer: an alignment substrate may be justified when drift repeats due to references, naming, state ambiguity, or mutation-contract mismatch.
+- Human intent may stay fuzzy, but boundary-crossing execution must compile into a low-entropy coordination grammar before durable truth is mutated.
 - Pacing layers protect clarity: slow logical boundaries must be decoupled from fast physical code directories.
 - Topology extensions load progressively: keep mono-repo as default; load extension protocols only when the repo shape requires them.
 - Multi-repo is optional: add Hub/Spoke rules only when one product spans repos; do not push `docs/_shared` workflows onto mono-repo by default.
@@ -85,7 +86,7 @@ Its core job is to help humans and agents answer:
 
 1. Meta Engine Layer (00-meta/): typed dispatcher protocols, mode SOPs, on-demand concepts, and minimal route-specific scaffolds
 2. PRD Layer (10-prd/): product what, why, observable behavior, and business glossary
-3. Alignment Substrate (15-alignment/): optional pressure-driven coordination support
+3. Alignment Substrate (15-alignment/): optional pressure-driven coordination grammar
 4. Product TDD Layer (20-product-tdd/): cross-unit technical truth and global topology
 5. Unit TDD Layer (30-unit-tdd/): logical structural design independent of src folder movement
 6. Local Context Layer (Local AGENTS.md): tactical hazards and recurrence tripwires tied to exact code areas
@@ -123,7 +124,7 @@ Rule of thumb:
 3. [Typed Taxonomy and Mode Engine](sections/meta-engine.md)
 4. [Progressive Ontology](sections/ontology.md)
 5. [PRD](sections/prd.md)
-6. [Alignment Pack](sections/alignment.md)
+6. [Alignment Substrate](sections/alignment.md)
 7. [Product TDD](sections/product-tdd.md)
 8. [Unit TDD and Local Context](sections/unit-tdd.md)
 9. [Deployment](sections/deployment.md)

@@ -18,7 +18,7 @@
 | Logical structure inside a unit | Unit TDD | docs/30-unit-tdd/* |
 | Local tactical hazards and tripwires | Local AGENTS | src/**/AGENTS.md |
 | Runtime and operations runbooks | Deployment | docs/40-deployment/* |
-| Ambiguous targeting conventions | Alignment | docs/15-alignment/* |
+| Ambiguous targeting and coordination conventions | Alignment Substrate | docs/15-alignment/* |
 | Reusable workflows, route protocols, and ontology rules | Meta Engine | docs/00-meta/* |
 | Volatile hypotheses and temporary reasoning | Tasks | tasks/* |
 

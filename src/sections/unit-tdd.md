@@ -1,6 +1,6 @@
 # Unit TDD and Local Context
 
-v9.6 keeps pacing layers to separate logical design from physical placement.
+Use pacing layers to separate logical design from physical placement.
 
 ## 9.1 Unit TDD (30-unit-tdd) -> Structure
 

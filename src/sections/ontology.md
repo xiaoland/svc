@@ -28,6 +28,7 @@ Default behavior:
 
 - do not preload the concept dictionary into every task
 - summarize only the needed concepts into the active task packet
+- treat alignment substrate terms such as object, address, operation, boundary, state/context, evidence, and protocol as on-demand coordination concepts; load them only when targeting, mutation-contract, or handshake language becomes ambiguous
 
 Topology-specific terms such as Hub, Spoke, or shared mounts should be loaded only when a topology extension is actually active.
 

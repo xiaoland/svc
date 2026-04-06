@@ -36,6 +36,14 @@
 4. Keep the 20/30 boundary sharp in both topologies: cross-unit contracts stay in Product TDD; one-unit internals stay in Unit TDD or local `AGENTS.md`.
 5. Use a dedicated shared-doc skill to absorb submodule safety complexity when the multi-repo extension is active.
 
+## v9.6 -> v9.7
+
+1. Rename Alignment Pack to Alignment Substrate to emphasize a reusable coordination grammar rather than a static document bundle.
+2. Treat alignment as seven coordination primitives: object, address, operation, invariants, state/context, evidence, and protocol.
+3. Prefer calculable maps from stable code anchors over hand-maintained static surface maps.
+4. Express alignment requests as declarative `From -> To` state diffs instead of mixed imperative instructions.
+5. Bind operation verbs to verification contracts and require a pre-execution impact handshake before non-local durable mutations.
+
 ### Related Assets
 
 - [Root AGENTS Template](../assets/templates/AGENTS.root.template.md)

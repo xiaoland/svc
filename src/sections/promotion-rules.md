@@ -25,7 +25,7 @@ Promote only if all are true:
 - Logical structural design within a unit -> Unit TDD
 - Hard local complexity and tripwires -> local `AGENTS.md` near code
 - Runtime and ops truth and runbooks -> Deployment
-- Ambiguous targeting -> Alignment pack
+- Ambiguous targeting and coordination grammar -> Alignment Substrate
 - Reusable workflows, route protocols, and ontology rules -> Meta engine (`00-meta`)
 
 ## Related Assets

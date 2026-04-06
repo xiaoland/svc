@@ -1,4 +1,4 @@
-# Alignment Change Request Template
+# Alignment Substrate Request Template
 
 ## Request Metadata
 
@@ -6,25 +6,35 @@
 - target surface:
 - requester:
 
-## Target Addressing
+## Coordination Primitives
 
-- stable anchors (ids/selectors/names):
-- region name:
-- element name:
+### Reference
 
-## Intended Operation
+- object:
+- address:
 
-- operation type:
-- before state:
-- after state:
+### Mutation Contract
 
-## Constraints
+- operation:
+- invariants / boundaries:
 
-- must keep:
-- must avoid:
-- uncertain points:
+### Grounding and Synchronization
+
+- applicable state / context:
+- evidence:
+- protocol / handshake checkpoint:
+
+## Desired State Diff
+
+- from:
+- to:
+
+## Blast Radius Forecast
+
+- touched anchors / files:
+- downstream surfaces at risk:
+- explicitly out of scope:
 
 ## Acceptance Check
 
-- visible check:
-- regression check:
+- verification contract:

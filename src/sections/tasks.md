@@ -21,7 +21,21 @@ Every non-trivial task packet must explicitly include these three anchors:
 
 These are guardrails, not bureaucracy.
 
-## 11.3 Task and Mode Relationship
+## 11.3 Substrate Expansion Rule
+
+Most tasks do not need substrate-complete wording.
+
+Keep MVT as the default lightweight task frame. Expand the active task into alignment substrate fields only when coordination risk exceeds what MVT can safely express, for example when:
+
+- references or object boundaries are drifting
+- the valid request depends on state or context
+- operation words may hide different side effects
+- evidence is still weak or missing
+- blast radius is not obviously local
+
+This expansion makes the task packet more explicit, but it does not change durable ownership by itself.
+
+## 11.4 Task and Mode Relationship
 
 Tasks and issues do not map one-to-one to modes.
 
@@ -30,7 +44,7 @@ Tasks and issues do not map one-to-one to modes.
 - mode transitions are driven by the current uncertainty or evidence state, not by a fixed linear pipeline
 - input type stays the front-door classifier even when the active mode changes
 
-## 11.4 Optional Exploration Scaffold
+## 11.5 Optional Exploration Scaffold
 
 Use the following fields only when they help reduce ambiguity:
 
@@ -44,7 +58,7 @@ Use the following fields only when they help reduce ambiguity:
 
 If an optional topology extension is active, keep any extension-specific captures in tasks until the matching extension guidance says they can be promoted.
 
-## 11.5 Exit Rule
+## 11.6 Exit Rule
 
 Do not promote a task note directly into durable truth without the promotion test. Tasks are for bounded exploration, not for becoming shadow architecture.
 

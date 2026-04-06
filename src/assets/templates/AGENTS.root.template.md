@@ -28,6 +28,7 @@ Read the following documents when needed and keep them current:
 - `docs/00-meta/`: typed input protocols, mode SOPs, and framework ontology.
 - `docs/00-meta/concepts.md`: load only when boundary language is unclear.
 - `docs/10-prd/`: product truths and business glossary.
+- `docs/15-alignment/`: optional coordination grammar for repeated drift, ambiguous targeting, or risky mutation; load only when MVT is not enough to constrain the work safely.
 - `docs/20-product-tdd/`: cross-unit technical realization.
 - `docs/30-unit-tdd/`: unit-local contracts and verification.
 - `docs/40-deployment/`: runtime and operational truth.
@@ -43,10 +44,11 @@ Read the following documents when needed and keep them current:
 2. Identify the owning layer and open a task packet for non-trivial work.
 3. Choose the active mode for this slice of work: Explore, Solidify, Execute, or Diagnose.
 4. Load only the route doc, mode SOP, and governing anchors needed for this work.
-5. Load topology-extension guidance only when the repo shape actually requires it.
-6. Execute and verify.
-7. Re-enter a different mode if the evidence state changes.
-8. Promote only stable truths after verification.
+5. Expand into alignment substrate fields only when MVT is not enough to constrain mutation safely.
+6. Load topology-extension guidance only when the repo shape actually requires it.
+7. Execute and verify.
+8. Re-enter a different mode if the evidence state changes.
+9. Promote only stable truths after verification.
 
 ### Typed Input Guide
 

@@ -13,11 +13,12 @@ This mode can appear in any input type once ownership and verification are suffi
 
 ## Read-Do Steps
 
-1. Restate the exact change and verification plan.
+1. Restate the exact change, protected invariants, and verification plan.
 2. Load the nearest local AGENTS plus any governing PRD, TDD, or deployment docs.
-3. Implement the smallest safe change for the current slice.
-4. Run checks and compare the result against the declared verification.
-5. If unexpected behavior appears, re-enter Explore or Diagnose instead of guessing.
+3. If blast radius is not obviously local, pause for the Impact Handshake before mutating durable truth.
+4. Implement the smallest safe change for the current slice.
+5. Run checks and compare the result against the declared verification.
+6. If unexpected behavior appears, re-enter Explore or Diagnose instead of guessing.
 
 ## Exit Criteria
 
