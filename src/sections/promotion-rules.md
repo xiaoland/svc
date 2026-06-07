@@ -26,6 +26,7 @@ Promote only if all are true:
 - Hard local complexity and tripwires -> local `AGENTS.md` near code
 - Runtime and ops truth and runbooks -> Deployment
 - Ambiguous targeting and coordination grammar -> Alignment Substrate
+- Language- and tech-stack-neutral implementation taste -> Meta Engine (`00-meta`)
 - Reusable workflows, route protocols, and ontology rules -> Meta engine (`00-meta`)
 
 ## Related Assets

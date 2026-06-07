@@ -100,5 +100,5 @@ For detailed definitions and routing guidance, use:
 
 ## Versioning and Migration
 
-- Current framework baseline in this repo: v9.5 (see `src/index.md`)
+- Current framework baseline in this repo: v9.8 (see `src/index.md`)
 - Change history and migration notes: `CHANGELOG.md`

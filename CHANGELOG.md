@@ -6,15 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [9.8.0] - 2026-06-07
+
 ### Added
 
 - **Agent-owned task workspaces**: task packets are now explicit task-local workspaces for volatile reasoning, exploration, evidence, and human-agent collaboration state
 - **Progressive poly-file task packets**: task packets may start as single files and split into directories when collaboration pressure requires separate state, evidence, decisions, verification, or temporary work surfaces
 - **Search isolation defaults**: ordinary source and durable-doc search now excludes volatile workspaces, generated output, dependencies, caches, and virtual environments by default
+- **Implementation taste**: non-trivial code design and implementation changes now have language- and tech-stack-neutral guidance for SSoT, trust and provenance, durable semantic naming, and complexity ROI
 
 ### Changed
 
 - **Task packet semantics**: task packets now preserve a compact human-inspectable control surface instead of behaving like append-only task notes
+- **Mode composition semantics**: creative engineering is now explicit as a non-linear loop where design formation, verification preparation, implementation shape, execution, and diagnosis can reshape each other
 
 ## [9.5.0] - 2026-04-04
 
@@ -64,6 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Dynamic navigation framework**: How agents should dynamically navigate ambiguity without falling into rigid waterfall processes or chaotic guesswork
 
 [Unreleased]: https://github.com/yourusername/svc
+[9.8.0]: https://github.com/yourusername/svc/releases/tag/v9.8.0
 [9.5.0]: https://github.com/yourusername/svc/releases/tag/v9.5.0
 [9.4.0]: https://github.com/yourusername/svc/releases/tag/v9.4.0
 [9.3.0]: https://github.com/yourusername/svc/releases/tag/v9.3.0

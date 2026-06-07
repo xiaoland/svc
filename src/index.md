@@ -1,7 +1,7 @@
-# Sustainable Vibe Coding Framework v9.7
+# Sustainable Vibe Coding Framework v9.8
 
-> Version: v9.7
-> Last edit on: 2026-04-06T20:39+08:00
+> Version: v9.8
+> Last edit on: 2026-06-07T17:01+08:00
 
 Sustainable Vibe Coding exists to make AI-assisted software development maintainable for a small team or a one-person company.
 
@@ -16,6 +16,7 @@ The framework stays intentionally small:
 - Tasks provide agent-owned, task-local workspaces for volatile work, but non-trivial work still carries minimal guardrails.
 - Concepts load progressively: cheat sheet first, full dictionary only on demand.
 - Mode Dispatch is reusable SOP overlays rather than the only dispatcher.
+- Implementation taste keeps non-trivial code design and implementation changes grounded in SSoT, trust boundaries, semantic naming, and complexity ROI.
 - Topology extensions are pressure-driven: keep mono-repo as default; load multi-repo only when one product outgrows one repo.
 
 Its core job is to help humans and agents answer:
@@ -52,6 +53,7 @@ Its core job is to help humans and agents answer:
 - how to route work by input type before choosing the current SOP
 - how to keep exploration bounded without killing creativity
 - how to keep agent workspaces readable and inspectable during human-agent collaboration
+- how to apply language- and tech-stack-neutral implementation taste without turning creative engineering into waterfall design
 - how to colocate complexity-dissolving memory as close to target code as possible
 - how to isolate architectural structure (slow-moving) from tactical hazards (fast-moving)
 - how to load only the concepts and protocols needed for the current step
@@ -61,8 +63,10 @@ Its core job is to help humans and agents answer:
 
 - Typed input taxonomy comes first: before changing docs or code, classify the perturbation as Intent, Constraint, Reality, or Artifact so blast radius and durable owner are explicit.
 - Mode Dispatch is a mind-pattern layer: Explore, Solidify, Execute, and Diagnose are still valid SOPs, but they are not a one-task-one-mode pipeline.
+- Creative engineering is non-linear: design formation, implementation shape, verification preparation, execution, and diagnosis can reshape each other. Do not model SVC as design -> code -> verify.
 - PRD is the SSoT for product what and why: PRD is pressure-driven and follows one-way derivation from drivers to behavior to derived domain structure. Domain structure cannot push obligations upstream, and PRD does not own implementation structure.
 - Code, tests, and guardrails are the SSoT for implementation truth: implementation truth should live in code, tests, type systems, lint rules, CI checks, and runtime assertions.
+- Implementation taste guides non-trivial code design and implementation: preserve SSoT, respect trust and provenance, name durable semantics directly, and spend complexity only for clear return.
 - TDD exists only where code alone is not enough: technical design docs are not mandatory ceremony. They exist only when code and tests cannot cheaply preserve or communicate critical truths.
 - Tasks absorb volatility through agent-owned workspaces with MVT anchors: every non-trivial task carries Objective & Hypothesis, Guardrails Touched, and Verification so exploration stays lightweight, inspectable, and grounded.
 - Progressive ontology beats full-context dumping: keep only a cheat sheet in root AGENTS and load `00-meta/concepts.md` only when classification or boundary language becomes ambiguous.
@@ -81,14 +85,14 @@ Its core job is to help humans and agents answer:
 3. For non-trivial work, open or update an agent-owned task packet with the three MVT anchors.
 4. Keep the packet current when discussion, exploration, implementation friction, or verification changes the working state.
 5. Select the current mode overlay: Explore, Solidify, Execute, or Diagnose. Revisit modes as the task evolves.
-6. Load only the anchors needed for this route, mode, and active topology (if any): PRD, Product TDD, Unit TDD, local AGENTS, deployment runbooks, glossary, concepts, and any extension SOPs that apply.
+6. Load only the anchors needed for this route, mode, and active topology (if any): PRD, Product TDD, Unit TDD, implementation taste, local AGENTS, deployment runbooks, glossary, concepts, and any extension SOPs that apply.
 7. Search source and durable docs with volatile workspaces excluded by default.
 8. Make changes only inside the owning layer for that truth.
 9. Promote new knowledge only when it passes the promotion test.
 
 ## Layer Model
 
-1. Meta Engine Layer (00-meta/): typed dispatcher protocols, mode SOPs, on-demand concepts, and minimal route-specific scaffolds
+1. Meta Engine Layer (00-meta/): typed dispatcher protocols, mode SOPs, implementation taste, on-demand concepts, and minimal route-specific scaffolds
 2. PRD Layer (10-prd/): product what, why, observable behavior, and business glossary
 3. Alignment Substrate (15-alignment/): optional pressure-driven coordination grammar
 4. Product TDD Layer (20-product-tdd/): cross-unit technical truth and global topology
@@ -135,6 +139,7 @@ Rule of thumb:
 9. [Deployment](sections/deployment.md)
 10. [Tasks](sections/tasks.md)
 11. [Promotion Rules](sections/promotion-rules.md)
+12. [Implementation Taste](sections/implementation-taste.md)
 
 ## Anti-patterns
 

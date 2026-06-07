@@ -19,6 +19,7 @@
 | Local tactical hazards and tripwires | Local AGENTS | src/**/AGENTS.md |
 | Runtime and operations runbooks | Deployment | docs/40-deployment/* |
 | Ambiguous targeting and coordination conventions | Alignment Substrate | docs/15-alignment/* |
+| Language- and tech-stack-neutral implementation taste | Meta Engine | docs/00-meta/implementation-taste.md |
 | Reusable workflows, route protocols, and ontology rules | Meta Engine | docs/00-meta/* |
 | Volatile hypotheses, temporary reasoning, task evidence, and collaboration state | Tasks | tasks/* |
 

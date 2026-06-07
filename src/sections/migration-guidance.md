@@ -51,9 +51,15 @@
 3. Preserve a compact control surface with MVT anchors, current understanding, and next step.
 4. Allow single-file packets to grow into packet directories when collaboration pressure requires separation of state, history, evidence, decisions, temporary work, or verification.
 5. Exclude volatile task workspaces, generated output, dependencies, caches, and virtual environments from ordinary source and durable-doc search by default.
+6. Add `docs/00-meta/implementation-taste.md` as the durable source for language- and tech-stack-neutral implementation taste.
+7. Load implementation taste for non-trivial code design or implementation changes that shape structure, boundaries, data shape, authority flow, durable naming, abstraction, or complexity budget.
+8. Keep implementation taste out of individual mode ownership: modes consume it as hooks, while the Meta Engine owns the non-linear design, verification, execution, and diagnosis loop.
+9. Update root AGENTS coding guidance to preserve SSoT, classify cross-boundary value provenance, name durable semantics directly, and spend complexity only for clear return.
+10. Treat over-applied OOP, design patterns, generality, and premature optimization or abstraction as complexity-budget failures unless their return is proven.
 
 ### Related Assets
 
 - [Root AGENTS Template](../assets/templates/AGENTS.root.template.md)
+- [Implementation Taste](implementation-taste.md)
 - [Task Packet Template](../assets/templates/task-packet.template.md)
 - [Concept Dictionary Template](../assets/templates/concepts.template.md)

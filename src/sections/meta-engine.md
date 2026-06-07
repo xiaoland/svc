@@ -19,6 +19,10 @@ Rule of thumb:
 - one task or issue may traverse multiple modes
 - mode transitions are non-linear and reversible
 
+Creative engineering is not a waterfall of design -> code -> verify. Design formation, verification preparation, implementation shape, execution, and diagnosis can reshape each other while durable ownership remains stable.
+
+Verification is not only a post-Execute gate. Once a design claim is solid enough to act on, prepare the proof shape and let it constrain Execute. If Execute exposes friction that invalidates the proof shape or design claim, return to Explore, Solidify, or Diagnose.
+
 ## Dispatcher Contract
 
 For every external perturbation:
@@ -89,24 +93,28 @@ This is an escalation path, not a replacement for MVT.
 
 - Use when key unknowns remain and the solution space must be mapped.
 - This mode can appear inside Intent, Constraint, Reality, or Artifact work.
+- For non-trivial code work, use implementation taste to expose authority, trust, naming, and complexity unknowns.
 - Exit when the unknowns are reduced enough to solidify or execute.
 
 ### Mode B: Solidify
 
 - Use when findings must be restated into stable claims, contracts, or explicit decisions.
 - This mode often bridges tasks and durable docs.
+- For non-trivial code work, use implementation taste to form the temporary design claim and prepare the verification shape.
 - Exit when durable ownership and verification are explicit.
 
 ### Mode C: Execute
 
 - Use when the current slice of work is clear enough to implement or edit safely.
 - This mode can appear multiple times inside the same task.
+- For non-trivial code work, use implementation taste as a projection onto concrete code surfaces, not as a new durable owner.
 - Exit when verification passes or when new uncertainty forces a return to Explore or Diagnose.
 
 ### Mode D: Diagnose
 
 - Use when observed reality diverges from expectations and evidence must be collected before action.
 - This mode is common in Reality work but can also reappear when execution produces unexplained behavior.
+- For non-trivial code work, use implementation taste to check whether the failure came from authority drift, trust-boundary confusion, semantic naming drift, or unjustified complexity.
 - Exit when likely causes are ranked and the next action is justified.
 
 ## Progressive Load Rules
@@ -118,6 +126,7 @@ Load the smallest useful set of references:
 - Read one or more mode SOPs only for the current working posture.
 - Read nearest local `AGENTS.md` files before changing code.
 - Read PRD, Product TDD, Unit TDD, or Deployment docs only for the owning layer of the current route.
+- Read implementation taste when a non-trivial code design or implementation change will shape implementation structure, boundary shape, data shape, state flow, authority flow, durable naming, abstraction, or complexity budget.
 - Read `15-alignment/` only when repeated drift, ambiguous targeting, or risky mutation requires more explicit coordination grammar.
 - Read topology-extension guidance only when the repo actually uses that topology.
 - Read `00-meta/concepts.md` only when boundary language is unclear or the user explicitly asks for meta concepts.
@@ -186,6 +195,7 @@ Before changes in a directory, recursively check for local AGENTS.md from the cu
 - [Constraint Route Template](../assets/templates/input-constraint.template.md)
 - [Reality Route Template](../assets/templates/input-reality.template.md)
 - [Artifact Route Template](../assets/templates/input-artifact.template.md)
+- [Implementation Taste](implementation-taste.md)
 - [Mode A Template](../assets/templates/mode-a-explore.template.md)
 - [Mode B Template](../assets/templates/mode-b-solidify.template.md)
 - [Mode C Template](../assets/templates/mode-c-execute.template.md)

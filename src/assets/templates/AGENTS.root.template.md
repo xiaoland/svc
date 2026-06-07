@@ -27,6 +27,7 @@ Read the following documents when needed and keep them current:
 
 - `docs/00-meta/`: typed input protocols, mode SOPs, and framework ontology.
 - `docs/00-meta/concepts.md`: load only when boundary language is unclear.
+- `docs/00-meta/implementation-taste.md`: load for non-trivial code design or implementation changes that shape structure, boundaries, data shape, authority flow, durable naming, abstraction, or complexity budget.
 - `docs/10-prd/`: product truths and business glossary.
 - `docs/15-alignment/`: optional coordination grammar for repeated drift, ambiguous targeting, or risky mutation; load only when MVT is not enough to constrain the work safely.
 - `docs/20-product-tdd/`: cross-unit technical realization.
@@ -45,6 +46,7 @@ Read the following documents when needed and keep them current:
 3. Keep the task packet current when discussion, exploration, implementation friction, or verification changes the working state.
 4. Choose the active mode for this slice of work: Explore, Solidify, Execute, or Diagnose.
 5. Load only the route doc, mode SOP, and governing anchors needed for this work.
+   - For non-trivial code design or implementation changes, load `docs/00-meta/implementation-taste.md`.
 6. Search source and durable docs with volatile workspaces excluded by default.
 7. Expand into alignment substrate fields only when MVT is not enough to constrain mutation safely.
 8. Load topology-extension guidance only when the repo shape actually requires it.
@@ -68,6 +70,8 @@ Read the following documents when needed and keep them current:
 
 Mode guidance:
 
+- creative engineering is non-linear; do not model work as design -> code -> verify
+- prepare verification shape as soon as a design claim is stable enough, and let it constrain Execute
 - do not assume one task equals one mode
 - switch modes when evidence or clarity changes
 - mode selection never overrides durable ownership
@@ -96,7 +100,7 @@ Pause and ask for human input when any of these happen:
 
 ## Global Coding Guidelines
 
-- Less is more; quality over quantity; high cohesion and low coupling.
-- Establish invariants at system boundaries and rely on them internally.
-- Prefer abstraction only when duplication or patterns become clear.
-- Source files should stay under 300 lines where practical.
+- Preserve SSoT for durable facts, state, relationships, and decisions.
+- Treat cross-boundary values by provenance: authority fact, reference, command or proposal, user-authored value, or derived projection.
+- Name durable semantics directly and consistently.
+- Spend complexity only for clear return; avoid premature optimization, premature abstraction, and over-application of OOP or design patterns.
