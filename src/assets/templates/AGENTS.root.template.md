@@ -32,7 +32,7 @@ Read the following documents when needed and keep them current:
 - `docs/20-product-tdd/`: cross-unit technical realization.
 - `docs/30-unit-tdd/`: unit-local contracts and verification.
 - `docs/40-deployment/`: runtime and operational truth.
-- `tasks/`: volatile planning, investigation, diagnostics, and artifact workspace; procedural and non-authoritative.
+- `tasks/`: agent-owned, task-local workspace for volatile planning, investigation, diagnostics, artifacts, evidence, and collaboration state; procedural and non-authoritative.
 - `**/*/AGENTS.md`: when touching a directory, recursively inspect that directory and parents for local AGENTS.md. Local constraints are additive and may override generic defaults for that subtree. Add local `AGENTS.md` under complex modules when local constraints or tripwires are needed.
 
 > When implementation reveals reusable knowledge, promote it into durable docs.
@@ -41,14 +41,16 @@ Read the following documents when needed and keep them current:
 ## Operating Model
 
 1. Classify the request as Intent, Constraint, Reality, or Artifact.
-2. Identify the owning layer and open a task packet for non-trivial work.
-3. Choose the active mode for this slice of work: Explore, Solidify, Execute, or Diagnose.
-4. Load only the route doc, mode SOP, and governing anchors needed for this work.
-5. Expand into alignment substrate fields only when MVT is not enough to constrain mutation safely.
-6. Load topology-extension guidance only when the repo shape actually requires it.
-7. Execute and verify.
-8. Re-enter a different mode if the evidence state changes.
-9. Promote only stable truths after verification.
+2. Identify the owning layer and open or update a task packet for non-trivial work.
+3. Keep the task packet current when discussion, exploration, implementation friction, or verification changes the working state.
+4. Choose the active mode for this slice of work: Explore, Solidify, Execute, or Diagnose.
+5. Load only the route doc, mode SOP, and governing anchors needed for this work.
+6. Search source and durable docs with volatile workspaces excluded by default.
+7. Expand into alignment substrate fields only when MVT is not enough to constrain mutation safely.
+8. Load topology-extension guidance only when the repo shape actually requires it.
+9. Execute and verify.
+10. Re-enter a different mode if the evidence state changes.
+11. Promote only stable truths after verification.
 
 ### Typed Input Guide
 
@@ -69,6 +71,19 @@ Mode guidance:
 - do not assume one task equals one mode
 - switch modes when evidence or clarity changes
 - mode selection never overrides durable ownership
+
+Task packet guidance:
+
+- task packets are agent-owned and may be updated, split, and reorganized by the agent inside the task boundary
+- keep each packet human-agent-collaboration-oriented: readable, inspectable, and steerable by the human
+- preserve a compact control surface with objective, guardrails, verification, current understanding, and next step
+- split by collaboration pressure rather than by a fixed folder scheme
+- keep volatile packet content out of durable docs until it passes the promotion test
+
+Search guidance:
+
+- when searching source or durable docs, exclude `tasks/`, `temp/`, generated output, dependency folders, virtual environments, and tool caches by default
+- search those locations only when the task explicitly targets them or when recovering/reviewing task evidence
 
 ## Negotiation Triggers
 

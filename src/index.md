@@ -13,7 +13,7 @@ The framework stays intentionally small:
 - PRD remains the single source of truth for product intent and observable behavior.
 - Code and tests remain the single source of implementation truth.
 - TDD-style docs exist only where code and tests are not enough.
-- Tasks absorb volatility, but non-trivial work still carries minimal guardrails.
+- Tasks provide agent-owned, task-local workspaces for volatile work, but non-trivial work still carries minimal guardrails.
 - Concepts load progressively: cheat sheet first, full dictionary only on demand.
 - Mode Dispatch is reusable SOP overlays rather than the only dispatcher.
 - Topology extensions are pressure-driven: keep mono-repo as default; load multi-repo only when one product outgrows one repo.
@@ -51,9 +51,11 @@ Its core job is to help humans and agents answer:
 - how to extend mono-repo only when topology pressure requires it
 - how to route work by input type before choosing the current SOP
 - how to keep exploration bounded without killing creativity
+- how to keep agent workspaces readable and inspectable during human-agent collaboration
 - how to colocate complexity-dissolving memory as close to target code as possible
 - how to isolate architectural structure (slow-moving) from tactical hazards (fast-moving)
 - how to load only the concepts and protocols needed for the current step
+- how to keep volatile task material from polluting ordinary source and durable-doc search
 
 ### Core Principles
 
@@ -62,7 +64,7 @@ Its core job is to help humans and agents answer:
 - PRD is the SSoT for product what and why: PRD is pressure-driven and follows one-way derivation from drivers to behavior to derived domain structure. Domain structure cannot push obligations upstream, and PRD does not own implementation structure.
 - Code, tests, and guardrails are the SSoT for implementation truth: implementation truth should live in code, tests, type systems, lint rules, CI checks, and runtime assertions.
 - TDD exists only where code alone is not enough: technical design docs are not mandatory ceremony. They exist only when code and tests cannot cheaply preserve or communicate critical truths.
-- Tasks absorb volatility with MVT anchors: every non-trivial task carries Objective & Hypothesis, Guardrails Touched, and Verification so exploration stays lightweight but grounded.
+- Tasks absorb volatility through agent-owned workspaces with MVT anchors: every non-trivial task carries Objective & Hypothesis, Guardrails Touched, and Verification so exploration stays lightweight, inspectable, and grounded.
 - Progressive ontology beats full-context dumping: keep only a cheat sheet in root AGENTS and load `00-meta/concepts.md` only when classification or boundary language becomes ambiguous.
 - Docs are for expensive unknowns: a durable doc should exist only when future humans or agents would otherwise make costly mistakes.
 - Do not build a second software system out of docs: documentation is support structure, not a parallel runtime.
@@ -76,11 +78,13 @@ Its core job is to help humans and agents answer:
 
 1. Classify the incoming perturbation as Intent, Constraint, Reality, or Artifact.
 2. Identify the owning layer and blast radius before choosing how to work.
-3. For non-trivial work, open a task packet with the three MVT anchors.
-4. Select the current mode overlay: Explore, Solidify, Execute, or Diagnose. Revisit modes as the task evolves.
-5. Load only the anchors needed for this route, mode, and active topology (if any): PRD, Product TDD, Unit TDD, local AGENTS, deployment runbooks, glossary, concepts, and any extension SOPs that apply.
-6. Make changes only inside the owning layer for that truth.
-7. Promote new knowledge only when it passes the promotion test.
+3. For non-trivial work, open or update an agent-owned task packet with the three MVT anchors.
+4. Keep the packet current when discussion, exploration, implementation friction, or verification changes the working state.
+5. Select the current mode overlay: Explore, Solidify, Execute, or Diagnose. Revisit modes as the task evolves.
+6. Load only the anchors needed for this route, mode, and active topology (if any): PRD, Product TDD, Unit TDD, local AGENTS, deployment runbooks, glossary, concepts, and any extension SOPs that apply.
+7. Search source and durable docs with volatile workspaces excluded by default.
+8. Make changes only inside the owning layer for that truth.
+9. Promote new knowledge only when it passes the promotion test.
 
 ## Layer Model
 
@@ -91,7 +95,7 @@ Its core job is to help humans and agents answer:
 5. Unit TDD Layer (30-unit-tdd/): logical structural design independent of src folder movement
 6. Local Context Layer (Local AGENTS.md): tactical hazards and recurrence tripwires tied to exact code areas
 7. Deployment Layer (40-deployment/): runtime and operations truths
-8. Task Layer (tasks/): volatile work, diagnosis, artifacts, and temporary reasoning
+8. Task Layer (tasks/): agent-owned task-local workspaces for volatile work, diagnosis, artifacts, evidence, and temporary reasoning
 
 > Product truth and implementation truth remain separate by design.
 > Unit TDD and Local AGENTS are complementary, not substitutes.
@@ -107,13 +111,14 @@ Its core job is to help humans and agents answer:
 | Product Intent | Medium | User-facing what and why | PRD | docs/10-prd/ |
 | Cross-unit Design | Medium | Contracts and topology | Product TDD | docs/20-product-tdd/ |
 | Runtime Ops | Event-driven | Telemetry and runbooks | Deployment | docs/40-deployment/ |
-| Volatile Work | Fastest | Exploration, diagnosis, and transient artifacts | Tasks | tasks/ |
+| Volatile Work | Fastest | Exploration, diagnosis, collaboration state, evidence, and transient artifacts | Tasks | tasks/ |
 
 Rule of thumb:
 
 - If truth should survive directory refactors, put it in Structure.
 - If truth protects a fragile local seam, keep it near code in Stuff.
 - If truth is still exploratory, keep it in Tasks until stability is proven.
+- If task-local work grows beyond a compact control surface, split it into a packet directory by collaboration pressure.
 - If topology pressure appears, extend the default model incrementally rather than replacing it wholesale.
 - If ownership is unclear, do not let mode selection hide that ambiguity; resolve the route first.
 
@@ -137,6 +142,8 @@ Rule of thumb:
 - Treating modes as durable owners: Explore or Diagnose never decides whether truth belongs in PRD, TDD, Deployment, or Tasks.
 - Assuming one task equals one mode: a single task may loop between Explore, Solidify, Execute, and Diagnose.
 - Task packets without verification: exploration without an executable completion proof invites hallucinated done-ness.
+- Treating task packets as private scratchpads only: agent-owned workspaces must stay human-readable, inspectable, and steerable.
+- Letting volatile packets pollute ordinary search: exclude `tasks/`, temp surfaces, generated output, dependencies, and caches unless the search intentionally targets them.
 - Loading the full ontology by default: keep root AGENTS tiny and read `00-meta/concepts.md` only when needed.
 - Mixing framework ontology with business language: keep framework terms in meta docs and business terms in `10-prd/glossary.md`.
 - Using docs to compensate for missing tests: if correctness can be guarded mechanically, prefer that.

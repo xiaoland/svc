@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Agent-owned task workspaces**: task packets are now explicit task-local workspaces for volatile reasoning, exploration, evidence, and human-agent collaboration state
+- **Progressive poly-file task packets**: task packets may start as single files and split into directories when collaboration pressure requires separate state, evidence, decisions, verification, or temporary work surfaces
+- **Search isolation defaults**: ordinary source and durable-doc search now excludes volatile workspaces, generated output, dependencies, caches, and virtual environments by default
+
+### Changed
+
+- **Task packet semantics**: task packets now preserve a compact human-inspectable control surface instead of behaving like append-only task notes
+
 ## [9.5.0] - 2026-04-04
 
 ### Added

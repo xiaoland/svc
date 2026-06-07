@@ -25,12 +25,14 @@ For every external perturbation:
 
 1. Classify it as Intent, Constraint, Reality, or Artifact before acting.
 2. Estimate blast radius and durable owner from that type.
-3. Open a task packet with MVT anchors if the work is non-trivial.
-4. Select the current mode overlay for this slice of work.
-5. Load only the route protocol, mode SOP, and governing anchors needed for the task.
-6. Expand the request into alignment substrate fields only when coordination risk exceeds what MVT can safely express.
-7. Load topology-extension guidance only when the repo shape actually requires it.
-8. Promote stable knowledge after the work, not during guesswork.
+3. Open or update an agent-owned task packet with MVT anchors if the work is non-trivial.
+4. Keep the packet current when discussion, exploration, implementation friction, or verification changes the working state.
+5. Select the current mode overlay for this slice of work.
+6. Load only the route protocol, mode SOP, and governing anchors needed for the task.
+7. Search source and durable docs with volatile workspaces excluded by default.
+8. Expand the request into alignment substrate fields only when coordination risk exceeds what MVT can safely express.
+9. Load topology-extension guidance only when the repo shape actually requires it.
+10. Promote stable knowledge after the work, not during guesswork.
 
 ## Substrate Expansion Rule
 
@@ -120,6 +122,18 @@ Load the smallest useful set of references:
 - Read topology-extension guidance only when the repo actually uses that topology.
 - Read `00-meta/concepts.md` only when boundary language is unclear or the user explicitly asks for meta concepts.
 - Read `10-prd/glossary.md` only when business/domain terminology matters.
+
+## Source Search Defaults
+
+For ordinary source and durable-doc search, exclude volatile and generated surfaces by default:
+
+- `tasks/`
+- `temp/`
+- generated output such as `build/`, `dist/`, and coverage reports
+- dependency folders such as `node_modules/`
+- virtual environments and tool caches such as `.venv/`, `.tox/`, and `.pytest_cache/`
+
+Search those surfaces only when the active question targets them, when recovering the active task packet, or when reviewing evidence deliberately stored there.
 
 ## Impact Handshake Rule
 

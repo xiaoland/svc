@@ -9,7 +9,7 @@ Use pacing layers to separate logical design from physical placement.
 - Contents: cross-submodule constraints, internal technology choices, high-level naming, internal contracts
 - Ontology note: a Unit is a logical technical boundary, not a folder name
 
-Unit TDD is the default durable destination when a Constraint input is local to one unit but too important to leave only in code comments or task notes.
+Unit TDD is the default durable destination when a Constraint input is local to one unit but too important to leave only in code comments or task packets.
 
 ## 9.2 Quick Boundary Check
 

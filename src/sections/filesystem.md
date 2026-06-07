@@ -11,7 +11,7 @@ Use this form as the default startup shape.
 - Root AGENTS.md as a typed dispatcher plus ontology cheat sheet
 - docs/00-meta/ for input routes, mode SOPs, and the on-demand concept dictionary
 - docs/10-prd/ for product truth and business glossary
-- tasks/ as the entropy buffer
+- tasks/ as the agent-owned, task-local workspace
 
 ```text
 /
@@ -81,7 +81,9 @@ Notes:
 - `docs/00-meta/concepts.md` owns framework ontology only.
 - `docs/10-prd/glossary.md` owns business/domain language only.
 - Input route docs and mode SOPs are orthogonal: route decides ownership, mode decides how to work.
-- Task filenames are flexible, but every non-trivial task note must include the MVT anchors.
+- Task packet shapes are flexible, but every non-trivial packet must keep a compact control surface with MVT anchors.
+- A packet may start as `tasks/<task-id>.md`; when it grows beyond a compact control surface, prefer `tasks/<task-id>/packet.md` with supporting files split by collaboration pressure.
+- Use `work/` inside a task directory for task-local scratch artifacts when needed; do not create root-level scratch files for bounded exploration.
 
 ## Optional Topology Extensions
 

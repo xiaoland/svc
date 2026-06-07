@@ -44,6 +44,14 @@
 4. Express alignment requests as declarative `From -> To` state diffs instead of mixed imperative instructions.
 5. Bind operation verbs to verification contracts and require a pre-execution impact handshake before non-local durable mutations.
 
+## v9.7 -> v9.8
+
+1. Treat task packets as agent-owned, task-local workspaces rather than only task files.
+2. Keep every packet human-agent-collaboration-oriented: readable, inspectable, and steerable by the human.
+3. Preserve a compact control surface with MVT anchors, current understanding, and next step.
+4. Allow single-file packets to grow into packet directories when collaboration pressure requires separation of state, history, evidence, decisions, temporary work, or verification.
+5. Exclude volatile task workspaces, generated output, dependencies, caches, and virtual environments from ordinary source and durable-doc search by default.
+
 ### Related Assets
 
 - [Root AGENTS Template](../assets/templates/AGENTS.root.template.md)

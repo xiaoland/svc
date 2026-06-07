@@ -16,7 +16,7 @@ Use when product behavior stays the same, but technical, dependency, performance
 ## Forbidden
 
 - Do not rewrite product intent to justify an implementation decision.
-- Do not hide cross-unit contract changes inside task notes only.
+- Do not hide cross-unit contract changes inside task packets only.
 
 ## Read-Do Steps
 
