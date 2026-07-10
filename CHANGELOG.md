@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Implementation taste**: clarified data-shape-first design judgment and measured optimization before adding clever algorithms or generalized machinery
+
 ## [9.8.0] - 2026-06-07
 
 ### Added

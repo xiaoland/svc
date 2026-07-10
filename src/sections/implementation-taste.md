@@ -51,11 +51,23 @@ Durable model fields, cross-boundary fields, commands, events, and business oper
 
 Core data model names are usually design formation concerns. DTO names, component prop names, adapter names, and local variable names are implementation shape concerns unless they define a durable contract or reveal a missing design distinction.
 
+### Shape Data Before Clever Flow
+
+Data shape often determines implementation shape.
+
+Before adding clever control flow, complex algorithms, or orchestration machinery, first ask whether the data structure, authority boundary, ownership path, or state representation is wrong or underspecified.
+
+Prefer data and boundary shapes that make valid behavior obvious and invalid behavior hard to express. When the data is shaped well, the implementation should need less cleverness to remain readable and verifiable.
+
 ### Spend Complexity for Return
 
 Complexity is an input. Useful behavior, reliability, clarity, maintainability, and evolvability are outputs.
 
 Evaluate both total ROI and marginal ROI. Each abstraction, layer, state holder, protocol, configuration switch, indirection, dependency, and design pattern must explain what it earns.
+
+Do not guess performance pressure. Measure before optimizing, and optimize only when the measured bottleneck is material enough to justify the added complexity.
+
+Prefer simple algorithms and simple data structures until scale, evidence, or correctness pressure proves they are no longer enough. Fancy algorithms and generalized machinery carry hidden constants in implementation effort, bug surface, and future comprehension.
 
 Do not treat OOP, design patterns, generality, or optimization as taste by default. Over-application is a taste failure. Premature optimization and premature abstraction both consume complexity budget before the return is proven.
 
