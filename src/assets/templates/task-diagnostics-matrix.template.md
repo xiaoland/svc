@@ -1,34 +1,18 @@
-# Task Template: Diagnostics Matrix
+# Diagnostic Task: <Symptom>
 
-## MVT Core
+- **Objective**: identify the supported root cause of <symptom>
+- **Guardrails**: gather evidence before mutation; preserve existing claims until disproven
+- **Verification**: reproduce or falsify the cause with observable evidence
+- **Current Truth**: <known symptoms, evidence, and uncertainty>
+- **Next Step**: <next diagnostic action or blocking decision>
 
-- Objective & Hypothesis: identify the root cause of <symptom> and verify the most likely explanation
-- Guardrails Touched: no evidence, no modification; preserve existing product claims until disproven
-- Verification: reproduce or falsify the suspected cause with logs, tests, traces, or other observable evidence
+## Failure Matrix
 
-## Perturbation
-
-- signal:
-- input type: Reality
-- active mode: Diagnose
-- governing anchors:
-
-## Failure Mode Matrix
-
-| Suspected Cause | Supporting Evidence | Missing Evidence | Validation Step | Owner |
+| Suspected Cause | Supporting Evidence | Missing Evidence | Validation Step | Likely Owner |
 | --- | --- | --- | --- | --- |
 | | | | | |
-| | | | | |
 
-## Temporary Assumptions
+## Durable Follow-up
 
-- assumption:
-
-## Negotiation Triggers
-
-- stop and ask for help when:
-
-## Promotion Candidates
-
-- local tripwire to add after fix:
-- stable contract or runbook update to promote:
+- Root-cause owner, if confirmed: <source, config, test, product, technical, deployment, or local seam>
+- Recurrence guard, if justified: <mechanical check or local tripwire>

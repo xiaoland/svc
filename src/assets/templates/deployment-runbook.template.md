@@ -34,4 +34,4 @@
 
 - evidence quality threshold:
 - approval owner:
-- switch mode to C after confirmation:
+- approved forward-fix entry:

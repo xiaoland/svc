@@ -1,6 +1,7 @@
 # Python
 *.pyc
 .venv
+.pdm-python
 
 # Build
 build

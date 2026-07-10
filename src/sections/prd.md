@@ -1,101 +1,44 @@
-# PRD
+# Product Truth
 
-## Core Thesis
+Product truth owns what the product is for, what users or external systems can observe, which rules and scope apply, and why those commitments exist. It does not own implementation topology, internal sequencing, wire details, or local code contracts.
 
-PRD owns product intent and observable behavior. It is the default durable destination for Intent inputs.
+## Minimal Shape
 
-PRD must follow this absolute rule:
+Start with one `docs/10-prd/README.md` containing:
 
-- PRD is not upstream domain-driven.
-- PRD is driven by market, business, constraint, and operational pressures.
-- Domain boundaries are derived inside PRD as a semantic stabilizer, not a prerequisite.
-- Business vocabulary lives in `10-prd/glossary.md`, not in framework meta docs.
+- product purpose and current pressure
+- product claims and evaluation expectations
+- capabilities and observable workflows
+- rules, invariants, and scope boundaries
+- business terms whose meaning must remain stable
 
-This prevents premature hardening around domain models and keeps product intent grounded in real pressure signals.
+Use [the product-truth template](../assets/templates/product-truth.template.md). Do not create an empty glossary or directory family.
 
-## One-way Derivation Structure
+## Derivation
 
-PRD must use a one-way derivation flow:
-
-- Drivers -> Behavior and Claims -> Domain Structure
+Keep the reasoning direction explicit:
 
 ```text
-10-prd/
-|-- index.md
-|-- glossary.md
-|-- _drivers/
-|   |-- market-and-user-pressures.md
-|   |-- business-and-service-objectives.md
-|   |-- hard-constraints.md
-|   `-- operational-realities.md
-|-- behavior/
-|   |-- claims.md
-|   |-- capabilities.md
-|   |-- workflows.md
-|   |-- rules-and-invariants.md
-|   `-- scope.md
-`-- domain-structure/
-    |-- derived-boundaries.md
-    `-- cross-domain-interactions.md
+drivers -> product behavior and claims -> derived domain structure
 ```
 
-## Layer Dependency Rule
+Market, user, business, hard-constraint, and operational pressures are upstream. Domain boundaries may stabilize language after behavior is understood, but they cannot invent new product obligations.
 
-- `_drivers/` is always upstream. Every product decision must trace back to pressure signals in this layer.
-- `behavior/` is the core of PRD. It defines externally committed product behavior.
-- `domain-structure/` is derived only. It may organize boundaries and semantic interactions, but must not push new obligations back into `_drivers/` or `behavior/`.
-- `glossary.md` stabilizes business language for the product layer. It must not redefine framework ontology.
+For each material claim, preserve enough of the following to evaluate it:
 
-## Intent Route Contract
+- the problem or outcome being committed to
+- the driver or rationale
+- observable success dimensions
+- expected evidence
 
-When work is classified as Intent:
+Do not add hard numeric gates unless the product actually requires them.
 
-1. Check whether existing product claims would be broken, weakened, or superseded.
-2. Update the relevant drivers and behavior docs before changing technical realization docs.
-3. Link downstream realization only after product truth is stable.
+## Ownership Boundary
 
-## Ontology
+An Intent lens often points here, but only when the product promise changes. A dependency, environment, or implementation constraint can leave product truth unchanged. When product truth does change, update it before describing downstream realization.
 
-PRD authors and AI agents must use these terms consistently:
+Use Product TDD for admitted cross-unit technical contracts, Unit TDD for admitted internal unit design, and Deployment for non-trivial runtime or recovery truth.
 
-- Product Driver: market, business, constraint, or operational pressure that shapes product truth
-- Product Claim: durable product commitment used to evaluate delivery value
-- Capability: what the product can do
-- Workflow: user or service observable behavior path
-- Domain: semantic boundary derived after drivers and behavior are defined
-- Glossary Term: a business-owned word or phrase whose meaning must stay stable across product discussions
+## Expansion Rule
 
-## Claim-Centered Evaluation
-
-`behavior/claims.md` is the bridge between business intent and implementation.
-
-Each major claim should include:
-
-- Claim Intent: what user/business problem it commits to solve
-- Evaluation Dimensions: how success is judged
-- Evidence Expectation: what logs/tests/data prove the claim
-- Source Rationale: links to specific files in `_drivers/`
-- Realization Pointers: links to implementation docs in `20-product-tdd/` or `30-unit-tdd/`
-
-Default strategy:
-
-- do not introduce hard numeric gates unless explicitly required
-
-## PRD Layer Purity (Anti-pattern Guardrail)
-
-PRD must not manage implementation details outside product truth. Do not encode:
-
-- internal mechanism ordering
-- module ownership topology
-- wire transport internals
-- local technical contracts or interface details
-
-These belong to:
-
-- `20-product-tdd/` for cross-unit technical truth
-- `30-unit-tdd/` for unit-level architecture and contracts
-- `40-deployment/` for runtime and operations truth
-
-## Related Assets
-
-- [PRD File Set Template](../assets/templates/prd-file-set.template.md)
+Split the single file only when real content has distinct consumers or change cadence. Common pressure-driven splits are drivers, behavior, scope, glossary, and derived domain structure. Every new file needs an owner and content at creation time.

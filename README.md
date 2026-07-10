@@ -1,104 +1,58 @@
-# Sustainable Vibe Coding (SVC)
+# Sustainable Vibe Coding
 
-Sustainable Vibe Coding is a selective memory framework for AI-assisted software development. It helps small teams and solo builders keep the right truths durable while leaving volatile exploration in lightweight task space.
+Sustainable Vibe Coding (SVC) is a selective-memory framework for AI-assisted software development. It keeps stable, expensive-to-recover truth durable while leaving exploration and task state disposable.
 
-This repository contains:
+This repository contains the canonical framework, consumer templates, and a tool that builds a linked single-file reference.
 
-- Source documentation for the SVC framework
-- Templates for applying SVC in other repositories
-- A monolith builder that compiles linked markdown into one reference file
+## Develop SVC
 
-## Quick Start
-
-### Prerequisites
-
-- Python 3.11 or newer
-- PDM
-
-### Setup
+Requirements: Python 3.11+ and PDM.
 
 ```bash
 pdm install
-```
-
-### Build the Monolith Reference
-
-```bash
+pdm run test
 pdm run build-monolith
 ```
 
-Default output is `build/monolith.md`, generated from `src/index.md` and linked markdown under `src/`.
+`build/monolith.md` is ignored generated output. Edit sources under `src/`, not the monolith.
 
-### Run Tests
+## Read SVC
 
-```bash
-pdm run test
+1. Read [the framework index](src/index.md) for the consumer minimum and knowledge-owner registry.
+2. Read [the working protocol](src/sections/working-protocol.md) for routing, task state, mutation permission, and verification.
+3. Open only the relevant owner or optional extension.
+4. Load [implementation taste](src/sections/implementation-taste.md) only for non-trivial implementation judgment.
+
+Change history and the current Unreleased migration path live in [CHANGELOG.md](CHANGELOG.md).
+
+## Apply the Minimal Consumer Kernel
+
+A new consumer starts with exactly four durable documents:
+
+```text
+AGENTS.md
+docs/00-meta/working-protocol.md
+docs/00-meta/implementation-taste.md
+docs/10-prd/README.md
 ```
 
-## Main Commands
+Use these sources:
 
-```bash
-# Build consolidated markdown reference
-pdm run build-monolith
+- customize [the root AGENTS template](src/assets/templates/AGENTS.root.template.md)
+- copy [the working protocol](src/sections/working-protocol.md)
+- copy [implementation taste](src/sections/implementation-taste.md)
+- instantiate [the product-truth template](src/assets/templates/product-truth.template.md)
 
-# Run unit tests
-pdm run test
-
-# Optional direct invocation
-python -m src.tools.build_monolith --entry src/index.md --output build/monolith.md --root src
-```
+Create `tasks/` only for active non-trivial work. Add TDD, local `AGENTS.md`, Deployment, Alignment, multi-repo, a glossary, or additional PRD files only when their admission rule is satisfied and real content exists.
 
 ## Repository Layout
 
 ```text
-.
-|-- AGENTS.md
-|-- CHANGELOG.md
-|-- SEQUENCE_OF_USE.md
-|-- build/
-|   `-- monolith.md
-|-- scripts/
-|   `-- build_monolith.py
-|-- src/
-|   |-- index.md
-|   |-- sections/
-|   |-- assets/
-|   |   |-- templates/
-|   |   `-- mappings/
-|   `-- tools/
-|       `-- build_monolith.py
-`-- tests/
-    `-- test_build_monolith.py
+src/index.md                  framework entry
+src/sections/                canonical owner guidance
+src/sections/extensions/     pressure-driven extensions
+src/assets/templates/        consumer shapes
+src/tools/                   documentation tooling
+tests/                       tooling and framework contracts
+tasks/                       volatile framework work
 ```
-
-## How to Read SVC in This Repository
-
-1. Start with `SEQUENCE_OF_USE.md` for the workflow view.
-2. Read `src/index.md` for the framework purpose and principles.
-3. Read section docs in `src/sections/` based on your current question.
-4. Build and browse `build/monolith.md` when you want a single-file reference.
-
-## Framework Concepts You Will See Often
-
-- Typed input classification: Intent, Constraint, Reality, Artifact
-- Reusable mode overlays: Explore, Solidify, Execute, Diagnose
-- Durable ownership separation: PRD, Product TDD, Unit TDD, Local AGENTS, Deployment
-- Promotion rule: only persist stable, expensive-to-rediscover truth
-
-For detailed definitions and routing guidance, use:
-
-- `src/sections/meta-engine.md`
-- `src/sections/ontology.md`
-- `src/assets/mappings/durable-destination-map.md`
-
-## Contributor Workflow
-
-1. Edit source markdown in `src/` and templates in `src/assets/templates/`.
-2. Rebuild `build/monolith.md`.
-3. Run tests.
-4. Keep generated output aligned with source changes.
-
-## Versioning and Migration
-
-- Current framework baseline in this repo: v9.8 (see `src/index.md`)
-- Change history and migration notes: `CHANGELOG.md`

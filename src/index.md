@@ -1,162 +1,73 @@
-# Sustainable Vibe Coding Framework v9.8
+# Sustainable Vibe Coding
 
-> Version: v9.8
-> Last edit on: 2026-06-07T17:01+08:00
+Sustainable Vibe Coding (SVC) is a selective-memory framework for small teams using AI-assisted development. It preserves truths that are costly to rediscover or dangerous to lose without turning documentation into a second software system.
 
-Sustainable Vibe Coding exists to make AI-assisted software development maintainable for a small team or a one-person company.
+## Core Contract
 
-The framework is not a document-heavy process system. It is a selective memory system for preserving truths that are expensive to rediscover and risky to lose.
+- Product documentation owns product what and why.
+- Code, configuration, schemas, tests, assertions, and runtime checks own mechanically enforceable implementation truth.
+- Durable technical documents exist only where those surfaces cannot preserve an expensive contract clearly enough.
+- Active task state remains volatile under the working protocol and the consumer project's retention rule.
 
-The framework stays intentionally small:
+The [working protocol](sections/working-protocol.md) owns routing, task state, mutation permission, and verification. [Implementation taste](sections/implementation-taste.md) is loaded only when a change requires non-trivial implementation judgment.
 
-- Root AGENTS classifies the perturbation before acting.
-- PRD remains the single source of truth for product intent and observable behavior.
-- Code and tests remain the single source of implementation truth.
-- TDD-style docs exist only where code and tests are not enough.
-- Tasks provide agent-owned, task-local workspaces for volatile work, but non-trivial work still carries minimal guardrails.
-- Concepts load progressively: cheat sheet first, full dictionary only on demand.
-- Mode Dispatch is reusable SOP overlays rather than the only dispatcher.
-- Implementation taste keeps non-trivial code design and implementation changes grounded in SSoT, trust boundaries, semantic naming, and complexity ROI.
-- Topology extensions are pressure-driven: keep mono-repo as default; load multi-repo only when one product outgrows one repo.
+## Minimal Consumer Kernel
 
-Its core job is to help humans and agents answer:
+Start a consumer repository with exactly:
 
-- what the product must be and why
-- what technical truths must remain stable across iterations
-- what local complexities are dangerous enough to deserve explicit design memory
-- what runtime truths matter operationally
-- how to align at the correct level of granularity when natural language alone is not enough
-- what should stay ephemeral in tasks rather than being promoted into durable docs
-- how to extend mono-repo only when topology pressure requires it
-- how to classify incoming work before choosing a document owner or mutation path
-- how to explore ambiguous work without drifting away from core guardrails
-- how to keep core ontology available without bloating the context window
-- how to switch mind-patterns during a task without confusing durable ownership
+```text
+AGENTS.md
+docs/00-meta/working-protocol.md
+docs/00-meta/implementation-taste.md
+docs/10-prd/README.md
+```
 
-## Purpose and Core Principles
+- `AGENTS.md` contains repository identity, the crucial map, knowledge-owner references, development/debug fast paths, and project-specific execution rules.
+- `working-protocol.md` is the single operational contract.
+- `implementation-taste.md` is present but loaded only on its trigger.
+- `10-prd/README.md` holds the current product truth in the smallest useful form.
 
-### Purpose
+Four paths define the topology, not completeness. The kernel is complete only when root instructions contain real repository owners, executable development/debug entries, and a concrete task-retention rule; the protocol is referenced without a local fork; and product truth contains current claims rather than an empty template. Remove every unused placeholder during adoption.
 
-Sustainable Vibe Coding exists to make AI-assisted software development maintainable for a small team or a one-person company.
+Create `tasks/` only when active work needs a packet. Do not create empty glossaries, route or mode files, archives, TDD layers, Deployment, Alignment, multi-repo surfaces, or local `AGENTS.md` files.
 
-It is not a document-heavy process system. It is a selective memory system for preserving truths that are expensive to rediscover and risky to lose.
+Manual adoption sources:
 
-Its core job is to help humans and agents answer:
+- [Root AGENTS template](assets/templates/AGENTS.root.template.md)
+- [Working protocol](sections/working-protocol.md)
+- [Implementation taste](sections/implementation-taste.md)
+- [Product-truth template](assets/templates/product-truth.template.md)
 
-- what the product must be and why
-- what technical truths must remain stable across iterations
-- what local complexities are dangerous enough to deserve explicit design memory
-- what runtime truths matter operationally
-- how to align at the correct level of granularity when natural language alone is not enough
-- what should stay ephemeral in tasks rather than being promoted into durable docs
-- how to extend mono-repo only when topology pressure requires it
-- how to route work by input type before choosing the current SOP
-- how to keep exploration bounded without killing creativity
-- how to keep agent workspaces readable and inspectable during human-agent collaboration
-- how to apply language- and tech-stack-neutral implementation taste without turning creative engineering into waterfall design
-- how to colocate complexity-dissolving memory as close to target code as possible
-- how to isolate architectural structure (slow-moving) from tactical hazards (fast-moving)
-- how to load only the concepts and protocols needed for the current step
-- how to keep volatile task material from polluting ordinary source and durable-doc search
+## Knowledge Owners
 
-### Core Principles
+Use the working protocol to resolve the owner from claim semantics, provenance, and diagnosed cause. The registry below names available durable destinations; it does not assign one from the input label alone.
 
-- Typed input taxonomy comes first: before changing docs or code, classify the perturbation as Intent, Constraint, Reality, or Artifact so blast radius and durable owner are explicit.
-- Mode Dispatch is a mind-pattern layer: Explore, Solidify, Execute, and Diagnose are still valid SOPs, but they are not a one-task-one-mode pipeline.
-- Creative engineering is non-linear: design formation, implementation shape, verification preparation, execution, and diagnosis can reshape each other. Do not model SVC as design -> code -> verify.
-- PRD is the SSoT for product what and why: PRD is pressure-driven and follows one-way derivation from drivers to behavior to derived domain structure. Domain structure cannot push obligations upstream, and PRD does not own implementation structure.
-- Code, tests, and guardrails are the SSoT for implementation truth: implementation truth should live in code, tests, type systems, lint rules, CI checks, and runtime assertions.
-- Implementation taste guides non-trivial code design and implementation: preserve SSoT, respect trust and provenance, name durable semantics directly, and spend complexity only for clear return.
-- TDD exists only where code alone is not enough: technical design docs are not mandatory ceremony. They exist only when code and tests cannot cheaply preserve or communicate critical truths.
-- Tasks absorb volatility through agent-owned workspaces with MVT anchors: every non-trivial task carries Objective & Hypothesis, Guardrails Touched, and Verification so exploration stays lightweight, inspectable, and grounded.
-- Progressive ontology beats full-context dumping: keep only a cheat sheet in root AGENTS and load `00-meta/concepts.md` only when classification or boundary language becomes ambiguous.
-- Docs are for expensive unknowns: a durable doc should exist only when future humans or agents would otherwise make costly mistakes.
-- Do not build a second software system out of docs: documentation is support structure, not a parallel runtime.
-- Alignment docs are coordination artifacts, not a new truth layer: an alignment substrate may be justified when drift repeats due to references, naming, state ambiguity, or mutation-contract mismatch.
-- Human intent may stay fuzzy, but boundary-crossing execution must compile into a low-entropy coordination grammar before durable truth is mutated.
-- Pacing layers protect clarity: slow logical boundaries must be decoupled from fast physical code directories.
-- Topology extensions load progressively: keep mono-repo as default; load extension protocols only when the repo shape requires them.
-- Multi-repo is optional: add Hub/Spoke rules only when one product spans repos; do not push `docs/_shared` workflows onto mono-repo by default.
+| Truth | Durable owner | Admission |
+| --- | --- | --- |
+| Mechanically enforceable implementation fact | Source, configuration, schema, test, assertion, or automation | Prefer this owner whenever it can prevent drift directly |
+| Product promise, behavior, rules, scope, business language | [PRD](sections/prd.md) | Always keep a minimal product truth; split only for distinct consumers or cadence |
+| Repository development, debug, contribution, or release workflow | Root `AGENTS.md`, `CONTRIBUTING.md`, or executable project configuration | Keep the instruction at the entry used by its consumer |
+| Cross-unit authority, topology, or compatibility contract | [Product TDD](sections/product-tdd.md) | Another unit must rely on it to interoperate safely |
+| Expensive internal invariant of one logical unit | [Unit TDD](sections/unit-tdd.md) | It survives refactors and is not cheaply enforced or recovered |
+| Durable technical decision and rationale | ADR beside the affected technical owner | Real alternatives and long-lived consequences cannot be recovered cheaply; accepted history is superseded, not rewritten |
+| Repeated fragile seam in a physical subtree | Nearest local `AGENTS.md` | A local tripwire or mandatory verification prevents likely recurrence |
+| Runtime, packaging, migration, observability, or recovery truth | [Deployment](sections/deployment.md) | Operational behavior is non-trivial |
 
-## Front-Door Execution Loop
+Active reasoning, evidence, provisional decisions, and bounded artifacts are not durable destinations. Keep them in the [task control surface](sections/working-protocol.md#keep-a-task-control-surface) while work is active.
 
-1. Classify the incoming perturbation as Intent, Constraint, Reality, or Artifact.
-2. Identify the owning layer and blast radius before choosing how to work.
-3. For non-trivial work, open or update an agent-owned task packet with the three MVT anchors.
-4. Keep the packet current when discussion, exploration, implementation friction, or verification changes the working state.
-5. Select the current mode overlay: Explore, Solidify, Execute, or Diagnose. Revisit modes as the task evolves.
-6. Load only the anchors needed for this route, mode, and active topology (if any): PRD, Product TDD, Unit TDD, implementation taste, local AGENTS, deployment runbooks, glossary, concepts, and any extension SOPs that apply.
-7. Search source and durable docs with volatile workspaces excluded by default.
-8. Make changes only inside the owning layer for that truth.
-9. Promote new knowledge only when it passes the promotion test.
+Before adding any durable surface, require all of the following:
 
-## Layer Model
+- the claim is stable enough to outlive the current task
+- losing it would be expensive or risky
+- code, tests, schemas, or automation cannot preserve it better
+- a canonical owner and real consumer exist
+- useful content exists now
 
-1. Meta Engine Layer (00-meta/): typed dispatcher protocols, mode SOPs, implementation taste, on-demand concepts, and minimal route-specific scaffolds
-2. PRD Layer (10-prd/): product what, why, observable behavior, and business glossary
-3. Alignment Substrate (15-alignment/): optional pressure-driven coordination grammar
-4. Product TDD Layer (20-product-tdd/): cross-unit technical truth and global topology
-5. Unit TDD Layer (30-unit-tdd/): logical structural design independent of src folder movement
-6. Local Context Layer (Local AGENTS.md): tactical hazards and recurrence tripwires tied to exact code areas
-7. Deployment Layer (40-deployment/): runtime and operations truths
-8. Task Layer (tasks/): agent-owned task-local workspaces for volatile work, diagnosis, artifacts, evidence, and temporary reasoning
+No empty placeholder passes this test.
 
-> Product truth and implementation truth remain separate by design.
-> Unit TDD and Local AGENTS are complementary, not substitutes.
-> Input type decides ownership; mode decides the current working posture.
-> Mono-repo stays the default startup shape; topology extensions such as multi-repo load only when real pressure demands them.
+## Optional Extensions
 
-### Pacing Layers Map
+- [Alignment](sections/extensions/alignment.md): repeated coordination drift remains after normal owners and stable anchors are used.
+- [Multi-repo](sections/extensions/multi-repo.md): one product spans repositories and shared truth has a mechanically enforceable freshness contract.
 
-| Layer | Evolution Speed | Scope | Ownership | Typical Storage |
-| --- | --- | --- | --- | --- |
-| Structure | Slow | Logical architecture of a unit | Unit TDD | docs/30-unit-tdd/ |
-| Stuff | Fast | Local tactical code hazards and tripwires | Local AGENTS | src/**/AGENTS.md |
-| Product Intent | Medium | User-facing what and why | PRD | docs/10-prd/ |
-| Cross-unit Design | Medium | Contracts and topology | Product TDD | docs/20-product-tdd/ |
-| Runtime Ops | Event-driven | Telemetry and runbooks | Deployment | docs/40-deployment/ |
-| Volatile Work | Fastest | Exploration, diagnosis, collaboration state, evidence, and transient artifacts | Tasks | tasks/ |
-
-Rule of thumb:
-
-- If truth should survive directory refactors, put it in Structure.
-- If truth protects a fragile local seam, keep it near code in Stuff.
-- If truth is still exploratory, keep it in Tasks until stability is proven.
-- If task-local work grows beyond a compact control surface, split it into a packet directory by collaboration pressure.
-- If topology pressure appears, extend the default model incrementally rather than replacing it wholesale.
-- If ownership is unclear, do not let mode selection hide that ambiguity; resolve the route first.
-
-## Section Index
-
-1. [Minimal Filesystem](sections/filesystem.md)
-2. [Optional Multi-Repo Extension](sections/multi-repo.md)
-3. [Typed Taxonomy and Mode Engine](sections/meta-engine.md)
-4. [Progressive Ontology](sections/ontology.md)
-5. [PRD](sections/prd.md)
-6. [Alignment Substrate](sections/alignment.md)
-7. [Product TDD](sections/product-tdd.md)
-8. [Unit TDD and Local Context](sections/unit-tdd.md)
-9. [Deployment](sections/deployment.md)
-10. [Tasks](sections/tasks.md)
-11. [Promotion Rules](sections/promotion-rules.md)
-12. [Implementation Taste](sections/implementation-taste.md)
-
-## Anti-patterns
-
-- Routing work by ambiguity alone: do not skip typed input classification and jump straight to a mode.
-- Treating modes as durable owners: Explore or Diagnose never decides whether truth belongs in PRD, TDD, Deployment, or Tasks.
-- Assuming one task equals one mode: a single task may loop between Explore, Solidify, Execute, and Diagnose.
-- Task packets without verification: exploration without an executable completion proof invites hallucinated done-ness.
-- Treating task packets as private scratchpads only: agent-owned workspaces must stay human-readable, inspectable, and steerable.
-- Letting volatile packets pollute ordinary search: exclude `tasks/`, temp surfaces, generated output, dependencies, and caches unless the search intentionally targets them.
-- Loading the full ontology by default: keep root AGENTS tiny and read `00-meta/concepts.md` only when needed.
-- Mixing framework ontology with business language: keep framework terms in meta docs and business terms in `10-prd/glossary.md`.
-- Using docs to compensate for missing tests: if correctness can be guarded mechanically, prefer that.
-- Creating doc families before pain exists: start minimal and grow on evidence.
-- Documenting known-knowns: do not store facts that are easier to read directly from code.
-- Loading topology extensions by default: do not make mono-repo users carry Hub/Spoke or `docs/_shared` workflows unless the repo actually uses them.
-- Bypassing the task layer: do not update PRD or code from vague prompts without a bounded task packet.
-- Fixing bugs without evidence: Reality work stays read-first until root cause is justified.
-
-## Other
-- [Migration Guidance](sections/migration-guidance.md)
+Mono-repo is the default. Extensions add only their distinct pressure-driven contract; they do not replace the core owner model.

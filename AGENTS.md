@@ -1,72 +1,38 @@
 # AGENTS
 
-This repository is the SVC framework source itself, not an application service. Keep changes source-first, minimal, and verifiable.
+This repository is the source of the Sustainable Vibe Coding (SVC) framework, not a consumer project. Keep the framework small, source-first, and mechanically verifiable.
 
-## Quick Operating Loop
+## Knowledge Owners
 
-1. Classify the request as Intent, Constraint, Reality, or Artifact.
-2. Identify the durable owner for that truth before editing.
-3. Choose the current working posture: Explore, Solidify, Execute, or Diagnose.
-4. Load only the minimum needed references.
-5. Edit source files, verify, then promote stable knowledge.
+- Framework purpose, consumer minimum, and owner registry: `src/index.md`
+- Working protocol, task minimum, mutation gate, and documentation quality: `src/sections/working-protocol.md`
+- Non-trivial implementation judgment: `src/sections/implementation-taste.md`
+- Product truth: `src/sections/prd.md`
+- Cross-unit technical contracts: `src/sections/product-tdd.md`
+- Unit design and local instructions: `src/sections/unit-tdd.md`
+- Runtime and operational truth: `src/sections/deployment.md`
+- Optional topology and coordination guidance: `src/sections/extensions/`
+- Consumer shapes: `src/assets/templates/`
+- Monolith behavior: `src/tools/build_monolith.py` and `tests/`
+- Change history and migration notes: `CHANGELOG.md`
+- Volatile work: `tasks/`; delete packets when their task closes, with no archive or deletion-time promotion review.
 
-Input type decides ownership. Mode decides posture. Mode never overrides ownership.
+`build/monolith.md` is generated output, never an editing source.
 
-## Repository-Specific Sources of Truth
+## Development Workflow
 
-- Framework narrative and principles: `src/index.md`
-- Framework section details: `src/sections/`
-- Reusable templates: `src/assets/templates/`
-- Durable routing map: `src/assets/mappings/durable-destination-map.md`
-- Build logic: `src/tools/build_monolith.py`
-- Test coverage for builder behavior: `tests/test_build_monolith.py`
+- Runtime: Python 3.11+
+- Environment and commands: PDM
+- Install: `pdm install`
+- Test: `pdm run test`
+- Build the ignored reference artifact: `pdm run build-monolith`
+- Search source with `rg`; exclude `tasks/`, `.venv/`, and `build/` unless they are the target.
+- Diagnose builder failures from the reported source file and Markdown target; missing local paths and fragments are contract failures.
 
-Generated artifact:
+## Execution Rules
 
-- `build/monolith.md` is generated output. Do not treat it as the editing source.
-
-## Durable Owner Cheat Sheet
-
-- Intent: update product-level behavior guidance first.
-- Constraint: update technical boundary guidance without rewriting product intent.
-- Reality: gather evidence first, then fix; no evidence, no modification.
-- Artifact: keep tactical unless reuse and stability are proven.
-
-When ownership is ambiguous, resolve route first using:
-
-- `src/sections/meta-engine.md`
-- `src/sections/ontology.md`
-
-## Progressive Read Order
-
-Read the smallest useful set:
-
-1. `AGENTS.md` (this file)
-2. `src/index.md`
-3. Relevant section files in `src/sections/`
-4. Relevant templates in `src/assets/templates/`
-
-If a local `AGENTS.md` exists in a target subtree, apply it as additive constraints.
-
-## Guardrails
-
-- Keep source edits in `src/` and regenerate `build/monolith.md`.
-- Prefer existing terminology and layer boundaries over introducing new vocabulary.
-- Avoid framework bloat: add durable documentation only when it is stable and costly to rediscover.
-- Preserve current public command surface in `pyproject.toml` unless change is intentional.
-
-## Verification Commands
-
-```bash
-pdm run build-monolith
-pdm run test
-```
-
-## Negotiation Triggers
-
-Stop and request human confirmation when:
-
-- A change conflicts with existing layer ownership or established claims.
-- Blast radius crosses multiple durable owners and the correct owner is unclear.
-- Evidence is insufficient for a bug-fix or architectural decision.
-- A requested shortcut weakens maintainability, readability, or verifiability.
+- For non-trivial work, read `src/sections/working-protocol.md` before mutation.
+- Load `src/sections/implementation-taste.md` only when a change shapes code structure, boundaries, data, authority, naming, abstraction, or complexity.
+- Apply the nearest local `AGENTS.md` as an additive constraint when one exists.
+- Edit canonical source first. Update a template only when its consumer-facing shape changes.
+- Do not add a layer, template, tool, or agent surface without a distinct owner, trigger, consumer, and verification path.

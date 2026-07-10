@@ -1,35 +1,25 @@
-# AGENTS.md (Local Tactical Template)
+# Local Instructions: <Subtree>
 
 ## Scope
 
-- Directory: <path>
-- Covered files: <patterns>
+- Applies to: `<path or pattern>`
+- Does not apply to: `<boundary if needed>`
 
-## Non-Negotiable Invariants
+## Invariants and Authority
 
-1. <invariant-1>
-2. <invariant-2>
+- <non-negotiable local invariant>
+- Authority lives in: `<source>`
+- Allowed write path: `<entry point>`
+- Forbidden shortcut: `<shortcut and failure it causes>`
 
-## Authority and Write Paths
-
-- Source of truth state lives in: <location>
-- Allowed mutation entry points: <list>
-- Forbidden shortcuts: <list>
-
-## Hazard Map
+## Hazard and Tripwire
 
 - Fragile seam: <description>
-- Failure symptom: <description>
-- Safe mutation pattern: <description>
-- Safe guardrail: <test/check/assertion>
+- Recurrence signal: <observable symptom>
+- Required check: `<test, assertion, log, or command>`
+- Escalate when: <condition that invalidates local action>
 
-## Tripwires
+## Navigation
 
-- Recurrence signal: <what symptom should alert future agents>
-- Required early warning: <test/assert/log/check>
-- Escalate when: <condition that should stop local guessing>
-
-## Local Navigation Handles
-
-- Stable anchors: <id or selector list>
-- Key test files: <paths>
+- Stable anchors: `<symbols, ids, or selectors>`
+- Relevant tests: `<paths>`

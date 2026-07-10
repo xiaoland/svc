@@ -25,7 +25,7 @@ Use this protocol in a Spoke repo when local work discovers that shared Hub trut
 ## Phase 2: Solidify Global
 
 - shared files to edit:
-- owning route:
+- canonical owner:
 - summary for human approval:
 - approval received from:
 - Hub commit:
