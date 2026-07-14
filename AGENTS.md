@@ -13,6 +13,8 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - Runtime and operational truth: `src/sections/deployment.md`
 - Optional topology and coordination guidance: `src/sections/extensions/`
 - Consumer shapes: `src/assets/templates/`
+- Versioned release inventory: `src/manifest.json`
+- Consumer CLI, migration engine, and packaged resources: `src/svc_cli/` and `pdm_build.py`
 - Monolith behavior: `src/tools/build_monolith.py` and `tests/`
 - Change history and migration notes: `CHANGELOG.md`
 - Volatile work: `tasks/`; delete packets when their task closes, with no archive or deletion-time promotion review.
@@ -25,6 +27,8 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - Environment and commands: PDM
 - Install: `pdm install`
 - Test: `pdm run test`
+- Consumer CLI smoke test: `pdm run svc --help`
+- Build the installable distribution: `pdm build`
 - Build the ignored reference artifact: `pdm run build-monolith`
 - Search source with `rg`; exclude `tasks/`, `.venv/`, and `build/` unless they are the target.
 - Diagnose builder failures from the reported source file and Markdown target; missing local paths and fragments are contract failures.

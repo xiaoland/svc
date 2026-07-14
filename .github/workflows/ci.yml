@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install pdm==2.27.0
+      - run: pdm install --frozen-lockfile -d -G release
+      - run: pdm run test
+      - if: github.event_name != 'pull_request'
+        run: pdm run release check-ci
+      - if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if grep -Fq 'release:none' <<<"$PR_BODY"; then
+            pdm run release check-pr --base "origin/${{ github.base_ref }}" --release-none
+          else
+            pdm run release check-pr --base "origin/${{ github.base_ref }}"
+          fi
+      - name: Preview unconsumed release notes
+        run: |
+          if find changes -maxdepth 1 -type f -name '*.md' | grep -q .; then
+            version=$(pdm run release plan --json | python -c 'import json,sys; print(json.load(sys.stdin)["target_version"])')
+            pdm run towncrier build --draft --version "$version"
+          fi
+      - run: pdm run build-monolith
+
+  distribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pdm==2.27.0
+      - run: pdm install --frozen-lockfile -d -G release
+      - run: pdm build
+      - name: Smoke-test the installed wheel
+        run: |
+          python -m venv /tmp/svc-wheel
+          /tmp/svc-wheel/bin/pip install dist/*.whl
+          /tmp/svc-wheel/bin/svc --help
+          repo=$(mktemp -d)
+          plan=$(/tmp/svc-wheel/bin/svc init "$repo" --json)
+          digest=$(python -c 'import json,sys; print(json.load(sys.stdin)["plan_digest"])' <<<"$plan")
+          /tmp/svc-wheel/bin/svc init "$repo" --apply "$digest"
+          /tmp/svc-wheel/bin/svc status "$repo"
+          migration_repo=$(mktemp -d)
+          cp -R tests/fixtures/migrations/9.8.0_to_10.0.0/prepared/. "$migration_repo/"
+          migration=$(/tmp/svc-wheel/bin/svc migrate "$migration_repo" --from-version 9.8.0 --to 10.0.0 --json)
+          migration_digest=$(python -c 'import json,sys; print(json.load(sys.stdin)["plan_digest"])' <<<"$migration")
+          /tmp/svc-wheel/bin/svc migrate "$migration_repo" --from-version 9.8.0 --to 10.0.0 --apply "$migration_digest"
+          /tmp/svc-wheel/bin/svc status "$migration_repo"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: python-distributions
+          path: dist/*
+          if-no-files-found: error

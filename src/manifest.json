@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "previous_version": "9.8.0",
+  "svc_version": "10.0.0",
+  "behavioral_impact": {
+    "level": "major",
+    "reasons": [
+      "changes required consumer layout",
+      "introduces a machine-readable consumption contract",
+      "introduces executable initialization and migration behavior"
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "working-protocol",
+      "class": "svc-managed",
+      "source": "sections/working-protocol.md",
+      "target": "docs/00-meta/working-protocol.md",
+      "init_action": "create",
+      "upgrade_action": "replace-clean",
+      "sha256": "df68d948476552b3d4d31bba468e5a777eb3837f3daf803ae36e1af751a1e0e2"
+    },
+    {
+      "id": "implementation-taste",
+      "class": "svc-managed",
+      "source": "sections/implementation-taste.md",
+      "target": "docs/00-meta/implementation-taste.md",
+      "init_action": "create",
+      "upgrade_action": "replace-clean",
+      "sha256": "dd76500c8144548d7bae9e280b515bc4fa4aa6ecf242df8ecd01550b341c61dd"
+    },
+    {
+      "id": "root-instructions",
+      "class": "consumer-owned",
+      "source": "assets/templates/AGENTS.root.template.md",
+      "target": "AGENTS.md",
+      "init_action": "create-if-absent",
+      "upgrade_action": "preserve",
+      "sha256": "e6bccff0a490679f6e5e0234593f06de8b59fc4b1a087c6987b1551ae105caf4"
+    },
+    {
+      "id": "product-truth",
+      "class": "consumer-owned",
+      "source": "assets/templates/product-truth.template.md",
+      "target": "docs/10-prd/README.md",
+      "init_action": "create-if-absent",
+      "upgrade_action": "preserve",
+      "sha256": "e160b807f5460fbfbef286fcb205146943cb9a18897dc88db267f39a40e20a30"
+    },
+    {
+      "id": "consumer-state",
+      "class": "generated",
+      "target": ".svc/state.json",
+      "init_action": "generate",
+      "upgrade_action": "regenerate",
+      "generator": "svc.state.v1"
+    }
+  ]
+}

@@ -11,9 +11,9 @@ Sustainable Vibe Coding (SVC) is a selective-memory framework for small teams us
 
 The [working protocol](sections/working-protocol.md) owns routing, task state, mutation permission, and verification. [Implementation taste](sections/implementation-taste.md) is loaded only when a change requires non-trivial implementation judgment.
 
-## Minimal Consumer Kernel
+## Versioned Consumer Kernel
 
-Start a consumer repository with exactly:
+The release manifest installs four durable documents:
 
 ```text
 AGENTS.md
@@ -27,16 +27,54 @@ docs/10-prd/README.md
 - `implementation-taste.md` is present but loaded only on its trigger.
 - `10-prd/README.md` holds the current product truth in the smallest useful form.
 
-Four paths define the topology, not completeness. The kernel is complete only when root instructions contain real repository owners, executable development/debug entries, and a concrete task-retention rule; the protocol is referenced without a local fork; and product truth contains current claims rather than an empty template. Remove every unused placeholder during adoption.
+It also generates one non-authoritative control file:
+
+```text
+.svc/state.json
+```
+
+The four durable paths define the knowledge topology, not completeness. Generated state records installed version, release-manifest digest, managed-file digests, applied migrations, plan digest, and verification result; deleting it loses provenance but never deletes product or technical truth.
+
+The kernel is complete only when root instructions contain real repository owners, executable development/debug entries, and a concrete task-retention rule; the protocol is referenced without a local fork; and product truth contains current claims rather than an empty template. Remove every unused placeholder during adoption.
 
 Create `tasks/` only when active work needs a packet. Do not create empty glossaries, route or mode files, archives, TDD layers, Deployment, Alignment, multi-repo surfaces, or local `AGENTS.md` files.
 
-Manual adoption sources:
+The machine-readable [release manifest](manifest.json) declares every artifact's stable identity, source, consumer target, file class, initialization action, upgrade action, and digest or generator. Paths never imply authority.
+
+| File class | Authority | Initialization | Upgrade |
+| --- | --- | --- | --- |
+| SVC-managed | Versioned SVC release | Create from the declared payload | Replace only when current content matches installed provenance; otherwise block as drift |
+| Consumer-owned | Consumer repository | Seed from a template only when absent | Preserve; validate or advise without overwrite |
+| Generated | Declared generator and authoritative inputs | Generate and record provenance | Rebuild explicitly; never treat as a knowledge owner |
+
+Consume SVC through the version-addressable `svc` CLI:
+
+```text
+svc status <repo> [--json]
+svc init <repo> [--apply <plan-digest>] [--json]
+svc migrate <repo> --to <version> [--from-version <version>] [--apply <plan-digest>] [--json]
+```
+
+`init` and `migrate` are non-mutating plans by default. Apply requires the exact current plan digest. A migration resolves only registered adjacent steps, validates preconditions, stages and verifies the result before writing, persists a recoverable commit journal, verifies postconditions, and restores the pre-run tree if commit fails or the next invocation finds an interrupted commit. Recovery is reported in command output. Missing provenance, managed drift, Consumer-owned work, stale plans, and failed conditions block with no durable writes.
+
+Machine output includes `schema_version`, stable operation/status names, artifact identities, digests, blockers, and verification results. Exit codes are `0` for healthy/ready/applied, `2` for invalid CLI syntax, `3` for required action or conflict, and `4` for an invalid release or failed operation. SVC emits no outbound telemetry.
+
+The release payloads remain source-first:
 
 - [Root AGENTS template](assets/templates/AGENTS.root.template.md)
 - [Working protocol](sections/working-protocol.md)
 - [Implementation taste](sections/implementation-taste.md)
 - [Product-truth template](assets/templates/product-truth.template.md)
+
+## SVC Behavioral SemVer
+
+Version classification follows declared consumer behavior rather than document wording or accidental buggy behavior:
+
+- **MAJOR** changes a required obligation, default behavior, authority or permission boundary, task-packet semantics, required consumer layout, stable CLI or manifest machine contract, or removes a supported capability.
+- **MINOR** adds an optional backward-compatible capability or expands accepted inputs without changing existing obligations or defaults.
+- **PATCH** clarifies the contract or fixes implementation to satisfy it without changing consumer obligations, defaults, authority, required layout, or stable machine contracts.
+
+An optional additive layout may be MINOR. A fix may change observed faulty behavior and remain PATCH when it restores an already-declared contract. Every release declares its behavioral impact in the manifest; mechanical checks validate bump compatibility, while review remains responsible for classification truth.
 
 ## Knowledge Owners
 

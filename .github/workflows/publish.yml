@@ -1,0 +1,114 @@
+name: Publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: svc-publish
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      needed: ${{ steps.plan.outputs.needed }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pdm==2.27.0
+      - run: pdm install --frozen-lockfile -d -G release
+      - id: plan
+        run: |
+          plan=$(pdm run release publish-plan --json)
+          echo "needed=$(python -c 'import json,sys; print(str(json.load(sys.stdin)["needed"]).lower())' <<<"$plan")" >> "$GITHUB_OUTPUT"
+          if [[ "$plan" == *'"version"'* ]]; then
+            echo "version=$(python -c 'import json,sys; print(json.load(sys.stdin)["version"])' <<<"$plan")" >> "$GITHUB_OUTPUT"
+            echo "tag=$(python -c 'import json,sys; print(json.load(sys.stdin)["tag"])' <<<"$plan")" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    needs: detect
+    if: needs.detect.outputs.needed == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pdm==2.27.0
+      - run: pdm install --frozen-lockfile -d -G release
+      - run: |
+          pdm run release verify-prepared
+          pdm run test
+          pdm run build-monolith
+          pdm build --dest dist/python
+      - name: Smoke-test release wheel
+        run: |
+          python -m venv /tmp/svc-release
+          /tmp/svc-release/bin/pip install dist/python/*.whl
+          /tmp/svc-release/bin/svc --help
+      - name: Assemble release assets once
+        run: |
+          mkdir -p dist/release
+          cp dist/python/* dist/release/
+          cp src/manifest.json dist/release/svc-manifest.json
+          (cd dist/release && sha256sum * > SHA256SUMS)
+      - uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
+        with:
+          subject-path: dist/release/*
+      - name: Create tag and draft release without overwriting assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.detect.outputs.tag }}
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          pdm run release notes --json | python -c 'import json,sys; print(json.load(sys.stdin)["notes"])' > /tmp/release-notes.md
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag -a "$TAG" -m "SVC $VERSION"
+            git push origin "$TAG"
+          fi
+          test "$(git rev-list -n 1 "$TAG")" = "$(git rev-parse HEAD)"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --verify-tag --title "SVC $VERSION" --notes-file /tmp/release-notes.md
+          fi
+          mkdir -p /tmp/release-assets
+          gh release download "$TAG" --dir /tmp/release-assets || true
+          for asset in dist/release/*; do
+            name=$(basename "$asset")
+            if [[ -f "/tmp/release-assets/$name" ]]; then
+              cmp "$asset" "/tmp/release-assets/$name"
+            else
+              gh release upload "$TAG" "$asset"
+            fi
+          done
+      - id: pypi
+        run: |
+          plan=$(pdm run release pypi-plan --dist-dir dist/python --json)
+          echo "needed=$(python -c 'import json,sys; print(str(json.load(sys.stdin)["needed"]).lower())' <<<"$plan")" >> "$GITHUB_OUTPUT"
+      - if: steps.pypi.outputs.needed == 'true'
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+        with:
+          packages-dir: dist/python/
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false

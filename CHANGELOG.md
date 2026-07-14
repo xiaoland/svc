@@ -2,9 +2,19 @@
 
 All notable changes to the Sustainable Vibe Coding Framework are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Releases use SVC Behavioral SemVer: MAJOR changes required obligations, defaults, authority, task semantics, required layout, or stable machine contracts; MINOR adds backward-compatible optional capability; PATCH restores or clarifies the existing protocol without changing those contracts.
 
 ## [Unreleased]
+
+<!-- towncrier release notes start -->
+
+### Added
+
+- **Versioned consumption**: installable `sustainable-vibe-coding` distribution with a stable `svc` console command
+- **Release manifest**: machine-readable artifact identity, file authority, target, action, digest or generator, version, and behavioral impact
+- **Consumer state**: Generated `.svc/state.json` records installed provenance, managed digests, applied migrations, exact plan digest, and verification result
+- **Safe migration engine**: default dry-run, exact plan-digest apply, adjacent sequential steps, immutable snapshot preconditions, shadow-tree postconditions, persistent commit journal, automatic same-process or next-invocation recovery, and stable JSON evidence
+- **Migration fixtures**: clean v9.8 migration, Consumer-owned blockers, managed drift, stale plans, staged failure, rollback, and idempotent reapply
 
 ### Changed
 
@@ -15,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Task lifecycle**: made task workspaces disposable under project-owned retention with no required README, archive, or deletion-time promotion review
 - **Owner admission**: made Product TDD, Unit TDD, local instructions, Deployment, Alignment, and multi-repo explicitly pressure-driven instead of default placeholders
 - **Monolith validation**: missing local Markdown paths and fragments now fail the build instead of being skipped
+- **Consumer adoption**: replaced manual copy instructions with version-addressable `status`, `init`, and `migrate` commands
+- **Version authority**: unified the framework and Python distribution at `10.0.0`
+- **Consumer layout**: retained four durable knowledge documents and added Generated `.svc/state.json` as non-authoritative installation evidence
 
 ### Removed
 
@@ -24,14 +37,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Migration
 
-For consumers based on v9.8:
+For consumers based on v9.8, install the target CLI and plan the explicit source transition:
 
-1. Replace the four input-route and four mode files with a copy of `src/sections/working-protocol.md` at `docs/00-meta/working-protocol.md`.
-2. Shorten root `AGENTS.md` to project identity, the crucial map, knowledge-owner references, executable development/debug entries, a concrete task-retention rule, and a short protocol reference.
-3. Convert active task packets to Objective, Guardrails, Verification, Current Truth, and Next Step. Apply root retention directly; do not add archives or deletion-time promotion review.
-4. Keep contentful PRD, TDD, Deployment, Alignment, multi-repo, ADR, or local-instruction documents only when their current admission rule is met. Remove empty placeholders; a minimal PRD may consolidate into `docs/10-prd/README.md`.
-5. Remove copied SVC repo skills and installable Codex agent definitions; this release provides no replacement automation surface.
-6. Refresh `docs/00-meta/implementation-taste.md` from the current canonical source. Move any still-useful claim from the old `docs/00-meta/concepts.md` into the working protocol or its actual owner, then delete the old concepts file.
+```text
+svc migrate <repo> --from-version 9.8.0 --to 10.0.0
+```
+
+1. Inspect the dry-run blockers. v9.8 has no installed digests, so the CLI never silently removes unknown route, mode, or concepts files.
+2. Update Consumer-owned root instructions to reference `working-protocol.md`, `implementation-taste.md`, and `docs/10-prd/README.md`; consolidate product truth at that path without surrendering consumer ownership.
+3. Inspect and remove or relocate obsolete v9.8 protocol files. Preserve any still-useful local claim in its actual owner.
+4. Rerun the migration plan. It recognizes the released v9.8 implementation-taste digest, refuses local managed drift, and installs the two v10 managed protocol files.
+5. Apply only the new exact plan digest, then run `svc status <repo>` and require a healthy result.
+6. Convert active task packets to Objective, Guardrails, Verification, Current Truth, and Next Step. Apply root retention directly; do not add archives or deletion-time promotion review.
 
 ## [9.8.0] - 2026-06-07
 
@@ -94,10 +111,10 @@ For consumers based on v9.8:
 
 - **Dynamic navigation framework**: How agents should dynamically navigate ambiguity without falling into rigid waterfall processes or chaotic guesswork
 
-[Unreleased]: https://github.com/yourusername/svc
-[9.8.0]: https://github.com/yourusername/svc/releases/tag/v9.8.0
-[9.5.0]: https://github.com/yourusername/svc/releases/tag/v9.5.0
-[9.4.0]: https://github.com/yourusername/svc/releases/tag/v9.4.0
-[9.3.0]: https://github.com/yourusername/svc/releases/tag/v9.3.0
-[9.2.0]: https://github.com/yourusername/svc/releases/tag/v9.2.0
-[9.1.0]: https://github.com/yourusername/svc/releases/tag/v9.1.0
+[Unreleased]: https://github.com/xiaoland/svc
+[9.8.0]: https://github.com/xiaoland/svc/releases/tag/v9.8.0
+[9.5.0]: https://github.com/xiaoland/svc/releases/tag/v9.5.0
+[9.4.0]: https://github.com/xiaoland/svc/releases/tag/v9.4.0
+[9.3.0]: https://github.com/xiaoland/svc/releases/tag/v9.3.0
+[9.2.0]: https://github.com/xiaoland/svc/releases/tag/v9.2.0
+[9.1.0]: https://github.com/xiaoland/svc/releases/tag/v9.1.0

@@ -8,7 +8,7 @@ from src.tools.build_monolith import MonolithBuilder
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXCLUDED_MARKDOWN_ROOTS = {".git", ".venv", "build", "tasks"}
+EXCLUDED_MARKDOWN_ROOTS = {".git", ".venv", "build", "tasks", "tests"}
 
 
 def canonical_markdown_files() -> list[Path]:
@@ -122,10 +122,10 @@ class FrameworkContractTests(unittest.TestCase):
             with self.subTest(path=relative):
                 self.assertEqual(fields, expected)
 
-    def test_minimal_consumer_kernel_has_exactly_four_documents(self) -> None:
+    def test_consumer_kernel_has_four_durable_documents_and_generated_state(self) -> None:
         index = (REPO_ROOT / "src/index.md").read_text(encoding="utf-8")
         match = re.search(
-            r"## Minimal Consumer Kernel.*?```text\n(.*?)```",
+            r"## Versioned Consumer Kernel.*?```text\n(.*?)```",
             index,
             flags=re.DOTALL,
         )
@@ -140,10 +140,13 @@ class FrameworkContractTests(unittest.TestCase):
                 "docs/10-prd/README.md",
             ],
         )
+        self.assertIn(".svc/state.json", index)
+        self.assertIn("Generated state", index)
 
     def test_pdm_exposes_only_supported_commands(self) -> None:
         pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('build-monolith = "python -m src.tools.build_monolith"', pyproject)
+        self.assertIn('svc = "svc_cli.cli:main"', pyproject)
         self.assertIn("test = \"python -m unittest discover", pyproject)
         self.assertNotIn("install-agents", pyproject)
 
