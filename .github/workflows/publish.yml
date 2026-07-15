@@ -15,6 +15,10 @@ concurrency:
 jobs:
   detect:
     runs-on: ubuntu-latest
+    # GitHub exposes draft releases only to a token with write-level contents access.
+    # This job uses that access only for the read-only Releases API state query below.
+    permissions:
+      contents: write
     outputs:
       needed: ${{ steps.plan.outputs.needed }}
       version: ${{ steps.plan.outputs.version }}
@@ -42,7 +46,9 @@ jobs:
             # A tag is only an intermediate checkpoint. A missing or draft GitHub
             # Release means a prior publish attempt did not complete, so resume it.
             if [[ "$needed" != "true" ]]; then
-              if ! draft=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null); then
+              draft=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+                --jq ".[] | select(.tag_name == \"$tag\") | .draft" | head -n 1)
+              if [[ -z "$draft" ]]; then
                 needed=true
                 mode=resume-tag
               elif [[ "$draft" == "true" ]]; then
