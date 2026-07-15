@@ -25,9 +25,9 @@
   - The wheel projects every canonical Markdown document into one read-only corpus plus a deterministic catalog. `svc lookup --name` performs full-path regex lookup; deterministic keyword lookup shares an internal query/result boundary with a future semantic backend.
   - `svc init`, `svc status`, and `svc adopt` implement exact-plan project adoption through `svc.json`, a Codex skill at `.agents/skills/svc/SKILL.md`, and bounded Consumer-owned navigation anchors. Modified generated surfaces block rather than being overwritten. `svc self-update` is a separate, current-interpreter non-editable-pip operation.
   - Local plans revalidate preconditions, stage bytes outside the project, write atomically, verify postconditions, restore ordinary failures, and preserve intervening consumer content rather than overwriting it during a conflicted rollback.
-  - Verification is complete for this foundation: 50 unit/fixture tests, monolith build, Behavioral SemVer release check, Towncrier draft, clean wheel lookup/init/status/self-update planning, and sdist-to-wheel corpus-payload equivalence all pass.
-  - No v10 tag, GitHub Release, PyPI package, GitHub App, or protected publishing environment has been created. The pivot has no released-consumer migration obligation.
-- **Next Step**: Review the completed foundation and, only after a new Impact Handshake, choose the next bounded busybox slice: local thread export, task-packet helpers, or explicit dev-server assurance.
+  - Local verification passed with 51 unit/fixture tests, monolith build, Behavioral SemVer release check, clean wheel lookup/init/status/self-update planning, and sdist-to-wheel corpus-payload equivalence.
+  - v10.0.0 has a tag and an attested GitHub draft release. The first PyPI attempt correctly failed before publication because no Trusted Publisher existed; a release-resume defect then showed that tag existence alone is not completion proof. The workflow now resumes when the GitHub Release is missing or still a draft, and treats a published Release as the completion checkpoint.
+- **Next Step**: Merge the release-resume fix, rerun Publish, and verify the PyPI distribution plus the published GitHub Release before closing this packet.
 
 ## Supporting Material
 
