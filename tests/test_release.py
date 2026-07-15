@@ -11,6 +11,7 @@ from tools.release import (
     bump,
     bump_impact,
     check,
+    check_ci,
     check_pr,
     fragments,
     prepare,
@@ -59,9 +60,9 @@ class ReleasePlannerTests(unittest.TestCase):
                 fragments(root)
 
     def test_repository_release_contract_is_consistent(self) -> None:
-        plan = check(ROOT)
-        self.assertEqual(plan["base_version"], "9.8.0")
-        self.assertEqual(plan["target_version"], "10.0.0")
+        plan = check_ci(ROOT)
+        self.assertEqual(plan.get("base_version", plan.get("previous_version")), "9.8.0")
+        self.assertEqual(plan.get("target_version", plan.get("version")), "10.0.0")
         self.assertEqual(plan["impact"], "major")
 
     def test_feature_pr_does_not_prebump_released_metadata(self) -> None:
@@ -200,6 +201,18 @@ class ReleasePlannerTests(unittest.TestCase):
                     check_pr("origin/main", False, root)
                 result = check_pr("origin/main", True, root)
             self.assertEqual(result["release"], "none")
+
+    def test_prepared_release_pr_does_not_require_a_second_pyproject_version_change(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "changes").mkdir()
+            diff = unittest.mock.MagicMock(stdout="CHANGELOG.md\nsrc/manifest.json\n")
+            with (
+                patch("subprocess.run", return_value=diff),
+                patch("tools.release.verify_prepared", return_value={"version": "10.0.0"}),
+            ):
+                result = check_pr("origin/main", False, root)
+            self.assertEqual(result["version"], "10.0.0")
 
 
 if __name__ == "__main__":

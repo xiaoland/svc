@@ -5,6 +5,7 @@
 
 # Build
 build
+dist/
 
 # Filesystem
 .DS_Store
