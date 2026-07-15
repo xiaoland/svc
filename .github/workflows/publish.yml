@@ -19,6 +19,7 @@ jobs:
       needed: ${{ steps.plan.outputs.needed }}
       version: ${{ steps.plan.outputs.version }}
       tag: ${{ steps.plan.outputs.tag }}
+      mode: ${{ steps.plan.outputs.mode }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -34,6 +35,7 @@ jobs:
         run: |
           plan=$(pdm run release publish-plan --json)
           needed=$(python -c 'import json,sys; print(str(json.load(sys.stdin)["needed"]).lower())' <<<"$plan")
+          mode=create
           if [[ "$plan" == *'"version"'* ]]; then
             version=$(python -c 'import json,sys; print(json.load(sys.stdin)["version"])' <<<"$plan")
             tag=$(python -c 'import json,sys; print(json.load(sys.stdin)["tag"])' <<<"$plan")
@@ -43,12 +45,14 @@ jobs:
               draft=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || printf 'true')
               if [[ "$draft" == "true" ]]; then
                 needed=true
+                mode=resume
               fi
             fi
             echo "version=$version" >> "$GITHUB_OUTPUT"
             echo "tag=$tag" >> "$GITHUB_OUTPUT"
           fi
           echo "needed=$needed" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: detect
@@ -63,6 +67,14 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+      - name: Restore tagged release source for a resumed publish
+        env:
+          MODE: ${{ needs.detect.outputs.mode }}
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: |
+          if [[ "$MODE" == "resume" ]]; then
+            git checkout "$TAG"
+          fi
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
