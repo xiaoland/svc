@@ -1,8 +1,6 @@
 # Sustainable Vibe Coding
 
-Sustainable Vibe Coding (SVC) is a selective-memory framework for AI-assisted software development. It keeps stable, expensive-to-recover truth durable while leaving exploration and task state disposable.
-
-This repository contains the canonical framework, consumer templates, and a tool that builds a linked single-file reference.
+Sustainable Vibe Coding (SVC) is a source-first framework delivered as a versioned local corpus and a small development-collaboration CLI. It helps AI-assisted teams retain costly-to-rediscover truth without copying upstream framework documents into every repository.
 
 ## Develop SVC
 
@@ -12,47 +10,88 @@ Requirements: Python 3.11+ and PDM.
 pdm install
 pdm run test
 pdm run build-monolith
+pdm run svc --help
+pdm build
 ```
 
-`build/monolith.md` is ignored generated output. Edit sources under `src/`, not the monolith.
+Edit canonical framework content under `src/`, never `build/monolith.md`. `src/` contains only SVC corpus content and release metadata; Python runtime code is in `svc_cli/`, and repository-only builders/release tools are in `tools/`.
 
-## Read SVC
+## Use a Released Corpus
 
-1. Read [the framework index](src/index.md) for the consumer minimum and knowledge-owner registry.
-2. Read [the working protocol](src/sections/working-protocol.md) for routing, task state, mutation permission, and verification.
-3. Open only the relevant owner or optional extension.
-4. Load [implementation taste](src/sections/implementation-taste.md) only for non-trivial implementation judgment.
+Install the CLI, then query the guidance you need. The wheel contains the read-only corpus and a deterministic catalog, so ordinary lookup writes nothing and contacts no service.
 
-Change history and the current Unreleased migration path live in [CHANGELOG.md](CHANGELOG.md).
+```bash
+python -m pip install sustainable-vibe-coding==10.0.0
 
-## Apply the Minimal Consumer Kernel
+svc lookup --name 'sections/working-protocol\.md'
+svc lookup --name 'assets/templates/AGENTS\..*\.template\.md' --all
+svc lookup --keyword "task packet mutation gate"
+```
 
-A new consumer starts with exactly four durable documents:
+`--name` is a full-path regular expression over source-relative SVC document paths—not a document ID. Keyword results are short, deterministic candidates; use a returned path with `--name` to read canonical content. Semantic search is intentionally deferred until a local artifact and quality contract are measured.
+
+## Initialize a Consumer Project
+
+Initialization is dry-run by default. It creates no copied SVC documents and never silently overwrites consumer content.
+
+```bash
+svc init /path/to/project --agent codex --json
+svc init /path/to/project --apply <plan-digest>
+svc status /path/to/project
+```
+
+The exact-plan apply may create:
 
 ```text
-AGENTS.md
-docs/00-meta/working-protocol.md
-docs/00-meta/implementation-taste.md
-docs/10-prd/README.md
+svc.json
+.agents/skills/svc/SKILL.md
+AGENTS.md                  (a bounded generated SVC navigation block)
+docs/index.md              (created when absent, with a bounded generated navigation block)
 ```
 
-Use these sources:
+`svc.json` records only the project's adopted SVC baseline (plus its file schema):
 
-- customize [the root AGENTS template](src/assets/templates/AGENTS.root.template.md)
-- copy [the working protocol](src/sections/working-protocol.md)
-- copy [implementation taste](src/sections/implementation-taste.md)
-- instantiate [the product-truth template](src/assets/templates/product-truth.template.md)
+```json
+{
+  "schema_version": 1,
+  "svc_version": "10.0.0"
+}
+```
 
-Create `tasks/` only for active non-trivial work. Add TDD, local `AGENTS.md`, Deployment, Alignment, multi-repo, a glossary, or additional PRD files only when their admission rule is satisfied and real content exists.
+Everything unmarked in `AGENTS.md` and `docs/index.md` remains Consumer-owned. The Codex skill is a substantial operational guide to `svc` commands, not a duplicate of the framework corpus. Modified generated blocks or skills block refresh for human review.
+
+## Upgrade Deliberately
+
+The executable and project adoption are deliberately separate:
+
+```bash
+svc self-update --json
+svc self-update --apply <plan-digest>
+
+svc status /path/to/project
+svc lookup --keyword "migration"
+svc adopt 10.0.0 /path/to/project --apply <plan-digest>
+```
+
+`self-update` changes only a supported non-editable pip installation in the current interpreter. It never changes `svc.json`. After reviewing any packaged migration guidance and applying Consumer-owned changes under the project's mutation gate, `svc adopt` records the new baseline in `svc.json` through another exact plan.
+
+## Behavioral SemVer and Releases
+
+SVC uses Behavioral SemVer:
+
+- **MAJOR** changes required obligations, defaults, permission/authority boundaries, task-packet semantics, consumer layout, or a stable CLI/catalog contract.
+- **MINOR** adds an optional backward-compatible capability.
+- **PATCH** fixes or clarifies the existing protocol without changing those behaviors.
+
+Towncrier fragments and the release planner make the impact reviewable. GitHub Releases are the canonical release record; the Python package is the installation projection. See [CONTRIBUTING.md](CONTRIBUTING.md) for commit, fragment, and release workflow rules.
 
 ## Repository Layout
 
 ```text
-src/index.md                  framework entry
-src/sections/                canonical owner guidance
-src/sections/extensions/     pressure-driven extensions
-src/assets/templates/        consumer shapes
-src/tools/                   documentation tooling
-tests/                       tooling and framework contracts
-tasks/                       volatile framework work
+src/                         canonical SVC corpus and release metadata
+svc_cli/                     installable Python runtime
+tools/                       catalog, monolith, and release tooling
+pdm_build.py                 wheel corpus projection hook
+tests/                       contract and fixture tests
+tasks/                       volatile work packets
 ```

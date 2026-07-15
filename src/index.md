@@ -1,6 +1,6 @@
 # Sustainable Vibe Coding
 
-Sustainable Vibe Coding (SVC) is a selective-memory framework for small teams using AI-assisted development. It preserves truths that are costly to rediscover or dangerous to lose without turning documentation into a second software system.
+Sustainable Vibe Coding (SVC) is a versioned knowledge corpus and a local development-collaboration CLI for small teams using AI-assisted development. It preserves truth that is costly to rediscover without turning copied documentation into a second software system.
 
 ## Core Contract
 
@@ -11,36 +11,86 @@ Sustainable Vibe Coding (SVC) is a selective-memory framework for small teams us
 
 The [working protocol](sections/working-protocol.md) owns routing, task state, mutation permission, and verification. [Implementation taste](sections/implementation-taste.md) is loaded only when a change requires non-trivial implementation judgment.
 
-## Minimal Consumer Kernel
+## Packaged Runtime Consumption
 
-Start a consumer repository with exactly:
+SVC guidance is released inside the `svc` CLI. The canonical source is this `src/` corpus; the wheel contains a read-only projection of every canonical Markdown document plus a generated machine-readable catalog. A catalog path is the normalized path relative to `src/`, such as `sections/working-protocol.md` or `assets/templates/AGENTS.local.template.md`.
+
+No SVC framework document is copied into a consumer repository. There is no consumer-side SVC-managed document class and no `.svc` installation state directory. A project owns its product truth, technical decisions, task packets, and unmarked documentation. SVC supplies on-demand guidance and narrowly bounded integration anchors only.
+
+Query a released corpus locally:
 
 ```text
-AGENTS.md
-docs/00-meta/working-protocol.md
-docs/00-meta/implementation-taste.md
-docs/10-prd/README.md
+svc lookup --name 'sections/working-protocol\.md'
+svc lookup --name 'assets/templates/AGENTS\..*\.template\.md' --all
+svc lookup --keyword "task packet mutation gate"
 ```
 
-- `AGENTS.md` contains repository identity, the crucial map, knowledge-owner references, development/debug fast paths, and project-specific execution rules.
-- `working-protocol.md` is the single operational contract.
-- `implementation-taste.md` is present but loaded only on its trigger.
-- `10-prd/README.md` holds the current product truth in the smallest useful form.
+`--name` is a full-path regular expression, not a document identifier. It returns one document by default and rejects ambiguity; `--all` permits intentionally broad matches. Keyword search is deterministic and local. Its results identify paths and excerpts; resolve a selected path through `--name` to read the authoritative body. Semantic lookup is intentionally not yet a public command.
 
-Four paths define the topology, not completeness. The kernel is complete only when root instructions contain real repository owners, executable development/debug entries, and a concrete task-retention rule; the protocol is referenced without a local fork; and product truth contains current claims rather than an empty template. Remove every unused placeholder during adoption.
+Every command supports stable JSON output through `--json`. Exit code `0` means a ready, healthy, applied, or no-op result; `2` is CLI syntax; `3` means required action, invalid project state, conflict, or blocked plan; and `4` means release integrity, local apply, or installer failure.
 
-Create `tasks/` only when active work needs a packet. Do not create empty glossaries, route or mode files, archives, TDD layers, Deployment, Alignment, multi-repo surfaces, or local `AGENTS.md` files.
+## Project Adoption
 
-Manual adoption sources:
+`svc init` is plan-first. Its default plan makes no write. Applying the exact plan digest may only:
 
-- [Root AGENTS template](assets/templates/AGENTS.root.template.md)
-- [Working protocol](sections/working-protocol.md)
-- [Implementation taste](sections/implementation-taste.md)
-- [Product-truth template](assets/templates/product-truth.template.md)
+```text
+svc.json
+.agents/skills/svc/SKILL.md
+AGENTS.md                  (a bounded marked navigation block)
+docs/index.md              (created when absent, with a bounded marked navigation block)
+```
+
+`svc.json` is the project's small adoption declaration:
+
+```json
+{
+  "schema_version": 1,
+  "svc_version": "10.0.0"
+}
+```
+
+Its version means the project says it has adopted that SVC baseline. It does not assert that Consumer-owned documents match a framework snapshot. The installed package manager remains the authority for the executable version.
+
+The Codex skill at `.agents/skills/svc/SKILL.md` is an operational guide: it explains when and how to use the CLI, but does not copy the canonical SVC corpus. Root `AGENTS.md` and `docs/index.md` remain Consumer-owned from creation. Only their marked SVC navigation blocks, and the installed skill, have generated provenance markers. A user-modified or malformed generated surface blocks refresh rather than being silently replaced.
+
+```text
+svc init <repo> --agent codex
+svc init <repo> --apply <plan-digest>
+svc status <repo>
+```
+
+`svc status` reports the installed CLI/corpus version separately from the adopted project version, and reports missing, outdated, or user-modified generated guidance without claiming ownership over consumer content.
+
+## Update and Migration Guidance
+
+`svc self-update` and project adoption are separate:
+
+```text
+svc self-update
+svc self-update --apply <plan-digest>
+svc adopt <installed-version>
+svc adopt <installed-version> --apply <plan-digest>
+```
+
+The initial self-update adapter supports only a non-editable `pip` installation in the current interpreter. It plans the exact installer command, performs no project write, and verifies the resulting package version in a fresh interpreter. Unsupported installers and editable development installations are reported without mutation.
+
+After a CLI update, first inspect `svc status`. When a release provides migration guidance, look it up, evaluate the consumer repository's actual facts under its mutation gate, make Consumer-owned changes, and only then apply `svc adopt`. `adopt` writes `svc.json` only; it cannot claim that a human or Coding Agent has completed the required judgment.
+
+The source release metadata in `manifest.json` records corpus version and Behavioral SemVer impact. A future major release declares either a packaged Markdown guide under `migrations/` or a concrete reason why migration guidance is not applicable. The release planner validates that declaration; the CLI does not apply a generic consumer-file migration graph.
+
+## SVC Behavioral SemVer
+
+Version classification follows declared consumer behavior rather than document wording or accidental buggy behavior:
+
+- **MAJOR** changes a required obligation, default behavior, permission or authority boundary, task-packet semantic, consumer layout, or supported stable CLI/catalog contract.
+- **MINOR** adds a backward-compatible optional capability or expands accepted input without changing existing obligations or defaults.
+- **PATCH** fixes or clarifies the protocol without changing its required behavior, defaults, permission boundary, task-packet semantics, or consumer layout.
+
+An optional additive layout may be MINOR. A fix may change observed faulty behavior and remain PATCH when it restores an already-declared contract. Every release declares its behavioral impact in release metadata; mechanical checks validate bump compatibility while review remains responsible for classification truth.
 
 ## Knowledge Owners
 
-Use the working protocol to resolve the owner from claim semantics, provenance, and diagnosed cause. The registry below names available durable destinations; it does not assign one from the input label alone.
+Use the working protocol to resolve an owner from claim semantics, provenance, and diagnosed cause. The registry below names available durable destinations; it does not assign one from an input label alone.
 
 | Truth | Durable owner | Admission |
 | --- | --- | --- |
@@ -51,7 +101,7 @@ Use the working protocol to resolve the owner from claim semantics, provenance, 
 | Expensive internal invariant of one logical unit | [Unit TDD](sections/unit-tdd.md) | It survives refactors and is not cheaply enforced or recovered |
 | Durable technical decision and rationale | ADR beside the affected technical owner | Real alternatives and long-lived consequences cannot be recovered cheaply; accepted history is superseded, not rewritten |
 | Repeated fragile seam in a physical subtree | Nearest local `AGENTS.md` | A local tripwire or mandatory verification prevents likely recurrence |
-| Runtime, packaging, migration, observability, or recovery truth | [Deployment](sections/deployment.md) | Operational behavior is non-trivial |
+| Runtime, packaging, observability, or recovery truth | [Deployment](sections/deployment.md) | Operational behavior is non-trivial |
 
 Active reasoning, evidence, provisional decisions, and bounded artifacts are not durable destinations. Keep them in the [task control surface](sections/working-protocol.md#keep-a-task-control-surface) while work is active.
 

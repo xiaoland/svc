@@ -1,17 +1,55 @@
 [project]
-name = "svc-doc-tools"
-version = "0.1.0"
-description = "Utility scripts for building consolidated documentation."
+name = "sustainable-vibe-coding"
+version = "10.0.0"
+description = "Packaged SVC corpus and local development-collaboration CLI."
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
+
+[dependency-groups]
+release = [
+    "towncrier>=25.8,<26",
+]
+
+[project.scripts]
+svc = "svc_cli.cli:main"
 
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 
 [tool.pdm]
-distribution = false
+distribution = true
 
 [tool.pdm.scripts]
-build-monolith = "python -m src.tools.build_monolith"
+build-monolith = "python -m tools.build_monolith"
+svc = "python -m svc_cli.cli"
 test = "python -m unittest discover -s tests -p 'test_*.py'"
+release = "python -m tools.release"
+
+[tool.pdm.build]
+includes = ["svc_cli"]
+source-includes = ["src", "tools", "tests", "pdm_build.py"]
+
+[tool.towncrier]
+directory = "changes"
+filename = "CHANGELOG.md"
+title_format = "## [{version}] - {project_date}"
+issue_format = "`{issue}`"
+start_string = "<!-- towncrier release notes start -->\n"
+underlines = ["", "", ""]
+
+[[tool.towncrier.type]]
+directory = "major"
+name = "Behavioral breaking changes"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "minor"
+name = "Backward-compatible capabilities"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "patch"
+name = "Protocol fixes"
+showcontent = true

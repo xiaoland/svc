@@ -1,0 +1,75 @@
+# Contributing to SVC
+
+SVC is a source-first protocol. A contribution is complete when its behavioral impact, migration obligation, and verification evidence are reviewable—not merely when code passes locally.
+
+## Set Up and Verify
+
+Use Python 3.11 or newer and PDM:
+
+```console
+pdm install -d -G release
+pdm run test
+pdm run build-monolith
+pdm build
+pdm run svc lookup --name 'sections/working-protocol\\.md'
+```
+
+Canonical framework sources live under `src/`. Do not edit `build/monolith.md`; regenerate it with `pdm run build-monolith`.
+
+## Commit Messages
+
+Use this grammar:
+
+```text
+feat|fix|ref|docs|chore(<scope>): <imperative summary>
+```
+
+Keep the first line concise. Add body bullets when they preserve expensive context, constraints, or verification results.
+
+Accepted examples:
+
+```text
+feat(lookup): add an optional local corpus capability
+docs(protocol): define project adoption authority
+ref(cli): isolate packaged resource lookup
+```
+
+Rejected examples include `update files` (no type, scope, or intent), `feat: migration` (no scope), and `fix(cli): fixed status` (not imperative).
+
+Commit type is navigation metadata. It never determines release impact or the next version.
+
+## Declare Behavioral Impact
+
+Every user- or protocol-visible pull request adds one Markdown fragment:
+
+```text
+changes/<issue-or-pr>.major.md
+changes/<issue-or-pr>.minor.md
+changes/<issue-or-pr>.patch.md
+```
+
+Use:
+
+- `major` when required obligations, defaults, authority or permission boundaries, task-packet semantics, consumer layout, stable CLI/catalog contracts, or supported capabilities change incompatibly.
+- `minor` for an optional backward-compatible capability or accepted-input expansion.
+- `patch` for a correction or clarification that preserves declared protocol behavior.
+
+The fragment contains one concise, consumer-facing statement. Use the issue or pull-request number when one exists; a short lowercase identifier is acceptable before a number exists. Contributor-internal changes may omit a fragment only when the pull request explicitly records `release:none`.
+
+Validate fragments and inspect the calculated version without changing files:
+
+```console
+pdm run release check
+pdm run release plan
+pdm run towncrier build --draft --version 10.0.0
+```
+
+Towncrier renders release notes. The repository release planner—not commit prefixes—takes the maximum fragment impact, applies SVC Behavioral SemVer, and verifies version and migration-guidance obligations. A MAJOR release must declare either a packaged Markdown guide under `src/migrations/` or an explicit `not-applicable` reason; it never registers a consumer-file migration graph.
+
+For an already predeclared MAJOR release, the declaration lives in `behavioral_impact.migration`. When a MAJOR is still only a pending fragment, stage the declaration under a top-level `release_policy.migration` object in `src/manifest.json`; `release prepare` transfers it into the prepared release metadata and removes the staging field. This prevents an old release's migration rationale from silently becoming the next release's rationale.
+
+## Release Boundary
+
+After changes merge to `main`, automation creates or updates one Release PR. That PR consumes fragments and makes the version, changelog, release-metadata reasons, lockfile, and migration-guide declaration reviewable together.
+
+Merging a feature PR does not publish anything. Merging the Release PR prepares a candidate. Publication requires approval in the protected GitHub `release` environment; the workflow builds once, attests the artifacts, creates the tag and draft GitHub Release, publishes the same wheel and sdist to PyPI through Trusted Publishing, and only then publishes the GitHub Release.

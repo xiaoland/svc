@@ -2,36 +2,34 @@
 
 All notable changes to the Sustainable Vibe Coding Framework are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Releases use SVC Behavioral SemVer: MAJOR changes required obligations, defaults, authority, task semantics, required layout, or stable machine contracts; MINOR adds backward-compatible optional capability; PATCH restores or clarifies the existing protocol without changing those contracts.
 
 ## [Unreleased]
 
+<!-- towncrier release notes start -->
+
+### Added
+
+- **Packaged SVC corpus**: the installable `sustainable-vibe-coding` distribution ships the canonical Markdown corpus with a deterministic path catalog and local `svc lookup` command
+- **Project adoption**: plan-first `svc init`, `svc status`, and `svc adopt` establish `svc.json`, a Codex operational skill, and bounded navigation anchors without taking ownership of project documentation
+- **Self-update boundary**: `svc self-update` plans and applies only a supported current-interpreter pip update, separately from project adoption
+- **Codex skill integration**: initialization installs `.agents/skills/svc/SKILL.md`, which teaches command selection and safe use without duplicating SVC guidance
+
 ### Changed
 
-- **Implementation taste**: clarified data-shape-first design judgment and measured optimization before adding clever algorithms or generalized machinery
-- **Implementation taste surface**: condensed the document without changing its trigger or core authority, provenance, naming, data-shape, complexity, and verification principles
-- **Minimal consumer kernel**: reduced the default durable shape to root instructions, one working protocol, implementation taste, and one product-truth document
-- **Working protocol**: consolidated input lenses, owner resolution, working postures, the five-field task control surface, mutation permission, verification, and documentation quality under one canonical owner
-- **Task lifecycle**: made task workspaces disposable under project-owned retention with no required README, archive, or deletion-time promotion review
-- **Owner admission**: made Product TDD, Unit TDD, local instructions, Deployment, Alignment, and multi-repo explicitly pressure-driven instead of default placeholders
-- **Monolith validation**: missing local Markdown paths and fragments now fail the build instead of being skipped
+- **Consumer contract**: SVC guidance is queried from the installed corpus on demand instead of copied into consumer repositories
+- **Repository topology**: `src/` is now canonical SVC content only; `svc_cli/` holds runtime code and `tools/` holds build/release tooling
+- **Release metadata**: `src/manifest.json` records corpus version, Behavioral SemVer impact, and migration-guide policy rather than a consumer-file inventory
+- **Major-release guidance**: future major releases require a packaged migration guide or explicit non-applicability declaration, while consumers retain the judgment and writes for their own material
 
 ### Removed
 
-- **Route and mode documents**: replaced the four input-route and four mode files with `docs/00-meta/working-protocol.md`
-- **Duplicate framework surfaces**: removed the filesystem, ontology, promotion-map, migration-guide, and sequence documents after moving current claims to their canonical owners
-- **Unsupported agent surfaces**: removed the stale repo skills and installable Codex agent definitions rather than maintaining divergent protocol copies
+- **Managed-document installer**: SVC-managed consumer copies, `.svc/state.json`, digest tracking, consumer-file migration graph, and `svc migrate`
+- **Ambiguous source layout**: Python runtime and build tools no longer live below canonical `src/`
 
 ### Migration
 
-For consumers based on v9.8:
-
-1. Replace the four input-route and four mode files with a copy of `src/sections/working-protocol.md` at `docs/00-meta/working-protocol.md`.
-2. Shorten root `AGENTS.md` to project identity, the crucial map, knowledge-owner references, executable development/debug entries, a concrete task-retention rule, and a short protocol reference.
-3. Convert active task packets to Objective, Guardrails, Verification, Current Truth, and Next Step. Apply root retention directly; do not add archives or deletion-time promotion review.
-4. Keep contentful PRD, TDD, Deployment, Alignment, multi-repo, ADR, or local-instruction documents only when their current admission rule is met. Remove empty placeholders; a minimal PRD may consolidate into `docs/10-prd/README.md`.
-5. Remove copied SVC repo skills and installable Codex agent definitions; this release provides no replacement automation surface.
-6. Refresh `docs/00-meta/implementation-taste.md` from the current canonical source. Move any still-useful claim from the old `docs/00-meta/concepts.md` into the working protocol or its actual owner, then delete the old concepts file.
+This is the first unreleased v10 release shape. No v10 package, tag, or GitHub Release exists, so there is no published v10 consumer state to migrate. Future published major releases provide lookup migration guidance for Consumer-owned material before `svc adopt` records the new baseline.
 
 ## [9.8.0] - 2026-06-07
 
@@ -94,10 +92,10 @@ For consumers based on v9.8:
 
 - **Dynamic navigation framework**: How agents should dynamically navigate ambiguity without falling into rigid waterfall processes or chaotic guesswork
 
-[Unreleased]: https://github.com/yourusername/svc
-[9.8.0]: https://github.com/yourusername/svc/releases/tag/v9.8.0
-[9.5.0]: https://github.com/yourusername/svc/releases/tag/v9.5.0
-[9.4.0]: https://github.com/yourusername/svc/releases/tag/v9.4.0
-[9.3.0]: https://github.com/yourusername/svc/releases/tag/v9.3.0
-[9.2.0]: https://github.com/yourusername/svc/releases/tag/v9.2.0
-[9.1.0]: https://github.com/yourusername/svc/releases/tag/v9.1.0
+[Unreleased]: https://github.com/xiaoland/svc
+[9.8.0]: https://github.com/xiaoland/svc/releases/tag/v9.8.0
+[9.5.0]: https://github.com/xiaoland/svc/releases/tag/v9.5.0
+[9.4.0]: https://github.com/xiaoland/svc/releases/tag/v9.4.0
+[9.3.0]: https://github.com/xiaoland/svc/releases/tag/v9.3.0
+[9.2.0]: https://github.com/xiaoland/svc/releases/tag/v9.2.0
+[9.1.0]: https://github.com/xiaoland/svc/releases/tag/v9.1.0
