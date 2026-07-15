@@ -50,6 +50,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("pypa/gh-action-pypi-publish@", text)
         self.assertIn("pdm run release pypi-plan", text)
         self.assertIn("svc-release-metadata.json", text)
+        self.assertIn('gh release view "$tag" --json isDraft --jq .isDraft', text)
+        self.assertIn("A tag is only an intermediate checkpoint", text)
         self.assertIn('git config user.name "github-actions[bot]"', text)
         self.assertIn('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"', text)
         self.assertNotIn("ghcr.io", text)
