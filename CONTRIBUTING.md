@@ -70,6 +70,18 @@ For an already predeclared MAJOR release, the declaration lives in `behavioral_i
 
 ## Release Boundary
 
-After changes merge to `main`, automation creates or updates one Release PR. That PR consumes fragments and makes the version, changelog, release-metadata reasons, lockfile, and migration-guide declaration reviewable together.
+`main` is SVC's only integration and release source. Do not create or target a long-lived `develop` branch. Feature branches merge into `main`; `release/svc` is an automation-owned, short-lived release-candidate branch, never a second integration line.
 
-Merging a feature PR does not publish anything. Merging the Release PR prepares a candidate. Publication requires approval in the protected GitHub `release` environment; the workflow builds once, attests the artifacts, creates the tag and draft GitHub Release, publishes the same wheel and sdist to PyPI through Trusted Publishing, and only then publishes the GitHub Release.
+Maintainers configure these boundaries before the first release:
+
+- Repository variable `RELEASE_APP_ID` and secret `RELEASE_APP_PRIVATE_KEY` for the Release PR GitHub App.
+- Protected GitHub environment `release`, which gates publication.
+- PyPI Trusted Publisher for project `sustainable-vibe-coding`, repository `xiaoland/svc`, workflow `publish.yml`, and environment `release`.
+
+The release flow is intentionally sequenced:
+
+1. A feature PR declares Behavioral SemVer with a fragment, or records `release:none`, then merges to `main`.
+2. The Release PR workflow consumes pending fragments and creates or updates `release/svc`. Review its version, changelog, migration declaration, release reasons, and lockfile together.
+3. Merging that Release PR prepares the candidate. Publish approval in the protected `release` environment builds and attests the wheel and sdist, creates `v<version>` and a draft GitHub Release, publishes those same artifacts to PyPI through Trusted Publishing, then publishes the GitHub Release.
+
+The GitHub Release is the completion checkpoint, not the tag. If a publish is interrupted, run `Publish` with `workflow_dispatch` only after diagnosing the state: an absent tag creates a release from `main`; a tag without a Release rebuilds that tag; a draft Release verifies and reuses its immutable uploaded assets. A published Release is left unchanged.
