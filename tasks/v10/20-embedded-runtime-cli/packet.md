@@ -26,8 +26,8 @@
   - `svc init`, `svc status`, and `svc adopt` implement exact-plan project adoption through `svc.json`, a Codex skill at `.agents/skills/svc/SKILL.md`, and bounded Consumer-owned navigation anchors. Modified generated surfaces block rather than being overwritten. `svc self-update` is a separate, current-interpreter non-editable-pip operation.
   - Local plans revalidate preconditions, stage bytes outside the project, write atomically, verify postconditions, restore ordinary failures, and preserve intervening consumer content rather than overwriting it during a conflicted rollback.
   - Local verification passed with 51 unit/fixture tests, monolith build, Behavioral SemVer release check, clean wheel lookup/init/status/self-update planning, and sdist-to-wheel corpus-payload equivalence.
-  - v10.0.0 has a tag and an attested GitHub draft release. The first PyPI attempt correctly failed before publication because no Trusted Publisher existed. Recovery has three explicit states: create from `main` when the tag is absent; rebuild from the tag when the Release is absent; and, for a draft Release, checksum-verify then reuse its immutable, attested assets. A published Release is the completion checkpoint.
-- **Next Step**: Merge the draft-asset resume fix, rerun Publish, and verify the PyPI distribution plus the published GitHub Release before closing this packet.
+  - v10.0.0 has a tag and an attested GitHub draft release. The first PyPI attempt correctly failed before publication because no Trusted Publisher existed. Recovery has three explicit states: create from `main` when the tag is absent; rebuild from the tag when the Release is absent; and, for a draft Release, checksum-verify then reuse its immutable, attested assets. The protected Releases API query distinguishes those states; a published Release is the completion checkpoint.
+- **Next Step**: Merge the draft-state detection fix, rerun Publish, and verify the PyPI distribution plus the published GitHub Release before closing this packet.
 
 ## Supporting Material
 
