@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 <!-- towncrier release notes start -->
 
+## [10.0.0] - 2026-07-15
+
+### Behavioral breaking changes
+
+- Replace copied SVC-managed documents and the consumer-file migration engine with a packaged on-demand corpus, plan-first project adoption, and explicit migration guidance for Consumer-owned material. (`v10`)
+
+
 ### Added
 
 - **Packaged SVC corpus**: the installable `sustainable-vibe-coding` distribution ships the canonical Markdown corpus with a deterministic path catalog and local `svc lookup` command
@@ -99,3 +106,4 @@ This is the first unreleased v10 release shape. No v10 package, tag, or GitHub R
 [9.3.0]: https://github.com/xiaoland/svc/releases/tag/v9.3.0
 [9.2.0]: https://github.com/xiaoland/svc/releases/tag/v9.2.0
 [9.1.0]: https://github.com/xiaoland/svc/releases/tag/v9.1.0
+[10.0.0]: https://github.com/xiaoland/svc/releases/tag/v10.0.0

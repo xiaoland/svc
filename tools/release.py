@@ -248,7 +248,7 @@ def check_pr(base: str, release_none: bool, root: Path = ROOT) -> dict[str, obje
     }
     if changed_fragments:
         return check(root)
-    if {"CHANGELOG.md", "pyproject.toml", "src/manifest.json"} <= changed:
+    if {"CHANGELOG.md", "src/manifest.json"} <= changed:
         return verify_prepared(root)
     if release_none:
         return {"release": "none", "changed": sorted(changed)}

@@ -5,8 +5,7 @@
   "behavioral_impact": {
     "level": "major",
     "reasons": [
-      "replaces copied SVC-managed documents with an on-demand packaged corpus",
-      "changes the consumer bootstrap layout and stable CLI protocol"
+      "Replace copied SVC-managed documents and the consumer-file migration engine with a packaged on-demand corpus, plan-first project adoption, and explicit migration guidance for Consumer-owned material."
     ],
     "migration": {
       "status": "not-applicable",
