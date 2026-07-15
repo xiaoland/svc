@@ -1,7 +1,7 @@
 [project]
 name = "sustainable-vibe-coding"
 version = "10.0.0"
-description = "Executable consumption and migration protocol for Sustainable Vibe Coding."
+description = "Packaged SVC corpus and local development-collaboration CLI."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
@@ -22,15 +22,14 @@ build-backend = "pdm.backend"
 distribution = true
 
 [tool.pdm.scripts]
-build-monolith = "python -m src.tools.build_monolith"
+build-monolith = "python -m tools.build_monolith"
 svc = "python -m svc_cli.cli"
 test = "python -m unittest discover -s tests -p 'test_*.py'"
-release = "python -m src.tools.release"
+release = "python -m tools.release"
 
 [tool.pdm.build]
-package-dir = "src"
-includes = ["src/svc_cli"]
-source-includes = ["src/index.md", "src/manifest.json", "src/sections", "src/assets", "tests"]
+includes = ["svc_cli"]
+source-includes = ["src", "tools", "tests", "pdm_build.py"]
 
 [tool.towncrier]
 directory = "changes"

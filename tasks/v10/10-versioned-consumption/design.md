@@ -1,10 +1,12 @@
 # Versioned Consumption
 
+> Historical design: this consumer-copy and executable-migration model was superseded before v10 publication by [`../20-embedded-runtime-cli/packet.md`](../20-embedded-runtime-cli/packet.md). It remains task-local decision history only and must not be used as current implementation guidance.
+
 ## Outcome
 
 Replace manual document copying with a version-addressable SVC distribution, explicit file authority, observable installed state, and safe executable migrations.
 
-This design is implemented. Durable behavior now lives in the release manifest, CLI/migration code, consumer contract, package configuration, and tests; this file remains task-local context only.
+This design was implemented locally, then deliberately replaced before publication. Durable current behavior lives in the embedded-runtime CLI, release metadata, consumer contract, package configuration, and tests; this file remains task-local context only.
 
 ## Confirmed Decisions
 

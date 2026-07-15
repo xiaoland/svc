@@ -13,10 +13,11 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - Runtime and operational truth: `src/sections/deployment.md`
 - Optional topology and coordination guidance: `src/sections/extensions/`
 - Consumer shapes: `src/assets/templates/`
-- Versioned release inventory: `src/manifest.json`
-- Consumer CLI, migration engine, and packaged resources: `src/svc_cli/` and `pdm_build.py`
-- Monolith behavior: `src/tools/build_monolith.py` and `tests/`
-- Change history and migration notes: `CHANGELOG.md`
+- Release metadata and Behavioral SemVer declaration: `src/manifest.json`
+- Consumer runtime, project integration, and packaged-resource access: `svc_cli/`
+- Catalog/wheel projection and repository tooling: `tools/build_catalog.py`, `pdm_build.py`, and `tools/`
+- Monolith behavior: `tools/build_monolith.py` and `tests/`
+- Change history and release guidance: `CHANGELOG.md`
 - Volatile work: `tasks/`; delete packets when their task closes, with no archive or deletion-time promotion review.
 
 `build/monolith.md` is generated output, never an editing source.
@@ -30,6 +31,7 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - Consumer CLI smoke test: `pdm run svc --help`
 - Build the installable distribution: `pdm build`
 - Build the ignored reference artifact: `pdm run build-monolith`
+- Inspect the packaged corpus locally: `pdm run svc lookup --name 'sections/working-protocol\\.md'`
 - Search source with `rg`; exclude `tasks/`, `.venv/`, and `build/` unless they are the target.
 - Diagnose builder failures from the reported source file and Markdown target; missing local paths and fragments are contract failures.
 
@@ -39,4 +41,5 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - Load `src/sections/implementation-taste.md` only when a change shapes code structure, boundaries, data, authority, naming, abstraction, or complexity.
 - Apply the nearest local `AGENTS.md` as an additive constraint when one exists.
 - Edit canonical source first. Update a template only when its consumer-facing shape changes.
+- Keep `src/` free of Python runtime and build-tool code; package projections belong under `svc_cli/` and repository tooling under `tools/`.
 - Do not add a layer, template, tool, or agent surface without a distinct owner, trigger, consumer, and verification path.

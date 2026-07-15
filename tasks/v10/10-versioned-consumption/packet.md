@@ -16,14 +16,14 @@
   - Release automation creates or updates one reviewable Release PR, synchronizes version/manifest/Changelog/lock state, and consumes only included fragments.
   - A protected publish dry-run proves one-build promotion, artifact hashes, attestation inputs, tag/version agreement, GitHub Release assets, PyPI Trusted Publishing configuration, retry/idempotency, and zero GHCR publication.
 - **Current Truth**:
-  - The local `10.0.0` consumption and migration slice is implemented and verified; see [`design.md`](design.md) and [`verification.md`](verification.md).
-  - The Python package is `src/svc_cli/` with console entry `svc_cli.cli:main`; the distribution and executable remain `sustainable-vibe-coding` and `svc`.
+  - This packet's original consumer-copy and executable-migration design was superseded before v10 publication by [`../20-embedded-runtime-cli/packet.md`](../20-embedded-runtime-cli/packet.md). Its detailed design and verification files are historical context, not current implementation guidance.
+  - The current Python package is root `svc_cli/` with console entry `svc_cli.cli:main`; the distribution and executable remain `sustainable-vibe-coding` and `svc`.
   - Distribution is named `sustainable-vibe-coding`; the short PyPI project name `svc` is already owned by another project.
-  - GitHub Packages does not provide a pip-compatible PyPI registry. The approved topology is GitHub Releases for canonical release assets plus PyPI for normal Python installation.
-  - CI, Release PR, and protected publish workflows now exist under `.github/workflows/`; no Git tag, branch, GitHub Release, or Python distribution was created or published.
-  - Towncrier fragments, the repository release planner, and `CONTRIBUTING.md` now own change declaration, Behavioral SemVer calculation, migration enforcement, and contribution guidance.
-  - The detailed implementation sequence and external prerequisites are in [`release-plan.md`](release-plan.md).
-- **Next Step**: Review the implemented local release protocol and verification evidence. External GitHub/PyPI configuration and first publication remain a separate, explicitly authorized slice.
+  - GitHub Packages does not provide a pip-compatible PyPI registry. The approved topology remains GitHub Releases for canonical release assets plus PyPI for normal Python installation.
+  - CI, Release PR, and protected publish workflows exist under `.github/workflows/`; their smoke and release checks now target the embedded corpus/runtime model. No Git tag, branch, GitHub Release, or Python distribution was created or published.
+  - Towncrier fragments, the repository release planner, and `CONTRIBUTING.md` own change declaration, Behavioral SemVer calculation, staged/published MAJOR migration guidance, and contribution guidance.
+  - The detailed external release prerequisites remain in [`release-plan.md`](release-plan.md), subject to the supersession notice at its top.
+- **Next Step**: Keep this control surface only while v10 remains active; use the embedded-runtime packet for current work. External GitHub/PyPI configuration and first publication remain a separate, explicitly authorized slice.
 
 ## Supporting Material
 

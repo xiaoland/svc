@@ -1,5 +1,7 @@
 # Distribution and Release Plan
 
+> Status: the release topology remains useful, but its package-rename and consumer-migration references are superseded by the embedded-runtime design in [`../20-embedded-runtime-cli/packet.md`](../20-embedded-runtime-cli/packet.md). Use root `svc_cli/`, root `tools/`, and the current release tests as implementation authority.
+
 ## Approved Topology
 
 ```text

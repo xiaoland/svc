@@ -6,20 +6,34 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.tools.release import (
+from tools.release import (
     ReleaseError,
     bump,
     bump_impact,
     check,
     check_pr,
     fragments,
+    prepare,
     pypi_plan,
     verify_migration,
     verify_prepared,
 )
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def release_metadata(previous: str = "9.8.0", current: str = "10.0.0", impact: str = "major") -> dict[str, object]:
+    return {
+        "schema_version": 2,
+        "previous_version": previous,
+        "svc_version": current,
+        "behavioral_impact": {
+            "level": impact,
+            "reasons": ["consumer-visible protocol change"],
+            "migration": {"status": "not-applicable", "reason": "No released consumer state exists."},
+        },
+    }
 
 
 class ReleasePlannerTests(unittest.TestCase):
@@ -45,7 +59,7 @@ class ReleasePlannerTests(unittest.TestCase):
                 fragments(root)
 
     def test_repository_release_contract_is_consistent(self) -> None:
-        plan = check(REPO_ROOT)
+        plan = check(ROOT)
         self.assertEqual(plan["base_version"], "9.8.0")
         self.assertEqual(plan["target_version"], "10.0.0")
         self.assertEqual(plan["impact"], "major")
@@ -55,27 +69,96 @@ class ReleasePlannerTests(unittest.TestCase):
             root = Path(tmp)
             (root / "changes").mkdir()
             (root / "src").mkdir()
-            (root / "changes/42.minor.md").write_text(
-                "Add an optional capability.\n", encoding="utf-8"
-            )
+            (root / "changes/42.minor.md").write_text("Add an optional capability.\n", encoding="utf-8")
+            (root / "pyproject.toml").write_text('[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n', encoding="utf-8")
+            (root / "src/manifest.json").write_text(json.dumps(release_metadata()), encoding="utf-8")
+            with patch("tools.release.git_tags", return_value=["10.0.0"]):
+                plan = check(root)
+            self.assertEqual(plan["target_version"], "10.1.0")
+            self.assertEqual(plan["impact"], "minor")
+
+    def test_pending_major_requires_a_separate_staged_migration_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "changes").mkdir()
+            (root / "src").mkdir()
+            (root / "changes/42.major.md").write_text("Change a required obligation.\n", encoding="utf-8")
+            (root / "pyproject.toml").write_text('[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n', encoding="utf-8")
+            metadata = release_metadata(previous="9.9.0", current="10.0.0")
+            manifest_path = root / "src/manifest.json"
+            manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+            with patch("tools.release.git_tags", return_value=["10.0.0"]):
+                with self.assertRaisesRegex(ReleaseError, "migration guide or explicit non-applicability"):
+                    check(root)
+
+                metadata["release_policy"] = {
+                    "migration": {
+                        "status": "not-applicable",
+                        "reason": "The protocol has no persisted consumer state yet.",
+                    }
+                }
+                manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
+                plan = check(root)
+            self.assertEqual(plan["target_version"], "11.0.0")
+
+    def test_prepare_moves_pending_major_policy_into_the_release_and_removes_the_staging_field(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
             (root / "pyproject.toml").write_text(
                 '[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n',
                 encoding="utf-8",
             )
-            (root / "src/manifest.json").write_text(
-                json.dumps(
-                    {
-                        "previous_version": "9.8.0",
-                        "svc_version": "10.0.0",
-                        "behavioral_impact": {"level": "major", "reasons": ["released"]},
-                    }
-                ),
-                encoding="utf-8",
+            metadata = release_metadata(previous="9.9.0", current="10.0.0", impact="patch")
+            metadata["release_policy"] = {
+                "migration": {
+                    "status": "not-applicable",
+                    "reason": "This new protocol has no persisted consumer state.",
+                }
+            }
+            manifest_path = root / "src/manifest.json"
+            manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
+            (root / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
+            plan = {
+                "base_version": "10.0.0",
+                "target_version": "11.0.0",
+                "impact": "major",
+                "reasons": ["Change a required obligation."],
+            }
+
+            with (
+                patch("tools.release.release_plan", return_value=plan),
+                patch("tools.release.subprocess.run"),
+                patch("tools.release.verify_prepared", return_value={}),
+            ):
+                prepare(root)
+
+            prepared = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertNotIn("release_policy", prepared)
+            self.assertEqual(prepared["behavioral_impact"]["migration"], metadata["release_policy"]["migration"])
+
+    def test_major_release_requires_packaged_guide_or_reviewable_non_applicability(self) -> None:
+        with self.assertRaisesRegex(ReleaseError, "packaged migration guide"):
+            verify_migration("10.0.0", "11.0.0", "major")
+        verify_migration(
+            "10.0.0",
+            "11.0.0",
+            "major",
+            {"status": "not-applicable", "reason": "No persisted consumer state."},
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            guide = root / "src/migrations/11.0.0.md"
+            guide.parent.mkdir(parents=True)
+            guide.write_text("# Migration\n", encoding="utf-8")
+            verify_migration(
+                "10.0.0",
+                "11.0.0",
+                "major",
+                {"status": "guide", "path": "migrations/11.0.0.md"},
+                root,
             )
-            with patch("src.tools.release.git_tags", return_value=["10.0.0"]):
-                plan = check(root)
-            self.assertEqual(plan["target_version"], "10.1.0")
-            self.assertEqual(plan["impact"], "minor")
 
     def test_pypi_retry_accepts_only_identical_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -86,11 +169,9 @@ class ReleasePlannerTests(unittest.TestCase):
             response = unittest.mock.MagicMock()
             response.__enter__.return_value = response
             response.__exit__.return_value = False
-            response.read.return_value = json.dumps(
-                {"urls": [{"filename": wheel.name, "digests": {"sha256": digest}}]}
-            ).encode()
+            response.read.return_value = json.dumps({"urls": [{"filename": wheel.name, "digests": {"sha256": digest}}]}).encode()
             with patch("urllib.request.urlopen", return_value=response):
-                result = pypi_plan(dist, REPO_ROOT)
+                result = pypi_plan(dist, ROOT)
             self.assertFalse(result["needed"])
 
     def test_prepared_release_has_no_fragments_and_has_release_notes(self) -> None:
@@ -98,39 +179,16 @@ class ReleasePlannerTests(unittest.TestCase):
             root = Path(tmp)
             (root / "changes").mkdir()
             (root / "src").mkdir()
-            (root / "pyproject.toml").write_text(
-                '[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n',
-                encoding="utf-8",
-            )
-            (root / "src/manifest.json").write_text(
-                json.dumps(
-                    {
-                        "previous_version": "9.8.0",
-                        "svc_version": "10.0.0",
-                        "behavioral_impact": {
-                            "level": "major",
-                            "reasons": ["contract change"],
-                        },
-                    }
-                ),
-                encoding="utf-8",
-            )
-            (root / "CHANGELOG.md").write_text(
-                "## [10.0.0] - 2026-07-13\n\n"
-                "[10.0.0]: https://github.com/xiaoland/svc/releases/tag/v10.0.0\n",
-                encoding="utf-8",
-            )
+            (root / "pyproject.toml").write_text('[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n', encoding="utf-8")
+            (root / "src/manifest.json").write_text(json.dumps(release_metadata(), indent=2), encoding="utf-8")
+            (root / "CHANGELOG.md").write_text("## [10.0.0] - 2026-07-13\n\n[10.0.0]: https://github.com/xiaoland/svc/releases/tag/v10.0.0\n", encoding="utf-8")
             self.assertEqual(verify_prepared(root)["impact"], "major")
 
-    def test_major_migration_non_applicability_must_be_explicit(self) -> None:
-        with self.assertRaisesRegex(ReleaseError, "requires a sequential migration"):
-            verify_migration("10.0.0", "11.0.0", "major")
-        verify_migration(
-            "10.0.0",
-            "11.0.0",
-            "major",
-            {"status": "not-applicable", "reason": "No persisted consumer state."},
-        )
+            metadata = release_metadata()
+            metadata["release_policy"] = {"migration": metadata["behavioral_impact"]["migration"]}
+            (root / "src/manifest.json").write_text(json.dumps(metadata), encoding="utf-8")
+            with self.assertRaisesRegex(ReleaseError, "must not retain"):
+                verify_prepared(root)
 
     def test_pull_request_requires_fragment_or_release_none(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

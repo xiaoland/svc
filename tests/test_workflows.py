@@ -20,25 +20,28 @@ class WorkflowContractTests(unittest.TestCase):
                 with self.subTest(workflow=path.name, action=action):
                     self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
 
-    def test_ci_is_read_only_and_builds_clean_distribution(self) -> None:
+    def test_ci_is_read_only_and_smokes_the_embedded_runtime_wheel(self) -> None:
         text = self.workflow("ci.yml")
         self.assertIn("contents: read", text)
         self.assertIn('python-version: ["3.11", "3.14"]', text)
         self.assertIn("pdm run release check-pr", text)
         self.assertIn("release:none", text)
         self.assertIn("pdm build", text)
-        self.assertIn("svc migrate", text)
+        self.assertIn("svc lookup --name", text)
+        self.assertIn("svc init", text)
+        self.assertNotIn("svc migrate", text)
         self.assertNotIn("contents: write", text)
 
     def test_release_pr_uses_app_token_and_does_not_publish(self) -> None:
         text = self.workflow("release-pr.yml")
         self.assertIn("actions/create-github-app-token@", text)
         self.assertIn("pdm run release prepare", text)
+        self.assertIn("migration guidance", text)
         self.assertIn("gh pr create", text)
         self.assertNotIn("gh release create", text)
         self.assertNotIn("gh-action-pypi-publish", text)
 
-    def test_publish_is_protected_oidc_and_attested(self) -> None:
+    def test_publish_is_protected_oidc_attested_and_exports_release_metadata(self) -> None:
         text = self.workflow("publish.yml")
         self.assertIn("environment: release", text)
         self.assertIn("id-token: write", text)
@@ -46,6 +49,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("actions/attest-build-provenance@", text)
         self.assertIn("pypa/gh-action-pypi-publish@", text)
         self.assertIn("pdm run release pypi-plan", text)
+        self.assertIn("svc-release-metadata.json", text)
         self.assertNotIn("ghcr.io", text)
 
 

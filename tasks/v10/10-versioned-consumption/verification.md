@@ -1,5 +1,7 @@
 # Versioned Consumption Implementation Verification
 
+> Historical verification: these results covered the superseded consumer-copy and migration engine. The current proof is [`../20-embedded-runtime-cli/verification.md`](../20-embedded-runtime-cli/verification.md).
+
 ## Implemented Surfaces
 
 - Version and distribution authority: `pyproject.toml`, `pdm.lock`

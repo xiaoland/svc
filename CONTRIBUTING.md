@@ -11,7 +11,7 @@ pdm install -d -G release
 pdm run test
 pdm run build-monolith
 pdm build
-pdm run svc --help
+pdm run svc lookup --name 'sections/working-protocol\\.md'
 ```
 
 Canonical framework sources live under `src/`. Do not edit `build/monolith.md`; regenerate it with `pdm run build-monolith`.
@@ -29,8 +29,8 @@ Keep the first line concise. Add body bullets when they preserve expensive conte
 Accepted examples:
 
 ```text
-feat(migration): require exact plan digest before apply
-docs(protocol): define generated consumer state authority
+feat(lookup): add an optional local corpus capability
+docs(protocol): define project adoption authority
 ref(cli): isolate packaged resource lookup
 ```
 
@@ -50,7 +50,7 @@ changes/<issue-or-pr>.patch.md
 
 Use:
 
-- `major` when required obligations, defaults, authority or permission boundaries, task-packet semantics, consumer layout, stable machine contracts, or supported capabilities change incompatibly.
+- `major` when required obligations, defaults, authority or permission boundaries, task-packet semantics, consumer layout, stable CLI/catalog contracts, or supported capabilities change incompatibly.
 - `minor` for an optional backward-compatible capability or accepted-input expansion.
 - `patch` for a correction or clarification that preserves declared protocol behavior.
 
@@ -64,10 +64,12 @@ pdm run release plan
 pdm run towncrier build --draft --version 10.0.0
 ```
 
-Towncrier renders release notes. The repository release planner—not commit prefixes—takes the maximum fragment impact, applies SVC Behavioral SemVer, and verifies version and migration obligations. A MAJOR fragment must have a sequential registered migration from the previous release. If no persisted consumer state can require migration, declare `release_policy.migration` in `src/manifest.json` with status `not-applicable` and a concrete reviewable reason; the Release PR moves that declaration into the released behavioral-impact record.
+Towncrier renders release notes. The repository release planner—not commit prefixes—takes the maximum fragment impact, applies SVC Behavioral SemVer, and verifies version and migration-guidance obligations. A MAJOR release must declare either a packaged Markdown guide under `src/migrations/` or an explicit `not-applicable` reason; it never registers a consumer-file migration graph.
+
+For an already predeclared MAJOR release, the declaration lives in `behavioral_impact.migration`. When a MAJOR is still only a pending fragment, stage the declaration under a top-level `release_policy.migration` object in `src/manifest.json`; `release prepare` transfers it into the prepared release metadata and removes the staging field. This prevents an old release's migration rationale from silently becoming the next release's rationale.
 
 ## Release Boundary
 
-After changes merge to `main`, automation creates or updates one Release PR. That PR consumes fragments and makes the version, changelog, manifest reasons, lockfile, and migration graph reviewable together.
+After changes merge to `main`, automation creates or updates one Release PR. That PR consumes fragments and makes the version, changelog, release-metadata reasons, lockfile, and migration-guide declaration reviewable together.
 
 Merging a feature PR does not publish anything. Merging the Release PR prepares a candidate. Publication requires approval in the protected GitHub `release` environment; the workflow builds once, attests the artifacts, creates the tag and draft GitHub Release, publishes the same wheel and sdist to PyPI through Trusted Publishing, and only then publishes the GitHub Release.

@@ -59,17 +59,12 @@ jobs:
           python -m venv /tmp/svc-wheel
           /tmp/svc-wheel/bin/pip install dist/*.whl
           /tmp/svc-wheel/bin/svc --help
+          /tmp/svc-wheel/bin/svc lookup --name 'sections/working-protocol\.md' --json
           repo=$(mktemp -d)
           plan=$(/tmp/svc-wheel/bin/svc init "$repo" --json)
           digest=$(python -c 'import json,sys; print(json.load(sys.stdin)["plan_digest"])' <<<"$plan")
           /tmp/svc-wheel/bin/svc init "$repo" --apply "$digest"
           /tmp/svc-wheel/bin/svc status "$repo"
-          migration_repo=$(mktemp -d)
-          cp -R tests/fixtures/migrations/9.8.0_to_10.0.0/prepared/. "$migration_repo/"
-          migration=$(/tmp/svc-wheel/bin/svc migrate "$migration_repo" --from-version 9.8.0 --to 10.0.0 --json)
-          migration_digest=$(python -c 'import json,sys; print(json.load(sys.stdin)["plan_digest"])' <<<"$migration")
-          /tmp/svc-wheel/bin/svc migrate "$migration_repo" --from-version 9.8.0 --to 10.0.0 --apply "$migration_digest"
-          /tmp/svc-wheel/bin/svc status "$migration_repo"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: python-distributions

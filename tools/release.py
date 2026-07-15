@@ -10,10 +10,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from svc_cli.migrations import resolve_migrations
-
-
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 FRAGMENT_RE = re.compile(
     r"^(?P<name>[a-z0-9][a-z0-9-]*)\.(?P<impact>major|minor|patch)\.md$"
 )
@@ -103,7 +100,10 @@ def maximum_impact(items: list[Fragment]) -> str:
 
 
 def load_manifest(root: Path = ROOT) -> dict[str, object]:
-    return json.loads((root / "src/manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((root / "src/manifest.json").read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict) or manifest.get("schema_version") != 2:
+        raise ReleaseError("src/manifest.json must use release metadata schema_version 2")
+    return manifest
 
 
 def project_version(root: Path = ROOT) -> str:
@@ -162,22 +162,27 @@ def verify_migration(
     current: str,
     impact: str,
     migration_policy: object | None = None,
+    root: Path = ROOT,
 ) -> None:
     if impact != "major":
         return
-    try:
-        migrations = resolve_migrations(previous, current)
-    except ValueError as error:
-        if (
-            isinstance(migration_policy, dict)
-            and migration_policy.get("status") == "not-applicable"
-            and isinstance(migration_policy.get("reason"), str)
-            and migration_policy["reason"].strip()
-        ):
+    if not isinstance(migration_policy, dict):
+        raise ReleaseError("MAJOR release requires a packaged migration guide or explicit non-applicability")
+    status = migration_policy.get("status")
+    if status == "not-applicable":
+        reason = migration_policy.get("reason")
+        if isinstance(reason, str) and reason.strip():
             return
-        raise ReleaseError(f"MAJOR release requires a sequential migration: {error}") from error
-    if not migrations:
-        raise ReleaseError("MAJOR release requires a registered migration")
+        raise ReleaseError("MAJOR migration non-applicability requires a concrete reason")
+    if status == "guide":
+        path = migration_policy.get("path")
+        if not isinstance(path, str) or not path.startswith("migrations/") or not path.endswith(".md"):
+            raise ReleaseError("MAJOR migration guide must name a Markdown path under src/migrations/")
+        source = root / "src" / path
+        if not source.is_file():
+            raise ReleaseError(f"MAJOR migration guide does not exist: {path}")
+        return
+    raise ReleaseError("MAJOR migration policy must be guide or not-applicable")
 
 
 def check(root: Path = ROOT) -> dict[str, object]:
@@ -199,6 +204,7 @@ def check(root: Path = ROOT) -> dict[str, object]:
             str(plan["target_version"]),
             str(plan["impact"]),
             migration_policy,
+            root,
         )
         return plan
     if plan["target_version"] != manifest["svc_version"]:
@@ -216,6 +222,7 @@ def check(root: Path = ROOT) -> dict[str, object]:
         str(manifest["svc_version"]),
         str(plan["impact"]),
         impact.get("migration"),
+        root,
     )
     return plan
 
@@ -268,15 +275,35 @@ def prepare(root: Path = ROOT) -> dict[str, object]:
     plan = release_plan(root)
     manifest_path = root / "src/manifest.json"
     manifest = load_manifest(root)
+    base_version = str(plan["base_version"])
+    declared_version = str(manifest["svc_version"])
+    predeclared_release = parse_version(declared_version) > parse_version(base_version)
+    existing_impact = manifest.get("behavioral_impact")
+    staged_policy = manifest.pop("release_policy", None)
     manifest["previous_version"] = plan["base_version"]
     manifest["svc_version"] = plan["target_version"]
     impact_data: dict[str, object] = {"level": plan["impact"], "reasons": plan["reasons"]}
-    existing_impact = manifest.get("behavioral_impact")
-    if isinstance(existing_impact, dict) and "migration" in existing_impact:
-        impact_data["migration"] = existing_impact["migration"]
-    release_policy = manifest.pop("release_policy", None)
-    if isinstance(release_policy, dict) and "migration" in release_policy:
-        impact_data["migration"] = release_policy["migration"]
+    if plan["impact"] == "major":
+        if predeclared_release:
+            if staged_policy is not None:
+                raise ReleaseError("A predeclared MAJOR release must declare migration in behavioral_impact, not release_policy")
+            migration_policy = (
+                existing_impact.get("migration") if isinstance(existing_impact, dict) else None
+            )
+        else:
+            migration_policy = (
+                staged_policy.get("migration") if isinstance(staged_policy, dict) else None
+            )
+        verify_migration(
+            base_version,
+            str(plan["target_version"]),
+            "major",
+            migration_policy,
+            root,
+        )
+        impact_data["migration"] = migration_policy
+    elif staged_policy is not None:
+        raise ReleaseError("release_policy is valid only while staging a pending MAJOR release")
     manifest["behavioral_impact"] = impact_data
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     replace_project_version(root / "pyproject.toml", str(plan["target_version"]))
@@ -313,6 +340,8 @@ def verify_prepared(root: Path = ROOT) -> dict[str, object]:
     if remaining:
         raise ReleaseError("Prepared release still contains change fragments")
     manifest = load_manifest(root)
+    if "release_policy" in manifest:
+        raise ReleaseError("Prepared release metadata must not retain a staging release_policy")
     previous = str(manifest["previous_version"])
     current = str(manifest["svc_version"])
     if project_version(root) != current:
@@ -330,7 +359,7 @@ def verify_prepared(root: Path = ROOT) -> dict[str, object]:
         or not all(isinstance(reason, str) and reason.strip() for reason in reasons)
     ):
         raise ReleaseError("Release manifest requires non-empty behavioral reasons")
-    verify_migration(previous, current, impact, impact_data.get("migration"))
+    verify_migration(previous, current, impact, impact_data.get("migration"), root)
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     if f"## [{current}]" not in changelog:
         raise ReleaseError(f"CHANGELOG.md has no {current} release section")

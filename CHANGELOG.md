@@ -10,45 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **Versioned consumption**: installable `sustainable-vibe-coding` distribution with a stable `svc` console command
-- **Release manifest**: machine-readable artifact identity, file authority, target, action, digest or generator, version, and behavioral impact
-- **Consumer state**: Generated `.svc/state.json` records installed provenance, managed digests, applied migrations, exact plan digest, and verification result
-- **Safe migration engine**: default dry-run, exact plan-digest apply, adjacent sequential steps, immutable snapshot preconditions, shadow-tree postconditions, persistent commit journal, automatic same-process or next-invocation recovery, and stable JSON evidence
-- **Migration fixtures**: clean v9.8 migration, Consumer-owned blockers, managed drift, stale plans, staged failure, rollback, and idempotent reapply
+- **Packaged SVC corpus**: the installable `sustainable-vibe-coding` distribution ships the canonical Markdown corpus with a deterministic path catalog and local `svc lookup` command
+- **Project adoption**: plan-first `svc init`, `svc status`, and `svc adopt` establish `svc.json`, a Codex operational skill, and bounded navigation anchors without taking ownership of project documentation
+- **Self-update boundary**: `svc self-update` plans and applies only a supported current-interpreter pip update, separately from project adoption
+- **Codex skill integration**: initialization installs `.agents/skills/svc/SKILL.md`, which teaches command selection and safe use without duplicating SVC guidance
 
 ### Changed
 
-- **Implementation taste**: clarified data-shape-first design judgment and measured optimization before adding clever algorithms or generalized machinery
-- **Implementation taste surface**: condensed the document without changing its trigger or core authority, provenance, naming, data-shape, complexity, and verification principles
-- **Minimal consumer kernel**: reduced the default durable shape to root instructions, one working protocol, implementation taste, and one product-truth document
-- **Working protocol**: consolidated input lenses, owner resolution, working postures, the five-field task control surface, mutation permission, verification, and documentation quality under one canonical owner
-- **Task lifecycle**: made task workspaces disposable under project-owned retention with no required README, archive, or deletion-time promotion review
-- **Owner admission**: made Product TDD, Unit TDD, local instructions, Deployment, Alignment, and multi-repo explicitly pressure-driven instead of default placeholders
-- **Monolith validation**: missing local Markdown paths and fragments now fail the build instead of being skipped
-- **Consumer adoption**: replaced manual copy instructions with version-addressable `status`, `init`, and `migrate` commands
-- **Version authority**: unified the framework and Python distribution at `10.0.0`
-- **Consumer layout**: retained four durable knowledge documents and added Generated `.svc/state.json` as non-authoritative installation evidence
+- **Consumer contract**: SVC guidance is queried from the installed corpus on demand instead of copied into consumer repositories
+- **Repository topology**: `src/` is now canonical SVC content only; `svc_cli/` holds runtime code and `tools/` holds build/release tooling
+- **Release metadata**: `src/manifest.json` records corpus version, Behavioral SemVer impact, and migration-guide policy rather than a consumer-file inventory
+- **Major-release guidance**: future major releases require a packaged migration guide or explicit non-applicability declaration, while consumers retain the judgment and writes for their own material
 
 ### Removed
 
-- **Route and mode documents**: replaced the four input-route and four mode files with `docs/00-meta/working-protocol.md`
-- **Duplicate framework surfaces**: removed the filesystem, ontology, promotion-map, migration-guide, and sequence documents after moving current claims to their canonical owners
-- **Unsupported agent surfaces**: removed the stale repo skills and installable Codex agent definitions rather than maintaining divergent protocol copies
+- **Managed-document installer**: SVC-managed consumer copies, `.svc/state.json`, digest tracking, consumer-file migration graph, and `svc migrate`
+- **Ambiguous source layout**: Python runtime and build tools no longer live below canonical `src/`
 
 ### Migration
 
-For consumers based on v9.8, install the target CLI and plan the explicit source transition:
-
-```text
-svc migrate <repo> --from-version 9.8.0 --to 10.0.0
-```
-
-1. Inspect the dry-run blockers. v9.8 has no installed digests, so the CLI never silently removes unknown route, mode, or concepts files.
-2. Update Consumer-owned root instructions to reference `working-protocol.md`, `implementation-taste.md`, and `docs/10-prd/README.md`; consolidate product truth at that path without surrendering consumer ownership.
-3. Inspect and remove or relocate obsolete v9.8 protocol files. Preserve any still-useful local claim in its actual owner.
-4. Rerun the migration plan. It recognizes the released v9.8 implementation-taste digest, refuses local managed drift, and installs the two v10 managed protocol files.
-5. Apply only the new exact plan digest, then run `svc status <repo>` and require a healthy result.
-6. Convert active task packets to Objective, Guardrails, Verification, Current Truth, and Next Step. Apply root retention directly; do not add archives or deletion-time promotion review.
+This is the first unreleased v10 release shape. No v10 package, tag, or GitHub Release exists, so there is no published v10 consumer state to migrate. Future published major releases provide lookup migration guidance for Consumer-owned material before `svc adopt` records the new baseline.
 
 ## [9.8.0] - 2026-06-07
 

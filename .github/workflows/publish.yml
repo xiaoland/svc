@@ -65,11 +65,12 @@ jobs:
           python -m venv /tmp/svc-release
           /tmp/svc-release/bin/pip install dist/python/*.whl
           /tmp/svc-release/bin/svc --help
+          /tmp/svc-release/bin/svc lookup --name 'sections/working-protocol\.md' --json
       - name: Assemble release assets once
         run: |
           mkdir -p dist/release
           cp dist/python/* dist/release/
-          cp src/manifest.json dist/release/svc-manifest.json
+          cp src/manifest.json dist/release/svc-release-metadata.json
           (cd dist/release && sha256sum * > SHA256SUMS)
       - uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
         with:

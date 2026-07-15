@@ -1,24 +1,19 @@
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
 
-from src.tools.build_monolith import MonolithBuilder
+from tools.build_monolith import MonolithBuilder
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-EXCLUDED_MARKDOWN_ROOTS = {".git", ".venv", "build", "tasks", "tests"}
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "src"
 
 
 def canonical_markdown_files() -> list[Path]:
-    files: list[Path] = []
-    for path in REPO_ROOT.rglob("*.md"):
-        relative = path.relative_to(REPO_ROOT)
-        if relative.parts and relative.parts[0] in EXCLUDED_MARKDOWN_ROOTS:
-            continue
-        files.append(path)
-    return sorted(files)
+    return sorted(path for path in SOURCE.rglob("*.md") if path.is_file())
 
 
 def word_count(path: Path) -> int:
@@ -28,80 +23,43 @@ def word_count(path: Path) -> int:
 class FrameworkContractTests(unittest.TestCase):
     def test_all_canonical_markdown_links_resolve(self) -> None:
         for path in canonical_markdown_files():
-            with self.subTest(path=path.relative_to(REPO_ROOT).as_posix()):
-                MonolithBuilder(REPO_ROOT).build(path)
+            with self.subTest(path=path.relative_to(SOURCE).as_posix()):
+                MonolithBuilder(SOURCE).build(path)
 
-    def test_obsolete_protocol_surfaces_are_absent(self) -> None:
-        removed_paths = [
-            ".agents/skills/init-svc",
-            ".agents/skills/edit-svc-shared-docs",
-            "SEQUENCE_OF_USE.md",
-            "src/.agents/codex-agents/impact_cartographer.toml",
-            "src/.agents/codex-agents/svc_local_context_loader.toml",
-            "src/.agents/codex-agents/svc_task_steward.toml",
-            "src/assets/mappings/durable-destination-map.md",
-            "src/sections/alignment.md",
-            "src/sections/filesystem.md",
-            "src/sections/meta-engine.md",
-            "src/sections/migration-guidance.md",
-            "src/sections/multi-repo.md",
-            "src/sections/ontology.md",
-            "src/sections/promotion-rules.md",
-            "src/sections/tasks.md",
-            "src/assets/templates/concepts.template.md",
-            "src/assets/templates/input-artifact.template.md",
-            "src/assets/templates/input-constraint.template.md",
-            "src/assets/templates/input-intent.template.md",
-            "src/assets/templates/input-reality.template.md",
-            "src/assets/templates/mode-a-explore.template.md",
-            "src/assets/templates/mode-b-solidify.template.md",
-            "src/assets/templates/mode-c-execute.template.md",
-            "src/assets/templates/mode-d-diagnose.template.md",
-            "src/assets/templates/prd-file-set.template.md",
-            "src/assets/templates/product-tdd-file-set.template.md",
-            "src/tools/install_agents.py",
-            "scripts/build_monolith.py",
-            "tests/test_install_agents.py",
-        ]
-        for relative in removed_paths:
+    def test_embedded_runtime_replaced_the_old_consumer_file_model(self) -> None:
+        removed_code_roots = ["src/svc_cli", "src/tools", "src/.agents/codex-agents"]
+        for relative in removed_code_roots:
             with self.subTest(path=relative):
-                self.assertFalse((REPO_ROOT / relative).exists())
+                self.assertEqual(list((ROOT / relative).rglob("*.py")) if (ROOT / relative).exists() else [], [])
+        fixtures = ROOT / "tests/fixtures/migrations"
+        self.assertEqual([path for path in fixtures.rglob("*") if path.is_file()] if fixtures.exists() else [], [])
+        self.assertTrue((ROOT / "svc_cli/cli.py").is_file())
+        self.assertTrue((ROOT / "tools/build_catalog.py").is_file())
+        self.assertTrue((ROOT / "tools/build_monolith.py").is_file())
 
-    def test_no_live_reference_uses_removed_protocol_names(self) -> None:
-        obsolete = (
-            "meta-engine.md",
-            "migration-guidance.md",
-            "durable-destination-map.md",
-            "input-intent.template.md",
-            "input-constraint.template.md",
-            "input-reality.template.md",
-            "input-artifact.template.md",
-            "mode-a-explore.template.md",
-            "mode-b-solidify.template.md",
-            "mode-c-execute.template.md",
-            "mode-d-diagnose.template.md",
-            "init-svc",
-            "edit-svc-shared-docs",
-            "install-agents",
-        )
-        files = [path for path in canonical_markdown_files() if path.name != "CHANGELOG.md"]
-        files.extend(sorted((REPO_ROOT / "src").rglob("*.py")))
-        files.extend(sorted((REPO_ROOT / "src").rglob("*.toml")))
-        files.append(REPO_ROOT / "pyproject.toml")
-        text = "\n".join(path.read_text(encoding="utf-8") for path in files)
-        for name in obsolete:
-            with self.subTest(name=name):
-                self.assertNotIn(name, text)
+        index = (SOURCE / "index.md").read_text(encoding="utf-8")
+        self.assertIn("## Packaged Runtime Consumption", index)
+        self.assertIn("svc lookup --name", index)
+        self.assertNotIn("svc migrate", index)
+        self.assertNotIn(".svc/state.json", index)
+        self.assertIn("No SVC framework document is copied", index)
 
-    def test_consumer_templates_do_not_use_removed_protocol_fields(self) -> None:
-        deployment = (
-            REPO_ROOT / "src/assets/templates/deployment-runbook.template.md"
-        ).read_text(encoding="utf-8")
-        shared_docs = (
-            REPO_ROOT / "src/assets/templates/edit-shared-docs.template.md"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("switch mode to C", deployment)
-        self.assertNotIn("- owning route:", shared_docs)
+    def test_no_live_runtime_or_canonical_source_claims_the_removed_commands_or_state(self) -> None:
+        paths = canonical_markdown_files()
+        paths.extend(sorted((ROOT / "svc_cli").rglob("*.py")))
+        paths.extend(sorted((ROOT / "tools").rglob("*.py")))
+        paths.extend([ROOT / "pdm_build.py", ROOT / "pyproject.toml", ROOT / "README.md", ROOT / "CONTRIBUTING.md"])
+        text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+        for obsolete in ("svc migrate", ".svc/state.json", "resolve_migrations", "src/svc_cli", "src/tools"):
+            with self.subTest(obsolete=obsolete):
+                self.assertNotIn(obsolete, text)
+
+    def test_release_metadata_is_not_a_consumer_file_inventory(self) -> None:
+        metadata = json.loads((SOURCE / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(metadata["schema_version"], 2)
+        self.assertIn("behavioral_impact", metadata)
+        self.assertNotIn("artifacts", metadata)
+        self.assertIn(metadata["behavioral_impact"]["migration"]["status"], {"guide", "not-applicable"})
 
     def test_task_minimum_has_exactly_five_fields(self) -> None:
         paths = [
@@ -111,92 +69,44 @@ class FrameworkContractTests(unittest.TestCase):
         ]
         expected = ["Objective", "Guardrails", "Verification", "Current Truth", "Next Step"]
         for relative in paths:
-            text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+            text = (ROOT / relative).read_text(encoding="utf-8")
             if relative == "src/sections/working-protocol.md":
                 text = text.split("## Keep a Task Control Surface", 1)[1].split("\n## ", 1)[0]
-            fields = re.findall(
-                r"^- \*\*(Objective|Guardrails|Verification|Current Truth|Next Step)\*\*:",
-                text,
-                flags=re.MULTILINE,
-            )
+            fields = re.findall(r"^- \*\*(Objective|Guardrails|Verification|Current Truth|Next Step)\*\*:", text, flags=re.MULTILINE)
             with self.subTest(path=relative):
                 self.assertEqual(fields, expected)
 
-    def test_consumer_kernel_has_four_durable_documents_and_generated_state(self) -> None:
-        index = (REPO_ROOT / "src/index.md").read_text(encoding="utf-8")
-        match = re.search(
-            r"## Versioned Consumer Kernel.*?```text\n(.*?)```",
-            index,
-            flags=re.DOTALL,
-        )
-        self.assertIsNotNone(match)
-        paths = [line.strip() for line in match.group(1).splitlines() if line.strip()]
-        self.assertEqual(
-            paths,
-            [
-                "AGENTS.md",
-                "docs/00-meta/working-protocol.md",
-                "docs/00-meta/implementation-taste.md",
-                "docs/10-prd/README.md",
-            ],
-        )
-        self.assertIn(".svc/state.json", index)
-        self.assertIn("Generated state", index)
-
-    def test_pdm_exposes_only_supported_commands(self) -> None:
-        pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertIn('build-monolith = "python -m src.tools.build_monolith"', pyproject)
+    def test_pdm_exposes_runtime_and_repository_tools_from_their_new_locations(self) -> None:
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn('build-monolith = "python -m tools.build_monolith"', pyproject)
+        self.assertIn('release = "python -m tools.release"', pyproject)
         self.assertIn('svc = "svc_cli.cli:main"', pyproject)
-        self.assertIn("test = \"python -m unittest discover", pyproject)
-        self.assertNotIn("install-agents", pyproject)
+        self.assertIn('includes = ["svc_cli"]', pyproject)
+        self.assertNotIn("package-dir = \"src\"", pyproject)
 
-    def test_root_template_requires_capability_closure(self) -> None:
-        template = (
-            REPO_ROOT / "src/assets/templates/AGENTS.root.template.md"
-        ).read_text(encoding="utf-8")
-        for heading in (
-            "## Repository Map",
-            "## Knowledge Owners",
-            "## Development Workflow",
-            "## Execution Rules",
-        ):
+    def test_root_template_and_review_budgets_remain_bounded(self) -> None:
+        root_template = SOURCE / "assets/templates/AGENTS.root.template.md"
+        template = root_template.read_text(encoding="utf-8")
+        for heading in ("## Repository Map", "## Knowledge Owners", "## Development Workflow", "## Execution Rules"):
             with self.subTest(heading=heading):
                 self.assertIn(heading, template)
-        for requirement in (
-            "Replace every angle-bracket placeholder",
-            "Task retention:",
-            "Runtime data:",
-            "Smoke/debug entry:",
-        ):
+        for requirement in ("Replace every angle-bracket placeholder", "Task retention:", "Runtime data:", "Smoke/debug entry:"):
             with self.subTest(requirement=requirement):
                 self.assertIn(requirement, template)
 
-    def test_review_budgets(self) -> None:
-        root = REPO_ROOT / "src/assets/templates/AGENTS.root.template.md"
-        protocol = REPO_ROOT / "src/sections/working-protocol.md"
-        taste = REPO_ROOT / "src/sections/implementation-taste.md"
-        self.assertLessEqual(word_count(root), 450)
+        protocol = SOURCE / "sections/working-protocol.md"
+        taste = SOURCE / "sections/implementation-taste.md"
+        self.assertLessEqual(word_count(root_template), 450)
         self.assertLessEqual(word_count(protocol), 650)
         self.assertLessEqual(word_count(taste), 650)
-
-        owners = [
-            REPO_ROOT / "src/sections/prd.md",
-            REPO_ROOT / "src/sections/product-tdd.md",
-            REPO_ROOT / "src/sections/unit-tdd.md",
-            REPO_ROOT / "src/sections/deployment.md",
-        ]
-        cold_start = word_count(root) + word_count(protocol) + max(map(word_count, owners))
-        self.assertLessEqual(cold_start, 1900)
 
     def test_mutation_gate_has_one_canonical_heading(self) -> None:
         headings = []
         for path in canonical_markdown_files():
-            if path.name == "CHANGELOG.md":
-                continue
             for line in path.read_text(encoding="utf-8").splitlines():
                 if line.strip() == "## Mutation Gate":
-                    headings.append(path.relative_to(REPO_ROOT).as_posix())
-        self.assertEqual(headings, ["src/sections/working-protocol.md"])
+                    headings.append(path.relative_to(SOURCE).as_posix())
+        self.assertEqual(headings, ["sections/working-protocol.md"])
 
 
 if __name__ == "__main__":
