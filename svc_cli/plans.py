@@ -44,6 +44,8 @@ class PlannedWrite:
     action: str
     reason: str
     before_sha256: str | None
+    before_mode: int | None
+    parent_states: tuple[tuple[str, str], ...]
     content: bytes = field(repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -59,6 +61,8 @@ class PlannedWrite:
             "action": self.action,
             "reason": self.reason,
             "before_sha256": self.before_sha256,
+            "before_mode": self.before_mode,
+            "parent_states": [list(state) for state in self.parent_states],
             "after_sha256": self.after_sha256,
         }
 
@@ -124,11 +128,14 @@ def make_write(
 ) -> PlannedWrite:
     target = _absolute_target(repo, path)
     before = _read_optional_bytes(target)
+    before_mode = _read_optional_mode(target)
     return PlannedWrite(
         path=path,
         action=action,
         reason=reason,
         before_sha256=sha256_bytes(before) if before is not None else None,
+        before_mode=before_mode,
+        parent_states=_parent_states(repo.resolve(), target),
         content=content,
     )
 
@@ -187,7 +194,7 @@ def apply_local_plan(plan: LocalPlan, approved_digest: str) -> dict[str, object]
         try:
             for write in plan.writes:
                 target = _absolute_target(plan.repo, write.path)
-                _assert_write_precondition(target, write)
+                _assert_write_precondition(plan.repo.resolve(), target, write)
                 _ensure_parent_directories(plan.repo.resolve(), target, created_directories)
                 _commit_write(target, staged[write.path])
                 committed.append(write)
@@ -231,12 +238,42 @@ def _read_optional_bytes(path: Path) -> bytes | None:
     return path.read_bytes()
 
 
+def _read_optional_mode(path: Path) -> int | None:
+    if not path.exists() and not path.is_symlink():
+        return None
+    if path.is_symlink() or not path.is_file():
+        raise SvcError("path-not-file", "Integration target must be a regular file.", {"path": str(path)})
+    return path.stat().st_mode & 0o777
+
+
+def _parent_states(root: Path, target: Path) -> tuple[tuple[str, str], ...]:
+    parents: list[Path] = []
+    cursor = target.parent
+    while cursor != root:
+        parents.append(cursor)
+        cursor = cursor.parent
+    return tuple(
+        (parent.relative_to(root).as_posix(), _path_state(parent))
+        for parent in reversed(parents)
+    )
+
+
+def _path_state(path: Path) -> str:
+    if not path.exists() and not path.is_symlink():
+        return "missing"
+    if path.is_symlink():
+        return "symlink"
+    if path.is_dir():
+        return "directory"
+    return "other"
+
+
 def _assert_preconditions(plan: LocalPlan) -> None:
     for write in plan.writes:
-        _assert_write_precondition(_absolute_target(plan.repo, write.path), write)
+        _assert_write_precondition(plan.repo.resolve(), _absolute_target(plan.repo, write.path), write)
 
 
-def _assert_write_precondition(path: Path, write: PlannedWrite) -> None:
+def _assert_write_precondition(root: Path, path: Path, write: PlannedWrite) -> None:
     current = _read_optional_bytes(path)
     actual = sha256_bytes(current) if current is not None else None
     if actual != write.before_sha256:
@@ -245,6 +282,21 @@ def _assert_write_precondition(path: Path, write: PlannedWrite) -> None:
             "Project content changed after planning.",
             {"path": write.path, "expected_sha256": write.before_sha256, "actual_sha256": actual},
         )
+    actual_mode = _read_optional_mode(path)
+    if actual_mode != write.before_mode:
+        raise SvcError(
+            "stale-plan",
+            "Project file mode changed after planning.",
+            {"path": write.path, "expected_mode": write.before_mode, "actual_mode": actual_mode},
+        )
+    for relative, expected_state in write.parent_states:
+        actual_state = _path_state(root.joinpath(*PurePosixPath(relative).parts))
+        if actual_state != expected_state:
+            raise SvcError(
+                "stale-plan",
+                "Project parent path changed after planning.",
+                {"path": write.path, "parent": relative, "expected_state": expected_state, "actual_state": actual_state},
+            )
 
 
 def _ensure_parent_directories(root: Path, target: Path, created: list[Path]) -> None:
@@ -260,7 +312,7 @@ def _ensure_parent_directories(root: Path, target: Path, created: list[Path]) ->
         created.append(directory)
 
 
-def _write_atomic(path: Path, content: bytes) -> None:
+def _write_atomic(path: Path, content: bytes, mode: int | None = None) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=".svc-write-", dir=path.parent)
     temporary_path = Path(temporary)
     try:
@@ -268,6 +320,8 @@ def _write_atomic(path: Path, content: bytes) -> None:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
+        if mode is not None:
+            os.chmod(temporary_path, mode)
         os.replace(temporary_path, path)
     finally:
         if temporary_path.exists():
@@ -275,7 +329,7 @@ def _write_atomic(path: Path, content: bytes) -> None:
 
 
 def _commit_write(path: Path, content: bytes) -> None:
-    _write_atomic(path, content)
+    _write_atomic(path, content, _read_optional_mode(path))
 
 
 def _verify_postconditions(plan: LocalPlan) -> None:

@@ -11,5 +11,19 @@
       "status": "not-applicable",
       "reason": "SVC 10.0.0 has not been published, so no released v10 consumer state exists."
     }
+  },
+  "release_policy": {
+    "migration": {
+      "status": "not-applicable",
+      "reason": "The product owner asserts that SVC 10.0.0 has zero known adopted consumers; SVC 10.0.1 blocks schema-v1 writes instead of silently migrating them."
+    },
+    "version_exception": {
+      "kind": "zero-known-adopted-consumers",
+      "from_version": "10.0.0",
+      "to_version": "10.0.1",
+      "one_time": true,
+      "owner_assertion": "The product owner asserts zero known adopted consumers of published SVC 10.0.0.",
+      "reason": "All remaining v10 work changes required consumer behavior and is intentionally released as 10.0.1 under this one-time exception."
+    }
   }
 }

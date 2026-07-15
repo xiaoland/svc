@@ -17,6 +17,11 @@ NAVIGATION_BLOCK_RE = re.compile(
     r"<!-- svc:end navigation -->(?P<tail>\n?)",
     re.DOTALL,
 )
+LOCAL_CONFIG_IGNORE_RE = re.compile(
+    r"(?ms)^# svc:begin local-config sha256=(?P<digest>[0-9a-f]{64})\r?\n"
+    r"(?P<body>.*?)"
+    r"^# svc:end local-config\r?\n?"
+)
 SKILL_MARKER_RE = re.compile(
     r"^<!-- svc:generated skill sha256=(?P<digest>[0-9a-f]{64}) -->\n?$",
     re.MULTILINE,
@@ -82,7 +87,8 @@ def skill_body() -> str:
         "## Start With Status\n\n"
         "Run `svc status --json` when beginning work that may depend on SVC. It distinguishes the "
         "installed CLI/corpus version from the version this project has adopted in `svc.json`, and "
-        "reports missing or user-modified generated guidance without claiming authority over project content.\n\n"
+        "reports invalid schema-v2 configuration, missing or user-modified generated guidance, and the "
+        "managed local-config ignore block without claiming authority over project content.\n\n"
         "## Find Canonical Guidance\n\n"
         "Use `svc lookup --keyword \"<need>\" --json` to search locally and deterministically. "
         "Use the returned path with `svc lookup --name '<escaped-exact-path>' --json` to read the "
@@ -92,8 +98,34 @@ def skill_body() -> str:
         "## Bootstrap or Repair Integration\n\n"
         "Use `svc init --agent codex <repo> --json` to inspect a non-mutating plan. Apply only the "
         "returned exact digest with `--apply <digest>`. Init may create `svc.json`, this skill, and "
-        "bounded navigation blocks in root `AGENTS.md` and `docs/index.md`; it never silently overwrites "
-        "unmarked consumer content or a modified generated surface.\n\n"
+        "bounded navigation blocks in root `AGENTS.md` and `docs/index.md`, plus a marked `.gitignore` "
+        "entry for `svc.local.json`; it never silently overwrites unmarked consumer content or a modified "
+        "generated surface. Schema-v1 projects are write-blocked: migrate the configuration deliberately.\n\n"
+        "## Declare Development Capabilities\n\n"
+        "`svc.json` schema v2 is a complete, committed configuration. Its optional `dev` section selects a "
+        "profile and declares named targets. Each target has a scope (`worktree`, `repository`, or `host`), "
+        "one readiness probe (`http`, `tcp`, or `exec`), and an `exec` or `manual` provisioner. Keep machine- "
+        "or worktree-specific `dev` values in the optional ignored `svc.local.json` overlay. It merges object "
+        "values into the base configuration, replaces scalar or array values, and cannot override the schema "
+        "version, adopted SVC version, or any non-`dev` field. The effective result must pass the same strict "
+        "schema.\n\n"
+        "Use `svc dev identity --repo <repo> --json` to inspect the resolved workspace identity. Use `svc dev "
+        "status [target] --repo <repo> --json` only to observe declared targets: it never starts or takes over "
+        "a process. Use `svc dev ensure <target> --repo <repo> --json` to handle exactly one declared target. "
+        "Ensure reuses a healthy endpoint, refuses an occupied but unhealthy endpoint, and reports the required "
+        "consumer action for a manual provisioner. It coordinates executable provisioning only at the declared "
+        "scope and relinquishes process authority after readiness succeeds.\n\n"
+        "Worktree scope is the default and a worktree-scoped probe endpoint must prove the resolved instance; "
+        "repository scope intentionally shares a capability, and host scope requires an explicit `host_key`. "
+        "Only `${dev.instance}`, `${dev.worktree.id}`, `${dev.profile}`, and `${dev.target}` interpolate in "
+        "declared dev values. Commands are argument arrays without a shell, and configured working directories "
+        "must stay inside the workspace.\n\n"
+        "## Add Optional Editor or Package Bridges\n\n"
+        "Use `svc dev setup vscode [target] --repo <repo> --plan --json` or `svc dev setup npm [target] "
+        "--repo <repo> --plan --json` to inspect one bounded bridge. Apply only its exact current digest with "
+        "`--apply <digest>`. Setup owns only marked VS Code Tasks and exact reserved root package scripts that "
+        "call `svc dev ensure <target>`; it never reads `launch.json`, chooses a package manager, creates package "
+        "metadata, removes orphan entries, or overwrites a Consumer conflict.\n\n"
         "## Upgrade Deliberately\n\n"
         "`svc self-update` plans an update of the installed executable only. It never adopts guidance "
         "for this project. After an update, inspect `svc status`, look up the release migration guidance, "
@@ -110,6 +142,63 @@ def render_skill() -> str:
     body = skill_body()
     digest = sha256_bytes(body.encode("utf-8"))
     return f"{body}<!-- svc:generated skill sha256={digest} -->\n"
+
+
+def local_config_ignore_body() -> str:
+    return "svc.local.json\n"
+
+
+def render_local_config_ignore_block(line_ending: str = "\n") -> bytes:
+    body = local_config_ignore_body().replace("\n", line_ending)
+    digest = sha256_bytes(local_config_ignore_body().encode("utf-8"))
+    return (
+        f"# svc:begin local-config sha256={digest}{line_ending}".encode("utf-8")
+        + body.encode("utf-8")
+        + f"# svc:end local-config{line_ending}".encode("utf-8")
+    )
+
+
+def inspect_local_config_ignore(content: bytes | None) -> IntegrationInspection:
+    if content is None:
+        return IntegrationInspection("missing", None)
+    text = _decode(content)
+    begin_count = text.count("# svc:begin local-config")
+    end_count = text.count("# svc:end local-config")
+    if begin_count == 0 and end_count == 0:
+        return IntegrationInspection("unanchored", text)
+    if begin_count != 1 or end_count != 1:
+        return IntegrationInspection("modified", text)
+    match = LOCAL_CONFIG_IGNORE_RE.search(text)
+    if match is None:
+        return IntegrationInspection("modified", text)
+    body = match.group("body").replace("\r\n", "\n")
+    if sha256_bytes(body.encode("utf-8")) != match.group("digest"):
+        return IntegrationInspection("modified", text, match)
+    if body != local_config_ignore_body():
+        return IntegrationInspection("modified", text, match)
+    return IntegrationInspection("current", text, match)
+
+
+def desired_local_config_ignore(content: bytes | None) -> DesiredIntegration | None:
+    inspection = inspect_local_config_ignore(content)
+    if inspection.status == "current":
+        return None
+    if inspection.status in {"modified"}:
+        raise IntegrationProblem(
+            "managed-ignore-drift",
+            "The SVC-managed svc.local.json ignore section is modified or malformed and will not be replaced.",
+        )
+    line_ending = "\r\n" if inspection.content is not None and "\r\n" in inspection.content else "\n"
+    block = render_local_config_ignore_block(line_ending)
+    if inspection.status == "missing":
+        return DesiredIntegration("create", "create SVC local-config ignore section", block)
+    assert inspection.content is not None
+    separator = b"" if not inspection.content else line_ending.encode("utf-8") if inspection.content.endswith(("\n", "\r")) else (line_ending * 2).encode("utf-8")
+    return DesiredIntegration(
+        "append",
+        "append SVC local-config ignore section",
+        inspection.content.encode("utf-8") + separator + block,
+    )
 
 
 def inspect_navigation(content: bytes | None) -> IntegrationInspection:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +19,7 @@ from svc_cli.project import (
     plan_init,
     render_project_state,
 )
+from svc_cli.integration import local_config_ignore_body
 from svc_cli.plans import apply_local_plan
 
 
@@ -38,13 +40,18 @@ class ProjectIntegrationTests(unittest.TestCase):
             second = plan_init(root)
             self.assertEqual(first.as_dict(), second.as_dict())
             self.assertEqual(tree_bytes(root), before)
-            self.assertEqual({write.path for write in first.writes}, {PROJECT_FILE, CODEX_SKILL_FILE, AGENTS_FILE, DOCS_INDEX_FILE})
+            self.assertEqual(
+                {write.path for write in first.writes},
+                {PROJECT_FILE, CODEX_SKILL_FILE, AGENTS_FILE, DOCS_INDEX_FILE, ".gitignore"},
+            )
 
             result = apply_local_plan(first, first.digest)
             self.assertEqual(result["status"], "applied")
             self.assertEqual(parse_project_state((root / PROJECT_FILE).read_bytes()).svc_version, "10.0.0")
             self.assertTrue((root / CODEX_SKILL_FILE).is_file())
             self.assertTrue((root / DOCS_INDEX_FILE).is_file())
+            self.assertIn(b"svc:begin local-config", (root / ".gitignore").read_bytes())
+            self.assertFalse((root / "svc.local.json").exists())
             self.assertTrue(inspect_status(root)["healthy"])
 
             repeat = plan_init(root)
@@ -182,6 +189,81 @@ class ProjectIntegrationTests(unittest.TestCase):
                 mismatch = inspect_status(root)
             self.assertEqual(mismatch["runtime"]["status"], "mismatch")
             self.assertFalse(mismatch["healthy"])
+
+    def test_init_manages_only_a_clean_local_config_ignore_section(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original = b"node_modules\r\nsvc.local.json\r\n"
+            (root / ".gitignore").write_bytes(original)
+            plan = plan_init(root)
+            apply_local_plan(plan, plan.digest)
+            ignored = (root / ".gitignore").read_bytes()
+            self.assertTrue(ignored.startswith(original))
+            self.assertIn(local_config_ignore_body().encode(), ignored.replace(b"\r\n", b"\n"))
+            self.assertIn(b"\r\n", ignored)
+
+            drifted = ignored.replace(
+                b"svc.local.json\r\n# svc:end local-config",
+                b"private-svc.local.json\r\n# svc:end local-config",
+            )
+            (root / ".gitignore").write_bytes(drifted)
+            blocked = plan_init(root)
+            self.assertIn("managed-ignore-drift", {item.code for item in blocked.blockers})
+
+    def test_schema_v1_blocks_writes_and_v2_adopt_preserves_consumer_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            legacy = b'{\n  "schema_version": 1,\n  "svc_version": "10.0.0"\n}\n'
+            (root / PROJECT_FILE).write_bytes(legacy)
+            blocked = plan_init(root)
+            self.assertIn("schema-v1-write-blocked", {item.code for item in blocked.blockers})
+            self.assertEqual((root / PROJECT_FILE).read_bytes(), legacy)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            current = (
+                b'{\n'
+                b'  "schema_version": 2,\n'
+                b'  "svc_version" : "9.9.9",\n'
+                b'  "dev": {"profile":"local","profiles":{"local":{"targets":{"app":{'
+                b'"probe":{"kind":"exec","argv":["check"]},"provision":{"kind":"manual"}}}}}}\n'
+                b'}\n'
+            )
+            (root / PROJECT_FILE).write_bytes(current)
+            adopt = plan_adopt(root, "10.0.0")
+            self.assertEqual([write.path for write in adopt.writes], [PROJECT_FILE])
+            updated = adopt.writes[0].content
+            self.assertEqual(updated.replace(b'"10.0.0"', b'"9.9.9"'), current)
+            apply_local_plan(adopt, adopt.digest)
+            self.assertEqual((root / PROJECT_FILE).read_bytes(), updated)
+
+    def test_invalid_local_overlay_blocks_init_without_rewriting_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            initial = plan_init(root)
+            apply_local_plan(initial, initial.digest)
+            local = root / "svc.local.json"
+            local.write_text('{"schema_version": 2}\n', encoding="utf-8")
+            before = local.read_bytes()
+            blocked = plan_init(root)
+            self.assertIn("invalid-project-configuration", {item.code for item in blocked.blockers})
+            with self.assertRaises(SvcError):
+                apply_local_plan(blocked, blocked.digest)
+            self.assertEqual(local.read_bytes(), before)
+
+    def test_apply_preserves_existing_consumer_file_mode_and_rejects_mode_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agents = root / AGENTS_FILE
+            agents.write_text("# Consumer\n", encoding="utf-8")
+            os.chmod(agents, 0o640)
+            plan = plan_init(root)
+            os.chmod(agents, 0o600)
+            with self.assertRaisesRegex(SvcError, "mode changed"):
+                apply_local_plan(plan, plan.digest)
+            os.chmod(agents, 0o640)
+            apply_local_plan(plan, plan.digest)
+            self.assertEqual(agents.stat().st_mode & 0o777, 0o640)
 
 
 if __name__ == "__main__":

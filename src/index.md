@@ -35,21 +35,24 @@ Every command supports stable JSON output through `--json`. Exit code `0` means 
 
 ```text
 svc.json
+.gitignore                 (a bounded generated ignore block for svc.local.json)
 .agents/skills/svc/SKILL.md
 AGENTS.md                  (a bounded marked navigation block)
 docs/index.md              (created when absent, with a bounded marked navigation block)
 ```
 
-`svc.json` is the project's small adoption declaration:
+`svc.json` is the project's complete, committed SVC configuration. Schema v2 keeps the adoption baseline and may declare development capabilities:
 
 ```json
 {
-  "schema_version": 1,
-  "svc_version": "10.0.0"
+  "schema_version": 2,
+  "svc_version": "10.0.1"
 }
 ```
 
-Its version means the project says it has adopted that SVC baseline. It does not assert that Consumer-owned documents match a framework snapshot. The installed package manager remains the authority for the executable version.
+Its version means the project says it has adopted that SVC baseline. It does not assert that Consumer-owned documents match a framework snapshot. The installed package manager remains the authority for the executable version. Schema-v1 projects are never rewritten automatically; migrate their configuration deliberately before `init` or `adopt` can write.
+
+`svc.local.json` is an optional, ignored, sparse overlay for the `dev` declaration. It merges objects into the committed configuration and replaces scalar or array values; it cannot change the schema version, adopted SVC version, or any non-`dev` field. The effective configuration must still satisfy schema v2. `init` maintains only its marked `.gitignore` entry and never creates the local file.
 
 The Codex skill at `.agents/skills/svc/SKILL.md` is an operational guide: it explains when and how to use the CLI, but does not copy the canonical SVC corpus. Root `AGENTS.md` and `docs/index.md` remain Consumer-owned from creation. Only their marked SVC navigation blocks, and the installed skill, have generated provenance markers. A user-modified or malformed generated surface blocks refresh rather than being silently replaced.
 
@@ -60,6 +63,23 @@ svc status <repo>
 ```
 
 `svc status` reports the installed CLI/corpus version separately from the adopted project version, and reports missing, outdated, or user-modified generated guidance without claiming ownership over consumer content.
+
+## Declared Development Capabilities
+
+Projects may use the optional `dev` section of schema-v2 `svc.json` to name a selected profile and its targets. A target declares its coordination scope, one readiness probe (`http`, `tcp`, or `exec`), a provisioning action (`exec` or `manual`), and bounded timing; its `access` entries describe consumer-facing endpoints. Configuration is strict: unknown fields, invalid effective overlays, symlinks, duplicate JSON keys, non-finite values, and `null` are rejected.
+
+```text
+svc dev identity --repo <repo> --json
+svc dev status [target] --repo <repo> --json
+svc dev ensure <target> --repo <repo> --json
+svc dev setup vscode|npm [target] --repo <repo> --plan|--apply <digest> --json
+```
+
+`dev identity` exposes the resolved workspace identity for diagnosis. `dev status` observes declared targets without starting or taking over anything. `dev ensure` handles exactly one named target: it reuses a healthy endpoint; refuses an endpoint that responds but is unhealthy; and requires the consumer's manual action when declared. For executable provisioning, it coordinates only the declared capability scope, waits for the declared readiness check, then relinquishes process authority after success. Worktree scope is the default and requires the probe endpoint to prove the resolved worktree instance; repository scope intentionally shares one capability, while host scope requires an explicit host key.
+
+Interpolation is limited to `${dev.instance}`, `${dev.worktree.id}`, `${dev.profile}`, and `${dev.target}` in declared dev values. Commands are executed as argument arrays without a shell, and configured working directories must remain inside the workspace.
+
+`svc dev setup` is the optional plan-first bridge to Consumer-owned editor/package surfaces. It adds only marked VS Code Tasks or reserved exact root `package.json` scripts that call `svc dev ensure <target>`; apply requires the current exact digest. It never reads `launch.json`, infers a package manager, creates package metadata, removes orphans, or replaces a conflicting Consumer entry.
 
 ## Update and Migration Guidance
 

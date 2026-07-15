@@ -45,6 +45,56 @@ class CliContractTests(unittest.TestCase):
             self.assertEqual(status_code, EXIT_OK)
             self.assertTrue(status["healthy"])
 
+    def test_dev_identity_and_missing_configuration_status_are_machine_readable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            code, identity, _ = self.invoke(["dev", "identity", "--repo", str(root), "--json"])
+            self.assertEqual(code, EXIT_OK)
+            self.assertEqual(identity["command"], "dev identity")
+            self.assertEqual(identity["workspace"]["repository_kind"], "non-git")
+
+            code, status, _ = self.invoke(["dev", "status", "--repo", str(root), "--json"])
+            self.assertEqual(code, EXIT_CONFLICT)
+            self.assertEqual(status["status"], "invalid-configuration")
+
+    def test_dev_setup_cli_is_plan_then_exact_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "svc.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "svc_version": "10.0.1",
+                        "dev": {
+                            "profile": "local",
+                            "profiles": {
+                                "local": {
+                                    "targets": {
+                                        "app": {
+                                            "scope": "repository",
+                                            "probe": {"kind": "exec", "argv": ["check"]},
+                                            "provision": {"kind": "manual"},
+                                        }
+                                    }
+                                }
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "package.json").write_text('{"name":"fixture"}\n', encoding="utf-8")
+            code, plan, _ = self.invoke(["dev", "setup", "npm", "app", "--repo", str(root), "--plan", "--json"])
+            self.assertEqual(code, EXIT_OK)
+            self.assertEqual(plan["status"], "ready")
+            self.assertNotIn("svc:dev:app", (root / "package.json").read_text(encoding="utf-8"))
+            digest = str(plan["plan_digest"])
+
+            code, applied, _ = self.invoke(["dev", "setup", "npm", "app", "--repo", str(root), "--apply", digest, "--json"])
+            self.assertEqual(code, EXIT_OK)
+            self.assertEqual(applied["status"], "applied")
+            self.assertIn('"svc:dev:app": "svc dev ensure app"', (root / "package.json").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

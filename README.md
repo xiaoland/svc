@@ -21,7 +21,7 @@ Edit canonical framework content under `src/`, never `build/monolith.md`. `src/`
 Install the CLI, then query the guidance you need. The wheel contains the read-only corpus and a deterministic catalog, so ordinary lookup writes nothing and contacts no service.
 
 ```bash
-python -m pip install sustainable-vibe-coding==10.0.0
+python -m pip install sustainable-vibe-coding==10.0.1
 
 svc lookup --name 'sections/working-protocol\.md'
 svc lookup --name 'assets/templates/AGENTS\..*\.template\.md' --all
@@ -44,21 +44,43 @@ The exact-plan apply may create:
 
 ```text
 svc.json
+.gitignore                 (a bounded generated ignore block for svc.local.json)
 .agents/skills/svc/SKILL.md
 AGENTS.md                  (a bounded generated SVC navigation block)
 docs/index.md              (created when absent, with a bounded generated navigation block)
 ```
 
-`svc.json` records only the project's adopted SVC baseline (plus its file schema):
+`svc.json` is the complete, committed project configuration. Schema v2 records the adopted baseline and can optionally declare development capabilities:
 
 ```json
 {
-  "schema_version": 1,
-  "svc_version": "10.0.0"
+  "schema_version": 2,
+  "svc_version": "10.0.1"
 }
 ```
 
-Everything unmarked in `AGENTS.md` and `docs/index.md` remains Consumer-owned. The Codex skill is a substantial operational guide to `svc` commands, not a duplicate of the framework corpus. Modified generated blocks or skills block refresh for human review.
+`svc.local.json` is an optional, ignored sparse overlay for only the `dev` configuration. It cannot change the schema or adopted version, and its merged result must remain valid. `init` maintains just its marked ignore block; it never writes a local configuration file. Schema-v1 projects are write-blocked until deliberately migrated to schema v2.
+
+Everything unmarked in `AGENTS.md` and `docs/index.md` remains Consumer-owned. The Codex skill is a substantial operational guide to `svc` commands, not a duplicate of the framework corpus. Modified generated blocks, skills, or local-config ignore section block refresh for human review.
+
+## Declare and Ensure Development Capabilities
+
+An optional `dev` section selects a profile and declares named targets. Each target has a scope (`worktree`, `repository`, or `host`), one readiness probe (`http`, `tcp`, or `exec`), and either an executable or manual provisioning action. Use JSON output for editor or automation integration:
+
+```bash
+svc dev identity --repo /path/to/project --json
+svc dev status --repo /path/to/project --json
+svc dev status frontend --repo /path/to/project --json
+svc dev ensure frontend --repo /path/to/project --json
+svc dev setup vscode frontend --repo /path/to/project --plan --json
+svc dev setup npm frontend --repo /path/to/project --apply <digest> --json
+```
+
+`status` only observes; it never starts or takes over a process. `ensure` handles one declared target, reuses a healthy endpoint, refuses an occupied but unhealthy endpoint, and does not run a `manual` provisioner. Executable provisioning is coordinated at the declared scope and releases process authority once readiness succeeds. Worktree scope is the default and its probe endpoint must prove the resolved instance; host scope requires a declared `host_key`.
+
+Dev values may interpolate only `${dev.instance}`, `${dev.worktree.id}`, `${dev.profile}`, and `${dev.target}`. Commands are argument arrays, not shell snippets, and their configured working directories must remain inside the workspace.
+
+`svc dev setup` is a deliberately narrow bridge for consumer-owned files: it can add marked VS Code Tasks or exact root `package.json` scripts that invoke `svc dev ensure <target>`. It is plan-first; `--apply` requires the current exact digest. It never reads `launch.json`, selects a package manager, creates package metadata, or overwrites a conflicting consumer entry.
 
 ## Upgrade Deliberately
 

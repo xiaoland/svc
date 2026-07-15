@@ -18,6 +18,11 @@ VERSION_RE = re.compile(
     r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)$"
 )
 IMPACT_ORDER = {"patch": 0, "minor": 1, "major": 2}
+ZERO_KNOWN_ADOPTION_EXCEPTION = {
+    "kind": "zero-known-adopted-consumers",
+    "from_version": "10.0.0",
+    "to_version": "10.0.1",
+}
 
 
 class ReleaseError(ValueError):
@@ -61,6 +66,42 @@ def bump_impact(previous: str, current: str) -> str:
     if after[:2] == before[:2] and after[2] > before[2]:
         return "patch"
     raise ReleaseError(f"Version is not a single Behavioral SemVer bump: {previous} -> {current}")
+
+
+def verify_version_exception(
+    previous: str,
+    current: str,
+    impact: str,
+    version_exception: object | None,
+) -> None:
+    """Verify SVC's single, immutable MAJOR-version exception."""
+    if impact != "major":
+        raise ReleaseError("Version exception is valid only for a MAJOR behavioral impact")
+    if not isinstance(version_exception, dict):
+        raise ReleaseError("MAJOR version exception requires a complete declaration")
+    required = {
+        *ZERO_KNOWN_ADOPTION_EXCEPTION,
+        "one_time",
+        "owner_assertion",
+        "reason",
+    }
+    if set(version_exception) != required:
+        raise ReleaseError("MAJOR version exception has missing or unknown fields")
+    if any(
+        version_exception[field] != value
+        for field, value in ZERO_KNOWN_ADOPTION_EXCEPTION.items()
+    ):
+        raise ReleaseError("Only the 10.0.0 -> 10.0.1 zero-known-adopted-consumers exception is allowed")
+    if version_exception["one_time"] is not True:
+        raise ReleaseError("MAJOR version exception must declare one_time: true")
+    for field in ("owner_assertion", "reason"):
+        if not isinstance(version_exception[field], str) or not version_exception[field].strip():
+            raise ReleaseError(f"MAJOR version exception requires a non-empty {field}")
+    if (previous, current) != (
+        ZERO_KNOWN_ADOPTION_EXCEPTION["from_version"],
+        ZERO_KNOWN_ADOPTION_EXCEPTION["to_version"],
+    ):
+        raise ReleaseError("MAJOR version exception does not match the release versions")
 
 
 def fragments(root: Path = ROOT) -> list[Fragment]:
@@ -143,11 +184,27 @@ def release_plan(root: Path = ROOT) -> dict[str, object]:
     base = tags[-1] if tags else str(manifest["previous_version"])
     declared = str(manifest["svc_version"])
     calculated = bump(base, impact)
-    target = declared if parse_version(declared) > parse_version(base) else calculated
-    if target != calculated:
-        raise ReleaseError(
-            f"Declared {target} does not match {impact} bump from {base}: {calculated}"
+    release_policy = manifest.get("release_policy")
+    has_version_exception = (
+        isinstance(release_policy, dict) and "version_exception" in release_policy
+    )
+    version_exception = release_policy.get("version_exception") if has_version_exception else None
+    if has_version_exception:
+        if declared != base:
+            raise ReleaseError("Version exception must be staged without pre-bumping release metadata")
+        target = str(
+            version_exception.get("to_version")
+            if isinstance(version_exception, dict)
+            else ""
         )
+        verify_version_exception(base, target, impact, version_exception)
+    else:
+        target = declared if parse_version(declared) > parse_version(base) else calculated
+    if target != calculated:
+        if not has_version_exception:
+            raise ReleaseError(
+                f"Declared {target} does not match {impact} bump from {base}: {calculated}"
+            )
     return {
         "base_version": base,
         "target_version": target,
@@ -280,6 +337,10 @@ def prepare(root: Path = ROOT) -> dict[str, object]:
     predeclared_release = parse_version(declared_version) > parse_version(base_version)
     existing_impact = manifest.get("behavioral_impact")
     staged_policy = manifest.pop("release_policy", None)
+    has_version_exception = (
+        isinstance(staged_policy, dict) and "version_exception" in staged_policy
+    )
+    version_exception = staged_policy.get("version_exception") if has_version_exception else None
     manifest["previous_version"] = plan["base_version"]
     manifest["svc_version"] = plan["target_version"]
     impact_data: dict[str, object] = {"level": plan["impact"], "reasons": plan["reasons"]}
@@ -302,6 +363,14 @@ def prepare(root: Path = ROOT) -> dict[str, object]:
             root,
         )
         impact_data["migration"] = migration_policy
+        if has_version_exception:
+            verify_version_exception(
+                base_version,
+                str(plan["target_version"]),
+                "major",
+                version_exception,
+            )
+            impact_data["version_exception"] = version_exception
     elif staged_policy is not None:
         raise ReleaseError("release_policy is valid only while staging a pending MAJOR release")
     manifest["behavioral_impact"] = impact_data
@@ -350,8 +419,12 @@ def verify_prepared(root: Path = ROOT) -> dict[str, object]:
     if not isinstance(impact_data, dict) or impact_data.get("level") not in IMPACT_ORDER:
         raise ReleaseError("Release manifest has no valid behavioral impact")
     impact = str(impact_data["level"])
-    if bump_impact(previous, current) != impact:
-        raise ReleaseError("Prepared version violates Behavioral SemVer")
+    version_exception = impact_data.get("version_exception")
+    if version_exception is None:
+        if bump_impact(previous, current) != impact:
+            raise ReleaseError("Prepared version violates Behavioral SemVer")
+    else:
+        verify_version_exception(previous, current, impact, version_exception)
     reasons = impact_data.get("reasons")
     if (
         not isinstance(reasons, list)
