@@ -41,6 +41,7 @@ jobs:
       - if: steps.plan.outputs.needed == 'true'
         run: |
           pdm run release prepare
+          pdm install --frozen-lockfile -d -G release
           pdm run test
           pdm build
       - if: steps.plan.outputs.needed == 'true'

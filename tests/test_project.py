@@ -47,7 +47,10 @@ class ProjectIntegrationTests(unittest.TestCase):
 
             result = apply_local_plan(first, first.digest)
             self.assertEqual(result["status"], "applied")
-            self.assertEqual(parse_project_state((root / PROJECT_FILE).read_bytes()).svc_version, "10.0.0")
+            self.assertEqual(
+                parse_project_state((root / PROJECT_FILE).read_bytes()).svc_version,
+                first.target_version,
+            )
             self.assertTrue((root / CODEX_SKILL_FILE).is_file())
             self.assertTrue((root / DOCS_INDEX_FILE).is_file())
             self.assertIn(b"svc:begin local-config", (root / ".gitignore").read_bytes())
@@ -180,12 +183,13 @@ class ProjectIntegrationTests(unittest.TestCase):
             self.assertEqual(status["project"]["status"], "adoption-pending")
             self.assertFalse(status["healthy"])
 
-            adopt = plan_adopt(root, "10.0.0")
+            adopt = plan_adopt(root)
             self.assertEqual([write.path for write in adopt.writes], [PROJECT_FILE])
             apply_local_plan(adopt, adopt.digest)
             self.assertTrue(inspect_status(root)["healthy"])
 
-            with patch("svc_cli.project.installed_distribution_version", return_value="10.0.1"):
+            mismatch_version = "0.0.0" if adopt.target_version != "0.0.0" else "0.0.1"
+            with patch("svc_cli.project.installed_distribution_version", return_value=mismatch_version):
                 mismatch = inspect_status(root)
             self.assertEqual(mismatch["runtime"]["status"], "mismatch")
             self.assertFalse(mismatch["healthy"])
@@ -230,10 +234,11 @@ class ProjectIntegrationTests(unittest.TestCase):
                 b'}\n'
             )
             (root / PROJECT_FILE).write_bytes(current)
-            adopt = plan_adopt(root, "10.0.0")
+            adopt = plan_adopt(root)
             self.assertEqual([write.path for write in adopt.writes], [PROJECT_FILE])
             updated = adopt.writes[0].content
-            self.assertEqual(updated.replace(b'"10.0.0"', b'"9.9.9"'), current)
+            expected = current.replace(b'"9.9.9"', f'"{adopt.target_version}"'.encode())
+            self.assertEqual(updated, expected)
             apply_local_plan(adopt, adopt.digest)
             self.assertEqual((root / PROJECT_FILE).read_bytes(), updated)
 
