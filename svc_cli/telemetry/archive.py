@@ -131,13 +131,15 @@ def _publish_without_overwrite(temp_path: Path, output: Path) -> None:
             pass
 
 
-def _regular_file_identity(info: os.stat_result, *, description: str) -> tuple[int, int, int]:
+def _regular_file_identity(info: os.stat_result, *, description: str) -> tuple[int, int, int, int, int]:
     if _is_link_or_reparse_point(info) or not stat.S_ISREG(info.st_mode):
         raise OSError(f"{description} is not a regular file")
-    return (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
+    # ctime is intentionally excluded: Windows may update it during read-only
+    # inspection. Size and mtime close inode-reuse gaps during publication.
+    return (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode), info.st_size, info.st_mtime_ns)
 
 
-def _published_identity(path: Path) -> tuple[int, int, int]:
+def _published_identity(path: Path) -> tuple[int, int, int, int, int]:
     return _regular_file_identity(path.lstat(), description=f"Published archive {path}")
 
 
@@ -181,7 +183,7 @@ def _create_anchored_temp(parent_fd: int, output_name: str) -> tuple[int, str]:
     raise OSError("Could not allocate a unique archive staging filename")
 
 
-def _anchored_published_identity(parent_fd: int, output_name: str) -> tuple[int, int, int]:
+def _anchored_published_identity(parent_fd: int, output_name: str) -> tuple[int, int, int, int, int]:
     info = os.stat(output_name, dir_fd=parent_fd, follow_symlinks=False)
     return _regular_file_identity(info, description=f"Published archive {output_name}")
 
@@ -419,7 +421,7 @@ def write_agent_thread_archive(
     temp_name: str | None = None
     parent_fd: int | None = None
     staging_fd: int | None = None
-    staging_identity: tuple[int, int, int] | None = None
+    staging_identity: tuple[int, int, int, int, int] | None = None
     try:
         _verify_output_parent(parent, target.parent_identity, repository)
         if _supports_anchored_publication():
@@ -430,9 +432,6 @@ def write_agent_thread_archive(
             temp_path = Path(fallback_name)
         if os.name != "nt":
             os.fchmod(staging_fd, 0o600)
-        staging_identity = _regular_file_identity(
-            os.fstat(staging_fd), description="Archive staging file"
-        )
         temp_file = os.fdopen(staging_fd, "w+b")
         staging_fd = None
         with temp_file:
@@ -567,6 +566,9 @@ def write_agent_thread_archive(
                 archive.writestr(_entry_info("manifest.json"), _json_bytes(manifest))
             temp_file.flush()
             os.fsync(temp_file.fileno())
+            staging_identity = _regular_file_identity(
+                os.fstat(temp_file.fileno()), description="Archive staging file"
+            )
         # The archive is a snapshot.  Validate its mutable evidence inputs at
         # the atomic-commit boundary, after all ZIP serialization and fsync.
         # Changes after publication cannot alter the already hash-bound ZIP.

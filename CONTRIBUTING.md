@@ -74,14 +74,14 @@ For an already predeclared MAJOR release, the declaration lives in `behavioral_i
 
 Maintainers configure these boundaries before the first release:
 
-- Repository variable `RELEASE_APP_ID` and secret `RELEASE_APP_PRIVATE_KEY` for the Release PR GitHub App.
+- Enable **Allow GitHub Actions to create and approve pull requests** in the repository's Actions settings. The Release PR job uses only its built-in, short-lived `GITHUB_TOKEN`, explicitly scoped to `contents: write` and `pull-requests: write`; ordinary workflows may retain a read-only default token.
 - Protected GitHub environment `release`, which gates publication.
 - PyPI Trusted Publisher for project `sustainable-vibe-coding`, repository `xiaoland/svc`, workflow `publish.yml`, and environment `release`.
 
 The release flow is intentionally sequenced:
 
 1. A feature PR declares Behavioral SemVer with a fragment, or records `release:none`, then merges to `main`.
-2. The Release PR workflow consumes pending fragments and creates or updates `release/svc`. Review its version, changelog, migration declaration, release reasons, and lockfile together.
+2. The Release PR workflow consumes pending fragments and creates or updates `release/svc` with `GITHUB_TOKEN`. Its opened or updated pull-request workflows wait for a maintainer with write access to select **Approve workflows to run**; then review its version, changelog, migration declaration, release reasons, lockfile, and CI together.
 3. Merging that Release PR prepares the candidate. Publish approval in the protected `release` environment builds and attests the wheel and sdist, creates `v<version>` and a draft GitHub Release, publishes those same artifacts to PyPI through Trusted Publishing, then publishes the GitHub Release.
 
 The GitHub Release is the completion checkpoint, not the tag. If a publish is interrupted, run `Publish` with `workflow_dispatch` only after diagnosing the state: an absent tag creates a release from `main`; a tag without a Release rebuilds that tag; a draft Release verifies and reuses its immutable uploaded assets. A published Release is left unchanged.

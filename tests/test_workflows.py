@@ -32,12 +32,20 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("svc migrate", text)
         self.assertNotIn("contents: write", text)
 
-    def test_release_pr_uses_app_token_and_does_not_publish(self) -> None:
+    def test_release_pr_uses_builtin_token_and_does_not_publish(self) -> None:
         text = self.workflow("release-pr.yml")
-        self.assertIn("actions/create-github-app-token@", text)
+        self.assertIn("contents: write", text)
+        self.assertIn("pull-requests: write", text)
+        self.assertIn("token: ${{ github.token }}", text)
+        self.assertIn("GH_TOKEN: ${{ github.token }}", text)
         self.assertIn("pdm run release prepare", text)
         self.assertIn("migration guidance", text)
         self.assertIn("gh pr create", text)
+        self.assertNotIn("actions/create-github-app-token@", text)
+        self.assertNotIn("RELEASE_APP_ID", text)
+        self.assertNotIn("RELEASE_APP_PRIVATE_KEY", text)
+        self.assertNotIn("secrets.", text)
+        self.assertNotIn("vars.", text)
         self.assertNotIn("gh release create", text)
         self.assertNotIn("gh-action-pypi-publish", text)
 

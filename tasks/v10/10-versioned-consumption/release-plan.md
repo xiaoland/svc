@@ -104,7 +104,7 @@ The repository-owned release planner must:
 7. consume only fragments included in the Release PR
 8. create or update one `Release vX.Y.Z` PR
 
-Use a repository-scoped GitHub App installation token for unattended Release PR CI. Avoid long-lived PATs. A `GITHUB_TOKEN` bootstrap is acceptable only if manual approval of automation-created PR workflows is an explicit temporary tradeoff.
+Use the built-in, short-lived `GITHUB_TOKEN` with only `contents: write` and `pull-requests: write` in the Release PR job; avoid long-lived PATs. A maintainer must enable the repository Actions setting that permits token-created pull requests and approve the generated PR workflows before review and merge. This approval is an intentional human release gate, not a temporary workaround.
 
 The Release PR is the human checkpoint for version, migration, generated notes, and exact state diff. Merging it authorizes preparation, not external publication.
 
@@ -137,7 +137,7 @@ These are not repository-file implementation and require separate authority:
 - reserve/configure the `sustainable-vibe-coding` PyPI project
 - configure PyPI Trusted Publisher for `xiaoland/svc` and `publish.yml`
 - create and protect the GitHub `release` environment with required reviewer policy
-- create/install the repository-scoped GitHub App used for Release PRs, or approve the temporary `GITHUB_TOKEN` tradeoff
+- enable the repository Actions setting that permits GitHub Actions to create pull requests, and have a maintainer approve generated Release PR workflows
 - configure branch protection and required CI checks
 - enable immutable GitHub Releases when available for the repository
 

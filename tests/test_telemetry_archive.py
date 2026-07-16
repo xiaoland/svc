@@ -390,6 +390,38 @@ class TelemetryArchiveTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "archive-output-mutated")
             self.assertEqual(output.read_bytes(), b"replacement")
 
+    def test_regular_file_identity_includes_size_and_mtime_but_not_ctime(self):
+        base = SimpleNamespace(
+            st_mode=stat.S_IFREG | 0o600,
+            st_dev=1,
+            st_ino=2,
+            st_size=3,
+            st_mtime_ns=4,
+            st_ctime_ns=5,
+        )
+        self.assertEqual(
+            archive_module._regular_file_identity(base, description="fixture"),
+            (1, 2, stat.S_IFREG, 3, 4),
+        )
+        self.assertNotEqual(
+            archive_module._regular_file_identity(
+                SimpleNamespace(**{**vars(base), "st_size": 6}), description="fixture"
+            ),
+            archive_module._regular_file_identity(base, description="fixture"),
+        )
+        self.assertNotEqual(
+            archive_module._regular_file_identity(
+                SimpleNamespace(**{**vars(base), "st_mtime_ns": 7}), description="fixture"
+            ),
+            archive_module._regular_file_identity(base, description="fixture"),
+        )
+        self.assertEqual(
+            archive_module._regular_file_identity(
+                SimpleNamespace(**{**vars(base), "st_ctime_ns": 8}), description="fixture"
+            ),
+            archive_module._regular_file_identity(base, description="fixture"),
+        )
+
     def test_task_packet_change_after_enumeration_aborts_publication(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "repository"

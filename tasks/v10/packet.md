@@ -23,10 +23,10 @@
   - The embedded-runtime foundation in [`20-embedded-runtime-cli/packet.md`](20-embedded-runtime-cli/packet.md) is implemented and released as SVC 10.0.0: pure canonical `src/`, root-level `svc_cli/` runtime and `tools/` tooling, deterministic catalog/corpus lookup, minimal `svc.json`, Codex-only operational skill, non-destructive anchors with default `docs/index.md`, separate self-update and adoption, and no automatic consumer-file migration engine.
   - Its release planner now distinguishes a predeclared MAJOR's migration declaration from a pending MAJOR's staging policy, so an old non-applicability rationale cannot silently carry into a later release.
   - Semantic lookup and task helpers remain deliberately deferred until each has a separate protocol and Impact Handshake. Dev-server assurance is implemented in [`30-ensure-dev-server/packet.md`](30-ensure-dev-server/packet.md). The Codex thread-export contract is implemented in [`40-export-agent-thread/packet.md`](40-export-agent-thread/packet.md), with fresh-wheel fixture acceptance on macOS, Windows, and Linux; it works from direct local rollout data without requiring Codex CLI.
-  - SVC 10.0.0 is published on PyPI and GitHub Releases. The release automation's external prerequisites and recovery protocol are documented in `CONTRIBUTING.md`.
+  - SVC 10.0.0 is published on PyPI and GitHub Releases. The Release PR workflow uses a built-in, short-lived `GITHUB_TOKEN` with job-scoped Contents and Pull requests write permissions; the repository Actions setting must allow token-created PRs, and a maintainer explicitly approves their CI runs. Protected publication and recovery remain documented in `CONTRIBUTING.md`.
   - All remaining changes in this v10 task are assigned to 10.0.1 under a one-time version exception authorized by the product owner. Their real Behavioral SemVer impact remains declared; release metadata must say `zero known adopted consumers`, because a published public package cannot mechanically prove that no unknown consumer exists.
   - Sub-agents are available again for bounded parallel research and review; the primary agent retains packet and implementation authority.
-- **Next Step**: Review the completed 10.0.1 release surface, then perform only user-authorized commit and release work.
+- **Next Step**: Complete the user-authorized 10.0.1 release hardening, verify the Release PR topology and cross-platform archive behavior, then publish through the reviewed Release PR and protected environment.
 
 ## Supporting Material
 

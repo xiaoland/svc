@@ -1,7 +1,7 @@
 # Codex Agent-Thread Export
 
 - **Objective**: Add the first local-observability capability, `svc telemetry agent-thread export`. It exports a selected Codex thread as a self-describing ZIP containing the complete provider-obtainable thread record—conversation items, reasoning items, tool calls/results, and provider metadata—plus associated SVC task-packet material discovered from auditable `tasks/...` references in that record.
-- **Status**: Implementation and cross-platform fixture verification complete; awaiting user-directed commit/release work. The product owner confirmed the Impact Handshake and explicitly authorized this sub-task on 2026-07-16.
+- **Status**: Implementation and cross-platform fixture verification complete; user-authorized release hardening is in progress after Linux CI exposed an inode-reuse gap in destination verification. The product owner confirmed the Impact Handshake and explicitly authorized this sub-task on 2026-07-16.
 - **Scope**:
   - Codex is the first provider, not a permanent public-protocol constraint. `agent-thread` selection, archive manifests, task-packet association, diagnostics, and ZIP writing are provider-neutral; `codex-rollout-v1` is the only source adapter implemented in this slice. It must work when the user is using Codex App or the Codex VS Code extension and has not installed `codex` CLI.
   - The supported hosts are macOS, Windows, and Linux. The first adapter reads a validated local Codex rollout snapshot from `$CODEX_HOME` (default `~/.codex`) or an explicit source path. It must not require a PATH-installed `codex`, a running App/extension, or a network connection.
@@ -38,9 +38,9 @@
 - `list` validates the state-table and rollout-path safety without reading transcript bodies; exact export validates the rollout-v1 signature before capture.
 - The ZIP layout is `providers/<provider>/…`, `thread/index.json`, `task-packets/tasks/…`, and `manifest.json`. It has no dynamic-provider or cloud boundary.
 - Full-source export is gated by `--include-sensitive`; it preserves native JSONL byte-for-byte and keeps provider-unavailable reasoning opaque.
-- Source and task-packet snapshots are rechecked after ZIP fsync at the pre-publication commit gate. A destination that changes during publication is rejected as `archive-output-mutated` without deleting the untrusted replacement.
+- Source and task-packet snapshots are rechecked after ZIP fsync at the pre-publication commit gate. A destination that changes during publication is rejected as `archive-output-mutated` without deleting the untrusted replacement; its cross-platform file identity is device, inode, file type, size, and mtime, deliberately excluding Windows-read-sensitive ctime.
 - Cross-platform identities intentionally use device/inode/size/mtime rather than `ctime_ns`: Windows may change `ctime_ns` during read-only inspection. Raw source hashes and descriptor-bound reads remain the content proof.
-- `pdm run test` passed 130 tests; `pdm run build-monolith`, `pdm run release check-ci --json`, and `pdm build` passed. The fresh-wheel fixture passed on macOS (Python 3.12.10), Windows (3.14.0), and Linux (3.13.5); details are in [`acceptance.md`](acceptance.md).
+- Release hardening: `pdm run test` passed 131 tests; `pdm run build-monolith`, `pdm run release check-ci --json`, and `pdm build` passed. The existing fresh-wheel fixture passed on macOS (Python 3.12.10), Windows (3.14.0), and Linux (3.13.5); a new replacement-during-publication regression also passed from a freshly installed wheel on Windows and Linux. Details are in [`acceptance.md`](acceptance.md).
 
 ## Supporting Material
 
