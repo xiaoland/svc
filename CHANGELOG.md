@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 <!-- towncrier release notes start -->
 
+## [10.0.1] - 2026-07-16
+
+### Behavioral breaking changes
+
+- Add the schema-v2 development-runtime protocol, including local configuration overlays, worktree-safe capability coordination, and bounded editor/package setup projections. (`v10-dev-runtime`)
+
+### Backward-compatible capabilities
+
+- Add explicit local `svc telemetry agent-thread list|export` evidence capture with a Codex rollout adapter, sensitive-export acknowledgement, and a provider-neutral extension seam. (`v10-agent-thread`)
+
+
 ## [10.0.0] - 2026-07-15
 
 ### Behavioral breaking changes
@@ -107,3 +118,4 @@ This is the first unreleased v10 release shape. No v10 package, tag, or GitHub R
 [9.2.0]: https://github.com/xiaoland/svc/releases/tag/v9.2.0
 [9.1.0]: https://github.com/xiaoland/svc/releases/tag/v9.1.0
 [10.0.0]: https://github.com/xiaoland/svc/releases/tag/v10.0.0
+[10.0.1]: https://github.com/xiaoland/svc/releases/tag/v10.0.1

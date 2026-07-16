@@ -1,18 +1,13 @@
 {
   "schema_version": 2,
-  "previous_version": "9.8.0",
-  "svc_version": "10.0.0",
+  "previous_version": "10.0.0",
+  "svc_version": "10.0.1",
   "behavioral_impact": {
     "level": "major",
     "reasons": [
-      "Replace copied SVC-managed documents and the consumer-file migration engine with a packaged on-demand corpus, plan-first project adoption, and explicit migration guidance for Consumer-owned material."
+      "Add explicit local `svc telemetry agent-thread list|export` evidence capture with a Codex rollout adapter, sensitive-export acknowledgement, and a provider-neutral extension seam.",
+      "Add the schema-v2 development-runtime protocol, including local configuration overlays, worktree-safe capability coordination, and bounded editor/package setup projections."
     ],
-    "migration": {
-      "status": "not-applicable",
-      "reason": "SVC 10.0.0 has not been published, so no released v10 consumer state exists."
-    }
-  },
-  "release_policy": {
     "migration": {
       "status": "not-applicable",
       "reason": "The product owner asserts that SVC 10.0.0 has zero known adopted consumers; SVC 10.0.1 blocks schema-v1 writes instead of silently migrating them."
