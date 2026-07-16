@@ -81,6 +81,18 @@ Interpolation is limited to `${dev.instance}`, `${dev.worktree.id}`, `${dev.prof
 
 `svc dev setup` is the optional plan-first bridge to Consumer-owned editor/package surfaces. It adds only marked VS Code Tasks or reserved exact root `package.json` scripts that call `svc dev ensure <target>`; apply requires the current exact digest. It never reads `launch.json`, infers a package manager, creates package metadata, removes orphans, or replaces a conflicting Consumer entry.
 
+## Local Agent-Thread Evidence
+
+`svc telemetry agent-thread list|export` is an explicit local evidence-capture family. It never implies automatic collection, network egress, upload, or anonymous metrics. The first provider adapter reads a validated local Codex rollout snapshot from `$CODEX_HOME` (default `~/.codex`) or an explicit source path; it does not require a PATH-installed `codex`, a running App or VS Code extension, or a network connection.
+
+```text
+svc telemetry agent-thread list [--codex-home <path>] [--json]
+svc telemetry agent-thread export --thread-id <uuid> --output /safe/export-dir/evidence.zip --include-sensitive
+svc telemetry agent-thread export --source <rollout.jsonl> --output /safe/export-dir/evidence.zip --include-sensitive
+```
+
+`list` returns non-sensitive selection metadata and does not print message bodies, tool values, reasoning, or full local paths by default. `export` requires exactly one explicit thread ID or source and an absent destination outside the selected repository; it never selects a latest thread implicitly or permits an archive to alter task-packet evidence. `--include-sensitive` is the deliberate acknowledgement required before copying raw conversation, tool arguments/results, and reasoning fields where the provider makes them available. “Complete” means complete provider-obtainable local source: opaque, unavailable, or redacted reasoning remains so and is never fabricated, decrypted, or recovered. Codex is the first provider (`codex`, via `codex-rollout-v1`), while the provider-neutral `agent-thread` contract leaves an extension seam for future adapters.
+
 ## Update and Migration Guidance
 
 `svc self-update` and project adoption are separate:

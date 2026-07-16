@@ -14,6 +14,7 @@ from .dev.setup import plan_setup
 from .lookup import CorpusLookup, LookupQuery
 from .project import inspect_status, plan_adopt, plan_init
 from .release import catalog, runtime_version
+from .telemetry.service import export_agent_thread, list_agent_threads
 from .update import apply_self_update, plan_self_update
 from .plans import apply_local_plan
 
@@ -81,6 +82,24 @@ def _parser() -> argparse.ArgumentParser:
     setup_mode.add_argument("--plan", action="store_true")
     setup_mode.add_argument("--apply", metavar="PLAN_DIGEST")
     dev_setup.add_argument("--json", action="store_true", dest="json_output")
+
+    telemetry = subparsers.add_parser("telemetry", help="Capture explicit, local observability evidence")
+    telemetry_resources = telemetry.add_subparsers(dest="telemetry_resource", required=True)
+    agent_thread = telemetry_resources.add_parser("agent-thread", help="List or export provider-obtainable agent-thread evidence")
+    agent_thread_commands = agent_thread.add_subparsers(dest="agent_thread_command", required=True)
+    thread_list = agent_thread_commands.add_parser("list", help="List safe Codex thread selection metadata")
+    thread_list.add_argument("--codex-home", type=Path)
+    thread_list.add_argument("--limit", type=_telemetry_limit, default=20, help="Maximum threads to list (1-100)")
+    thread_list.add_argument("--json", action="store_true", dest="json_output")
+    thread_export = agent_thread_commands.add_parser("export", help="Export one exact local thread as a sensitive ZIP evidence bundle")
+    selector = thread_export.add_mutually_exclusive_group(required=True)
+    selector.add_argument("--thread-id")
+    selector.add_argument("--source", type=Path, help="Exact Codex rollout JSONL source")
+    thread_export.add_argument("--output", required=True, type=Path, help="Absent .zip destination outside --repo")
+    thread_export.add_argument("--repo", default=".", type=Path, help="Repository whose task packets may be included")
+    thread_export.add_argument("--codex-home", type=Path)
+    thread_export.add_argument("--include-sensitive", action="store_true", help="Acknowledge raw conversation, tool, and reasoning data")
+    thread_export.add_argument("--json", action="store_true", dest="json_output")
     return parser
 
 
@@ -126,6 +145,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return EXIT_CONFLICT if plan.blockers else EXIT_OK
             payload = ensure_target(Path(args.repo), args.target)
             _emit(payload, json_output)
+            return EXIT_OK
+
+        if args.command == "telemetry":
+            if args.telemetry_resource == "agent-thread" and args.agent_thread_command == "list":
+                payload = list_agent_threads(args.codex_home, args.limit)
+                _emit_telemetry_list(payload, json_output)
+                return EXIT_OK
+            payload = export_agent_thread(
+                codex_home=args.codex_home,
+                thread_id=args.thread_id,
+                source=args.source,
+                repository=args.repo,
+                output=args.output,
+                include_sensitive=args.include_sensitive,
+            )
+            _emit_telemetry_export(payload, json_output)
             return EXIT_OK
 
         if args.command == "self-update":
@@ -176,6 +211,16 @@ def _lookup_limit(value: str) -> int:
     return limit
 
 
+def _telemetry_limit(value: str) -> int:
+    try:
+        limit = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("--limit must be an integer") from error
+    if not 1 <= limit <= 100:
+        raise argparse.ArgumentTypeError("--limit must be between 1 and 100")
+    return limit
+
+
 def _emit_local_plan(plan: Any, json_output: bool) -> None:
     if json_output:
         _emit_json(plan.as_dict())
@@ -221,6 +266,33 @@ def _emit_status(payload: dict[str, object], json_output: bool) -> None:
     for item in payload["guidance"]:
         print(f"  {item['status']:16} {item['path']}  ({item['kind']})")
     print("Healthy" if payload["healthy"] else "Action required")
+
+
+def _emit_telemetry_list(payload: dict[str, object], json_output: bool) -> None:
+    if json_output:
+        _emit_json(payload)
+        return
+    threads = payload["threads"]
+    print(f"SVC telemetry agent-thread list: {len(threads)} thread(s)")
+    for descriptor in threads:
+        if not isinstance(descriptor, dict):
+            continue
+        updated = descriptor.get("updated_at") or "unknown-time"
+        print(f"  {descriptor.get('thread_id')}  {descriptor.get('source_state')}  {updated}")
+
+
+def _emit_telemetry_export(payload: dict[str, object], json_output: bool) -> None:
+    if json_output:
+        _emit_json(payload)
+        return
+    archive = payload["archive"]
+    if isinstance(archive, dict):
+        print(f"SVC telemetry agent-thread export: exported {archive.get('path')}")
+    else:
+        print("SVC telemetry agent-thread export: exported")
+    warnings = payload.get("warnings")
+    if isinstance(warnings, list) and warnings:
+        print(f"  {len(warnings)} manifest warning(s); inspect manifest.json in the archive")
 
 
 def _emit_lookup(response: Any, json_output: bool) -> None:
@@ -272,6 +344,7 @@ def _exit_code(error: SvcError) -> int:
         "self-update-failed",
         "self-update-verification-failed",
         "staging-failed",
+        "output-write-failed",
     }:
         return EXIT_FAILURE
     return EXIT_CONFLICT
