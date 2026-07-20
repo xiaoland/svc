@@ -68,6 +68,14 @@ class ThreadDescriptor:
 
 
 @dataclass(frozen=True)
+class ThreadMetadataListing:
+    """Safe selection descriptors plus a redacted count of omitted sources."""
+
+    descriptors: tuple[ThreadDescriptor, ...]
+    omitted_sources: int = 0
+
+
+@dataclass(frozen=True)
 class SourceArtifact:
     """One native source file copied as raw evidence into a provider namespace."""
 
@@ -155,7 +163,7 @@ class ThreadProvider(Protocol):
 
     provider_id: str
 
-    def list_metadata(self, context: ProviderContext, limit: int) -> tuple[ThreadDescriptor, ...]: ...
+    def list_metadata(self, context: ProviderContext, limit: int) -> ThreadMetadataListing: ...
 
     def resolve(self, context: ProviderContext, selection: ThreadSelection) -> ResolvedThread: ...
 

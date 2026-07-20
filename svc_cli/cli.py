@@ -279,6 +279,18 @@ def _emit_telemetry_list(payload: dict[str, object], json_output: bool) -> None:
             continue
         updated = descriptor.get("updated_at") or "unknown-time"
         print(f"  {descriptor.get('thread_id')}  {descriptor.get('source_state')}  {updated}")
+    warnings = payload.get("warnings")
+    if isinstance(warnings, list):
+        omitted_sources = sum(
+            warning["count"]
+            for warning in warnings
+            if isinstance(warning, dict)
+            and warning.get("code") == "thread-source-omitted"
+            and isinstance(warning.get("count"), int)
+            and not isinstance(warning.get("count"), bool)
+        )
+        if omitted_sources:
+            print(f"  Degraded: {omitted_sources} source row(s) omitted")
 
 
 def _emit_telemetry_export(payload: dict[str, object], json_output: bool) -> None:

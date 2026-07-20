@@ -92,26 +92,101 @@ class TelemetryCliTests(unittest.TestCase):
             )
             self.assertEqual(code, EXIT_OK)
             self.assertEqual(payload["threads"], [{"provider_id": "codex", "thread_id": "thread-list", "source_state": "active", "created_at": None, "updated_at": "2026-07-16"}])
+            self.assertNotIn("warnings", payload)
             self.assertNotIn("secret task body", serialized_error)
             self.assertNotIn("secret task body", json.dumps(payload))
 
-    def test_list_failure_redacts_provider_local_paths(self) -> None:
+    def test_list_omits_unsafe_rows_with_a_redacted_warning(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             database = home / "state_5.sqlite"
             connection = sqlite3.connect(database)
-            connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT)")
-            connection.execute("INSERT INTO threads VALUES (?, ?)", ("thread-outside", "/private/not-a-rollout.jsonl"))
+            connection.execute(
+                "CREATE TABLE threads (id TEXT, rollout_path TEXT, title TEXT, cwd TEXT, preview TEXT, message TEXT, reasoning TEXT, tool_payload TEXT)"
+            )
+            connection.execute(
+                "INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "private-thread-id",
+                    "../private-rollout.jsonl",
+                    "private-title",
+                    "private-cwd",
+                    "private-preview",
+                    "private-message",
+                    "private-reasoning",
+                    "private-tool-payload",
+                ),
+            )
             connection.commit()
             connection.close()
 
             code, payload, serialized_error = self.invoke(
                 ["telemetry", "agent-thread", "list", "--codex-home", str(home), "--json"]
             )
+            self.assertEqual(code, EXIT_OK)
+            self.assertEqual(payload["status"], "listed")
+            self.assertEqual(payload["threads"], [])
+            self.assertEqual(payload["warnings"], [{"code": "thread-source-omitted", "count": 1}])
+            serialized = serialized_error + json.dumps(payload)
+            for private_value in (
+                "private-thread-id",
+                "private-rollout.jsonl",
+                "private-title",
+                "private-cwd",
+                "private-preview",
+                "private-message",
+                "private-reasoning",
+                "private-tool-payload",
+            ):
+                self.assertNotIn(private_value, serialized)
+
+    def test_list_human_output_marks_a_degraded_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            database = home / "state_5.sqlite"
+            connection = sqlite3.connect(database)
+            connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT)")
+            connection.execute("INSERT INTO threads VALUES (?, ?)", ("unsafe-thread", "../private-rollout.jsonl"))
+            connection.commit()
+            connection.close()
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = main(["telemetry", "agent-thread", "list", "--codex-home", str(home)])
+
+            self.assertEqual(code, EXIT_OK)
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertIn("SVC telemetry agent-thread list: 0 thread(s)", stdout.getvalue())
+            self.assertIn("Degraded: 1 source row(s) omitted", stdout.getvalue())
+            self.assertNotIn("private-rollout.jsonl", stdout.getvalue())
+
+    def test_list_missing_state_database_remains_a_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+
+            code, payload, serialized_error = self.invoke(
+                ["telemetry", "agent-thread", "list", "--codex-home", str(home), "--json"]
+            )
+
             self.assertEqual(code, EXIT_CONFLICT)
-            self.assertEqual(payload["error"]["code"], "thread-source-unsafe")
+            self.assertEqual(payload["error"]["code"], "thread-source-not-found")
             self.assertEqual(payload["error"]["details"], {})
-            self.assertNotIn("/private/not-a-rollout.jsonl", serialized_error)
+            self.assertNotIn(str(home), serialized_error)
+
+    def test_list_corrupt_state_database_remains_a_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / "state_5.sqlite").write_bytes(b"not-a-sqlite-database")
+
+            code, payload, serialized_error = self.invoke(
+                ["telemetry", "agent-thread", "list", "--codex-home", str(home), "--json"]
+            )
+
+            self.assertEqual(code, EXIT_CONFLICT)
+            self.assertEqual(payload["error"]["code"], "thread-source-incompatible")
+            self.assertEqual(payload["error"]["details"], {})
+            self.assertNotIn(str(home), serialized_error)
 
 
 if __name__ == "__main__":
