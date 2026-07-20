@@ -371,8 +371,13 @@ def prepare(root: Path = ROOT) -> dict[str, object]:
                 version_exception,
             )
             impact_data["version_exception"] = version_exception
-    elif staged_policy is not None:
-        raise ReleaseError("release_policy is valid only while staging a pending MAJOR release")
+    else:
+        if staged_policy is not None:
+            raise ReleaseError("release_policy is valid only while staging a pending MAJOR release")
+        impact_data["migration"] = {
+            "status": "not-applicable",
+            "reason": f"{str(plan['impact']).upper()} releases do not require consumer migration guidance.",
+        }
     manifest["behavioral_impact"] = impact_data
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     replace_project_version(root / "pyproject.toml", str(plan["target_version"]))

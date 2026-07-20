@@ -261,6 +261,42 @@ class ReleasePlannerTests(unittest.TestCase):
                 zero_known_adoption_exception(),
             )
 
+    def test_prepare_records_nonmajor_migration_non_applicability(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "fixture"\nversion = "10.0.1"\n\n[build-system]\n',
+                encoding="utf-8",
+            )
+            (root / "src/manifest.json").write_text(
+                json.dumps(release_metadata(previous="10.0.0", current="10.0.1")),
+                encoding="utf-8",
+            )
+            (root / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
+            plan = {
+                "base_version": "10.0.1",
+                "target_version": "10.0.2",
+                "impact": "patch",
+                "reasons": ["Correct a compatible behavior."],
+            }
+
+            with (
+                patch("tools.release.release_plan", return_value=plan),
+                patch("tools.release.subprocess.run"),
+                patch("tools.release.verify_prepared", return_value={}),
+            ):
+                prepare(root)
+
+            prepared = json.loads((root / "src/manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                prepared["behavioral_impact"]["migration"],
+                {
+                    "status": "not-applicable",
+                    "reason": "PATCH releases do not require consumer migration guidance.",
+                },
+            )
+
     def test_major_release_requires_packaged_guide_or_reviewable_non_applicability(self) -> None:
         with self.assertRaisesRegex(ReleaseError, "packaged migration guide"):
             verify_migration("10.0.0", "11.0.0", "major")
