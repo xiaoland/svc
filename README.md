@@ -87,12 +87,12 @@ Dev values may interpolate only `${dev.instance}`, `${dev.worktree.id}`, `${dev.
 The `telemetry` family is explicit local evidence capture, not automatic analytics. It reads a selected local provider snapshot and writes one private archive; it never uploads, contacts a network service, or collects anonymous metrics.
 
 ```bash
-svc telemetry agent-thread list [--codex-home /path/to/.codex] [--json]
+svc telemetry agent-thread list [--codex-home /path/to/.codex] [--limit 1-100] [--json]
 svc telemetry agent-thread export --thread-id <uuid> --output /safe/export-dir/evidence.zip --include-sensitive
 svc telemetry agent-thread export --source /path/to/rollout.jsonl --output /safe/export-dir/evidence.zip --include-sensitive
 ```
 
-`list` exposes non-sensitive selection metadata only. `export` requires an exact thread ID or an exact source file; it never guesses a latest thread. Its absent `.zip` destination must be outside `--repo`, preventing an export or its temporary file from becoming task-packet evidence. `--include-sensitive` is a deliberate acknowledgement to copy raw conversation, tool arguments/results, and reasoning fields wherever the provider makes them available. The export is limited to provider-obtainable data: opaque, unavailable, or redacted reasoning is not reconstructed or decrypted. Codex is the first provider (`codex`, via the `codex-rollout-v1` adapter), using local rollout data from Codex App or the VS Code extension without requiring the `codex` CLI; the `agent-thread` surface leaves a seam for future providers.
+`list` exposes non-sensitive selection metadata only. `--limit` applies to safe returned descriptors: unsafe source rows are skipped without spending a slot. A degraded successful JSON response carries only `"warnings":[{"code":"thread-source-omitted","count":N}]`, never a local path or rollout-derived field; an empty list with that warning is distinct from a state-database failure. `export` requires an exact thread ID or an exact source file; it never guesses a latest thread. Its absent `.zip` destination must be outside `--repo`, preventing an export or its temporary file from becoming task-packet evidence. `--include-sensitive` is a deliberate acknowledgement to copy raw conversation, tool arguments/results, and reasoning fields wherever the provider makes them available. The export is limited to provider-obtainable data: opaque, unavailable, or redacted reasoning is not reconstructed or decrypted. Codex is the first provider (`codex`, via the `codex-rollout-v1` adapter), using local rollout data from Codex App or the VS Code extension without requiring the `codex` CLI; the `agent-thread` surface leaves a seam for future providers.
 
 ## Upgrade Deliberately
 

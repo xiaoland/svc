@@ -27,6 +27,7 @@ from ..agent_threads import (
     SourceSnapshot,
     TextOccurrence,
     ThreadDescriptor,
+    ThreadMetadataListing,
     ThreadSelection,
 )
 
@@ -64,7 +65,7 @@ def _lstat_regular(path: Path, *, what: str) -> os.stat_result:
         info = path.lstat()
     except FileNotFoundError as exc:
         raise _error("thread-source-not-found", f"Codex {what} does not exist.", path=str(path)) from exc
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         raise _error("thread-source-unreadable", f"Codex {what} cannot be inspected.", path=str(path), reason=str(exc)) from exc
     if _is_link_or_reparse_point(info):
         raise _error("thread-source-unsafe", f"Codex {what} must not be a symlink.", path=str(path))
@@ -141,16 +142,16 @@ def _source_state(path: Path, value: object | None = None) -> str:
 def _resolve_path(home: Path, value: object) -> Path:
     if not isinstance(value, str) or not value.strip():
         raise _error("thread-source-incompatible", "State database has no usable rollout path.")
-    candidate = Path(value).expanduser()
-    if not candidate.is_absolute():
-        candidate = home / candidate
     try:
+        candidate = Path(value).expanduser()
+        if not candidate.is_absolute():
+            candidate = home / candidate
         candidate_resolved = candidate.resolve()
         home_resolved = home.expanduser().resolve()
         if not candidate_resolved.is_relative_to(home_resolved):
             raise _error("thread-source-unsafe", "State database rollout path escapes CODEX_HOME.", path=str(candidate), home=str(home))
-    except (OSError, RuntimeError) as exc:
-        raise _error("thread-source-unsafe", "State database rollout path cannot be safely resolved.", path=str(candidate), reason=str(exc)) from exc
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise _error("thread-source-unsafe", "State database rollout path cannot be safely resolved.", path=value, reason=str(exc)) from exc
     return candidate
 
 
@@ -287,7 +288,26 @@ def _state_connection(path: Path) -> _SnapshotConnection:
         raise _error("thread-source-incompatible", "Codex state database is not a readable SQLite database.", path=str(path), reason=str(exc)) from exc
 
 
-def _metadata_rows(home: Path, limit: int) -> tuple[ThreadDescriptor, ...]:
+def _metadata_source_state(home: Path, path_value: object, state_value: object | None) -> str | None:
+    """Return metadata-safe source state, or omit a row with an unsafe source."""
+    try:
+        source = _resolve_path(home, path_value)
+        try:
+            _lstat_regular(source, what="rollout source")
+        except SvcError as error:
+            if error.code == "thread-source-not-found":
+                return "missing"
+            if error.code not in {"thread-source-incompatible", "thread-source-unreadable", "thread-source-unsafe"}:
+                raise
+        else:
+            return _source_state(source, state_value)
+    except SvcError as error:
+        if error.code not in {"thread-source-incompatible", "thread-source-unreadable", "thread-source-unsafe"}:
+            raise
+    return None
+
+
+def _metadata_rows(home: Path, limit: int) -> ThreadMetadataListing:
     database = home / "state_5.sqlite"
     connection = _state_connection(database)
     try:
@@ -303,32 +323,48 @@ def _metadata_rows(home: Path, limit: int) -> tuple[ThreadDescriptor, ...]:
         for column in (created_column, updated_column, state_column):
             if column is not None:
                 selected.append(column)
-        projection = ", ".join('"' + column.replace('"', '""') + '"' for column in selected)
-        order = ('"' + updated_column.replace('"', '""') + '" DESC') if updated_column else 'rowid DESC'
-        rows = connection.execute(f"SELECT {projection} FROM threads ORDER BY {order} LIMIT ?", (limit,)).fetchall()
+
+        def quote(column: str) -> str:
+            return '"' + column.replace('"', '""') + '"'
+
+        projection = ", ".join(quote(column) for column in selected)
+        if updated_column is not None:
+            order_fields: list[tuple[str, str]] = [(updated_column, "DESC")]
+            for column in (id_column, source_column, created_column, state_column):
+                if column is not None and all(column != ordered for ordered, _ in order_fields):
+                    order_fields.append((column, "ASC"))
+            # All descriptor-bearing values break timestamp ties, keeping a
+            # safe-result limit stable across equivalent SQLite snapshots.
+            order = ", ".join(f"{quote(column)} {direction}" for column, direction in order_fields)
+        else:
+            order = "rowid DESC"
+        rows = connection.execute(f"SELECT {projection} FROM threads ORDER BY {order}")
         result: list[ThreadDescriptor] = []
+        omitted_sources = 0
         for row in rows:
             values = dict(zip(selected, row))
             thread_id = values.get(id_column)
             if not isinstance(thread_id, str) or not thread_id.strip():
                 continue
-            source = _resolve_path(home, values.get(source_column))
-            try:
-                _lstat_regular(source, what="rollout source")
-            except SvcError as error:
-                if error.code != "thread-source-not-found":
-                    raise
-                source_state = "missing"
-            else:
-                source_state = _source_state(source, values.get(state_column) if state_column else None)
-            result.append(ThreadDescriptor(
-                provider_id="codex",
-                thread_id=thread_id,
-                source_state=source_state,
-                created_at=None if values.get(created_column) is None else str(values.get(created_column)),
-                updated_at=None if values.get(updated_column) is None else str(values.get(updated_column)),
-            ))
-        return tuple(result)
+            source_state = _metadata_source_state(
+                home,
+                values.get(source_column),
+                values.get(state_column) if state_column else None,
+            )
+            if source_state is None:
+                omitted_sources += 1
+                continue
+            # Inspect every ordered row so the degradation count is complete,
+            # while `limit` remains a cap on safe returned descriptors only.
+            if len(result) < limit:
+                result.append(ThreadDescriptor(
+                    provider_id="codex",
+                    thread_id=thread_id,
+                    source_state=source_state,
+                    created_at=None if values.get(created_column) is None else str(values.get(created_column)),
+                    updated_at=None if values.get(updated_column) is None else str(values.get(updated_column)),
+                ))
+        return ThreadMetadataListing(tuple(result), omitted_sources)
     except SvcError:
         raise
     except sqlite3.DatabaseError as exc:
@@ -486,7 +522,7 @@ class CodexRolloutProvider:
 
     provider_id = "codex"
 
-    def list_metadata(self, context: ProviderContext, limit: int) -> tuple[ThreadDescriptor, ...]:
+    def list_metadata(self, context: ProviderContext, limit: int) -> ThreadMetadataListing:
         if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
             raise _error("invalid-limit", "Thread metadata limit must be a positive integer.", limit=limit)
         home = _home(context)

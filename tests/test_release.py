@@ -74,9 +74,9 @@ class ReleasePlannerTests(unittest.TestCase):
 
     def test_repository_release_contract_is_consistent(self) -> None:
         plan = check_ci(ROOT)
-        self.assertEqual(plan.get("base_version", plan.get("previous_version")), "10.0.0")
-        self.assertEqual(plan.get("target_version", plan.get("version")), "10.0.1")
-        self.assertEqual(plan["impact"], "major")
+        self.assertEqual(plan.get("base_version", plan.get("previous_version")), "10.0.1")
+        self.assertEqual(plan.get("target_version", plan.get("version")), "10.0.2")
+        self.assertEqual(plan["impact"], "patch")
 
     def test_feature_pr_does_not_prebump_released_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

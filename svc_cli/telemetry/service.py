@@ -22,19 +22,22 @@ def list_agent_threads(codex_home: Path | None, limit: int) -> dict[str, object]
 
     provider = local_provider()
     try:
-        descriptors = provider.list_metadata(_context(codex_home), limit)
+        listing = provider.list_metadata(_context(codex_home), limit)
     except SvcError as error:
         # A list command is deliberately metadata-only.  Provider diagnostics
         # can contain a local rollout path or SQLite implementation detail, so
         # preserve its stable code/message but not those private details.
         raise SvcError(error.code, error.message) from error
-    return {
+    payload: dict[str, object] = {
         "schema_version": TELEMETRY_SCHEMA_VERSION,
         "command": "telemetry agent-thread list",
         "status": "listed",
         "provider": provider.provider_id,
-        "threads": [descriptor.as_dict() for descriptor in descriptors],
+        "threads": [descriptor.as_dict() for descriptor in listing.descriptors],
     }
+    if listing.omitted_sources:
+        payload["warnings"] = [{"code": "thread-source-omitted", "count": listing.omitted_sources}]
+    return payload
 
 
 def export_agent_thread(

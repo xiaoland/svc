@@ -183,8 +183,9 @@ class CodexRolloutProviderTests(unittest.TestCase):
         connection.commit()
         connection.close()
         listed = self.provider.list_metadata(ProviderContext(home=self.root), 5)
-        self.assertEqual(listed[0].thread_id, "thread-db")
-        self.assertEqual(listed[0].created_at, "1")
+        self.assertEqual(listed.descriptors[0].thread_id, "thread-db")
+        self.assertEqual(listed.descriptors[0].created_at, "1")
+        self.assertEqual(listed.omitted_sources, 0)
         self.assertFalse((self.root / "state_5.sqlite-wal").exists())
         self.assertFalse((self.root / "state_5.sqlite-shm").exists())
         resolved = self.provider.resolve(ProviderContext(home=self.root), ThreadSelection(thread_id="thread-db"))
@@ -220,8 +221,8 @@ class CodexRolloutProviderTests(unittest.TestCase):
         connection.close()
 
         listed = self.provider.list_metadata(ProviderContext(home=self.root), 5)
-        self.assertEqual(listed[0].thread_id, "thread-missing")
-        self.assertEqual(listed[0].source_state, "missing")
+        self.assertEqual(listed.descriptors[0].thread_id, "thread-missing")
+        self.assertEqual(listed.descriptors[0].source_state, "missing")
 
     def test_list_is_metadata_only_and_defers_rollout_signature_to_export(self) -> None:
         source = self.root / "not-a-rollout.jsonl"
@@ -234,10 +235,81 @@ class CodexRolloutProviderTests(unittest.TestCase):
         connection.close()
 
         listed = self.provider.list_metadata(ProviderContext(home=self.root), 5)
-        self.assertEqual(listed[0].thread_id, "thread-metadata-only")
+        self.assertEqual(listed.descriptors[0].thread_id, "thread-metadata-only")
         with self.assertRaises(SvcError) as raised:
             self.provider.resolve(ProviderContext(home=self.root), ThreadSelection(thread_id="thread-metadata-only"))
         self.assertEqual(raised.exception.code, "thread-source-incompatible")
+
+    def test_list_omits_unsafe_rows_without_spending_the_safe_result_limit(self) -> None:
+        recent = self.root / "recent.jsonl"
+        older = self.root / "older.jsonl"
+        recent.write_text("metadata-only", encoding="utf-8")
+        older.write_text("metadata-only", encoding="utf-8")
+        database = self.root / "state_5.sqlite"
+        connection = sqlite3.connect(database)
+        connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT, updated_at TEXT)")
+        connection.executemany(
+            "INSERT INTO threads VALUES (?, ?, ?)",
+            [
+                ("unsafe-leading", "../escaped.jsonl", "4"),
+                ("unresolvable-leading", "\x00unresolvable.jsonl", "3"),
+                ("safe-recent", recent.name, "2"),
+                ("safe-older", older.name, "1"),
+            ],
+        )
+        connection.commit()
+        connection.close()
+
+        listed = self.provider.list_metadata(ProviderContext(home=self.root), 2)
+
+        self.assertEqual([item.thread_id for item in listed.descriptors], ["safe-recent", "safe-older"])
+        self.assertEqual(listed.omitted_sources, 2)
+        with self.assertRaises(SvcError) as raised:
+            self.provider.resolve(ProviderContext(home=self.root), ThreadSelection(thread_id="unsafe-leading"))
+        self.assertEqual(raised.exception.code, "thread-source-unsafe")
+
+    def test_list_reports_an_all_unsafe_inventory_as_degraded(self) -> None:
+        database = self.root / "state_5.sqlite"
+        connection = sqlite3.connect(database)
+        connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT, updated_at TEXT)")
+        connection.executemany(
+            "INSERT INTO threads VALUES (?, ?, ?)",
+            [
+                ("unsafe-newer", "../escaped-newer.jsonl", "2"),
+                ("unsafe-older", "../escaped-older.jsonl", "1"),
+            ],
+        )
+        connection.commit()
+        connection.close()
+
+        listed = self.provider.list_metadata(ProviderContext(home=self.root), 1)
+
+        self.assertEqual(listed.descriptors, ())
+        self.assertEqual(listed.omitted_sources, 2)
+
+    def test_list_uses_stable_descriptor_order_when_timestamps_tie(self) -> None:
+        alpha = self.root / "alpha.jsonl"
+        zulu = self.root / "zulu.jsonl"
+        alpha.write_text("metadata-only", encoding="utf-8")
+        zulu.write_text("metadata-only", encoding="utf-8")
+        database = self.root / "state_5.sqlite"
+        connection = sqlite3.connect(database)
+        connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT, updated_at TEXT)")
+        connection.executemany(
+            "INSERT INTO threads VALUES (?, ?, ?)",
+            [
+                ("zulu-safe", zulu.name, "same-time"),
+                ("middle-unsafe", "../escaped.jsonl", "same-time"),
+                ("alpha-safe", alpha.name, "same-time"),
+            ],
+        )
+        connection.commit()
+        connection.close()
+
+        listed = self.provider.list_metadata(ProviderContext(home=self.root), 2)
+
+        self.assertEqual([item.thread_id for item in listed.descriptors], ["alpha-safe", "zulu-safe"])
+        self.assertEqual(listed.omitted_sources, 1)
 
     def test_symlink_and_nonregular_sources_are_rejected(self) -> None:
         target = self.source(self.envelope("session_meta", {"id": "thread-safe"}))
