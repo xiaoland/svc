@@ -26,7 +26,12 @@ class TelemetryCliTests(unittest.TestCase):
             f"CLI returned {code} without a JSON response "
             f"(stdout characters={len(serialized_stdout)}, stderr characters={len(serialized_stderr)}).",
         )
-        payload = json.loads(serialized)
+        try:
+            payload = json.loads(serialized)
+        except json.JSONDecodeError as error:
+            self.fail(
+                f"CLI emitted invalid JSON (stdout={serialized_stdout!r}, stderr={serialized_stderr!r}): {error}"
+            )
         return code, payload, serialized_stderr
 
     @staticmethod
