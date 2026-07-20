@@ -1,24 +1,15 @@
 {
   "schema_version": 2,
-  "previous_version": "10.0.0",
-  "svc_version": "10.0.1",
+  "previous_version": "10.0.1",
+  "svc_version": "10.0.2",
   "behavioral_impact": {
-    "level": "major",
+    "level": "patch",
     "reasons": [
-      "Add explicit local `svc telemetry agent-thread list|export` evidence capture with a Codex rollout adapter, sensitive-export acknowledgement, and a provider-neutral extension seam.",
-      "Add the schema-v2 development-runtime protocol, including local configuration overlays, worktree-safe capability coordination, and bounded editor/package setup projections."
+      "Restore safe Codex thread metadata listings when unrelated state rows have unsafe rollout paths."
     ],
     "migration": {
       "status": "not-applicable",
-      "reason": "The product owner asserts that SVC 10.0.0 has zero known adopted consumers; SVC 10.0.1 blocks schema-v1 writes instead of silently migrating them."
-    },
-    "version_exception": {
-      "kind": "zero-known-adopted-consumers",
-      "from_version": "10.0.0",
-      "to_version": "10.0.1",
-      "one_time": true,
-      "owner_assertion": "The product owner asserts zero known adopted consumers of published SVC 10.0.0.",
-      "reason": "All remaining v10 work changes required consumer behavior and is intentionally released as 10.0.1 under this one-time exception."
+      "reason": "PATCH releases do not require consumer migration guidance."
     }
   }
 }
