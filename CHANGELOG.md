@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 <!-- towncrier release notes start -->
 
+## [10.0.2] - 2026-07-20
+
+### Protocol fixes
+
+- Restore safe Codex thread metadata listings when unrelated state rows have unsafe rollout paths. (`v10-windows-thread-list-isolation`)
+
+
 ## [10.0.1] - 2026-07-16
 
 ### Behavioral breaking changes
@@ -119,3 +126,4 @@ This is the first unreleased v10 release shape. No v10 package, tag, or GitHub R
 [9.1.0]: https://github.com/xiaoland/svc/releases/tag/v9.1.0
 [10.0.0]: https://github.com/xiaoland/svc/releases/tag/v10.0.0
 [10.0.1]: https://github.com/xiaoland/svc/releases/tag/v10.0.1
+[10.0.2]: https://github.com/xiaoland/svc/releases/tag/v10.0.2
