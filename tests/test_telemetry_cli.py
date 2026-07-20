@@ -18,21 +18,8 @@ class TelemetryCliTests(unittest.TestCase):
         stderr = io.StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
             code = main(arguments)
-        serialized_stdout = stdout.getvalue()
-        serialized_stderr = stderr.getvalue()
-        serialized = serialized_stdout or serialized_stderr
-        self.assertTrue(
-            serialized,
-            f"CLI returned {code} without a JSON response "
-            f"(stdout characters={len(serialized_stdout)}, stderr characters={len(serialized_stderr)}).",
-        )
-        try:
-            payload = json.loads(serialized)
-        except json.JSONDecodeError as error:
-            self.fail(
-                f"CLI emitted invalid JSON (stdout={serialized_stdout!r}, stderr={serialized_stderr!r}): {error}"
-            )
-        return code, payload, serialized_stderr
+        payload = json.loads(stdout.getvalue()) if stdout.getvalue() else json.loads(stderr.getvalue())
+        return code, payload, stderr.getvalue()
 
     @staticmethod
     def rollout(path: Path, thread_id: str, message: str) -> None:

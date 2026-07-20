@@ -272,20 +272,28 @@ def _state_snapshot(path: Path) -> tuple[Path, str]:
 
 def _state_connection(path: Path) -> _SnapshotConnection:
     snapshot, directory = _state_snapshot(path)
+    connection: sqlite3.Connection | None = None
+    handed_off = False
     try:
         connection = sqlite3.connect(snapshot)
         connection.execute("PRAGMA query_only=ON")
         table = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='threads'").fetchone()
         if table is None:
-            connection.close()
-            shutil.rmtree(directory, ignore_errors=True)
             raise _error("thread-source-incompatible", "Codex state database has no compatible threads table.", path=str(path))
-        return _SnapshotConnection(connection, directory)
+        snapshot_connection = _SnapshotConnection(connection, directory)
+        handed_off = True
+        return snapshot_connection
     except SvcError:
         raise
     except sqlite3.DatabaseError as exc:
-        shutil.rmtree(directory, ignore_errors=True)
         raise _error("thread-source-incompatible", "Codex state database is not a readable SQLite database.", path=str(path), reason=str(exc)) from exc
+    finally:
+        if not handed_off:
+            try:
+                if connection is not None:
+                    connection.close()
+            finally:
+                shutil.rmtree(directory, ignore_errors=True)
 
 
 def _metadata_source_state(home: Path, path_value: object, state_value: object | None) -> str | None:

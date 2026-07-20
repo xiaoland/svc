@@ -9,6 +9,7 @@ import unittest
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from svc_cli.errors import SvcError
 from svc_cli.telemetry.agent_threads import ProviderContext, ThreadSelection
@@ -211,6 +212,19 @@ class CodexRolloutProviderTests(unittest.TestCase):
         before = SimpleNamespace(st_dev=1, st_ino=2, st_size=3, st_mtime_ns=4, st_ctime_ns=5)
         after = SimpleNamespace(st_dev=1, st_ino=2, st_size=3, st_mtime_ns=4, st_ctime_ns=999)
         self.assertEqual(codex_rollout._state_signature(before), codex_rollout._state_signature(after))
+
+    def test_state_connection_closes_a_connection_rejected_by_sqlite(self) -> None:
+        database = self.root / "corrupt.sqlite"
+        database.write_bytes(b"not-a-sqlite-database")
+        connection = MagicMock()
+        connection.execute.side_effect = sqlite3.DatabaseError("not a database")
+
+        with patch.object(codex_rollout.sqlite3, "connect", return_value=connection):
+            with self.assertRaises(SvcError) as raised:
+                codex_rollout._state_connection(database)
+
+        self.assertEqual(raised.exception.code, "thread-source-incompatible")
+        connection.close.assert_called_once_with()
 
     def test_list_marks_a_missing_rollout_without_scanning_or_failing_all_metadata(self) -> None:
         db = self.root / "state_5.sqlite"
