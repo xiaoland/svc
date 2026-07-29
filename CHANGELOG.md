@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 <!-- towncrier release notes start -->
 
+## [11.0.0] - 2026-07-29
+
+### Behavioral breaking changes
+
+- Replace raw agent-thread export with a bounded normalized trajectory, directly cut off schema-v1 archives, and add deterministic Agent analysis plus an explicitly sensitive Textual workspace/thread navigator. (`v11-agent-observability`)
+
+
 ## [10.0.2] - 2026-07-20
 
 ### Protocol fixes
@@ -127,3 +134,4 @@ This is the first unreleased v10 release shape. No v10 package, tag, or GitHub R
 [10.0.0]: https://github.com/xiaoland/svc/releases/tag/v10.0.0
 [10.0.1]: https://github.com/xiaoland/svc/releases/tag/v10.0.1
 [10.0.2]: https://github.com/xiaoland/svc/releases/tag/v10.0.2
+[11.0.0]: https://github.com/xiaoland/svc/releases/tag/v11.0.0
