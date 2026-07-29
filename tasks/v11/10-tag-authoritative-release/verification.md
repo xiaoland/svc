@@ -120,8 +120,8 @@ Fixture repositories cover:
   removed after verification.
 
 These are local/static proofs only. The authorized GitHub-control mutation and
-API readback now satisfy REL-030 through REL-037's control portion; the first
-real tag still supplies the Publish/PyPI/Release proof.
+API readback satisfy REL-030 through REL-037's control portion; the first real
+tag result below supplies the Publish/PyPI/Release proof.
 
 ## Live Acceptance
 
@@ -158,7 +158,32 @@ The cutover merge itself creates no tag, draft, PyPI file, or Release. No
 direct production push or destructive tag probe is performed merely for
 testing.
 
-The first production tag requires separate explicit authorization. Its evidence
-must record the tag, commit, workflow run, named artifact ID/expiry,
-wheel/sdist hashes, PyPI post-upload readback, published immutable GitHub
-Release metadata/assets, and preserved-bundle recovery outcome.
+## First-Tag Acceptance — 2026-07-30
+
+The authorized annotated `v11.0.1` tag peels to the qualified hard-cut commit
+`1d4028a0bdedcb99c3694dfe9996f6538f9a5364`. Its automatic push run built the
+bundle but exposed a real environment-policy defect before any external
+publication: the request body omitted `type`, which GitHub interpreted as a
+branch policy. Replacing it with the only live `type: tag`, `name: v*` policy
+allowed recovery to use the original bundle without rebuilding.
+
+- Recovery run [`30472401002`](https://github.com/xiaoland/svc/actions/runs/30472401002)
+  published the exact two-file PyPI set and immutable GitHub Release
+  [`v11.0.1`](https://github.com/xiaoland/svc/releases/tag/v11.0.1).
+- The PyPI wheel hash is
+  `84dd93e1c0956fb1c724cb4a661fc8f8753a285813fbe2fddbccbd91df67d4af`; the
+  sdist hash is
+  `7c8c916033bd4eba460b4e7ca7f30de16ceef69c953a000cacb254673ddc52b8`.
+  API readback confirms the same hashes on PyPI and on the Release assets.
+- Original artifact `8732154215` (`svc-release-v11.0.1`) is 403,310 bytes and
+  expires `2026-10-27T16:45:09Z`. Both actual Release distributions pass
+  GitHub attestation verification; a fresh PyPI install passed `svc --help`
+  and the JSON lookup smoke.
+- Exact-complete dispatch
+  [`30472677788`](https://github.com/xiaoland/svc/actions/runs/30472677788)
+  took 20 seconds, accepted the already complete candidate, and skipped
+  bundle, PyPI, and Release mutation jobs. This closes the no-bundle
+  idempotence path required by REL-025 and REL-029.
+
+The detailed timing, artifact, control, and readback record is
+[`v11.0.1-acceptance.md`](v11.0.1-acceptance.md).

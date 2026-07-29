@@ -5,20 +5,19 @@ code or stabilize interfaces, but production remains on the prepared-source
 workflow until that cut. No merged state may make both release models normal
 publication paths.
 
-## Execution Status — 2026-07-29
+## Execution Result — 2026-07-30
 
-Slices 1, 2, and the source/workflow portion of Slice 4 are implemented and
-locally verified in the uncommitted working tree. They are deliberately not a
-production cutover: Slice 3's GitHub controls remain unchanged and require
-Sir's separate external-mutation approval plus API readback before this source
-change may merge. No tag, PyPI file, or GitHub Release was created.
+All slices are complete. CI-name bootstrap PR #16 supplied the future required
+checks on `main`; Slice 3 then activated and read back the rulesets,
+environment, and immutability control, and failing probe PR #17 was blocked.
+Hard-cut PR #18 merged with `release:none` and its exact-main checks passed.
 
-On 2026-07-30 Sir authorized the controls and a real `v11.0.1` acceptance
-release. Readback exposed the expected bootstrap constraint: the five stable
-check names do not yet exist on `main`, so the controls cannot safely be
-activated until a CI-name-only bootstrap PR has merged and produced those
-checks. The execution order is therefore Slice 2 bootstrap, Slice 3 controls
-and failing-probe evidence, then the Slice 4 hard cut and first protected tag.
+The first authorized `v11.0.1` tag exposed one live-control defect before any
+publication: omitting the environment policy's `type` created a branch rather
+than tag restriction. After replacing that policy, recovery reused the
+original bundle, published PyPI, and finalized the immutable GitHub Release.
+The subsequent no-bundle exact-complete dispatch succeeded. Detailed evidence
+is in [`v11.0.1-acceptance.md`](v11.0.1-acceptance.md).
 
 ## Slice 0 — Resolve the Projection Model — Complete
 
@@ -99,7 +98,7 @@ repository-control payload/evidence.
 Exit: stable checks are green on `main`, the future rule payload names them
 exactly, and the current release path still operates unchanged.
 
-## Slice 3 — Enforce Admission and Publication Controls Before Cutover
+## Slice 3 — Enforce Admission and Publication Controls Before Cutover — Complete
 
 External scope: GitHub `main` and `v*` rules, the `release` environment, and
 repository release immutability. Task evidence records the exact request and
@@ -125,7 +124,7 @@ deleted, only matching tag refs can reach the publisher environment, future
 published releases are immutable, and the protected cutover PR can still run
 every required check.
 
-## Slice 4 — Atomic Release-model Cutover — Locally Ready, Externally Blocked
+## Slice 4 — Atomic Release-model Cutover — Complete
 
 This is one protected PR and one merge boundary.
 
@@ -172,11 +171,13 @@ Qualification and publication:
 - delete `release-pr.yml`, `release-tag.yml`, prepared-source commands, release
   branch behavior, automatic tag creation, and normal-path dispatch.
 
-Exit: the merge commit passes protected target qualification, exact-main CI is
-green, and the repository contains only the tag-authoritative normal path. No
-tag or external release is created by the merge.
+Exit achieved: PR #18 merged at
+`1d4028a0bdedcb99c3694dfe9996f6538f9a5364`; protected target qualification
+and exact-main CI are green, and the repository contains only the
+tag-authoritative normal path. The merge itself created no tag or external
+release.
 
-## Slice 5 — Acceptance and First Real Release
+## Slice 5 — Acceptance and First Real Release — Complete
 
 - Run the full local and GitHub verification matrix.
 - Read back repository rules and required-check app identity.
@@ -188,8 +189,11 @@ tag or external release is created by the merge.
   immutable GitHub Release publication, and recovery from the named bundle
   without rebuilding.
 
-No sacrificial PyPI version or production tag is implied by implementation
-approval.
+Result: the authorized `v11.0.1` tag completed publication after a
+pre-publication environment-policy correction. The accepted release, original
+bundle recovery, exact-complete no-op, hashes, timings, and installation smoke
+are recorded in [`v11.0.1-acceptance.md`](v11.0.1-acceptance.md). No
+sacrificial PyPI version or production tag was used.
 
 ## Rollback Boundaries
 
