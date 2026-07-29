@@ -1,1 +1,0 @@
-Replace raw agent-thread export with a bounded normalized trajectory, directly cut off schema-v1 archives, and add deterministic Agent analysis plus an explicitly sensitive Textual workspace/thread navigator.
