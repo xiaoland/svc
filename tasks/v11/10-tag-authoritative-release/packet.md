@@ -21,10 +21,11 @@
     Behavioral SemVer bump. `release:none` continues to mean no release impact;
     neither state may make a qualified `main` commit structurally unpublishable.
   - Normal publication starts only from an explicit authorized `v*` tag push.
-    `workflow_dispatch` is retry/recovery-only and must name the tag. It may
-    omit the preserved run only when read-only probes prove either empty
-    candidate state or an already exact-complete immutable Release. Empty state
-    may rebuild; complete state verifies durable Release assets and exits.
+    `workflow_dispatch` is retry/recovery-only, must name the tag, and must run
+    at `refs/tags/<tag>` (not a branch ref). It may omit the preserved run only
+    when read-only probes prove either empty candidate state or an already
+    exact-complete immutable Release. Empty state may rebuild; complete state
+    verifies durable Release assets and exits.
   - Build the final distributions once per release attempt, smoke-test the
     exact wheel, retain one manifest-bound bundle as a named 90-day Actions
     artifact, complete only the missing members of a hash-verified PyPI set,
@@ -108,12 +109,10 @@
     version/corpus projection, and workflow work may now proceed under their
     recorded handshakes; no GitHub repository setting, tag, PyPI file, or
     remote release mutation is authorized by that start.
-  - The local Slice 1/2/4 implementation is now integrated in this working
-    tree: dynamic version/catalog projection replaces static release metadata;
-    the tag planner and append-only fragments replace prepared-source release
-    commands; and the sole target Publish path is tag-triggered. The legacy
-    release workflows are deleted locally. These changes are not committed or
-    merged, so production behavior and external controls remain unchanged.
+  - Historical pre-cutover snapshot: before PR #18, the local Slice 1/2/4
+    implementation was integrated but not committed or merged, so production
+    behavior and external controls remained unchanged. Those changes later
+    became the merged hard cut recorded below.
   - Recovery gained a separate trust boundary during implementation. A current
     run first packages the exact-tag `tools/release.py` and fresh plan as its
     short-lived control artifact. Before an incomplete release can download or
@@ -149,9 +148,23 @@
     `19984694`, tag ruleset `19984704`, the single `release` `v*` deployment
     policy, and immutable releases. A deliberately invalid PR #17 was blocked
     by the required `Release policy` check and then removed without merging.
-- **Next Step**: Commit and merge the hard cut PR with `release:none`, create
-  `v11.0.1`, then record Publish timing, artifact, PyPI, immutable Release,
-  and recovery evidence.
+  - The hard cut merged as PR #18 at
+    `1d4028a0bdedcb99c3694dfe9996f6538f9a5364`; its exact-main CI passed. The
+    annotated `v11.0.1` tag object
+    `a38657422e1ba4d995c20ce59c53f1ba28f41005` peels to that commit.
+  - The automatic tag push run `30472179651` built and preserved the release
+    bundle, but correctly stopped before PyPI or GitHub Release mutation when
+    the environment policy unexpectedly read back as `type: branch`. The
+    malformed policy was replaced by the sole live `type: tag`, `name: v*`
+    policy `55951894`.
+  - Recovery run `30472401002` reused original artifact `8732154215` without a
+    rebuild, published the hash-exact PyPI files, and finalized immutable
+    GitHub Release `361909769`. A no-bundle exact-complete dispatch
+    `30472677788` then succeeded in 20 seconds with the three mutation jobs
+    skipped. Full timing, asset, attestation, installation, and API-readback
+    evidence is in [`v11.0.1-acceptance.md`](v11.0.1-acceptance.md).
+- **Next Step**: Human acceptance of the recorded `v11.0.1` release evidence;
+  then delete this volatile task packet under the root retention rule.
 
 ## Supporting Material
 
@@ -167,5 +180,7 @@
 - Prepared Slice 3 request payload and readback procedure:
   [`repository-controls.md`](repository-controls.md)
 - Completion matrix: [`verification.md`](verification.md)
+- Actual first-tag timing and publication evidence:
+  [`v11.0.1-acceptance.md`](v11.0.1-acceptance.md)
 - Prior release-reliability evidence:
   [`../../v10/60-release-reliability/packet.md`](../../v10/60-release-reliability/packet.md)

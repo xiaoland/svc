@@ -1,10 +1,9 @@
 # Repository-control Payload and Readback
 
-Status: prepared locally on 2026-07-29; not applied. This is task evidence,
-not a tracked substitute for GitHub's live authority. Applying it is Slice 3
-and requires Sir's separate external-mutation approval.
+Status: applied and read back on 2026-07-30. This is task evidence, not a
+tracked substitute for GitHub's live authority.
 
-## Observed Baseline
+## Observed Baseline — Before Slice 3
 
 Read-only API results:
 
@@ -131,7 +130,7 @@ Then ensure the only custom deployment branch/tag policy is `v*` with
 `POST /repos/xiaoland/svc/environments/release/deployment-branch-policies`:
 
 ```json
-{"name": "v*"}
+{"name": "v*", "type": "tag"}
 ```
 
 Finally enable immutable releases with:
@@ -142,7 +141,8 @@ PUT /repos/xiaoland/svc/immutable-releases
 
 The `release` environment intentionally has no required reviewer: the
 protected tag is the sole approval. The `v*` custom policy is a ref boundary,
-not a second approval.
+not a second approval. `type` is intentionally explicit: omitting it creates
+a branch policy rather than a tag policy.
 
 ## Apply and Readback Sequence
 
@@ -154,7 +154,7 @@ not a second approval.
 3. Create/read back the tag ruleset, then query the effective tag rule surface
    and verify matching `v*` refs have update/deletion rules.
 4. Update/read back `release`; list deployment policies and require exactly
-   one policy named `v*` with no reviewer protection rule.
+   one policy named `v*` with `type: tag` and no reviewer protection rule.
 5. Enable/read back immutable releases and require `enabled: true`.
 6. Open a deliberately failing probe PR and record that the required checks
    prevent merge. Do not use a direct push, destructive tag probe, or a
@@ -178,9 +178,17 @@ and [immutable releases](https://docs.github.com/en/rest/repos/repos#enable-immu
 - The active `svc-immutable-release-tags` ruleset is ID `19984704`. Its
   `refs/tags/v*` scope has update and deletion protection with no bypass
   actor; it deliberately permits authorized creation of a new tag.
-- `release` reads back with one branch-policy protection rule and exactly one
-  custom deployment policy: ID `55950839`, name `v*`; it has no reviewer
-  protection rule. Repository immutable releases reads back as `enabled: true`.
+- The first policy creation omitted `type`; GitHub read back policy
+  `55950839` as `name: v*`, `type: branch`. The first real tag run therefore
+  completed planning and bundle construction but was rejected before PyPI or
+  GitHub Release mutation: `Tag "v11.0.1" is not allowed to deploy to release
+  due to environment protection rules.` The wrong policy was deleted.
+- `release` now has no reviewer protection rule and exactly one custom
+  deployment policy: ID `55951894`, `name: v*`, `type: tag`. Repository
+  immutable releases reads back as `enabled: true`. The successful recovery
+  and exact-complete dispatch in
+  [`v11.0.1-acceptance.md`](v11.0.1-acceptance.md) prove the tag policy accepts
+  the protected tag and no branch ref.
 - Probe PR [#17](https://github.com/xiaoland/svc/pull/17), an empty commit
   intentionally missing `release:none`, ran CI
   [`30471304529`](https://github.com/xiaoland/svc/actions/runs/30471304529).
