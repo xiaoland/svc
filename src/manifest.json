@@ -1,15 +1,15 @@
 {
   "schema_version": 2,
-  "previous_version": "10.0.1",
-  "svc_version": "10.0.2",
+  "previous_version": "10.0.2",
+  "svc_version": "11.0.0",
   "behavioral_impact": {
-    "level": "patch",
+    "level": "major",
     "reasons": [
-      "Restore safe Codex thread metadata listings when unrelated state rows have unsafe rollout paths."
+      "Replace raw agent-thread export with a bounded normalized trajectory, directly cut off schema-v1 archives, and add deterministic Agent analysis plus an explicitly sensitive Textual workspace/thread navigator."
     ],
     "migration": {
-      "status": "not-applicable",
-      "reason": "PATCH releases do not require consumer migration guidance."
+      "status": "guide",
+      "path": "migrations/11.0.0.md"
     }
   }
 }

@@ -302,7 +302,9 @@ def _block_noncurrent_schema(state: ProjectState | ProjectConfig, blockers: list
             Blocker(
                 "schema-v1-write-blocked",
                 PROJECT_FILE,
-                "SVC 10.0.1 does not automatically migrate schema-v1 projects; migrate the project configuration deliberately before writing.",
+                "SVC does not automatically migrate schema-v1 projects; "
+                "migrate the project configuration deliberately before "
+                "writing.",
             )
         )
         return

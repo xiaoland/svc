@@ -14,7 +14,12 @@ from .dev.setup import plan_setup
 from .lookup import CorpusLookup, LookupQuery
 from .project import inspect_status, plan_adopt, plan_init
 from .release import catalog, runtime_version
-from .telemetry.service import export_agent_thread, list_agent_threads
+from .telemetry.agent_threads import ArchiveFilter
+from .telemetry.service import (
+    export_agent_thread,
+    list_agent_threads,
+    prepare_agent_thread_analysis,
+)
 from .update import apply_self_update, plan_self_update
 from .plans import apply_local_plan
 
@@ -83,23 +88,66 @@ def _parser() -> argparse.ArgumentParser:
     setup_mode.add_argument("--apply", metavar="PLAN_DIGEST")
     dev_setup.add_argument("--json", action="store_true", dest="json_output")
 
-    telemetry = subparsers.add_parser("telemetry", help="Capture explicit, local observability evidence")
+    telemetry = subparsers.add_parser("telemetry", help="Collect and analyze explicit local observability evidence")
     telemetry_resources = telemetry.add_subparsers(dest="telemetry_resource", required=True)
-    agent_thread = telemetry_resources.add_parser("agent-thread", help="List or export provider-obtainable agent-thread evidence")
+    agent_thread = telemetry_resources.add_parser("agent-thread", help="List or normalize provider-obtainable agent-thread evidence")
     agent_thread_commands = agent_thread.add_subparsers(dest="agent_thread_command", required=True)
     thread_list = agent_thread_commands.add_parser("list", help="List safe Codex thread selection metadata")
     thread_list.add_argument("--codex-home", type=Path)
+    thread_list.add_argument(
+        "--archive-state",
+        choices=tuple(state.value for state in ArchiveFilter),
+        default=ArchiveFilter.ALL.value,
+        help="Filter by provider-reported lifecycle (default: all)",
+    )
     thread_list.add_argument("--limit", type=_telemetry_limit, default=20, help="Maximum threads to list (1-100)")
     thread_list.add_argument("--json", action="store_true", dest="json_output")
-    thread_export = agent_thread_commands.add_parser("export", help="Export one exact local thread as a sensitive ZIP evidence bundle")
+    thread_export = agent_thread_commands.add_parser(
+        "export",
+        help="Normalize one exact local thread into a sensitive schema-v2 ZIP bundle",
+    )
     selector = thread_export.add_mutually_exclusive_group(required=True)
     selector.add_argument("--thread-id")
     selector.add_argument("--source", type=Path, help="Exact Codex rollout JSONL source")
     thread_export.add_argument("--output", required=True, type=Path, help="Absent .zip destination outside --repo")
-    thread_export.add_argument("--repo", default=".", type=Path, help="Repository whose task packets may be included")
+    thread_export.add_argument("--repo", default=".", type=Path, help="Repository the output must remain outside")
     thread_export.add_argument("--codex-home", type=Path)
-    thread_export.add_argument("--include-sensitive", action="store_true", help="Acknowledge raw conversation, tool, and reasoning data")
+    thread_export.add_argument(
+        "--include-sensitive",
+        action="store_true",
+        help="Acknowledge bounded conversation, tool, and reasoning content",
+    )
     thread_export.add_argument("--json", action="store_true", dest="json_output")
+    thread_analyze = agent_thread_commands.add_parser(
+        "analyze",
+        help="Analyze one normalized thread or enter the sensitive local navigator",
+    )
+    analysis_selector = thread_analyze.add_mutually_exclusive_group()
+    analysis_selector.add_argument(
+        "--input",
+        dest="input_bundle",
+        type=Path,
+        help="Exact schema-v2 normalized bundle",
+    )
+    analysis_selector.add_argument("--thread-id")
+    analysis_selector.add_argument(
+        "--source",
+        type=Path,
+        help="Exact Codex rollout JSONL source",
+    )
+    thread_analyze.add_argument(
+        "--archive-state",
+        choices=tuple(state.value for state in ArchiveFilter),
+        default=None,
+        help="Interactive lifecycle filter (default: active)",
+    )
+    thread_analyze.add_argument("--codex-home", type=Path)
+    thread_analyze.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit compact deterministic Agent JSON; requires an explicit selector",
+    )
     return parser
 
 
@@ -148,10 +196,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             return EXIT_OK
 
         if args.command == "telemetry":
-            if args.telemetry_resource == "agent-thread" and args.agent_thread_command == "list":
-                payload = list_agent_threads(args.codex_home, args.limit)
+            if (
+                args.telemetry_resource == "agent-thread"
+                and args.agent_thread_command == "list"
+            ):
+                payload = list_agent_threads(args.codex_home, args.limit, args.archive_state)
                 _emit_telemetry_list(payload, json_output)
                 return EXIT_OK
+            if args.agent_thread_command == "analyze":
+                return _run_agent_thread_analysis(args)
             payload = export_agent_thread(
                 codex_home=args.codex_home,
                 thread_id=args.thread_id,
@@ -188,6 +241,132 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
         _emit_error(SvcError("invalid-release", str(error)), json_output)
         return EXIT_FAILURE
+
+
+def _is_interactive_terminal() -> bool:
+    return bool(sys.stdin.isatty() and sys.stdout.isatty())
+
+
+def _write_analysis_json(data: bytes) -> None:
+    output = sys.stdout
+    binary = getattr(output, "buffer", None)
+    if binary is not None:
+        binary.write(data)
+        binary.flush()
+        return
+    output.write(data.decode("utf-8"))
+
+
+def _run_agent_thread_analysis(args: argparse.Namespace) -> int:
+    explicit = any(
+        value is not None
+        for value in (
+            args.input_bundle,
+            args.thread_id,
+            args.source,
+        )
+    )
+    if explicit and args.archive_state is not None:
+        raise SvcError(
+            "invalid-analysis-request",
+            "--archive-state is valid only without an explicit analysis "
+            "selector.",
+        )
+    if args.input_bundle is not None and args.codex_home is not None:
+        raise SvcError(
+            "invalid-analysis-request",
+            "--codex-home is not valid with --input.",
+        )
+    if args.json_output and not explicit:
+        raise SvcError(
+            "invalid-analysis-request",
+            "--json requires --input, --thread-id, or --source.",
+        )
+    if not args.json_output and not _is_interactive_terminal():
+        raise SvcError(
+            "analysis-tty-required",
+            "Interactive analysis requires a TTY; use --json with an "
+            "explicit selector for automation.",
+        )
+
+    if args.json_output:
+        prepared = prepare_agent_thread_analysis(
+            input_bundle=args.input_bundle,
+            thread_id=args.thread_id,
+            source=args.source,
+            codex_home=args.codex_home,
+        )
+        _write_analysis_json(prepared.analysis.json_bytes)
+        return EXIT_OK
+
+    return _run_agent_thread_tui(args, explicit=explicit)
+
+
+def _run_agent_thread_tui(
+    args: argparse.Namespace,
+    *,
+    explicit: bool,
+) -> int:
+    """Import Textual only after the command and TTY gates are satisfied."""
+
+    try:
+        from .telemetry.tui import (
+            AgentThreadAnalysisApp,
+            AnalysisDocument,
+        )
+    except ImportError as error:
+        raise SvcError(
+            "interactive-analysis-unavailable",
+            "The local analysis interface is unavailable.",
+        ) from error
+
+    if explicit:
+        prepared = prepare_agent_thread_analysis(
+            input_bundle=args.input_bundle,
+            thread_id=args.thread_id,
+            source=args.source,
+            codex_home=args.codex_home,
+        )
+        app = AgentThreadAnalysisApp(
+            initial_document=AnalysisDocument(
+                prepared.bundle,
+                prepared.analysis,
+            )
+        )
+    else:
+        from .telemetry.service import list_sensitive_agent_threads
+
+        archive_state = (
+            args.archive_state
+            if args.archive_state is not None
+            else ArchiveFilter.ACTIVE.value
+        )
+
+        def inventory_loader(selected: ArchiveFilter):
+            return list_sensitive_agent_threads(
+                args.codex_home,
+                selected,
+            )
+
+        def analysis_loader(reference):
+            prepared = prepare_agent_thread_analysis(
+                input_bundle=None,
+                thread_id=reference.thread_id,
+                source=None,
+                codex_home=args.codex_home,
+            )
+            return AnalysisDocument(
+                prepared.bundle,
+                prepared.analysis,
+            )
+
+        app = AgentThreadAnalysisApp(
+            inventory_loader=inventory_loader,
+            analysis_loader=analysis_loader,
+            archive_state=archive_state,
+        )
+    app.run()
+    return EXIT_OK
 
 
 def _emit(payload: dict[str, object], json_output: bool) -> None:
@@ -297,14 +476,17 @@ def _emit_telemetry_export(payload: dict[str, object], json_output: bool) -> Non
     if json_output:
         _emit_json(payload)
         return
-    archive = payload["archive"]
-    if isinstance(archive, dict):
-        print(f"SVC telemetry agent-thread export: exported {archive.get('path')}")
+    bundle = payload["bundle"]
+    if isinstance(bundle, dict):
+        print(f"SVC telemetry agent-thread export: exported {bundle.get('path')}")
     else:
         print("SVC telemetry agent-thread export: exported")
-    warnings = payload.get("warnings")
-    if isinstance(warnings, list) and warnings:
-        print(f"  {len(warnings)} manifest warning(s); inspect manifest.json in the archive")
+    diagnostics = payload.get("diagnostics")
+    if isinstance(diagnostics, list) and diagnostics:
+        print(
+            f"  {len(diagnostics)} normalized diagnostic group(s); "
+            "inspect manifest.json in the bundle"
+        )
 
 
 def _emit_lookup(response: Any, json_output: bool) -> None:

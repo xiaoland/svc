@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import unittest
 from pathlib import Path
 
 
@@ -9,77 +8,159 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github/workflows"
 
 
-class WorkflowContractTests(unittest.TestCase):
-    def workflow(self, name: str) -> str:
-        return (WORKFLOWS / name).read_text(encoding="utf-8")
-
-    def test_every_action_is_pinned_to_a_commit(self) -> None:
-        for path in sorted(WORKFLOWS.glob("*.yml")):
-            uses = re.findall(r"uses:\s*([^\s#]+)", path.read_text(encoding="utf-8"))
-            for action in uses:
-                with self.subTest(workflow=path.name, action=action):
-                    self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
-
-    def test_ci_is_read_only_and_smokes_the_embedded_runtime_wheel(self) -> None:
-        text = self.workflow("ci.yml")
-        self.assertIn("contents: read", text)
-        self.assertIn('python-version: ["3.11", "3.14"]', text)
-        self.assertIn("pdm run release check-pr", text)
-        self.assertIn("release:none", text)
-        self.assertIn("pdm build", text)
-        self.assertIn("svc lookup --name", text)
-        self.assertIn("svc init", text)
-        self.assertNotIn("svc migrate", text)
-        self.assertNotIn("contents: write", text)
-
-    def test_release_pr_uses_builtin_token_and_does_not_publish(self) -> None:
-        text = self.workflow("release-pr.yml")
-        self.assertIn("contents: write", text)
-        self.assertIn("pull-requests: write", text)
-        self.assertIn("token: ${{ github.token }}", text)
-        self.assertIn("GH_TOKEN: ${{ github.token }}", text)
-        self.assertIn("pdm run release prepare", text)
-        prepared = text.index("pdm run release prepare")
-        resync = text.index("pdm install --frozen-lockfile -d -G release", prepared)
-        test = text.index("pdm run test", prepared)
-        self.assertLess(prepared, resync)
-        self.assertLess(resync, test)
-        self.assertIn("migration guidance", text)
-        self.assertIn("git add -A", text)
-        self.assertIn("Release preparation changed an unexpected path", text)
-        self.assertNotIn("git add CHANGELOG.md changes", text)
-        self.assertIn('gh pr list --head "$branch" --base main --state open', text)
-        self.assertIn('gh pr edit "$existing_pr"', text)
-        self.assertNotIn('gh pr view "$branch"', text)
-        self.assertIn("gh pr create", text)
-        self.assertNotIn("actions/create-github-app-token@", text)
-        self.assertNotIn("RELEASE_APP_ID", text)
-        self.assertNotIn("RELEASE_APP_PRIVATE_KEY", text)
-        self.assertNotIn("secrets.", text)
-        self.assertNotIn("vars.", text)
-        self.assertNotIn("gh release create", text)
-        self.assertNotIn("gh-action-pypi-publish", text)
-
-    def test_publish_is_protected_oidc_attested_and_exports_release_metadata(self) -> None:
-        text = self.workflow("publish.yml")
-        self.assertIn("environment: release", text)
-        self.assertIn("id-token: write", text)
-        self.assertIn("attestations: write", text)
-        self.assertIn("actions/attest-build-provenance@", text)
-        self.assertIn("pypa/gh-action-pypi-publish@", text)
-        self.assertIn("pdm run release pypi-plan", text)
-        self.assertIn("svc-release-metadata.json", text)
-        self.assertIn('gh api "repos/$GITHUB_REPOSITORY/releases" --paginate', text)
-        self.assertIn("GitHub exposes draft releases only", text)
-        self.assertIn("A tag is only an intermediate checkpoint", text)
-        self.assertIn("Restore tagged release source for a resumed publish", text)
-        self.assertIn('git checkout "$TAG"', text)
-        self.assertIn("Restore immutable draft assets", text)
-        self.assertIn("sha256sum --check SHA256SUMS", text)
-        self.assertIn('git config user.name "github-actions[bot]"', text)
-        self.assertIn('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"', text)
-        self.assertNotIn("ghcr.io", text)
+def workflow(name: str) -> str:
+    return (WORKFLOWS / name).read_text(encoding="utf-8")
 
 
-if __name__ == "__main__":
-    unittest.main()
+def job(text: str, name: str) -> str:
+    match = re.search(
+        rf"^  {re.escape(name)}:\n(?P<body>.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert match is not None, f"missing job {name}"
+    return match.group(0)
+
+
+def test_ci_is_read_only_locks_before_install_and_smokes_the_embedded_runtime_wheel() -> None:
+    text = workflow("ci.yml")
+    install = "pdm install --frozen-lockfile -d -G release -G test"
+    assert "contents: read" in text
+    assert 'python-version: ["3.11", "3.14"]' in text
+    assert "pdm lock --check" in text
+    assert install in text
+    assert text.index("pdm lock --check") < text.index(install)
+    assert "pdm run lint-tests" in text
+    assert text.index(install) < text.index("pdm run lint-tests") < text.index("pdm run test")
+    assert "pdm run release check-pr" in text
+    assert "release:none" in text
+    assert "pdm build" in text
+    assert "svc lookup --name" in text
+    assert "svc init" in text
+    assert "svc migrate" not in text
+    assert "contents: write" not in text
+    for job_name in ("test", "typecheck", "distribution"):
+        section = job(text, job_name)
+        assert "persist-credentials: false" in section
+
+    quality = job(text, "typecheck")
+    install = "pdm install --frozen-lockfile -d -G quality"
+    assert install in quality
+    assert "pdm run typecheck" in quality
+    assert "pdm run lint-imports" in quality
+    assert "pdm run lint-workflows" in quality
+    assert quality.index(install) < quality.index("pdm run typecheck")
+    assert quality.index("pdm run typecheck") < quality.index("pdm run lint-imports") < quality.index("pdm run lint-workflows")
+
+
+def test_release_pr_uses_builtin_token_and_prepares_a_checked_lockfile() -> None:
+    text = workflow("release-pr.yml")
+    assert "contents: write" in text
+    assert "pull-requests: write" in text
+    assert "token: ${{ github.token }}" in text
+    assert "GH_TOKEN: ${{ github.token }}" in text
+    assert "pdm run release prepare" in text
+    prepared = text.index("pdm run release prepare")
+    lock_check = text.index("pdm lock --check", prepared)
+    resync = text.index("pdm install --frozen-lockfile -d -G release -G test", prepared)
+    test = text.index("pdm run test", prepared)
+    assert prepared < lock_check
+    assert lock_check < resync
+    assert resync < test
+    assert "migration guidance" in text
+    assert "git add -A" in text
+    assert "Release preparation changed an unexpected path" in text
+    assert "git add CHANGELOG.md changes" not in text
+    assert 'gh pr list --head "$branch" --base main --state open' in text
+    assert 'gh pr edit "$existing_pr"' in text
+    assert 'gh pr view "$branch"' not in text
+    assert "gh pr create" in text
+    assert "actions/create-github-app-token@" not in text
+    assert "RELEASE_APP_ID" not in text
+    assert "RELEASE_APP_PRIVATE_KEY" not in text
+    assert "secrets." not in text
+    assert "vars." not in text
+    assert "gh release create" not in text
+    assert "gh-action-pypi-publish" not in text
+
+
+def test_release_tag_binds_only_a_merged_release_candidate_to_its_merge_sha() -> None:
+    text = workflow("release-tag.yml")
+    assert "pull_request:" in text
+    assert "branches: [main]" in text
+    assert "types: [closed]" in text
+    assert "github.event.pull_request.merged == true" in text
+    assert "github.event.pull_request.head.ref == 'release/svc'" in text
+    assert "github.event.pull_request.merge_commit_sha" in text
+    assert "workflow_dispatch:" in text
+    assert "commit:" in text
+    assert "required: true" in text
+    assert "ref: ${{ steps.target.outputs.commit }}" in text
+    assert 'git merge-base --is-ancestor "$commit" origin/main' in text
+    assert "pdm lock --check" in text
+    assert 'pdm run release tag-plan --commit "$COMMIT" --json' in text
+    assert 'git tag -a "$tag" -m "SVC $version" "$COMMIT"' in text
+    assert 'git fetch --force origin "refs/tags/$tag:refs/tags/$tag"' in text
+    assert 'pdm run release verify-tag --tag "$tag" --commit "$COMMIT" --json' in text
+    publish = job(text, "publish")
+    assert "actions: write" in publish
+    assert "GH_TOKEN: ${{ github.token }}" in publish
+    assert 'gh workflow run publish.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG" -f tag="$TAG"' in publish
+    assert "publish-plan" not in text
+    assert "resume-draft" not in text
+
+
+def test_publish_is_tag_bound_builds_once_and_hands_the_bundle_to_downstream_jobs() -> None:
+    text = workflow("publish.yml")
+    build = job(text, "build")
+    pypi = job(text, "publish-pypi")
+    finalize = job(text, "finalize-github-release")
+
+    assert 'tags: ["v*"]' in text
+    assert "branches: [main]" not in text
+    assert "workflow_dispatch:" in text
+    assert "workflow_call:" not in text
+    assert "tag:" in text
+    assert "required: true" in text
+    assert "environment: release" in pypi
+    assert "id-token: write" in pypi
+    assert "ref: ${{ steps.target.outputs.tag }}" in build
+    assert 'git rev-parse "$TAG^{commit}"' in build
+    assert 'git merge-base --is-ancestor "$commit" origin/main' in build
+    assert "pdm lock --check" in build
+    assert "pdm install --frozen-lockfile -d -G release -G test" in build
+    assert build.index("pdm lock --check") < build.index("pdm install --frozen-lockfile -d -G release -G test")
+    assert "pdm run release verify-tag" in build
+    assert "pdm run test" in build
+    assert "pdm run build-monolith" in build
+    assert build.count("pdm build") == 1
+    assert "pdm run release bundle" in build
+    assert "actions/attest-build-provenance@" in build
+    assert "actions/upload-artifact@" in build
+    assert "svc-release-${{ steps.target.outputs.tag }}" in build
+
+    assert "actions/download-artifact@" in pypi
+    assert "release-check.py verify-bundle" in pypi
+    assert "release-check.py pypi-plan" in pypi
+    assert "pypa/gh-action-pypi-publish@" in pypi
+    assert "packages-dir: dist/release/python/" in pypi
+    assert "actions/checkout@" not in pypi
+    assert "pdm build" not in pypi
+    assert "pdm run" not in pypi
+
+    assert "actions/download-artifact@" in finalize
+    assert "release-check.py verify-bundle" in finalize
+    assert 'gh release create "$TAG" --draft --verify-tag' in finalize
+    assert 'gh release edit "$TAG" --draft=false' in finalize
+    assert 'gh release view "$TAG" --json isDraft,name,body' in finalize
+    assert "Existing GitHub Release title or notes differ" in finalize
+    assert "manifest-bound asset" in finalize
+    assert 'cmp "$local"' in finalize
+    assert "actions/checkout@" not in finalize
+    assert "pdm build" not in finalize
+    assert text.index("  publish-pypi:") < text.index("  finalize-github-release:")
+    assert "publish-plan" not in text
+    assert "resume-tag" not in text
+    assert "resume-draft" not in text
+    assert "skip-existing" not in text
+    assert "gh api" not in text

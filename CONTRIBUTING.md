@@ -7,7 +7,11 @@ SVC is a source-first protocol. A contribution is complete when its behavioral i
 Use Python 3.11 or newer and PDM:
 
 ```console
-pdm install -d -G release
+pdm install -d -G release -G test -G quality
+pdm run lint-tests
+pdm run typecheck
+pdm run lint-imports
+pdm run lint-workflows
 pdm run test
 pdm run build-monolith
 pdm build
@@ -82,6 +86,7 @@ The release flow is intentionally sequenced:
 
 1. A feature PR declares Behavioral SemVer with a fragment, or records `release:none`, then merges to `main`.
 2. The Release PR workflow consumes pending fragments and creates or updates the one open `release/svc` candidate with `GITHUB_TOKEN`; a merged historical PR on that branch is never reused. Its opened or updated pull-request workflows wait for a maintainer with write access to select **Approve workflows to run**; then review its version, changelog, migration declaration, release reasons, lockfile, and CI together.
-3. Merging that Release PR prepares the candidate. Publish approval in the protected `release` environment builds and attests the wheel and sdist, creates `v<version>` and a draft GitHub Release, publishes those same artifacts to PyPI through Trusted Publishing, then publishes the GitHub Release.
+3. Merging that Release PR binds its exact merge commit to one immutable `v<version>` tag. The tag, not a later `main` checkout, owns the release run.
+4. Publish validates the tagged source and lockfile, builds and smoke-tests the wheel and sdist once, and passes that manifest-bound artifact bundle to PyPI through Trusted Publishing. Only after PyPI has the expected files does it create or finalize the GitHub Release.
 
-The GitHub Release is the completion checkpoint, not the tag. If a publish is interrupted, run `Publish` with `workflow_dispatch` only after diagnosing the state: an absent tag creates a release from `main`; a tag without a Release rebuilds that tag; a draft Release verifies and reuses its immutable uploaded assets. A published Release is left unchanged.
+The GitHub Release is the completion checkpoint, not the tag. If a publish is interrupted, rerun `Publish` with its required `tag` input. It checks out only that tag; it never infers an older release from a newer `main`. No PyPI files means upload, all matching file hashes means GitHub Release finalization may continue, and partial or mismatched files stop with a diagnosis. A published GitHub Release is left unchanged unless all of its manifest-bound assets already agree.

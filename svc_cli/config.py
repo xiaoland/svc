@@ -11,7 +11,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, Mapping, TypeAlias, overload
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -196,7 +196,7 @@ def declaration_digest_value(value: object) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _validate_names(values: dict[str, object], kind: str) -> None:
+def _validate_names(values: Mapping[str, object], kind: str) -> None:
     invalid = sorted(name for name in values if not _NAME.fullmatch(name))
     if invalid:
         raise ValueError(f"invalid {kind} name: {invalid[0]!r}")
@@ -313,6 +313,14 @@ def _validate_overlay_object(value: dict[str, Any], allowed: set[str], path: str
     unexpected = sorted(set(value) - allowed)
     if unexpected:
         raise ConfigError(f"{LOCAL_CONFIG_FILE} contains a non-overrideable or unknown field at {path}: {unexpected[0]}")
+
+
+@overload
+def _merge(base: dict[str, Any], local: dict[str, Any]) -> dict[str, Any]: ...
+
+
+@overload
+def _merge(base: object, local: object) -> object: ...
 
 
 def _merge(base: object, local: object) -> object:
