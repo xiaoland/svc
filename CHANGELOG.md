@@ -1,12 +1,11 @@
 # Changelog
 
-All notable changes to the Sustainable Vibe Coding Framework are documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Releases use SVC Behavioral SemVer: MAJOR changes required obligations, defaults, authority, task semantics, required layout, or stable machine contracts; MINOR adds backward-compatible optional capability; PATCH restores or clarifies the existing protocol without changing those contracts.
-
-## [Unreleased]
-
-<!-- towncrier release notes start -->
+This historical record is frozen through v11.0.0. Future release notes are
+derived from append-only tag-range fragments and published in GitHub Releases.
+Releases use SVC Behavioral SemVer: MAJOR changes required obligations,
+defaults, authority, task semantics, required layout, or stable machine
+contracts; MINOR adds backward-compatible optional capability; PATCH restores
+or clarifies the existing protocol without changing those contracts.
 
 ## [11.0.0] - 2026-07-29
 

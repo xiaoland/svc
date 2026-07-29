@@ -26,7 +26,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install pdm==2.27.0
       - run: pdm lock --check
-      - run: pdm install --frozen-lockfile -d -G release -G test
+      - run: pdm install --frozen-lockfile -d -G test
       - run: pdm run test
 
   quality:
@@ -35,8 +35,8 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          fetch-depth: 0
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
@@ -54,14 +54,29 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          persist-credentials: false
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
       - run: python -m pip install pdm==2.27.0
       - run: pdm lock --check
-      - run: pdm install --frozen-lockfile -d -G release
+      - run: pdm install --frozen-lockfile -d -G test
+      - name: Project the qualified rehearsal version
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          args=(--commit "$GITHUB_SHA")
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            args+=(--base "origin/$BASE_REF")
+            if grep -Fq 'release:none' <<<"$PR_BODY"; then
+              args+=(--release-none)
+            fi
+          fi
+          qualification=$(pdm run release target-qualify "${args[@]}" --json)
+          version=$(python -c 'import json,sys; print(json.load(sys.stdin)["pdm_build_scm_version"])' <<<"$qualification")
+          echo "PDM_BUILD_SCM_VERSION=$version" >> "$GITHUB_ENV"
       - run: pdm build
       - run: pdm run build-monolith
       - name: Smoke-test the installed wheel
@@ -75,11 +90,6 @@ jobs:
           digest=$(python -c 'import json,sys; print(json.load(sys.stdin)["plan_digest"])' <<<"$plan")
           /tmp/svc-wheel/bin/svc init "$repo" --apply "$digest"
           /tmp/svc-wheel/bin/svc status "$repo"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: python-distributions
-          path: dist/*
-          if-no-files-found: error
 
   release-policy:
     name: Release policy
@@ -94,24 +104,17 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install pdm==2.27.0
       - run: pdm lock --check
-      - run: pdm install --frozen-lockfile -d -G release
-      - name: Validate the current release policy
+      - run: pdm install --frozen-lockfile -d -G test
+      - name: Qualify the exact source
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           BASE_REF: ${{ github.base_ref }}
         run: |
+          args=(--commit "$GITHUB_SHA")
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            args+=(--base "origin/$BASE_REF")
             if grep -Fq 'release:none' <<<"$PR_BODY"; then
-              pdm run release check-pr --base "origin/$BASE_REF" --release-none
-            else
-              pdm run release check-pr --base "origin/$BASE_REF"
+              args+=(--release-none)
             fi
-          else
-            pdm run release check-ci
           fi
-      - name: Preview unconsumed release notes
-        run: |
-          if find changes -maxdepth 1 -type f -name '*.md' | grep -q .; then
-            version=$(pdm run release plan --json | python -c 'import json,sys; print(json.load(sys.stdin)["target_version"])')
-            pdm run towncrier build --draft --version "$version"
-          fi
+          pdm run release target-qualify "${args[@]}" --json

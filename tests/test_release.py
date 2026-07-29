@@ -1,87 +1,45 @@
 from __future__ import annotations
 
-import contextlib
+import hashlib
+import io
 import json
+import os
+import shutil
 import subprocess
-import sys
 import tempfile
-import urllib.error
+import tarfile
+import zipfile
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from tools.release import (
+    CUTOVER_BASELINE_COMMIT,
+    CUTOVER_BASELINE_FILES,
     ReleaseError,
-    bump,
-    bump_impact,
-    check,
-    check_pr,
-    create_release_bundle,
-    fragments,
-    prepare,
-    pypi_bundle_plan,
-    pypi_plan,
-    release_plan,
-    tag_plan,
-    verify_release_bundle,
-    verify_migration,
-    verify_tag,
-    verify_version_exception,
-    verify_prepared,
+    classify_bundle_retention,
+    classify_github_state,
+    classify_main_qualification,
+    classify_pypi_state,
+    create_target_release_bundle,
+    stage_target_pypi,
+    target_github_plan,
+    target_pypi_plan,
+    target_preflight,
+    target_qualification,
+    target_release_plan,
+    verify_target_release_bundle,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def release_metadata(
-    previous: str = "9.8.0", current: str = "10.0.0", impact: str = "major"
-) -> dict[str, object]:
-    return {
-        "schema_version": 2,
-        "previous_version": previous,
-        "svc_version": current,
-        "behavioral_impact": {
-            "level": impact,
-            "reasons": ["consumer-visible protocol change"],
-            "migration": {
-                "status": "not-applicable",
-                "reason": "No released consumer state exists.",
-            },
-        },
-    }
-
-
-def zero_known_adoption_exception() -> dict[str, object]:
-    return {
-        "kind": "zero-known-adopted-consumers",
-        "from_version": "10.0.0",
-        "to_version": "10.0.1",
-        "one_time": True,
-        "owner_assertion": "The product owner confirms zero known adopted consumers.",
-        "reason": "The real MAJOR impact is assigned to 10.0.1 once.",
-    }
-
-
-def write_prepared_release(root: Path, previous: str, current: str) -> None:
-    (root / "src").mkdir(exist_ok=True)
-    (root / "pyproject.toml").write_text(
-        f'[project]\nname = "fixture"\nversion = "{current}"\n\n[build-system]\n',
-        encoding="utf-8",
-    )
-    (root / "src/manifest.json").write_text(
-        json.dumps(
-            release_metadata(previous=previous, current=current, impact="patch"),
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    (root / "CHANGELOG.md").write_text(
-        f"## [{current}] - 2026-07-20\n\n"
-        f"[{current}]: https://github.com/xiaoland/svc/releases/tag/v{current}\n",
-        encoding="utf-8",
-    )
+QUALIFICATION_JOBS = (
+    "Python 3.11",
+    "Python 3.14",
+    "Quality and architecture",
+    "Distribution",
+    "Release policy",
+)
 
 
 def git(root: Path, *args: str) -> str:
@@ -96,557 +54,995 @@ def git(root: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def prepared_git_repository(root: Path) -> tuple[str, str]:
+def target_git_repository(
+    root: Path,
+    *,
+    impact: str = "patch",
+    annotated: bool = False,
+    migration: str | None = None,
+) -> tuple[str, str]:
     git(root, "init", "-b", "main")
     git(root, "config", "user.name", "Release Test")
     git(root, "config", "user.email", "release-test@example.invalid")
-    write_prepared_release(root, "10.0.0", "10.0.1")
+    (root / "changes").mkdir()
+    (root / "changes/README.md").write_text("Fragments.\n", encoding="utf-8")
+    (root / "src/migrations").mkdir(parents=True)
+    (root / "README.md").write_text("baseline\n", encoding="utf-8")
     git(root, "add", ".")
-    git(root, "commit", "-m", "prepare v10.0.1")
-    base = git(root, "rev-parse", "HEAD")
-    git(root, "tag", "-a", "v10.0.1", "-m", "SVC 10.0.1")
-    write_prepared_release(root, "10.0.1", "10.0.2")
-    git(root, "add", ".")
-    git(root, "commit", "-m", "prepare v10.0.2")
-    return base, git(root, "rev-parse", "HEAD")
-
-
-def pypi_response(urls: list[dict[str, object]]):
-    response = SimpleNamespace(read=lambda: json.dumps({"urls": urls}).encode())
-    return contextlib.nullcontext(response)
-
-
-def test_behavioral_bumps_are_exact() -> None:
-    assert bump("10.2.3", "major") == "11.0.0"
-    assert bump("10.2.3", "minor") == "10.3.0"
-    assert bump("10.2.3", "patch") == "10.2.4"
-    assert bump_impact("9.8.0", "10.0.0") == "major"
-    with pytest.raises(ReleaseError, match="single Behavioral SemVer bump"):
-        bump_impact("10.2.3", "10.3.1")
-
-
-def test_fragments_reject_unknown_names_and_empty_content() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        changes = root / "changes"
-        changes.mkdir()
-        (changes / "42.feature.md").write_text("Visible change\n", encoding="utf-8")
-        with pytest.raises(ReleaseError, match="Invalid change fragment"):
-            fragments(root)
-        (changes / "42.feature.md").unlink()
-        (changes / "42.patch.md").touch()
-        with pytest.raises(ReleaseError, match="Empty change fragment"):
-            fragments(root)
-
-
-def test_feature_pr_does_not_prebump_released_metadata(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "changes").mkdir()
-        (root / "src").mkdir()
-        (root / "changes/42.minor.md").write_text(
-            "Add an optional capability.\n", encoding="utf-8"
-        )
-        (root / "pyproject.toml").write_text(
-            '[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n',
-            encoding="utf-8",
-        )
-        (root / "src/manifest.json").write_text(
-            json.dumps(release_metadata()), encoding="utf-8"
-        )
-        monkeypatch.setattr("tools.release.git_tags", lambda *_args: ["10.0.0"])
-        plan = check(root)
-        assert plan["target_version"] == "10.1.0"
-        assert plan["impact"] == "minor"
-
-
-def test_pending_major_requires_a_separate_staged_migration_policy(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "changes").mkdir()
-        (root / "src").mkdir()
-        (root / "changes/42.major.md").write_text(
-            "Change a required obligation.\n", encoding="utf-8"
-        )
-        (root / "pyproject.toml").write_text(
-            '[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n',
-            encoding="utf-8",
-        )
-        metadata = release_metadata(previous="9.9.0", current="10.0.0")
-        manifest_path = root / "src/manifest.json"
-        manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
-
-        monkeypatch.setattr("tools.release.git_tags", lambda *_args: ["10.0.0"])
-        with pytest.raises(
-            ReleaseError,
-            match="migration guide or explicit non-applicability",
-        ):
-            check(root)
-
-        metadata["release_policy"] = {
-            "migration": {
-                "status": "not-applicable",
-                "reason": "The protocol has no persisted consumer state yet.",
-            }
-        }
-        manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
-        plan = check(root)
-        assert plan["target_version"] == "11.0.0"
-
-
-def test_zero_known_adoption_exception_stages_only_the_exact_major_release(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "changes").mkdir()
-        (root / "src").mkdir()
-        (root / "changes/v10-dev-runtime.major.md").write_text(
-            "Change the required project protocol.\n", encoding="utf-8"
-        )
-        (root / "pyproject.toml").write_text(
-            '[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n',
-            encoding="utf-8",
-        )
-        metadata = release_metadata(previous="9.8.0", current="10.0.0")
-        metadata["release_policy"] = {
-            "migration": {
-                "status": "not-applicable",
-                "reason": "The owner confirms no known adopted consumer requires migration.",
-            },
-            "version_exception": zero_known_adoption_exception(),
-        }
-        (root / "src/manifest.json").write_text(json.dumps(metadata), encoding="utf-8")
-
-        monkeypatch.setattr("tools.release.git_tags", lambda *_args: ["10.0.0"])
-        plan = check(root)
-        assert plan["target_version"] == "10.0.1"
-        assert plan["impact"] == "major"
-
-
-def test_zero_known_adoption_exception_rejects_patch_disguise_and_prebump(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "changes").mkdir()
-        (root / "src").mkdir()
-        (root / "changes/42.patch.md").write_text("Fix a typo.\n", encoding="utf-8")
-        (root / "pyproject.toml").write_text(
-            '[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n',
-            encoding="utf-8",
-        )
-        metadata = release_metadata(previous="9.8.0", current="10.0.0")
-        metadata["release_policy"] = {
-            "version_exception": zero_known_adoption_exception()
-        }
-        manifest_path = root / "src/manifest.json"
-        manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
-
-        monkeypatch.setattr("tools.release.git_tags", lambda *_args: ["10.0.0"])
-        with pytest.raises(ReleaseError, match="only for a MAJOR"):
-            release_plan(root)
-
-        metadata["svc_version"] = "10.0.1"
-        manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
-        with pytest.raises(ReleaseError, match="without pre-bumping"):
-            release_plan(root)
-
-
-def test_zero_known_adoption_exception_rejects_missing_wrong_and_reused_values() -> (
-    None
-):
-    exception = zero_known_adoption_exception()
-    exception.pop("owner_assertion")
-    with pytest.raises(ReleaseError, match="missing or unknown"):
-        verify_version_exception("10.0.0", "10.0.1", "major", exception)
-
-    exception = zero_known_adoption_exception()
-    exception["to_version"] = "10.0.2"
-    with pytest.raises(ReleaseError, match="Only the 10.0.0"):
-        verify_version_exception("10.0.0", "10.0.2", "major", exception)
-
-    with pytest.raises(ReleaseError, match="does not match"):
-        verify_version_exception(
-            "10.0.1", "10.0.2", "major", zero_known_adoption_exception()
-        )
-
-
-def test_prepare_moves_pending_major_policy_into_the_release_and_removes_the_staging_field(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "src").mkdir()
-        (root / "pyproject.toml").write_text(
-            '[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n',
-            encoding="utf-8",
-        )
-        metadata = release_metadata(previous="9.9.0", current="10.0.0", impact="patch")
-        metadata["release_policy"] = {
-            "migration": {
-                "status": "not-applicable",
-                "reason": "This new protocol has no persisted consumer state.",
-            }
-        }
-        manifest_path = root / "src/manifest.json"
-        manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
-        (root / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
-        plan = {
-            "base_version": "10.0.0",
-            "target_version": "11.0.0",
-            "impact": "major",
-            "reasons": ["Change a required obligation."],
-        }
-        commands: list[list[str]] = []
-
-        def record_command(command: list[str], *_args, **_kwargs) -> SimpleNamespace:
-            commands.append(command)
-            return SimpleNamespace()
-
-        monkeypatch.setattr("tools.release.release_plan", lambda *_args: plan)
-        monkeypatch.setattr("tools.release.subprocess.run", record_command)
-        monkeypatch.setattr("tools.release.verify_prepared", lambda *_args: {})
-        prepare(root)
-
-        prepared = json.loads(manifest_path.read_text(encoding="utf-8"))
-        assert "release_policy" not in prepared
-        assert (
-            prepared["behavioral_impact"]["migration"]
-            == metadata["release_policy"]["migration"]
-        )
-        assert ["pdm", "lock", "-d", "-G", ":all"] in commands
-
-
-def test_prepare_consumes_the_zero_known_adoption_exception(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "src").mkdir()
-        (root / "pyproject.toml").write_text(
-            '[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n',
-            encoding="utf-8",
-        )
-        metadata = release_metadata(previous="9.8.0", current="10.0.0", impact="patch")
-        metadata["release_policy"] = {
-            "migration": {
-                "status": "not-applicable",
-                "reason": "The owner confirms no known adopted consumer requires migration.",
-            },
-            "version_exception": zero_known_adoption_exception(),
-        }
-        manifest_path = root / "src/manifest.json"
-        manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
-        (root / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
-        plan = {
-            "base_version": "10.0.0",
-            "target_version": "10.0.1",
-            "impact": "major",
-            "reasons": ["Change a required obligation."],
-        }
-
-        monkeypatch.setattr("tools.release.release_plan", lambda *_args: plan)
-        monkeypatch.setattr(
-            "tools.release.subprocess.run",
-            lambda *_args, **_kwargs: SimpleNamespace(),
-        )
-        monkeypatch.setattr("tools.release.verify_prepared", lambda *_args: {})
-        prepare(root)
-
-        prepared = json.loads(manifest_path.read_text(encoding="utf-8"))
-        assert "release_policy" not in prepared
-        assert (
-            prepared["behavioral_impact"]["version_exception"]
-            == zero_known_adoption_exception()
-        )
-
-
-def test_major_release_requires_packaged_guide_or_reviewable_non_applicability() -> (
-    None
-):
-    with pytest.raises(ReleaseError, match="packaged migration guide"):
-        verify_migration("10.0.0", "11.0.0", "major")
-    verify_migration(
-        "10.0.0",
-        "11.0.0",
-        "major",
-        {"status": "not-applicable", "reason": "No persisted consumer state."},
+    git(root, "commit", "-m", "cutover baseline")
+    baseline = git(root, "rev-parse", "HEAD")
+    git(root, "tag", "v11.0.0")
+    (root / f"changes/visible-change.{impact}.md").write_text(
+        "Make the release path tag-authoritative.\n",
+        encoding="utf-8",
     )
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        guide = root / "src/migrations/11.0.0.md"
-        guide.parent.mkdir(parents=True)
-        guide.write_text("# Migration\n", encoding="utf-8")
-        verify_migration(
-            "10.0.0",
-            "11.0.0",
-            "major",
-            {"status": "guide", "path": "migrations/11.0.0.md"},
-            root,
+    if impact == "major" and migration is not None:
+        (root / "src/migrations/visible-change.md").write_text(
+            migration,
+            encoding="utf-8",
         )
+    git(root, "add", ".")
+    git(root, "commit", "-m", "add release evidence")
+    candidate = git(root, "rev-parse", "HEAD")
+    version = {"patch": "11.0.1", "minor": "11.1.0", "major": "12.0.0"}[impact]
+    if annotated:
+        git(root, "tag", "-a", f"v{version}", "-m", f"SVC {version}")
+    else:
+        git(root, "tag", f"v{version}")
+    remote = root.parent / f"{root.name}-remote.git"
+    subprocess.run(
+        ["git", "clone", "--bare", str(root), str(remote)],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    git(root, "remote", "add", "origin", str(remote))
+    return baseline, candidate
 
 
-def test_pypi_retry_accepts_only_identical_files(
-    monkeypatch: pytest.MonkeyPatch,
+def main_qualification_state(
+    commit: str,
+    *,
+    run_id: int = 42,
+) -> dict[str, object]:
+    jobs = [
+        {
+            "name": name,
+            "head_sha": commit,
+            "status": "completed",
+            "conclusion": "success",
+        }
+        for name in QUALIFICATION_JOBS
+    ]
+    checks = [
+        {
+            "name": name,
+            "head_sha": commit,
+            "status": "completed",
+            "conclusion": "success",
+            "app": {"id": 15368},
+            "check_suite": {"id": 99},
+        }
+        for name in QUALIFICATION_JOBS
+    ]
+    jobs.append(
+        {
+            "name": "Unrelated helper",
+            "head_sha": commit,
+            "status": "completed",
+            "conclusion": "success",
+        }
+    )
+    checks.append(
+        {
+            "name": "Qualify tag and external state",
+            "head_sha": commit,
+            "status": "completed",
+            "conclusion": "success",
+            "app": {"id": 15368},
+            "check_suite": {"id": 100},
+        }
+    )
+    return {
+        "runs": {
+            "http_status": 200,
+            "body": {
+                "total_count": 1,
+                "workflow_runs": [
+                    {
+                        "id": run_id,
+                        "check_suite_id": 99,
+                        "path": ".github/workflows/ci.yml@main",
+                        "event": "push",
+                        "head_branch": "main",
+                        "head_sha": commit,
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                ],
+            },
+        },
+        "jobs_by_run": {
+            str(run_id): {
+                "http_status": 200,
+                "body": {"total_count": len(jobs), "jobs": jobs},
+            }
+        },
+        "check_runs": {
+            "http_status": 200,
+            "body": {"total_count": len(checks), "check_runs": checks},
+        },
+    }
+
+
+def write_distributions(directory: Path, version: str) -> None:
+    wheel = directory / f"sustainable_vibe_coding-{version}-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr(
+            f"sustainable_vibe_coding-{version}.dist-info/METADATA",
+            f"Metadata-Version: 2.4\nName: sustainable-vibe-coding\nVersion: {version}\n",
+        )
+    sdist = directory / f"sustainable_vibe_coding-{version}.tar.gz"
+    metadata = (
+        f"Metadata-Version: 2.4\nName: sustainable-vibe-coding\nVersion: {version}\n"
+    ).encode()
+    with tarfile.open(sdist, "w:gz") as archive:
+        member = tarfile.TarInfo(
+            f"sustainable_vibe_coding-{version}/PKG-INFO"
+        )
+        member.size = len(metadata)
+        archive.addfile(member, io.BytesIO(metadata))
+
+
+@pytest.mark.parametrize("annotated", [False, True])
+def test_target_plan_derives_exact_tag_range_for_lightweight_and_annotated_tags(
+    annotated: bool,
 ) -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        dist = Path(tmp)
-        wheel = dist / "example.whl"
-        wheel.write_bytes(b"stable bytes")
-        digest = __import__("hashlib").sha256(wheel.read_bytes()).hexdigest()
-        monkeypatch.setattr(
-            "urllib.request.urlopen",
-            lambda *_args, **_kwargs: pypi_response(
-                [{"filename": wheel.name, "digests": {"sha256": digest}}]
-            ),
+        root = Path(tmp) / "work"
+        root.mkdir()
+        baseline, candidate = target_git_repository(root, annotated=annotated)
+
+        qualification = target_qualification(candidate, root=root)
+        assert qualification["previous_tag"] == "v11.0.0"
+        assert qualification["target_version"] == "11.0.1"
+        assert qualification["pdm_build_scm_version"] == "11.0.1"
+
+        plan = target_release_plan(
+            "v11.0.1",
+            candidate,
+            main_ref="main",
+            root=root,
         )
-        result = pypi_plan(dist, ROOT)
-        assert not result["needed"]
-
-
-def test_tag_plan_stays_on_the_prepared_commit_after_later_main_changes() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        _, candidate = prepared_git_repository(root)
-        (root / "changes").mkdir()
-        (root / "changes/later.patch.md").write_text(
-            "Add a later release fragment.\n", encoding="utf-8"
-        )
-        git(root, "add", ".")
-        git(root, "commit", "-m", "later main change")
-        git(root, "checkout", candidate)
-
-        plan = tag_plan(candidate, root)
-        assert plan["needed"]
-        assert plan["tag"] == "v10.0.2"
         assert plan["commit"] == candidate
+        assert plan["previous_tag"] == "v11.0.0"
+        assert plan["impact"] == "patch"
+        assert plan["title"] == "SVC 11.0.1"
+        assert "Make the release path tag-authoritative." in str(plan["notes"])
+        assert git(root, "rev-parse", "v11.0.0") == baseline
 
-        git(root, "tag", "-a", "v10.0.2", "-m", "SVC 10.0.2")
-        retry = tag_plan(candidate, root)
-        assert not retry["needed"]
-        assert retry["reason"] == "tag-already-created"
-        assert retry["commit"] == candidate
 
-
-def test_tag_validation_rejects_wrong_tag_version_or_commit() -> None:
+def test_target_qualification_enforces_release_none_and_empty_window_patch() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        base, candidate = prepared_git_repository(root)
-        git(root, "tag", "-a", "v10.0.2", "-m", "wrong target", base)
-        with pytest.raises(ReleaseError, match="points to"):
-            tag_plan(candidate, root)
-
-        git(root, "tag", "-d", "v10.0.2")
-        git(root, "tag", "-a", "v10.0.3", "-m", "wrong version", candidate)
-        with pytest.raises(
-            ReleaseError, match="does not match prepared package version"
-        ):
-            verify_tag("v10.0.3", candidate, root)
-
-        git(root, "tag", "-d", "v10.0.3")
-        git(root, "tag", "-a", "v10.0.2", "-m", "right target", candidate)
-        git(root, "checkout", base)
-        with pytest.raises(ReleaseError, match="resolves to"):
-            verify_tag("v10.0.2", base, root)
-
-
-def test_release_bundle_binds_artifacts_to_the_tag_and_rejects_tampering() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        _, candidate = prepared_git_repository(root)
-        git(root, "tag", "-a", "v10.0.2", "-m", "SVC 10.0.2", candidate)
-        dist = root / "dist"
-        dist.mkdir()
-        wheel = dist / "sustainable_vibe_coding-10.0.2-py3-none-any.whl"
-        sdist = dist / "sustainable_vibe_coding-10.0.2.tar.gz"
-        wheel.write_bytes(b"wheel bytes")
-        sdist.write_bytes(b"sdist bytes")
-        bundle_dir = root / "bundle"
-
-        bundle = create_release_bundle("v10.0.2", candidate, dist, bundle_dir, root)
-        assert bundle["tag"] == "v10.0.2"
-        assert bundle["commit"] == candidate
-        assert bundle["distributions"] == sorted(
-            [f"python/{sdist.name}", f"python/{wheel.name}"]
-        )
-        assert "svc-release-manifest.json" in bundle["assets"]
-        assert verify_release_bundle(bundle_dir, "v10.0.2")["version"] == "10.0.2"
-        checker = subprocess.run(
-            [
-                sys.executable,
-                str(bundle_dir / "release-check.py"),
-                "verify-bundle",
-                "--bundle-dir",
-                str(bundle_dir),
-                "--tag",
-                "v10.0.2",
-                "--json",
-            ],
-            cwd=root,
+        root = Path(tmp) / "work"
+        root.mkdir()
+        baseline, candidate = target_git_repository(root)
+        git(root, "tag", "-d", "v11.0.1")
+        remote = Path(git(root, "remote", "get-url", "origin"))
+        subprocess.run(
+            ["git", "--git-dir", str(remote), "tag", "-d", "v11.0.1"],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=True,
         )
-        assert json.loads(checker.stdout)["commit"] == candidate
+        (root / "changes/visible-change.patch.md").unlink()
+        git(root, "add", ".")
+        git(root, "commit", "-m", "remove fixture fragment before qualification")
+        # This fixture deletion is intentionally before the simulated cutover range.
+        empty = git(root, "rev-parse", "HEAD")
+        git(root, "push", "origin", "main")
 
-        (bundle_dir / "python" / wheel.name).write_bytes(b"changed wheel bytes")
-        with pytest.raises(ReleaseError, match="digest differs"):
-            verify_release_bundle(bundle_dir, "v10.0.2")
+        with pytest.raises(ReleaseError, match="append-only"):
+            target_qualification(empty, base=baseline, root=root)
+
+        git(root, "reset", "--hard", baseline)
+        (root / "README.md").write_text("internal-only\n", encoding="utf-8")
+        git(root, "add", ".")
+        git(root, "commit", "-m", "internal-only")
+        empty = git(root, "rev-parse", "HEAD")
+        git(root, "push", "--force", "origin", "main")
+        with pytest.raises(ReleaseError, match="release:none"):
+            target_qualification(empty, base=baseline, root=root)
+        qualified = target_qualification(
+            empty,
+            base=baseline,
+            release_none=True,
+            root=root,
+        )
+        assert qualified["release"] == "none"
+        assert qualified["impact"] == "patch"
+        assert qualified["target_version"] == "11.0.1"
 
 
-def test_pypi_bundle_plan_requires_none_or_all_matching_distributions(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_recovery_tag_plan_uses_durable_exact_main_evidence_without_main_ref() -> (
+    None
+):
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        _, candidate = prepared_git_repository(root)
-        git(root, "tag", "-a", "v10.0.2", "-m", "SVC 10.0.2", candidate)
+        root = Path(tmp) / "work"
+        root.mkdir()
+        _, candidate = target_git_repository(root)
+        evidence = main_qualification_state(candidate)
+        classified = classify_main_qualification(candidate, evidence)
+        assert classified["state"] == "qualified"
+        assert classified["run_id"] == 42
+
+        plan = target_release_plan(
+            "v11.0.1",
+            candidate,
+            main_ref="mutable-main-must-not-be-read",
+            qualification_observation=evidence,
+            root=root,
+        )
+        assert plan["qualification"]["state"] == "qualified"
+        assert plan["qualification"]["run_id"] == 42
+
+        run = evidence["runs"]["body"]["workflow_runs"][0]
+        run["path"] = ".github/workflows/ci.yml"
+        assert classify_main_qualification(candidate, evidence)["state"] == "qualified"
+        run["path"] = ".github/workflows/ci.yml.evil@main"
+        assert classify_main_qualification(candidate, evidence)["state"] != "qualified"
+        run["path"] = ".github/workflows/ci.yml@main"
+        evidence["check_runs"]["body"]["check_runs"][0]["app"]["id"] = 1
+        assert classify_main_qualification(candidate, evidence)["state"] == "mismatch"
+        with pytest.raises(ReleaseError, match="push-to-main qualification"):
+            target_release_plan(
+                "v11.0.1",
+                candidate,
+                main_ref="mutable-main-must-not-be-read",
+                qualification_observation=evidence,
+                root=root,
+            )
+
+
+def test_target_plan_rejects_off_main_source_race_and_wrong_bump() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "work"
+        root.mkdir()
+        _, candidate = target_git_repository(root)
+        git(root, "tag", "v11.0.2")
+        git(root, "push", "origin", "v11.0.2")
+        with pytest.raises(ReleaseError, match="exact patch bump"):
+            target_release_plan(
+                "v11.0.2",
+                candidate,
+                main_ref="main",
+                root=root,
+            )
+
+        (root / "README.md").write_text("later main\n", encoding="utf-8")
+        git(root, "add", ".")
+        git(root, "commit", "-m", "later main")
+        with pytest.raises(ReleaseError, match="not checked out"):
+            target_release_plan(
+                "v11.0.1",
+                candidate,
+                main_ref="main",
+                root=root,
+            )
+
+        git(root, "checkout", "-b", "branch-only", candidate)
+        (root / "README.md").write_text("branch only\n", encoding="utf-8")
+        git(root, "add", ".")
+        git(root, "commit", "-m", "branch only")
+        branch_commit = git(root, "rev-parse", "HEAD")
+        git(root, "tag", "v11.0.3")
+        git(root, "push", "origin", "v11.0.3")
+        with pytest.raises(ReleaseError, match="not reachable"):
+            target_release_plan(
+                "v11.0.3",
+                branch_commit,
+                main_ref="main",
+                root=root,
+            )
+
+
+def test_target_plan_rejects_malformed_and_non_commit_remote_tags() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "work"
+        root.mkdir()
+        _, candidate = target_git_repository(root)
+        with pytest.raises(ReleaseError, match="stable SemVer"):
+            target_release_plan(
+                "v11.0.1rc1",
+                candidate,
+                main_ref="main",
+                root=root,
+            )
+
+        blob = root / "tag-blob"
+        blob.write_text("not a commit\n", encoding="utf-8")
+        object_id = git(root, "hash-object", "-w", str(blob))
+        git(root, "update-ref", "refs/tags/v11.0.2", object_id)
+        git(root, "push", "origin", "refs/tags/v11.0.2")
+        with pytest.raises(ReleaseError, match="does not peel to a commit"):
+            target_release_plan(
+                "v11.0.1",
+                candidate,
+                main_ref="main",
+                root=root,
+            )
+
+
+def test_target_major_requires_same_slug_non_empty_migration() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "work"
+        root.mkdir()
+        target_git_repository(root, impact="major")
+        with pytest.raises(ReleaseError, match="missing required path"):
+            target_qualification("HEAD", root=root)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "work"
+        root.mkdir()
+        _, candidate = target_git_repository(
+            root,
+            impact="major",
+            migration="No consumer action applies because no persisted state exists.\n",
+        )
+        plan = target_release_plan(
+            "v12.0.0",
+            candidate,
+            main_ref="main",
+            root=root,
+        )
+        fragment = plan["fragments"][0]
+        assert fragment["migration"] == "src/migrations/visible-change.md"
+        assert "Migration: `src/migrations/visible-change.md`" in plan["notes"]
+
+
+def test_target_planning_is_deterministic_and_does_not_mutate_source() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "work"
+        root.mkdir()
+        _, candidate = target_git_repository(root)
+        before_status = git(root, "status", "--porcelain")
+        before_tree = git(root, "rev-parse", "HEAD^{tree}")
+        first = target_release_plan(
+            "v11.0.1",
+            candidate,
+            main_ref="main",
+            root=root,
+        )
+        second = target_release_plan(
+            "v11.0.1",
+            candidate,
+            main_ref="main",
+            root=root,
+        )
+        assert first == second
+        assert first["metadata"] == second["metadata"]
+        assert git(root, "status", "--porcelain") == before_status
+        assert git(root, "rev-parse", "HEAD^{tree}") == before_tree
+
+
+def test_target_fragment_ledger_rejects_modification_rename_deletion_and_reuse() -> None:
+    operations = ("modify", "rename", "delete", "reuse")
+    for operation in operations:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "work"
+            root.mkdir()
+            _, candidate = target_git_repository(root)
+            path = root / "changes/visible-change.patch.md"
+            if operation == "modify":
+                path.write_text("Changed after merge.\n", encoding="utf-8")
+            elif operation == "rename":
+                path.rename(root / "changes/renamed.patch.md")
+            else:
+                path.unlink()
+            git(root, "add", ".")
+            git(root, "commit", "-m", operation)
+            if operation == "reuse":
+                path.write_text("Reused path.\n", encoding="utf-8")
+                git(root, "add", ".")
+                git(root, "commit", "-m", "reuse path")
+            with pytest.raises(ReleaseError, match="append-only|reused"):
+                target_qualification("HEAD", root=root)
+
+
+def test_target_state_classifiers_are_exact_and_fail_closed() -> None:
+    hashes = {"a.whl": "a" * 64, "a.tar.gz": "b" * 64}
+    assert classify_pypi_state(
+        hashes, {"http_status": 404, "body": None}
+    )["state"] == "none"
+    subset = classify_pypi_state(
+        hashes,
+        {
+            "http_status": 200,
+            "body": {
+                "urls": [
+                    {"filename": "a.whl", "digests": {"sha256": "a" * 64}}
+                ]
+            },
+        },
+    )
+    assert subset["state"] == "exact-subset"
+    assert subset["upload"] == ["a.tar.gz"]
+    assert subset["readback_required"]
+    assert not subset["ready_for_github"]
+    assert classify_pypi_state(
+        hashes,
+        {
+            "http_status": 200,
+            "body": {
+                "urls": [
+                    {"filename": "a.whl", "digests": {"sha256": "0" * 64}}
+                ]
+            },
+        },
+    )["state"] == "mismatch"
+    all_exact = classify_pypi_state(
+        hashes,
+        {
+            "http_status": 200,
+            "body": {
+                "urls": [
+                    {"filename": name, "digests": {"sha256": digest}}
+                    for name, digest in hashes.items()
+                ]
+            },
+        },
+    )
+    assert all_exact["state"] == "all-exact"
+    assert all_exact["ready_for_github"]
+    assert not all_exact["upload"]
+    unexpected = classify_pypi_state(
+        hashes,
+        {
+            "http_status": 200,
+            "body": {
+                "urls": [
+                    *[
+                        {"filename": name, "digests": {"sha256": digest}}
+                        for name, digest in hashes.items()
+                    ],
+                    {"filename": "unknown.whl", "digests": {"sha256": "0" * 64}},
+                ]
+            },
+        },
+    )
+    assert unexpected["state"] == "mismatch"
+    assert unexpected["unexpected"] == ["unknown.whl"]
+
+    expected = {
+        "tag": "v11.0.1",
+        "commit": "1" * 40,
+        "title": "SVC 11.0.1",
+        "notes": "notes",
+        "assets": hashes,
+    }
+    draft = classify_github_state(
+        expected,
+        {
+            "http_status": 200,
+            "resolved_tag_commit": "1" * 40,
+            "asset_sha256": {"a.whl": "a" * 64},
+            "body": {
+                "tag_name": "v11.0.1",
+                "target_commitish": "main",
+                "name": "SVC 11.0.1",
+                "body": "notes",
+                "draft": True,
+                "immutable": False,
+                "assets": [{"name": "a.whl"}],
+            },
+        },
+    )
+    assert draft["state"] == "draft-subset"
+    assert draft["upload"] == ["a.tar.gz"]
+    wrong_commit = classify_github_state(
+        expected,
+        {
+            "http_status": 200,
+            "resolved_tag_commit": "2" * 40,
+            "asset_sha256": hashes,
+            "body": {
+                "tag_name": "v11.0.1",
+                "name": "SVC 11.0.1",
+                "body": "notes",
+                "draft": False,
+                "immutable": True,
+                "assets": [{"name": name} for name in hashes],
+            },
+        },
+    )
+    assert wrong_commit["state"] == "mismatch"
+
+
+def test_target_bundle_retention_requires_exact_live_artifact_and_window() -> None:
+    expected = {
+        "run_id": 42,
+        "name": "svc-release-v11.0.1",
+        "commit": "1" * 40,
+    }
+    observed = {
+        "run": {
+            "http_status": 200,
+            "body": {
+                "id": 42,
+                "path": ".github/workflows/publish.yml@main",
+                "event": "push",
+                "head_sha": "1" * 40,
+                "status": "completed",
+                "conclusion": "failure",
+            },
+        },
+        "artifacts": {
+            "http_status": 200,
+            "body": {
+                "artifacts": [
+                    {
+                        "id": 7,
+                        "name": "svc-release-v11.0.1",
+                        "expired": False,
+                        "expires_at": "2027-01-01T00:00:00Z",
+                    }
+                ]
+            },
+        },
+    }
+    result = classify_bundle_retention(
+        expected,
+        observed,
+        now="2026-09-01T00:00:00Z",
+    )
+    assert result["state"] == "available"
+    assert result["artifact_id"] == 7
+    observed["run"]["body"]["path"] = ".github/workflows/ci.yml"
+    assert classify_bundle_retention(
+        expected,
+        observed,
+        now="2026-09-01T00:00:00Z",
+    )["state"] == "mismatch"
+    observed["run"]["body"]["path"] = ".github/workflows/publish.yml@main"
+    observed["run"]["body"]["head_sha"] = "2" * 40
+    assert classify_bundle_retention(
+        expected,
+        observed,
+        now="2026-09-01T00:00:00Z",
+    )["state"] == "mismatch"
+    observed["run"]["body"]["head_sha"] = "1" * 40
+    observed["run"]["body"]["event"] = "pull_request"
+    assert classify_bundle_retention(
+        expected,
+        observed,
+        now="2026-09-01T00:00:00Z",
+    )["state"] == "mismatch"
+    observed["run"]["body"]["event"] = "push"
+    observed["run"]["body"]["status"] = "in_progress"
+    assert classify_bundle_retention(
+        expected,
+        observed,
+        now="2026-09-01T00:00:00Z",
+    )["state"] == "mismatch"
+    observed["run"]["body"]["status"] = "completed"
+    observed["artifacts"]["body"]["artifacts"][0]["expired"] = True
+    assert classify_bundle_retention(
+        expected,
+        observed,
+        now="2026-09-01T00:00:00Z",
+    )["state"] == "expired"
+
+    observed["artifacts"]["body"]["artifacts"][0]["expired"] = False
+    observed["artifacts"]["body"]["artifacts"][0][
+        "expires_at"
+    ] = "2026-09-02T00:00:00Z"
+    assert classify_bundle_retention(
+        expected,
+        observed,
+        now="2026-09-01T00:00:00Z",
+    )["state"] == "expired"
+    assert classify_bundle_retention(
+        expected,
+        observed,
+        now="2026-09-01T00:00:00Z",
+        minimum_days=0,
+    )["state"] == "available"
+
+
+def test_target_bundle_and_external_plans_use_original_manifest_bound_bytes() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "work"
+        root.mkdir()
+        _, candidate = target_git_repository(root)
+        plan = target_release_plan(
+            "v11.0.1",
+            candidate,
+            main_ref="main",
+            root=root,
+        )
+        plan_file = root / "plan.json"
+        plan_file.write_text(json.dumps(plan), encoding="utf-8")
         dist = root / "dist"
         dist.mkdir()
-        (dist / "sustainable_vibe_coding-10.0.2-py3-none-any.whl").write_bytes(b"wheel")
-        (dist / "sustainable_vibe_coding-10.0.2.tar.gz").write_bytes(b"sdist")
+        write_distributions(dist, "11.0.1")
         bundle_dir = root / "bundle"
-        bundle = create_release_bundle("v10.0.2", candidate, dist, bundle_dir, root)
-        files = bundle["files"]
-        distributions = bundle["distributions"]
-        assert isinstance(files, dict)
-        assert isinstance(distributions, list)
-        urls = [
-            {
-                "filename": Path(relative).name,
-                "digests": {"sha256": files[relative]},
-            }
-            for relative in distributions
+        bundle = create_target_release_bundle(plan_file, dist, bundle_dir)
+        assert bundle["notes"] == "RELEASE_NOTES.md"
+        assert bundle["title"] == "SVC 11.0.1"
+        assert verify_target_release_bundle(
+            bundle_dir / "svc-target-release-plan.json",
+            bundle_dir,
+        )["commit"] == candidate
+        recovery_plan = json.loads(json.dumps(plan))
+        recovery_plan["qualification"] = classify_main_qualification(
+            candidate,
+            main_qualification_state(candidate),
+        )
+        recovery_plan_file = root / "trusted-recovery-plan.json"
+        recovery_plan_file.write_text(
+            json.dumps(recovery_plan),
+            encoding="utf-8",
+        )
+        assert verify_target_release_bundle(
+            recovery_plan_file,
+            bundle_dir,
+        )["commit"] == candidate
+
+        changed_semantics = json.loads(json.dumps(recovery_plan))
+        changed_semantics["notes"] = "untrusted replacement\n"
+        changed_plan_file = root / "changed-plan.json"
+        changed_plan_file.write_text(
+            json.dumps(changed_semantics),
+            encoding="utf-8",
+        )
+        with pytest.raises(ReleaseError, match="semantics differ|notes differ"):
+            verify_target_release_bundle(changed_plan_file, bundle_dir)
+
+        wheel_name = "sustainable_vibe_coding-11.0.1-py3-none-any.whl"
+        wheel_digest = bundle["files"][f"python/{wheel_name}"]
+        pypi_state = root / "pypi.json"
+        pypi_state.write_text(
+            json.dumps(
+                {
+                    "http_status": 200,
+                    "body": {
+                        "urls": [
+                            {
+                                "filename": wheel_name,
+                                "digests": {"sha256": wheel_digest},
+                            }
+                        ]
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        pypi = target_pypi_plan(bundle_dir, pypi_state)
+        assert pypi["state"] == "exact-subset"
+        assert pypi["upload"] == [
+            "python/sustainable_vibe_coding-11.0.1.tar.gz"
         ]
-
-        not_found = urllib.error.HTTPError(
-            "https://example.invalid", 404, "missing", None, None
+        pypi_plan_file = root / "pypi-plan.json"
+        pypi_plan_file.write_text(json.dumps(pypi), encoding="utf-8")
+        staged = stage_target_pypi(
+            bundle_dir,
+            pypi_plan_file,
+            root / "pypi-stage",
         )
-
-        def missing_response(*_args, **_kwargs):
-            raise not_found
-
-        monkeypatch.setattr("urllib.request.urlopen", missing_response)
-        missing = pypi_bundle_plan(bundle_dir, "v10.0.2")
-        assert missing["needed"]
-        assert missing["tag"] == "v10.0.2"
-
-        monkeypatch.setattr(
-            "urllib.request.urlopen",
-            lambda *_args, **_kwargs: pypi_response(urls),
-        )
-        matching = pypi_bundle_plan(bundle_dir, "v10.0.2")
-        assert not matching["needed"]
-        assert matching["tag"] == "v10.0.2"
-
-        monkeypatch.setattr(
-            "urllib.request.urlopen",
-            lambda *_args, **_kwargs: pypi_response(urls[:1]),
-        )
-        with pytest.raises(ReleaseError, match="partial or differs"):
-            pypi_bundle_plan(bundle_dir, "v10.0.2")
-
-        mismatched = [*urls]
-        mismatched[0] = {
-            "filename": urls[0]["filename"],
-            "digests": {"sha256": "0" * 64},
+        assert staged == {
+            "staged": ["sustainable_vibe_coding-11.0.1.tar.gz"],
+            "count": 1,
         }
-        monkeypatch.setattr(
-            "urllib.request.urlopen",
-            lambda *_args, **_kwargs: pypi_response(mismatched),
-        )
-        with pytest.raises(ReleaseError, match="partial or differs"):
-            pypi_bundle_plan(bundle_dir, "v10.0.2")
 
-
-def test_prepared_release_has_no_fragments_and_has_release_notes() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "changes").mkdir()
-        (root / "src").mkdir()
-        (root / "pyproject.toml").write_text(
-            '[project]\nname = "fixture"\nversion = "10.0.0"\n\n[build-system]\n',
+        github_state = root / "github.json"
+        github_state.write_text(
+            json.dumps({"http_status": 404, "body": None}),
             encoding="utf-8",
         )
-        (root / "src/manifest.json").write_text(
-            json.dumps(release_metadata(), indent=2), encoding="utf-8"
-        )
-        (root / "CHANGELOG.md").write_text(
-            "## [10.0.0] - 2026-07-13\n\n[10.0.0]: https://github.com/xiaoland/svc/releases/tag/v10.0.0\n",
+        github = target_github_plan(bundle_dir, github_state)
+        assert github["action"] == "create"
+        assert github["upload"] == bundle["assets"]
+
+        executed = root / "artifact-checker-executed"
+        (bundle_dir / "release-check.py").write_text(
+            f"from pathlib import Path\nPath({str(executed)!r}).touch()\n",
             encoding="utf-8",
         )
-        assert verify_prepared(root)["impact"] == "major"
+        with pytest.raises(ReleaseError, match="digest differs"):
+            verify_target_release_bundle(recovery_plan_file, bundle_dir)
+        assert not executed.exists()
 
-        metadata = release_metadata()
-        metadata["release_policy"] = {
-            "migration": metadata["behavioral_impact"]["migration"]
+
+def test_target_preflight_requires_completed_predecessor_and_original_bundle() -> None:
+    baseline_github = {
+        "tag": "v11.0.0",
+        "commit": CUTOVER_BASELINE_COMMIT,
+        "title": "SVC 11.0.0",
+        "notes": "baseline",
+        "assets": CUTOVER_BASELINE_FILES,
+        "allow_legacy_mutable": True,
+    }
+
+    def exact_observation(
+        expected: dict[str, object], *, immutable: bool
+    ) -> dict[str, object]:
+        assets = expected["assets"]
+        assert isinstance(assets, dict)
+        return {
+            "pypi": {
+                "http_status": 200,
+                "body": {
+                    "urls": [
+                        {"filename": name, "digests": {"sha256": digest}}
+                        for name, digest in assets.items()
+                    ]
+                },
+            },
+            "github": {
+                "http_status": 200,
+                "resolved_tag_commit": expected["commit"],
+                "asset_sha256": assets,
+                "body": {
+                    "tag_name": expected["tag"],
+                    "target_commitish": "main",
+                    "name": expected["title"],
+                    "body": expected["notes"],
+                    "draft": False,
+                    "immutable": immutable,
+                    "assets": [{"name": name} for name in assets],
+                },
+            },
         }
-        (root / "src/manifest.json").write_text(json.dumps(metadata), encoding="utf-8")
-        with pytest.raises(ReleaseError, match="must not retain"):
-            verify_prepared(root)
+
+    predecessor_observed = exact_observation(baseline_github, immutable=False)
+    state = {
+        "now": "2026-09-01T00:00:00Z",
+        "prior_run_id": None,
+        "predecessor": {
+            **predecessor_observed,
+        },
+        "candidate": {
+            "pypi": {"http_status": 404, "body": None},
+            "github": {"http_status": 404, "body": None},
+        },
+        "artifact": {},
+    }
+    plan = {
+        "tag": "v11.0.1",
+        "commit": "2" * 40,
+        "previous_tag": "v11.0.0",
+        "title": "SVC 11.0.1",
+        "notes": "candidate notes\n",
+    }
+    assert target_preflight(plan, state)["decision"] == "build"
+
+    state["candidate"]["pypi"] = {
+        "http_status": 200,
+        "body": {
+            "urls": [
+                {
+                    "filename": "svc-11.0.1.whl",
+                    "digests": {"sha256": "c" * 64},
+                }
+            ]
+        },
+    }
+    assert target_preflight(plan, state)["decision"] == "fail"
+
+    state["prior_run_id"] = 42
+    state["artifact"] = {
+        "run": {
+            "http_status": 200,
+            "body": {
+                "id": 42,
+                "path": ".github/workflows/publish.yml",
+                "event": "workflow_dispatch",
+                "head_sha": "2" * 40,
+                "status": "completed",
+                "conclusion": "failure",
+            },
+        },
+        "artifacts": {
+            "http_status": 200,
+            "body": {
+                "artifacts": [
+                    {
+                        "id": 7,
+                        "name": "svc-release-v11.0.1",
+                        "expired": False,
+                        "expires_at": "2026-09-02T00:00:00Z",
+                    }
+                ]
+            },
+        },
+    }
+    recovered = target_preflight(plan, state)
+    assert recovered["decision"] == "requires-bundle"
+    assert recovered["bundle_state"] == "available"
+
+    state["candidate"]["github"] = {
+        "http_status": 200,
+        "resolved_tag_commit": "2" * 40,
+        "asset_sha256": {},
+        "body": {
+            "tag_name": "v11.0.1",
+            "target_commitish": "main",
+            "name": "SVC 11.0.1",
+            "body": "candidate notes\n",
+            "draft": True,
+            "immutable": False,
+            "assets": [],
+        },
+    }
+    draft_recovery = target_preflight(plan, state)
+    assert draft_recovery["decision"] == "requires-bundle"
+    assert draft_recovery["github_state"] == "draft-present"
 
 
-def test_prepared_zero_known_adoption_exception_is_immutable() -> None:
+def test_target_preflight_derives_exact_complete_from_durable_manifest_assets() -> (
+    None
+):
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "changes").mkdir()
-        (root / "src").mkdir()
-        (root / "pyproject.toml").write_text(
-            '[project]\nname = "fixture"\nversion = "10.0.1"\n\n[build-system]\n',
-            encoding="utf-8",
+        root = Path(tmp) / "work"
+        root.mkdir()
+        _, candidate = target_git_repository(root)
+        plan = target_release_plan(
+            "v11.0.1",
+            candidate,
+            main_ref="main",
+            root=root,
         )
-        metadata = release_metadata(previous="10.0.0", current="10.0.1")
-        metadata["behavioral_impact"]["version_exception"] = (
-            zero_known_adoption_exception()
-        )
-        manifest_path = root / "src/manifest.json"
-        manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
-        (root / "CHANGELOG.md").write_text(
-            "## [10.0.1] - 2026-07-15\n\n[10.0.1]: https://github.com/xiaoland/svc/releases/tag/v10.0.1\n",
-            encoding="utf-8",
-        )
-        assert verify_prepared(root)["impact"] == "major"
+        plan_file = root / "plan.json"
+        plan_file.write_text(json.dumps(plan), encoding="utf-8")
+        dist = root / "dist"
+        dist.mkdir()
+        write_distributions(dist, "11.0.1")
+        bundle_dir = root / "bundle"
+        bundle = create_target_release_bundle(plan_file, dist, bundle_dir)
+        assets = bundle["assets"]
+        files = bundle["files"]
+        assert isinstance(assets, list)
+        assert isinstance(files, dict)
+        asset_sha256 = {
+            Path(relative).name: hashlib.sha256(
+                (bundle_dir / relative).read_bytes()
+            ).hexdigest()
+            for relative in assets
+        }
+        candidate_observation = {
+            "pypi": {
+                "http_status": 200,
+                "body": {
+                    "urls": [
+                        {
+                            "filename": Path(relative).name,
+                            "digests": {"sha256": files[relative]},
+                        }
+                        for relative in bundle["distributions"]
+                    ]
+                },
+            },
+            "github": {
+                "http_status": 200,
+                "resolved_tag_commit": candidate,
+                "asset_sha256": asset_sha256,
+                "asset_content": {
+                    "svc-release-manifest.json": (
+                        bundle_dir / "svc-release-manifest.json"
+                    ).read_text(encoding="utf-8"),
+                    "svc-release-metadata.json": (
+                        bundle_dir / "svc-release-metadata.json"
+                    ).read_text(encoding="utf-8"),
+                },
+                "body": {
+                    "tag_name": "v11.0.1",
+                    "target_commitish": "main",
+                    "name": plan["title"],
+                    "body": plan["notes"],
+                    "draft": False,
+                    "immutable": True,
+                    "assets": [
+                        {"name": Path(relative).name} for relative in assets
+                    ],
+                },
+            },
+        }
+        baseline_github = {
+            "tag": "v11.0.0",
+            "commit": CUTOVER_BASELINE_COMMIT,
+            "title": "SVC 11.0.0",
+            "notes": "baseline",
+            "assets": CUTOVER_BASELINE_FILES,
+        }
 
-        metadata["behavioral_impact"]["version_exception"]["one_time"] = False
-        manifest_path.write_text(json.dumps(metadata), encoding="utf-8")
-        with pytest.raises(ReleaseError, match="one_time"):
-            verify_prepared(root)
+        def baseline_state() -> dict[str, object]:
+            return {
+                "pypi": {
+                    "http_status": 200,
+                    "body": {
+                        "urls": [
+                            {"filename": name, "digests": {"sha256": digest}}
+                            for name, digest in CUTOVER_BASELINE_FILES.items()
+                        ]
+                    },
+                },
+                "github": {
+                    "http_status": 200,
+                    "resolved_tag_commit": CUTOVER_BASELINE_COMMIT,
+                    "asset_sha256": CUTOVER_BASELINE_FILES,
+                    "body": {
+                        "tag_name": baseline_github["tag"],
+                        "target_commitish": "main",
+                        "name": baseline_github["title"],
+                        "body": baseline_github["notes"],
+                        "draft": False,
+                        "immutable": False,
+                        "assets": [
+                            {"name": name} for name in CUTOVER_BASELINE_FILES
+                        ],
+                    },
+                },
+            }
+
+        state = {
+            "now": "2026-09-01T00:00:00Z",
+            "prior_run_id": None,
+            "predecessor": baseline_state(),
+            "candidate": candidate_observation,
+            "artifact": {},
+        }
+        exact = target_preflight(plan, state)
+        assert exact["decision"] == "exact-complete"
+        assert exact["pypi_state"] == "all-exact"
+        assert exact["github_state"] == "published-exact"
 
 
-def test_pull_request_requires_fragment_or_release_none(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_sdist_round_trip_preserves_projected_version_and_catalog_without_scm() -> (
+    None
+):
+    version = "12.3.4"
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "changes").mkdir()
-        diff = SimpleNamespace(stdout="README.md\n")
-        monkeypatch.setattr(
-            "tools.release.subprocess.run", lambda *_args, **_kwargs: diff
+        temporary = Path(tmp)
+        first_dist = temporary / "tag-build"
+        environment = os.environ.copy()
+        environment["PDM_BUILD_SCM_VERSION"] = version
+        subprocess.run(
+            ["pdm", "build", "--no-wheel", "--dest", str(first_dist)],
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
         )
-        with pytest.raises(ReleaseError, match="requires a change fragment"):
-            check_pr("origin/main", False, root)
-        result = check_pr("origin/main", True, root)
-        assert result["release"] == "none"
+        sdist = next(first_dist.glob("*.tar.gz"))
+        unpacked = temporary / "unpacked"
+        shutil.unpack_archive(sdist, unpacked)
+        source = next(unpacked.iterdir())
+        assert not (source / ".git").exists()
+        generated_project = (source / "pyproject.toml").read_text(encoding="utf-8")
+        assert f'version = "{version}"' in generated_project
 
-
-def test_prepared_release_pr_does_not_require_a_second_pyproject_version_change(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "changes").mkdir()
-        diff = SimpleNamespace(stdout="CHANGELOG.md\nsrc/manifest.json\n")
-        monkeypatch.setattr(
-            "tools.release.subprocess.run", lambda *_args, **_kwargs: diff
+        wheel_dist = temporary / "wheel-from-sdist"
+        environment.pop("PDM_BUILD_SCM_VERSION", None)
+        subprocess.run(
+            ["pdm", "build", "--no-sdist", "--dest", str(wheel_dist)],
+            cwd=source,
+            env=environment,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
         )
-        monkeypatch.setattr(
-            "tools.release.verify_prepared", lambda *_args: {"version": "10.0.0"}
-        )
-        result = check_pr("origin/main", False, root)
-        assert result["version"] == "10.0.0"
+        wheel = next(wheel_dist.glob("*.whl"))
+        assert f"-{version}-" in wheel.name
+        with zipfile.ZipFile(wheel) as archive:
+            catalog = json.loads(archive.read("svc_cli/data/catalog.json"))
+            metadata_name = next(
+                name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+            )
+            metadata = archive.read(metadata_name).decode()
+        assert catalog["svc_version"] == version
+        assert f"Version: {version}\n" in metadata
