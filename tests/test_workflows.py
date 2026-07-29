@@ -75,6 +75,7 @@ def test_release_pr_uses_builtin_token_and_prepares_a_checked_lockfile() -> None
     assert 'gh pr edit "$existing_pr"' in text
     assert 'gh pr view "$branch"' not in text
     assert "gh pr create" in text
+    assert "release:none" in text
     assert "actions/create-github-app-token@" not in text
     assert "RELEASE_APP_ID" not in text
     assert "RELEASE_APP_PRIVATE_KEY" not in text
@@ -121,7 +122,9 @@ def test_publish_is_tag_bound_builds_once_and_hands_the_bundle_to_downstream_job
     assert "workflow_dispatch:" in text
     assert "workflow_call:" not in text
     assert "tag:" in text
+    assert "bundle_run_id:" in text
     assert "required: true" in text
+    assert "actions: read" in build
     assert "environment: release" in pypi
     assert "id-token: write" in pypi
     assert "ref: ${{ steps.target.outputs.tag }}" in build
@@ -136,6 +139,14 @@ def test_publish_is_tag_bound_builds_once_and_hands_the_bundle_to_downstream_job
     assert build.count("pdm build") == 1
     assert "pdm run release bundle" in build
     assert "actions/attest-build-provenance@" in build
+    assert "Recover the preserved release bundle" in build
+    assert "bundle_run_id must be a positive workflow run ID" in build
+    assert "if: steps.target.outputs.bundle_run_id == ''" in build
+    assert "github-token: ${{ github.token }}" in build
+    assert "run-id: ${{ steps.target.outputs.bundle_run_id }}" in build
+    assert "Verify the selected release bundle" in build
+    assert "cmp tools/release.py dist/release/release-check.py" in build
+    assert 'test "$bundle_commit" = "$COMMIT"' in build
     assert "actions/upload-artifact@" in build
     assert "svc-release-${{ steps.target.outputs.tag }}" in build
 
@@ -153,10 +164,14 @@ def test_publish_is_tag_bound_builds_once_and_hands_the_bundle_to_downstream_job
     assert 'gh release create "$TAG" --draft --verify-tag' in finalize
     assert 'gh release edit "$TAG" --draft=false' in finalize
     assert 'gh release view "$TAG" --json isDraft,name,body' in finalize
+    assert 'actual.rstrip("\\n") == expected' in finalize
     assert "Existing GitHub Release title or notes differ" in finalize
     assert "manifest-bound asset" in finalize
     assert 'cmp "$local"' in finalize
-    assert "actions/checkout@" not in finalize
+    assert "actions/checkout@" in finalize
+    assert "ref: ${{ needs.build.outputs.tag }}" in finalize
+    assert "fetch-depth: 0" in finalize
+    assert "persist-credentials: false" in finalize
     assert "pdm build" not in finalize
     assert text.index("  publish-pypi:") < text.index("  finalize-github-release:")
     assert "publish-plan" not in text
