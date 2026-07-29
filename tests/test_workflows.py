@@ -22,35 +22,49 @@ def job(text: str, name: str) -> str:
     return match.group(0)
 
 
-def test_ci_is_read_only_locks_before_install_and_smokes_the_embedded_runtime_wheel() -> None:
+def test_ci_exposes_stable_checks_while_preserving_the_legacy_release_path() -> None:
     text = workflow("ci.yml")
-    install = "pdm install --frozen-lockfile -d -G release -G test"
     assert "contents: read" in text
     assert 'python-version: ["3.11", "3.14"]' in text
     assert "pdm lock --check" in text
-    assert install in text
-    assert text.index("pdm lock --check") < text.index(install)
-    assert "pdm run lint-tests" in text
-    assert text.index(install) < text.index("pdm run lint-tests") < text.index("pdm run test")
-    assert "pdm run release check-pr" in text
-    assert "release:none" in text
-    assert "pdm build" in text
-    assert "svc lookup --name" in text
-    assert "svc init" in text
-    assert "svc migrate" not in text
     assert "contents: write" not in text
-    for job_name in ("test", "typecheck", "distribution"):
+    for check_name in (
+        "Python ${{ matrix.python-version }}",
+        "Quality and architecture",
+        "Distribution",
+        "Release policy",
+    ):
+        assert text.count(f"name: {check_name}") == 1
+
+    for job_name in ("python", "quality", "distribution", "release-policy"):
         section = job(text, job_name)
         assert "persist-credentials: false" in section
 
-    quality = job(text, "typecheck")
-    install = "pdm install --frozen-lockfile -d -G quality"
+    python = job(text, "python")
+    assert "pdm install --frozen-lockfile -d -G release -G test" in python
+    assert "pdm run test" in python
+
+    quality = job(text, "quality")
+    install = "pdm install --frozen-lockfile -d -G quality -G test"
     assert install in quality
+    assert "pdm run lint-tests" in quality
     assert "pdm run typecheck" in quality
     assert "pdm run lint-imports" in quality
     assert "pdm run lint-workflows" in quality
-    assert quality.index(install) < quality.index("pdm run typecheck")
+    assert quality.index(install) < quality.index("pdm run lint-tests")
+    assert quality.index("pdm run lint-tests") < quality.index("pdm run typecheck")
     assert quality.index("pdm run typecheck") < quality.index("pdm run lint-imports") < quality.index("pdm run lint-workflows")
+
+    distribution = job(text, "distribution")
+    assert "pdm build" in distribution
+    assert "svc lookup --name" in distribution
+    assert "svc init" in distribution
+    assert "svc migrate" not in distribution
+
+    policy = job(text, "release-policy")
+    assert "pdm run release check-pr" in policy
+    assert "pdm run release check-ci" in policy
+    assert "release:none" in policy
 
 
 def test_release_pr_uses_builtin_token_and_prepares_a_checked_lockfile() -> None:
