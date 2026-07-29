@@ -1,14 +1,29 @@
 [project]
 name = "sustainable-vibe-coding"
-version = "10.0.2"
+version = "11.0.0"
 description = "Packaged SVC corpus and local development-collaboration CLI."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["pydantic<3,>=2.13", "platformdirs<5,>=4", "filelock<4,>=3.29"]
+dependencies = [
+    "pydantic<3,>=2.13",
+    "platformdirs<5,>=4",
+    "filelock<4,>=3.29",
+    "textual>=8.2.8,<9",
+]
 
 [dependency-groups]
 release = [
     "towncrier>=25.8,<26",
+]
+quality = [
+    "mypy>=2.3,<2.4",
+    "import-linter>=2.13,<3",
+    "zizmor>=1.28,<2",
+]
+test = [
+    "pytest>=9,<10",
+    "pytest-asyncio>=1.4,<2",
+    "ruff>=0.15,<0.16",
 ]
 
 [project.scripts]
@@ -24,12 +39,65 @@ distribution = true
 [tool.pdm.scripts]
 build-monolith = "python -m tools.build_monolith"
 svc = "python -m svc_cli.cli"
-test = "python -m unittest discover -s tests -p 'test_*.py'"
+test = "pytest tests"
+lint-tests = "ruff check tests"
+lint-imports = "lint-imports"
+lint-workflows = "zizmor --offline .github/workflows"
 release = "python -m tools.release"
+typecheck = "mypy"
 
 [tool.pdm.build]
 includes = ["svc_cli"]
 source-includes = ["src", "tools", "tests", "pdm_build.py"]
+
+[tool.mypy]
+python_version = "3.11"
+files = [
+    "svc_cli/config.py",
+    "svc_cli/telemetry/agent_threads.py",
+    "svc_cli/telemetry/navigation.py",
+    "svc_cli/telemetry/tui.py",
+]
+plugins = ["pydantic.mypy"]
+check_untyped_defs = true
+disallow_any_generics = true
+warn_unused_ignores = true
+show_error_codes = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+
+[tool.importlinter]
+root_package = "svc_cli"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Navigation remains render and provider neutral"
+type = "forbidden"
+source_modules = ["svc_cli.telemetry.navigation"]
+forbidden_modules = [
+    "svc_cli.telemetry.providers",
+    "textual",
+    "rich",
+    "os",
+    "pathlib",
+]
+allow_indirect_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"unittest".msg = "SVC tests use native pytest fixtures and monkeypatch."
 
 [tool.towncrier]
 directory = "changes"

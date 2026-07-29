@@ -19,22 +19,26 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install pdm==2.27.0
-      - run: pdm install --frozen-lockfile -d -G release
+      - run: pdm lock --check
+      - run: pdm install --frozen-lockfile -d -G release -G test
+      - run: pdm run lint-tests
       - run: pdm run test
       - if: github.event_name != 'pull_request'
         run: pdm run release check-ci
       - if: github.event_name == 'pull_request'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           if grep -Fq 'release:none' <<<"$PR_BODY"; then
-            pdm run release check-pr --base "origin/${{ github.base_ref }}" --release-none
+            pdm run release check-pr --base "origin/$BASE_REF" --release-none
           else
-            pdm run release check-pr --base "origin/${{ github.base_ref }}"
+            pdm run release check-pr --base "origin/$BASE_REF"
           fi
       - name: Preview unconsumed release notes
         run: |
@@ -44,14 +48,35 @@ jobs:
           fi
       - run: pdm run build-monolith
 
-  distribution:
+  typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
       - run: python -m pip install pdm==2.27.0
+      - run: pdm lock --check
+      - run: pdm install --frozen-lockfile -d -G quality
+      - run: pdm run typecheck
+      - run: pdm run lint-imports
+      - run: pdm run lint-workflows
+
+  distribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pdm==2.27.0
+      - run: pdm lock --check
       - run: pdm install --frozen-lockfile -d -G release
       - run: pdm build
       - name: Smoke-test the installed wheel

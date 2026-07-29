@@ -1,0 +1,95 @@
+name: Release Tag
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact merged release-candidate commit to tag.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: svc-release-tag-${{ github.event.pull_request.merge_commit_sha || inputs.commit }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.ref == 'release/svc')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            commit="$INPUT_COMMIT"
+          else
+            commit="$MERGE_COMMIT"
+          fi
+          test -n "$commit"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # zizmor: ignore[artipacked] v4; this checkout must persist github.token for the immutable tag push.
+        with:
+          ref: ${{ steps.target.outputs.commit }}
+          fetch-depth: 0
+      - id: source
+        env:
+          TARGET_COMMIT: ${{ steps.target.outputs.commit }}
+        run: |
+          git fetch --force --tags origin main
+          commit=$(git rev-parse "$TARGET_COMMIT^{commit}")
+          test "$commit" = "$(git rev-parse HEAD)"
+          git merge-base --is-ancestor "$commit" origin/main
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pdm==2.27.0
+      - run: pdm lock --check
+      - run: pdm install --frozen-lockfile -d -G release
+      - id: plan
+        env:
+          COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          plan=$(pdm run release tag-plan --commit "$COMMIT" --json)
+          needed=$(python -c 'import json,sys; print(str(json.load(sys.stdin)["needed"]).lower())' <<<"$plan")
+          tag=$(python -c 'import json,sys; print(json.load(sys.stdin)["tag"])' <<<"$plan")
+          version=$(python -c 'import json,sys; print(json.load(sys.stdin)["version"])' <<<"$plan")
+          if [[ "$needed" == "true" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "SVC $version" "$COMMIT"
+            if ! git push origin "refs/tags/$tag"; then
+              echo "Tag push raced; fetching and verifying the remote tag."
+            fi
+          fi
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+          pdm run release verify-tag --tag "$tag" --commit "$COMMIT" --json
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+  publish:
+    needs: tag
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the tag-bound Publish workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: gh workflow run publish.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG" -f tag="$TAG"

@@ -1,547 +1,470 @@
 from __future__ import annotations
 
-import io
-import hashlib
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
 import stat
 import tempfile
-from types import SimpleNamespace
-import unittest
-from unittest.mock import patch
+import pytest
 import zipfile
 
+from svc_cli.errors import SvcError
 from svc_cli.telemetry.agent_threads import (
-    CaptureEvidence,
+    NormalizationResult,
     ProviderContext,
     ResolvedThread,
-    SourceArtifact,
-    SourceSnapshot,
-    TextOccurrence,
+    SourceStatus,
     ThreadSelection,
 )
-from svc_cli.telemetry import archive as archive_module
-from svc_cli.telemetry.archive import write_agent_thread_archive
-from svc_cli.telemetry.task_packets import _unsafe_link_info, copy_packet_file, iter_packet_files
-from svc_cli.errors import SvcError
+from svc_cli.telemetry.archive import (
+    _canonical_repository_and_output,
+    _finalize_normalization,
+    _verify_output_parent,
+    normalize_agent_thread,
+    write_agent_thread_bundle,
+)
+from svc_cli.telemetry.trajectory import (
+    DEFAULT_NORMALIZATION_POLICY,
+    TrajectoryCollector,
+    canonical_json_bytes,
+    validate_bundle,
+    zero_lossiness,
+)
 
 
-class FakeProvider:
-    provider_id = "fake"
+THREAD_REF = "thread_" + ("1" * 64)
 
-    def __init__(
+
+class SyntheticTrajectoryProvider:
+    provider_id = "synthetic"
+
+    def __init__(self, source_status: str = "stable") -> None:
+        self.source_status = source_status
+
+    def resolve(
         self,
-        payload: bytes = b"native\n",
-        error: Exception | None = None,
-        occurrences=(),
-        mutate_source: bool = False,
-        replace_source_same_bytes: bool = False,
-    ):
-        self.payload = payload
-        self.error = error
-        self.occurrences = tuple(occurrences)
-        self.mutate_source = mutate_source
-        self.replace_source_same_bytes = replace_source_same_bytes
-
-    def resolve(self, context, selection):
+        context: ProviderContext,
+        selection: ThreadSelection,
+    ) -> ResolvedThread:
+        assert selection.source is not None
         return ResolvedThread(
-            provider_id="fake",
-            adapter_id="fixture",
-            source_format="fixture-json",
-            thread_id=selection.thread_id or "source",
-            source_state="available",
-            artifact=SourceArtifact(Path(context.home) / "native.json", "capture/native.json", "application/json"),
+            provider_id=self.provider_id,
+            adapter_id="synthetic-v1",
+            source_format="fixture-v1",
+            thread_id="native-private-thread-id",
+            source_path=selection.source,
         )
 
-    def stream_capture(self, resolved, raw_output, index_output):
-        info = resolved.artifact.source_path.lstat()
-        source_snapshot = SourceSnapshot(
-            device=info.st_dev,
-            inode=info.st_ino,
-            size=info.st_size,
-            mtime_ns=info.st_mtime_ns,
+    def stream_normalize(self, resolved, sink, bounds):
+        records = (
+            {
+                "type": "meta",
+                "record_id": "r000000",
+                "record_index": 0,
+                "timestamp": None,
+                "source_ref": {
+                    "event_index": None,
+                    "component": "meta",
+                },
+                "trajectory_schema": "svc.trajectory/v1",
+                "provider_id": self.provider_id,
+                "adapter_id": "synthetic-v1",
+                "source_format": "fixture-v1",
+                "thread_ref": THREAD_REF,
+                "workspace": {
+                    "status": "missing",
+                    "flavor": None,
+                    "label": None,
+                    "ref": None,
+                    "label_truncated": False,
+                    "observed_code_points": 0,
+                    "retained_code_points": 0,
+                },
+                "content_profile": "bounded-normalized-v1",
+            },
+            {
+                "type": "message",
+                "record_id": "r000001",
+                "record_index": 1,
+                "timestamp": "2026-07-28T00:00:00Z",
+                "source_ref": {
+                    "event_index": 0,
+                    "line": 0,
+                    "component_index": 0,
+                    "component": "message",
+                },
+                "role": "user",
+                "content": "bounded private content",
+                "content_meta": {
+                    "truncated": False,
+                    "observed_code_points": 23,
+                    "retained_code_points": 23,
+                    "strategy": "none",
+                },
+                "task_refs": [],
+            },
         )
-        raw_output.write(self.payload)
-        index_output.write(b'{"records":1}')
-        if self.error:
-            raise self.error
-        if self.mutate_source:
-            resolved.artifact.source_path.write_bytes(b"changed after capture")
-        if self.replace_source_same_bytes:
-            replacement = resolved.artifact.source_path.with_name("replacement-native.json")
-            replacement.write_bytes(self.payload)
-            replacement.replace(resolved.artifact.source_path)
-        return CaptureEvidence(
-            source_sha256=hashlib.sha256(self.payload).hexdigest(),
-            source_bytes=len(self.payload),
-            record_counts={"messages": 1},
-            capabilities={"fixture": "full"},
-            occurrences=self.occurrences,
-            warnings=(),
-            source_snapshot=source_snapshot,
+        for record in records:
+            if not sink(record):
+                break
+        lossiness = zero_lossiness()
+        result_status = "ready"
+        if self.source_status != "stable":
+            lossiness["partial_reasons"][
+                "source_" + self.source_status
+            ] = 1
+            result_status = "partial"
+        return NormalizationResult(
+            provider_id=self.provider_id,
+            adapter_id="synthetic-v1",
+            source_format="fixture-v1",
+            thread_ref=THREAD_REF,
+            workspace=records[0]["workspace"],
+            source_status=SourceStatus(self.source_status),
+            result_status=result_status,
+            capabilities={
+                "reasoning": "absent",
+                "tool_linkage": "explicit",
+                "context": "absent",
+                "task_references": "available",
+                "explicit_concurrency": "unavailable",
+                "timestamps": "full",
+                "terminal_events": "unavailable",
+            },
+            counts={
+                "source_bytes_read": 2,
+                "source_events_seen": 1,
+                "records_emitted": 2,
+                "trajectory_bytes": 0,
+                "records_by_type": {
+                    "meta": 1,
+                    "message": 1,
+                    "reasoning": 0,
+                    "tool_call": 0,
+                    "tool_result": 0,
+                    "context": 0,
+                    "event": 0,
+                },
+                "messages_by_role": {"user": 1, "assistant": 0},
+                "tool_calls": 0,
+                "tool_results": 0,
+                "task_references": 0,
+                "diagnostics_emitted": 0,
+                "diagnostics_suppressed": 0,
+            },
+            lossiness=lossiness,
+            diagnostics=(),
         )
 
 
-class TelemetryArchiveTests(unittest.TestCase):
-    @staticmethod
-    def output(root: Path, name: str) -> Path:
-        destination = root.parent / "exports"
-        destination.mkdir(exist_ok=True)
-        return destination / name
-
-    def archive(self, root: Path, provider: FakeProvider, name="capture.zip"):
-        (root / "native.json").write_bytes(provider.payload)
-        return write_agent_thread_archive(
-            provider,
+class TestNormalizedBundle:
+    def export(
+        self,
+        root: Path,
+        provider: SyntheticTrajectoryProvider | None = None,
+    ) -> tuple[Path, dict[str, object]]:
+        repository = root / "repo"
+        output_parent = root / "exports"
+        repository.mkdir()
+        output_parent.mkdir()
+        source = root / "source.jsonl"
+        source.write_text("{}\n", encoding="utf-8")
+        output = output_parent / "thread.zip"
+        manifest = write_agent_thread_bundle(
+            provider or SyntheticTrajectoryProvider(),
             ProviderContext(home=root),
-            ThreadSelection(thread_id="thread-1"),
-            root,
-            self.output(root, name),
+            ThreadSelection(source=source),
+            repository,
+            output,
         )
+        return output, manifest
 
-    def test_archive_contains_provider_index_manifest_and_task_material(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            packet = root / "tasks" / "one"
-            packet.mkdir(parents=True)
-            (packet / "packet.md").write_text("objective", encoding="utf-8")
-            provider = FakeProvider(occurrences=(TextOccurrence("see tasks/one/packet.md", 4, "message", "user", "text"),))
+    def test_bundle_has_exact_private_deterministic_members(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output, manifest = self.export(Path(temporary))
+            validated = validate_bundle(output)
+            with zipfile.ZipFile(output) as archive:
+                assert (archive.namelist()) == (["manifest.json", "trajectory.jsonl"])
+                for info in archive.infolist():
+                    assert (info.date_time) == ((1980, 1, 1, 0, 0, 0))
+                    assert (stat.S_IMODE(info.external_attr >> 16)) == (0o600)
+                    assert (info.compress_type) == (zipfile.ZIP_DEFLATED)
+                payload = archive.read("manifest.json")
+                trajectory = archive.read("trajectory.jsonl")
 
-            manifest = self.archive(root, provider)
-            with zipfile.ZipFile(self.output(root, "capture.zip")) as archive:
-                self.assertEqual(
-                    archive.namelist(),
-                    [
-                        "providers/fake/capture/native.json",
-                        "thread/index.json",
-                        "task-packets/tasks/one/packet.md",
-                        "manifest.json",
-                    ],
-                )
-                self.assertEqual(archive.read("providers/fake/capture/native.json"), b"native\n")
-                self.assertEqual(archive.read("task-packets/tasks/one/packet.md"), b"objective")
-                self.assertEqual(json.loads(archive.read("manifest.json")), manifest)
-            self.assertEqual(manifest["artifact"]["sha256"], hashlib.sha256(b"native\n").hexdigest())
-            self.assertEqual(manifest["artifact"]["bytes"], len(b"native\n"))
-            self.assertEqual(manifest["task_packets"][0]["occurrences"][0]["source_line"], 4)
-            self.assertEqual(manifest["task_packets"][0]["occurrences"][0]["field_path"], "text")
+            assert (payload) == ((
+                    json.dumps(
+                        manifest,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                ).encode("utf-8"))
+            assert (validated.bundle_id) == (manifest["bundle_id"])
+            assert (validated.trajectory.trajectory_bytes) == (trajectory)
+            assert (b"native-private-thread-id") not in (output.read_bytes())
             if os.name != "nt":
-                self.assertEqual(stat.S_IMODE(self.output(root, "capture.zip").stat().st_mode), 0o600)
+                assert (stat.S_IMODE(output.stat().st_mode)) == (0o600)
 
-    def test_archive_has_stable_evidence_layout_and_does_not_modify_sources(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            packet = root / "tasks" / "one"
-            packet.mkdir(parents=True)
-            (packet / "packet.md").write_text("objective", encoding="utf-8")
-            provider = FakeProvider(occurrences=(TextOccurrence("tasks/one"),))
-            before = (packet / "packet.md").read_bytes()
-            self.archive(root, provider, "one.zip")
-            with zipfile.ZipFile(self.output(root, "one.zip")) as archive:
-                first_manifest = json.loads(archive.read("manifest.json"))
-                first_raw = archive.read("providers/fake/capture/native.json")
-            self.archive(root, provider, "two.zip")
-            with zipfile.ZipFile(self.output(root, "two.zip")) as archive:
-                second_manifest = json.loads(archive.read("manifest.json"))
-                self.assertEqual(first_raw, archive.read("providers/fake/capture/native.json"))
-            first_manifest.pop("captured_at")
-            second_manifest.pop("captured_at")
-            self.assertEqual(first_manifest, second_manifest)
-            self.assertEqual((packet / "packet.md").read_bytes(), before)
+    def test_collector_limit_diagnostics_use_the_actual_policy_and_attempt(
+        self,
+    ) -> None:
+        provider = SyntheticTrajectoryProvider()
+        resolved = provider.resolve(
+            ProviderContext(),
+            ThreadSelection(source=Path("synthetic.jsonl")),
+        )
+        observed_records: list[dict[str, object]] = []
+        provider.stream_normalize(
+            resolved,
+            lambda record: observed_records.append(dict(record)) or True,
+            {},
+        )
 
-    def test_existing_output_and_invalid_suffix_are_refused(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            output = self.output(root, "capture.zip")
-            output.write_bytes(b"sentinel")
-            with self.assertRaises(FileExistsError):
-                self.archive(root, FakeProvider())
-            self.assertEqual(output.read_bytes(), b"sentinel")
-            with self.assertRaises(ValueError):
-                self.archive(root, FakeProvider(), "capture.tar")
+        record_policy = replace(
+            DEFAULT_NORMALIZATION_POLICY,
+            records=1,
+        )
+        record_collector = TrajectoryCollector(policy=record_policy)
+        record_result = provider.stream_normalize(
+            resolved,
+            record_collector.emit,
+            {},
+        )
+        record_collector.finish()
+        _, record_loss, record_diagnostics, record_status = (
+            _finalize_normalization(record_result, record_collector)
+        )
+        assert (record_status) == ("partial")
+        assert (record_loss["partial_reasons"]["record_limit"]) == (1)
+        assert (record_diagnostics[-1]["details"]) == ({"observed_count": 2, "limit_count": 1})
 
-    def test_provider_error_cleans_temporary_output(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            with self.assertRaisesRegex(RuntimeError, "capture failed"):
-                self.archive(root, FakeProvider(error=RuntimeError("capture failed")))
-            self.assertEqual(list(self.output(root, "capture.zip").parent.glob(".capture.zip.*.tmp")), [])
-            self.assertEqual((root / "native.json").read_bytes(), b"native\n")
-
-    def test_invalid_traversal_and_symlink_candidates_are_manifest_warnings(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            packet = root / "tasks" / "safe"
-            packet.mkdir(parents=True)
-            (packet / "packet.md").write_text("safe", encoding="utf-8")
-            outside = root.parent / "outside-task.md"
-            outside.write_text("secret", encoding="utf-8")
-            link = root / "tasks" / "escape"
-            try:
-                link.symlink_to(outside)
-            except OSError:
-                self.skipTest("symlinks unavailable")
-            occurrences = (
-                TextOccurrence("tasks/../outside-task.md"),
-                TextOccurrence("/tasks/safe/packet.md"),
-                TextOccurrence("tasks/escape/packet.md"),
-                TextOccurrence("tasks/safe/packet.md"),
+        meta_bytes = len(
+            canonical_json_bytes(observed_records[0], newline=True)
+        )
+        message_bytes = len(
+            canonical_json_bytes(observed_records[1], newline=True)
+        )
+        trajectory_policy = replace(
+            DEFAULT_NORMALIZATION_POLICY,
+            trajectory_bytes=meta_bytes + 1,
+        )
+        trajectory_collector = TrajectoryCollector(
+            policy=trajectory_policy,
+        )
+        trajectory_result = provider.stream_normalize(
+            resolved,
+            trajectory_collector.emit,
+            {},
+        )
+        trajectory_collector.finish()
+        _, trajectory_loss, trajectory_diagnostics, _ = (
+            _finalize_normalization(
+                trajectory_result,
+                trajectory_collector,
             )
-            manifest = self.archive(root, FakeProvider(occurrences=occurrences))
-            codes = {warning["code"] for warning in manifest["warnings"]}
-            self.assertIn("task_packet_invalid_path", codes)
-            self.assertIn("task_packet_symlink_escape", codes)
-            self.assertNotIn("task_packet_missing", codes)
+        )
+        assert (trajectory_loss["partial_reasons"]["trajectory_limit"]) == (1)
+        assert (trajectory_diagnostics[-1]["details"]) == ({
+                "observed_bytes": meta_bytes + message_bytes,
+                "limit_bytes": meta_bytes + 1,
+            })
 
-    def test_multiple_roots_are_included_and_duplicate_occurrences_merge(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            for name in ("one", "two"):
-                packet = root / "tasks" / name
-                packet.mkdir(parents=True)
-                (packet / "packet.md").write_text(name, encoding="utf-8")
-            provider = FakeProvider(occurrences=(TextOccurrence("tasks/one tasks/one/packet.md tasks/two"),))
-            manifest = self.archive(root, provider)
-            self.assertEqual([item["root"] for item in manifest["task_packets"]], ["tasks/one", "tasks/two"])
-            with zipfile.ZipFile(self.output(root, "capture.zip")) as archive:
-                self.assertEqual(archive.read("task-packets/tasks/one/packet.md"), b"one")
-                self.assertEqual(archive.read("task-packets/tasks/two/packet.md"), b"two")
-
-    def test_nested_packet_tree_and_missing_reference_are_recorded_exactly(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            packet = root / "tasks" / "one"
-            nested = packet / "evidence"
-            nested.mkdir(parents=True)
-            (packet / "packet.md").write_text("one", encoding="utf-8")
-            (nested / "note.txt").write_text("nested", encoding="utf-8")
-            manifest = self.archive(
-                root,
-                FakeProvider(
-                    occurrences=(
-                        TextOccurrence("tasks/one/evidence/note.txt", 7, "message", "assistant", "payload.content"),
-                        TextOccurrence("tasks/missing/packet.md", 8, "message", "user", "payload.content"),
-                    )
-                ),
+    def test_core_limit_preserves_provider_diagnostic_cap_accounting(
+        self,
+    ) -> None:
+        provider = SyntheticTrajectoryProvider()
+        resolved = provider.resolve(
+            ProviderContext(),
+            ThreadSelection(source=Path("synthetic.jsonl")),
+        )
+        collector = TrajectoryCollector(
+            policy=replace(
+                DEFAULT_NORMALIZATION_POLICY,
+                records=1,
             )
-            with zipfile.ZipFile(self.output(root, "capture.zip")) as archive:
-                self.assertEqual(archive.read("task-packets/tasks/one/evidence/note.txt"), b"nested")
-            self.assertEqual(manifest["task_packets"][0]["occurrences"][0]["path"], "tasks/one/evidence/note.txt")
-            self.assertIn("task_packet_missing", {warning["code"] for warning in manifest["warnings"]})
+        )
+        result = provider.stream_normalize(
+            resolved,
+            collector.emit,
+            {},
+        )
+        collector.finish()
+        regular = tuple(
+            {
+                "code": "message-truncated",
+                "severity": "info",
+                "action": "truncate",
+                "count": 1,
+                "record_ref": None,
+                "source_ref": {
+                    "event_index": index,
+                    "line": index,
+                    "component_index": 0,
+                    "component": "message",
+                },
+                "details": {
+                    "observed_code_points": index + 2,
+                    "retained_code_points": 1,
+                },
+            }
+            for index in range(255)
+        )
+        marker = {
+            "code": "diagnostic-limit-reached",
+            "severity": "warning",
+            "action": "truncate",
+            "count": 1,
+            "record_ref": None,
+            "source_ref": None,
+            "details": {
+                "observed_count": 300,
+                "limit_count": 256,
+            },
+        }
+        lossiness = {
+            group: dict(values)
+            for group, values in result.lossiness.items()
+        }
+        lossiness["truncated"]["diagnostics"] = 45
+        counts = dict(result.counts)
+        counts["diagnostics_emitted"] = 256
+        counts["diagnostics_suppressed"] = 45
+        capped = replace(
+            result,
+            counts=counts,
+            lossiness=lossiness,
+            diagnostics=regular + (marker,),
+        )
 
-    def test_output_inside_repository_is_refused_before_capture(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            (root / "tasks").mkdir()
-            with self.assertRaisesRegex(ValueError, "outside the repository"):
-                write_agent_thread_archive(
-                    FakeProvider(),
+        final_counts, final_loss, diagnostics, _ = (
+            _finalize_normalization(capped, collector)
+        )
+
+        assert (len(diagnostics)) == (256)
+        assert (diagnostics[-1]["code"]) == ("diagnostic-limit-reached")
+        assert (diagnostics[-1]["details"]) == ({"observed_count": 301, "limit_count": 256})
+        assert (final_counts["diagnostics_suppressed"]) == (46)
+        assert (final_loss["truncated"]["diagnostics"]) == (46)
+
+    def test_ephemeral_normalization_matches_export_without_publication(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repo"
+            output_parent = root / "exports"
+            repository.mkdir()
+            output_parent.mkdir()
+            source = root / "source.jsonl"
+            source.write_text("{}\n", encoding="utf-8")
+            provider = SyntheticTrajectoryProvider()
+            selection = ThreadSelection(source=source)
+
+            ephemeral = normalize_agent_thread(
+                provider,
+                ProviderContext(home=root),
+                selection,
+            )
+            output = output_parent / "thread.zip"
+            manifest = write_agent_thread_bundle(
+                provider,
+                ProviderContext(home=root),
+                selection,
+                repository,
+                output,
+            )
+            persisted = validate_bundle(output)
+
+        assert (ephemeral.path) is None
+        assert (ephemeral.bundle_id) == (manifest["bundle_id"])
+        assert (ephemeral.bundle_id) == (persisted.bundle_id)
+        assert (ephemeral.trajectory.trajectory_bytes) == (persisted.trajectory.trajectory_bytes)
+
+    def test_source_race_status_is_semantic_and_partial(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _, manifest = self.export(
+                Path(temporary),
+                SyntheticTrajectoryProvider("grew"),
+            )
+        assert (manifest["source"]["source_status"]) == ("grew")
+        assert (manifest["result_status"]) == ("partial")
+        assert (manifest["lossiness"]["partial_reasons"]["source_grew"]) == (1)
+
+    def test_output_is_absent_outside_repository_and_never_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output, _ = self.export(root)
+            source = root / "source.jsonl"
+            with pytest.raises(FileExistsError):
+                write_agent_thread_bundle(
+                    SyntheticTrajectoryProvider(),
                     ProviderContext(home=root),
-                    ThreadSelection(thread_id="thread-1"),
-                    root,
-                    root / "tasks" / "capture.zip",
+                    ThreadSelection(source=source),
+                    root / "repo",
+                    output,
                 )
-            self.assertFalse((root / "tasks" / "capture.zip").exists())
 
-    def test_symlink_output_parent_is_refused_before_capture(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            exports = root.parent / "exports"
-            exports.mkdir()
-            linked = root.parent / "exports-link"
-            try:
-                linked.symlink_to(exports, target_is_directory=True)
-            except OSError:
-                self.skipTest("symlinks unavailable")
-            (root / "native.json").write_bytes(b"native\n")
-            with self.assertRaisesRegex(ValueError, "non-link directory"):
-                write_agent_thread_archive(
-                    FakeProvider(),
+            inside = root / "repo" / "inside.zip"
+            with pytest.raises(ValueError):
+                write_agent_thread_bundle(
+                    SyntheticTrajectoryProvider(),
                     ProviderContext(home=root),
-                    ThreadSelection(thread_id="thread-1"),
-                    root,
-                    linked / "capture.zip",
+                    ThreadSelection(source=source),
+                    root / "repo",
+                    inside,
                 )
-            self.assertFalse((exports / "capture.zip").exists())
+            assert not (inside.exists())
 
-    def test_forced_non_dirfd_fallback_retains_no_overwrite_behavior(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            output = self.output(root, "capture.zip")
-            with patch.object(archive_module, "_supports_anchored_publication", return_value=False):
-                self.archive(root, FakeProvider())
-                with self.assertRaises(FileExistsError):
-                    self.archive(root, FakeProvider())
-            with zipfile.ZipFile(output) as archive:
-                self.assertEqual(archive.read("providers/fake/capture/native.json"), b"native\n")
-
-    def test_source_change_after_capture_prevents_publication(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            with self.assertRaises(SvcError) as raised:
-                self.archive(root, FakeProvider(mutate_source=True))
-            self.assertEqual(raised.exception.code, "thread-source-mutated")
-            self.assertFalse(self.output(root, "capture.zip").exists())
-
-    def test_same_byte_source_replacement_after_capture_prevents_publication(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            with self.assertRaises(SvcError) as raised:
-                self.archive(root, FakeProvider(replace_source_same_bytes=True))
-            self.assertEqual(raised.exception.code, "thread-source-mutated")
-            self.assertFalse(self.output(root, "capture.zip").exists())
-
-    def test_source_change_after_atomic_commit_keeps_the_verified_snapshot(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            output = self.output(root, "capture.zip")
-            if archive_module._supports_anchored_publication():
-                original_publish = archive_module._publish_anchored_without_overwrite
-
-                def publish_then_mutate(parent_fd: int, temp_name: str, output_name: str) -> None:
-                    original_publish(parent_fd, temp_name, output_name)
-                    (root / "native.json").write_bytes(b"changed after publish")
-
-                patch_target = "_publish_anchored_without_overwrite"
-            else:
-                original_publish = archive_module._publish_without_overwrite
-
-                def publish_then_mutate(temp_path: Path, destination: Path) -> None:
-                    original_publish(temp_path, destination)
-                    (root / "native.json").write_bytes(b"changed after publish")
-
-                patch_target = "_publish_without_overwrite"
-            with patch.object(archive_module, patch_target, side_effect=publish_then_mutate):
-                self.archive(root, FakeProvider())
-            self.assertEqual((root / "native.json").read_bytes(), b"changed after publish")
-            with zipfile.ZipFile(output) as archive:
-                self.assertEqual(archive.read("providers/fake/capture/native.json"), b"native\n")
-
-    def test_source_change_after_zip_fsync_prevents_atomic_commit(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            output = self.output(root, "capture.zip")
-            original_verify_parent = archive_module._verify_output_parent
-            checks = 0
-
-            def mutate_before_final_source_check(parent, identity, repository):
-                nonlocal checks
-                checks += 1
-                if checks == 2:
-                    (root / "native.json").write_bytes(b"changed before commit")
-                return original_verify_parent(parent, identity, repository)
-
-            with patch.object(archive_module, "_verify_output_parent", side_effect=mutate_before_final_source_check):
-                with self.assertRaises(SvcError) as raised:
-                    self.archive(root, FakeProvider())
-            self.assertEqual(raised.exception.code, "thread-source-mutated")
-            self.assertFalse(output.exists())
-
-    def test_output_replacement_during_publication_is_not_reported_as_success(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            output = self.output(root, "capture.zip")
-            if archive_module._supports_anchored_publication():
-                original_publish = archive_module._publish_anchored_without_overwrite
-
-                def publish_then_replace(parent_fd: int, temp_name: str, output_name: str) -> None:
-                    original_publish(parent_fd, temp_name, output_name)
-                    os.unlink(output_name, dir_fd=parent_fd)
-                    replacement = os.open(
-                        output_name,
-                        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                        0o600,
-                        dir_fd=parent_fd,
-                    )
-                    try:
-                        os.write(replacement, b"replacement")
-                    finally:
-                        os.close(replacement)
-
-                patch_target = "_publish_anchored_without_overwrite"
-            else:
-                original_publish = archive_module._publish_without_overwrite
-
-                def publish_then_replace(temp_path: Path, destination: Path) -> None:
-                    original_publish(temp_path, destination)
-                    destination.unlink()
-                    destination.write_bytes(b"replacement")
-
-                patch_target = "_publish_without_overwrite"
-            with patch.object(archive_module, patch_target, side_effect=publish_then_replace):
-                with self.assertRaises(SvcError) as raised:
-                    self.archive(root, FakeProvider())
-            self.assertEqual(raised.exception.code, "archive-output-mutated")
-            self.assertEqual(output.read_bytes(), b"replacement")
-
-    def test_regular_file_identity_includes_size_and_mtime_but_not_ctime(self):
-        base = SimpleNamespace(
-            st_mode=stat.S_IFREG | 0o600,
-            st_dev=1,
-            st_ino=2,
-            st_size=3,
-            st_mtime_ns=4,
-            st_ctime_ns=5,
-        )
-        self.assertEqual(
-            archive_module._regular_file_identity(base, description="fixture"),
-            (1, 2, stat.S_IFREG, 3, 4),
-        )
-        self.assertNotEqual(
-            archive_module._regular_file_identity(
-                SimpleNamespace(**{**vars(base), "st_size": 6}), description="fixture"
-            ),
-            archive_module._regular_file_identity(base, description="fixture"),
-        )
-        self.assertNotEqual(
-            archive_module._regular_file_identity(
-                SimpleNamespace(**{**vars(base), "st_mtime_ns": 7}), description="fixture"
-            ),
-            archive_module._regular_file_identity(base, description="fixture"),
-        )
-        self.assertEqual(
-            archive_module._regular_file_identity(
-                SimpleNamespace(**{**vars(base), "st_ctime_ns": 8}), description="fixture"
-            ),
-            archive_module._regular_file_identity(base, description="fixture"),
-        )
-
-    def test_task_packet_change_after_enumeration_aborts_publication(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            packet = root / "tasks" / "one"
-            packet.mkdir(parents=True)
-            packet_file = packet / "packet.md"
-            packet_file.write_text("before", encoding="utf-8")
-            output = self.output(root, "capture.zip")
-            provider = FakeProvider(occurrences=(TextOccurrence("tasks/one/packet.md"),))
-            original_copy = archive_module.copy_packet_file
-            did_mutate = False
-
-            def copy_after_mutation(packet_member, tasks_root, destination):
-                nonlocal did_mutate
-                if not did_mutate:
-                    did_mutate = True
-                    packet_file.write_text("after", encoding="utf-8")
-                return original_copy(packet_member, tasks_root, destination)
-
-            with patch.object(archive_module, "copy_packet_file", side_effect=copy_after_mutation):
-                with self.assertRaises(SvcError) as raised:
-                    self.archive(root, provider)
-            self.assertEqual(raised.exception.code, "task-packet-mutated")
-            self.assertFalse(output.exists())
-
-    def test_provider_control_characters_and_invalid_evidence_are_refused(self):
-        with self.assertRaises(ValueError):
-            SourceArtifact(Path("native.json"), "capture\x00native.json", "application/json")
-
-        class InvalidEvidenceProvider(FakeProvider):
-            def stream_capture(self, resolved, raw_output, index_output):
-                raw_output.write(self.payload)
-                index_output.write(b"{}")
-                return CaptureEvidence(
-                    source_sha256="not-a-sha256",
-                    source_bytes=len(self.payload),
-                    record_counts={},
-                    capabilities={},
-                    occurrences=(),
-                    warnings=(),
-                )
-
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            with self.assertRaisesRegex(ValueError, "SHA-256"):
-                self.archive(root, InvalidEvidenceProvider())
-            self.assertFalse(self.output(root, "capture.zip").exists())
-
-    def test_tasks_directory_itself_is_not_a_packet_root(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            tasks = root / "tasks"
-            tasks.mkdir()
-            (tasks / "packet.md").write_text("container marker", encoding="utf-8")
-            manifest = self.archive(root, FakeProvider(occurrences=(TextOccurrence("see tasks/packet.md"),)))
-            self.assertEqual(manifest["task_packets"], [])
-            self.assertIn("task_packet_invalid_candidate", {item["code"] for item in manifest["warnings"]})
-
-    def test_invalid_windows_lexical_components_are_warnings(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            (root / "tasks").mkdir()
-            occurrences = (
-                TextOccurrence("tasks/bad:name/packet.md"),
-                TextOccurrence("tasks/CON/packet.md"),
-                TextOccurrence("tasks/has*wildcard/packet.md"),
-            )
-            manifest = self.archive(root, FakeProvider(occurrences=occurrences))
-            warnings = manifest["warnings"]
-            self.assertEqual(manifest["task_packets"], [])
-            self.assertEqual(
-                {warning["details"]["path"] for warning in warnings if warning["code"] == "task_packet_invalid_path"},
-                {"tasks/bad:name/packet.md", "tasks/CON/packet.md", "tasks/has*wildcard/packet.md"},
+    def test_replaced_output_parent_is_rejected_before_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repo"
+            repository.mkdir()
+            output_parent = root / "exports"
+            output_parent.mkdir()
+            target = _canonical_repository_and_output(
+                repository,
+                output_parent / "thread.zip",
             )
 
-    def test_packet_file_identity_and_tree_snapshot_reject_changes_after_enumeration(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            tasks = root / "tasks"
-            packet = tasks / "one"
-            packet.mkdir(parents=True)
-            member = packet / "packet.md"
-            member.write_text("before", encoding="utf-8")
-            enumeration = iter_packet_files(packet, tasks)
+            displaced_parent = root / "exports-original"
+            output_parent.rename(displaced_parent)
+            output_parent.mkdir()
 
-            replacement = packet / "replacement.tmp"
-            replacement.write_text("after", encoding="utf-8")
-            replacement.replace(member)
-            with self.assertRaises(ValueError):
-                copy_packet_file(next(iter(enumeration)), tasks, io.BytesIO())
+            with pytest.raises(ValueError, match="changed after validation"):
+                _verify_output_parent(
+                    output_parent,
+                    target.parent_identity,
+                    target.repository,
+                )
+            assert not ((output_parent / "thread.zip").exists())
 
-            with self.assertRaises(ValueError):
-                enumeration.verify(tasks)
+    def test_provider_errors_publish_no_artifact(self) -> None:
+        class FailingProvider(SyntheticTrajectoryProvider):
+            def stream_normalize(self, resolved, sink, bounds):
+                raise SvcError(
+                    "thread-source-incompatible",
+                    "not a compatible source",
+                )
 
-    def test_packet_tree_snapshot_rejects_added_member(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "repository"
-            root.mkdir()
-            tasks = root / "tasks"
-            packet = tasks / "one"
-            packet.mkdir(parents=True)
-            (packet / "packet.md").write_text("before", encoding="utf-8")
-            enumeration = iter_packet_files(packet, tasks)
-            (packet / "new.md").write_text("new", encoding="utf-8")
-            with self.assertRaises(ValueError):
-                enumeration.verify(tasks)
-
-    def test_reparse_point_attribute_is_rejected(self):
-        fixture = SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_file_attributes=0x0400)
-        self.assertTrue(_unsafe_link_info(fixture))
-
-    def test_source_artifact_rejects_windows_separator(self):
-        with self.assertRaises(ValueError):
-            SourceArtifact(Path("native.json"), "capture\\native.json", "application/json")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repo"
+            output_parent = root / "exports"
+            repository.mkdir()
+            output_parent.mkdir()
+            source = root / "source.jsonl"
+            source.write_text("{}\n", encoding="utf-8")
+            output = output_parent / "thread.zip"
+            with pytest.raises(SvcError):
+                write_agent_thread_bundle(
+                    FailingProvider(),
+                    ProviderContext(home=root),
+                    ThreadSelection(source=source),
+                    repository,
+                    output,
+                )
+            assert not (output.exists())
