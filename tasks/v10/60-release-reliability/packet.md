@@ -14,7 +14,7 @@
 - **Verification**:
   - A hermetic candidate-to-tag test proves that a prepared release commit stays the target even if a later `main` commit adds a new `changes/` fragment. It also rejects a tag/version/commit disagreement.
   - The tag release rehearsal runs `pdm lock --check`, frozen release-group installation, `release verify-tag` (which verifies the prepared release), `pdm run test`, `pdm run build-monolith`, `pdm build`, and an isolated installation of the produced wheel that exercises `svc --help` and packaged-resource lookup.
-  - The build job emits a checked manifest and uploads the wheel, sdist, release metadata, notes, and checksums as one artifact bundle. Tests assert that the PyPI job receives only this bundle and does not check out source or invoke a build.
+  - The build job emits a checked manifest and uploads the wheel, sdist, release metadata, notes, and checksums as one artifact bundle. Tests assert that the PyPI job receives only this bundle and does not check out source or invoke a build; the GitHub finalizer may check out only the exact release tag to establish repository context for `gh`, but it must not rebuild or source release data from that checkout.
   - Fixture-backed release tests cover a tag that remains pinned despite later `main` changes, tag/version/commit disagreement, bundle tampering, no PyPI files, all matching files after a retry, one-or-more missing files, and hash mismatch. Workflow contracts cover GitHub Release title, notes, asset, draft, and publication ordering; every ambiguous external state stops before a mutation.
   - Workflow contracts assert tag-only automatic triggering, mandatory explicit-tag dispatch recovery, exact tag checkout, artifact handoff order, and GitHub Release finalization after verified PyPI completion rather than before it.
   - `pdm run test`, `pdm run build-monolith`, `pdm build`, and an isolated wheel-install rehearsal pass. A successful release can be rerun with its tag without consulting package source from mutable `main` or Actions logs.
@@ -26,21 +26,41 @@
     repository and its identifier/path are intentionally not retained here.
   - Implemented: `.github/workflows/release-tag.yml` accepts only a merged `release/svc` PR to `main` (or an explicit merge commit), checks out that exact commit, verifies it is in `main`, creates or verifies its annotated version tag, and dispatches top-level `Publish` with that tag. The dispatch is necessary because a tag pushed by `GITHUB_TOKEN` does not create a second `push` run, while PyPI Trusted Publishing must remain in a top-level rather than reusable workflow.
   - Implemented: `Publish` runs only for a `v*` tag push or required explicit-tag dispatch; it checks out and verifies the tag, lockfile, release metadata, tests, monolith, and built wheel once. It uploads a portable artifact bundle containing the distributions, metadata, notes, checker, checksums, manifest, resolved tag, commit, and SHA-256 file map.
-  - Implemented: downstream PyPI and GitHub Release jobs download and re-verify that bundle without checking out or rebuilding source. PyPI allows only none or all matching distribution hashes; partial/mismatched state fails. GitHub Release finalization occurs after PyPI, verifies existing title/notes/assets, and only publishes a matching draft.
+  - Implemented: downstream PyPI and GitHub Release jobs download and re-verify that bundle without rebuilding source. PyPI has no checkout and allows only none or all matching distribution hashes; partial/mismatched state fails. The GitHub finalizer checks out only the exact release tag so `gh` has repository context, then verifies existing title/notes/assets and publishes only a matching draft after PyPI succeeds.
   - Integrated pre-publication evidence: 224 pytest items, Ruff, mypy, Import
     Linter, zizmor, PDM lock validation, release planning, monolith, sdist/
     wheel build, exact package inspection, and the same SHA-bound installed
-    wheel on macOS, WSL, and Windows all pass. No remote v11 tag, workflow
-    dispatch, GitHub Release, or PyPI publication had been performed when this
-    evidence was frozen.
+    wheel on macOS, WSL, and Windows all pass.
+  - Controlled v11.0.0 publication bound annotated tag `v11.0.0` to reviewed
+    release merge `f99baad7cf9b8798475c3037636dbc8a0e7a738b`. The original
+    Publish run `30432201868` built and verified one bundle, published PyPI,
+    then exposed that the GitHub finalizer lacked repository context. Its wheel
+    SHA-256 is
+    `f57fbe6a212a37ae49a8736f648667f0e42b6e56375c346546cebeae828af507`;
+    its sdist SHA-256 is
+    `377cd1ab36fc8f227566743019775f96ef3324b5a7a7ba1ff8e150ac9f6900b0`.
+  - A naive explicit-tag retry correctly stopped before mutation: the wheel was
+    byte-identical but the rebuilt gzip-wrapped sdist differed, so PyPI's
+    all-match gate rejected the mixed state. Recovery now therefore requires an
+    explicit numeric `bundle_run_id`, downloads that preserved prior-run bundle
+    with cross-run artifact authorization, first byte-compares its checker
+    against `tools/release.py` from the exact tag checkout, validates its tag
+    and commit, and re-uploads the unchanged bundle into the current run. It
+    skips dependency installation, tests, rebuilding, attestation, and PyPI
+    upload during that recovery path.
+  - Recovery run `30433280124` reused the bundle from `30432201868`, observed
+    both PyPI files with exact matching hashes, skipped upload, checked out the
+    exact tag only for `gh` repository context, verified normalized release
+    notes and assets, and published GitHub Release `SVC 11.0.0`. Both PyPI and
+    GitHub expose the two original distribution hashes; the release is no
+    longer a draft.
   - The PDM project's own current release workflow is tag-triggered and linear: build, install/smoke-test the wheel, `pdm publish --no-build`, then create the GitHub Release. `pdm-backend` follows the same tag → build → test-built-artifacts → upload shape. Neither official reference reconstructs an old release from a newer `main` state.
   - PyPA's current publishing guide strengthens that pattern: build distributions once, upload them as a workflow artifact, then use a dependent tag-only publish job to download and publish those exact files. Its publish action advises failing loudly on PyPI duplicates rather than routinely enabling `skip-existing`.
-- **Next Step**: Sir has authorized the scoped commit and v11.0.0 publication.
-  Use the reviewed `release/svc` merge as the first controlled remote exercise;
-  confirm that `Release Tag` dispatches top-level `Publish`, the existing
-  `release` environment approval and PyPI Trusted Publisher accept it, and a
-  rerun by explicit tag follows the all-match recovery path. Do not create a
-  separate test release or change remote publisher settings.
+- **Next Step**: Merge the workflow recovery fix after CI confirms its static
+  and behavior contracts. No new package release is required: the change is
+  repository release infrastructure only and declares `release:none`. After
+  merge, the only remaining acceptance for the wider agent-observability task
+  is Sir's manual TUI review.
 
 ## Supporting Material
 

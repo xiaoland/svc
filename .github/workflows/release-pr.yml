@@ -52,6 +52,7 @@ jobs:
           VERSION: ${{ steps.plan.outputs.version }}
         run: |
           branch=release/svc
+          body=$'Automated SVC release candidate. Review Behavioral SemVer, migration guidance, release-metadata reasons, and generated notes.\n\nThis PR consumes the already-reviewed release fragments; it introduces no additional behavioral change.\n\nrelease:none'
           git config user.name "svc-release[bot]"
           git config user.email "svc-release[bot]@users.noreply.github.com"
           git switch -C "$branch"
@@ -66,7 +67,7 @@ jobs:
           git push --force-with-lease origin "$branch"
           existing_pr=$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number')
           if [ -n "$existing_pr" ]; then
-            gh pr edit "$existing_pr" --title "Release v$VERSION" --body "Automated SVC release candidate. Review Behavioral SemVer, migration guidance, release-metadata reasons, and generated notes."
+            gh pr edit "$existing_pr" --title "Release v$VERSION" --body "$body"
           else
-            gh pr create --base main --head "$branch" --title "Release v$VERSION" --body "Automated SVC release candidate. Review Behavioral SemVer, migration guidance, release-metadata reasons, and generated notes."
+            gh pr create --base main --head "$branch" --title "Release v$VERSION" --body "$body"
           fi
