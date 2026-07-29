@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError, version as distribution_version
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
+from . import DISTRIBUTION_NAME
 from .catalog import normalized_document_path
+
+
+SOURCE_VERSION_FALLBACK = "0.0.0"
 
 
 class Resource(Protocol):
@@ -32,6 +37,13 @@ def resource_mode() -> str:
     return "wheel" if _packaged_data_root() is not None else "source"
 
 
+def source_distribution_version() -> str:
+    try:
+        return distribution_version(DISTRIBUTION_NAME)
+    except PackageNotFoundError:
+        return SOURCE_VERSION_FALLBACK
+
+
 def read_catalog_bytes() -> bytes:
     packaged = _packaged_data_root()
     if packaged is not None:
@@ -42,7 +54,7 @@ def read_catalog_bytes() -> bytes:
         raise FileNotFoundError("SVC source fallback is unavailable")
     from tools.build_catalog import build_catalog_bytes
 
-    return build_catalog_bytes(root, root / "manifest.json")
+    return build_catalog_bytes(root, source_distribution_version())
 
 
 def read_document(path: str) -> bytes:
@@ -51,7 +63,9 @@ def read_document(path: str) -> bytes:
     if packaged is not None:
         resource = packaged.joinpath("corpus", *PurePosixPath(normalized).parts)
         if not resource.is_file():
-            raise FileNotFoundError(f"Packaged SVC document does not exist: {normalized}")
+            raise FileNotFoundError(
+                f"Packaged SVC document does not exist: {normalized}"
+            )
         return resource.read_bytes()
 
     source = source_root() / PurePosixPath(normalized)

@@ -14,7 +14,7 @@ pdm run svc --help
 pdm build
 ```
 
-Edit canonical framework content under `src/`, never `build/monolith.md`. `src/` contains only SVC corpus content and release metadata; Python runtime code is in `svc_cli/`, and repository-only builders/release tools are in `tools/`.
+Edit canonical framework content under `src/`, never `build/monolith.md`. `src/` contains only SVC corpus content; Python runtime code is in `svc_cli/`, and repository-only builders/release tools are in `tools/`.
 
 ## Use a Released Corpus
 
@@ -127,12 +127,16 @@ SVC uses Behavioral SemVer:
 - **MINOR** adds an optional backward-compatible capability.
 - **PATCH** fixes or clarifies the existing protocol without changing those behaviors.
 
-Towncrier fragments and the release planner make the impact reviewable. GitHub Releases are the canonical release record; the Python package is the installation projection. See [CONTRIBUTING.md](CONTRIBUTING.md) for commit, fragment, and release workflow rules.
+Append-only change fragments and the tag-range release planner make impact
+reviewable. GitHub Releases are the canonical future human release record; the
+Python package is the installation projection. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for commit, fragment, migration-note, and
+tag-authoritative release rules.
 
 ## Repository Layout
 
 ```text
-src/                         canonical SVC corpus and release metadata
+src/                         canonical SVC corpus
 svc_cli/                     installable Python runtime
 tools/                       catalog, monolith, and release tooling
 pdm_build.py                 wheel corpus projection hook

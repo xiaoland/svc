@@ -1,6 +1,6 @@
 [project]
 name = "sustainable-vibe-coding"
-version = "11.0.0"
+dynamic = ["version"]
 description = "Packaged SVC corpus and local development-collaboration CLI."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,9 +12,6 @@ dependencies = [
 ]
 
 [dependency-groups]
-release = [
-    "towncrier>=25.8,<26",
-]
 quality = [
     "mypy>=2.3,<2.4",
     "import-linter>=2.13,<3",
@@ -30,11 +27,18 @@ test = [
 svc = "svc_cli.cli:main"
 
 [build-system]
-requires = ["pdm-backend"]
+requires = ["pdm-backend==2.4.9"]
 build-backend = "pdm.backend"
 
 [tool.pdm]
 distribution = true
+
+[tool.pdm.version]
+source = "scm"
+tag_filter = "v[0-9]*.[0-9]*.[0-9]*"
+tag_regex = '^v(?P<version>(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$'
+version_format = "pdm_build:format_scm_version"
+fallback_version = "0.0.0"
 
 [tool.pdm.scripts]
 build-monolith = "python -m tools.build_monolith"
@@ -98,26 +102,3 @@ select = ["TID251"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "unittest".msg = "SVC tests use native pytest fixtures and monkeypatch."
-
-[tool.towncrier]
-directory = "changes"
-filename = "CHANGELOG.md"
-title_format = "## [{version}] - {project_date}"
-issue_format = "`{issue}`"
-start_string = "<!-- towncrier release notes start -->\n"
-underlines = ["", "", ""]
-
-[[tool.towncrier.type]]
-directory = "major"
-name = "Behavioral breaking changes"
-showcontent = true
-
-[[tool.towncrier.type]]
-directory = "minor"
-name = "Backward-compatible capabilities"
-showcontent = true
-
-[[tool.towncrier.type]]
-directory = "patch"
-name = "Protocol fixes"
-showcontent = true

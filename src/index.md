@@ -118,7 +118,12 @@ The initial self-update adapter supports only a non-editable `pip` installation 
 
 After a CLI update, first inspect `svc status`. When a release provides migration guidance, look it up, evaluate the consumer repository's actual facts under its mutation gate, make Consumer-owned changes, and only then apply `svc adopt`. `adopt` writes `svc.json` only; it cannot claim that a human or Coding Agent has completed the required judgment.
 
-The source release metadata in `manifest.json` records corpus version and Behavioral SemVer impact. A future major release declares either a packaged Markdown guide under `migrations/` or a concrete reason why migration guidance is not applicable. The release planner validates that declaration; the CLI does not apply a generic consumer-file migration graph.
+The strict release tag is the corpus-version authority. Append-only change
+fragments added since the preceding release tag declare Behavioral SemVer
+impact, and every MAJOR fragment owns a same-slug packaged Markdown migration
+note under `migrations/` with steps or an explicit non-applicability reason.
+The release planner validates that evidence; the CLI does not apply a generic
+consumer-file migration graph.
 
 ## SVC Behavioral SemVer
 
@@ -128,7 +133,7 @@ Version classification follows declared consumer behavior rather than document w
 - **MINOR** adds a backward-compatible optional capability or expands accepted input without changing existing obligations or defaults.
 - **PATCH** fixes or clarifies the protocol without changing its required behavior, defaults, permission boundary, task-packet semantics, or consumer layout.
 
-An optional additive layout may be MINOR. A fix may change observed faulty behavior and remain PATCH when it restores an already-declared contract. Every release declares its behavioral impact in release metadata; mechanical checks validate bump compatibility while review remains responsible for classification truth.
+An optional additive layout may be MINOR. A fix may change observed faulty behavior and remain PATCH when it restores an already-declared contract. Every qualifying change records its impact in an append-only fragment; tag-range checks validate bump compatibility while review remains responsible for classification truth.
 
 ## Knowledge Owners
 
