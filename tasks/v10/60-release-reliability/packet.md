@@ -54,13 +54,18 @@
     notes and assets, and published GitHub Release `SVC 11.0.0`. Both PyPI and
     GitHub expose the two original distribution hashes; the release is no
     longer a draft.
+  - The recovery fix landed on `main` as
+    `38440db85894a2db89694c879b66b45537969257` through PR `#14`.
+    Post-merge CI run `30434211658` passed its Python 3.11, Python 3.14,
+    type/architecture, and distribution jobs. Release PR run `30434210866`
+    found no unconsumed fragment, made no release mutation, and left no open
+    release PR.
   - The PDM project's own current release workflow is tag-triggered and linear: build, install/smoke-test the wheel, `pdm publish --no-build`, then create the GitHub Release. `pdm-backend` follows the same tag → build → test-built-artifacts → upload shape. Neither official reference reconstructs an old release from a newer `main` state.
   - PyPA's current publishing guide strengthens that pattern: build distributions once, upload them as a workflow artifact, then use a dependent tag-only publish job to download and publish those exact files. Its publish action advises failing loudly on PyPI duplicates rather than routinely enabling `skip-existing`.
-- **Next Step**: Merge the workflow recovery fix after CI confirms its static
-  and behavior contracts. No new package release is required: the change is
-  repository release infrastructure only and declares `release:none`. After
-  merge, the only remaining acceptance for the wider agent-observability task
-  is Sir's manual TUI review.
+- **Next Step**: No automated release work remains and no new package release
+  is required. Keep the reviewed v11.0.0 tag, PyPI files, and GitHub Release
+  immutable. The wider agent-observability task now awaits only Sir's manual
+  TUI review.
 
 ## Supporting Material
 

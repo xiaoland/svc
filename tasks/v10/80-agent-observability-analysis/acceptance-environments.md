@@ -204,8 +204,10 @@ removed `task_packets` module.
 
 ### Human-only residual
 
-Run the installed candidate in a real macOS terminal and Windows Terminal, then
-judge only properties that headless Pilot and SSH cannot establish:
+Run the published v11.0.0 wheel with SHA-256
+`f57fbe6a212a37ae49a8736f648667f0e42b6e56375c346546cebeae828af507`
+in a real macOS terminal and Windows Terminal, then judge only properties that
+headless Pilot and SSH cannot establish:
 
 1. active/archived switching and workspace-tree density are readable
 2. title plus first-user-message preview identifies similar threads quickly

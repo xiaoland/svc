@@ -47,12 +47,11 @@
 - **Current Truth**:
   - On 2026-07-28 Sir corrected the product purpose: agent observability exists
     to improve SVC. The earlier audit-completeness framing was a product error.
-  - The released 10.0.2 baseline retains the raw export introduced in 10.0.1:
-    it preserves provider bytes, hashes/sizes the native source, hard-fails
-    source changes, indexes structure, and copies task-packet material. The
-    current unreleased 11.0.0 candidate replaces that behavior with the
-    intentionally lossy schema-v2 collect boundary and cuts schema-v1 archives
-    off directly.
+  - The pre-v11 10.0.2 baseline retained the raw export introduced in 10.0.1:
+    it preserved provider bytes, hashed/sized the native source, hard-failed
+    source changes, indexed structure, and copied task-packet material.
+    Published v11.0.0 replaces that behavior with the intentionally lossy
+    schema-v2 collect boundary and cuts schema-v1 archives off directly.
   - Current Codex state on all three inspected systems exposes the v1
     identification/lifecycle/recognition fields. Slice 0 freezes exact field
     authority, missing/invalid behavior, bounds, and filter-before-limit
@@ -78,13 +77,17 @@
     same wheel SHA-256
     `f57fbe6a212a37ae49a8736f648667f0e42b6e56375c346546cebeae828af507`;
     harness and caller staging cleanup were both proven.
-  - The shared stale `F:`/`/mnt/f` worktree was not used or mutated. No commit,
-    tag, push, changelog consumption, publication, or packet deletion had
-    occurred when this pre-publication evidence was frozen. Sir subsequently
-    authorized the scoped commit and v11.0.0 publication.
-- **Next Step**: Complete the authorized tag-bound v11.0.0 publication. After
-  that, only hands-on terminal acceptance remains: in a real macOS terminal
-  and Windows Terminal, judge workspace-tree readability, title plus
+  - The shared stale `F:`/`/mnt/f` worktree was not used or mutated. The
+    implementation landed as `2b457442789a88a09897234d0147a252971c6936`;
+    reviewed release merge `f99baad7cf9b8798475c3037636dbc8a0e7a738b`
+    owns annotated tag `v11.0.0`. PyPI and the published GitHub Release expose
+    the accepted wheel SHA-256 above and matching original sdist SHA-256
+    `377cd1ab36fc8f227566743019775f96ef3324b5a7a7ba1ff8e150ac9f6900b0`.
+    Release recovery hardening landed on `main` as
+    `38440db85894a2db89694c879b66b45537969257`; its post-merge CI and no-fragment
+    Release PR workflows both passed.
+- **Next Step**: Only hands-on terminal acceptance remains. In a real macOS
+  terminal and Windows Terminal, judge workspace-tree readability, title plus
   first-message recognition, active/archived switching, keyboard navigation,
   narrow/resize behavior, analysis-view usefulness, and alternate-screen
   restoration on `Escape`/`q`.
