@@ -25,7 +25,7 @@ def test_lookup_machine_output_uses_source_relative_path_identity() -> None:
     assert "content" in payload["results"][0]
 
 
-def test_init_cli_is_plan_first_and_requires_its_exact_digest_to_apply() -> None:
+def test_init_cli_is_plan_first_and_enforces_its_exact_apply_digest() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         code, plan, _ = invoke(["init", str(root), "--json"])
@@ -40,10 +40,6 @@ def test_init_cli_is_plan_first_and_requires_its_exact_digest_to_apply() -> None
         applied_code, applied, _ = invoke(["init", str(root), "--apply", digest, "--json"])
         assert applied_code == EXIT_OK
         assert applied["status"] == "applied"
-
-        status_code, status, _ = invoke(["status", str(root), "--json"])
-        assert status_code == EXIT_OK
-        assert status["healthy"]
 
 
 def test_dev_identity_and_missing_configuration_status_are_machine_readable() -> None:

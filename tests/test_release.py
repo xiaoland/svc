@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import tarfile
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -193,6 +194,90 @@ def write_distributions(directory: Path, version: str) -> None:
         )
         member.size = len(metadata)
         archive.addfile(member, io.BytesIO(metadata))
+
+
+@dataclass(frozen=True)
+class TargetReleaseFixture:
+    root: Path
+    candidate: str
+    plan: dict[str, object]
+    bundle_dir: Path
+    bundle: dict[str, object]
+    recovery_plan_file: Path
+
+
+@dataclass(frozen=True)
+class TargetReleaseSeed:
+    candidate: str
+    plan_bytes: bytes
+    bundle_bytes: bytes
+    bundle_files: tuple[tuple[str, bytes], ...]
+    recovery_plan_bytes: bytes
+
+
+@pytest.fixture(scope="module")
+def target_release_seed() -> TargetReleaseSeed:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "work"
+        root.mkdir()
+        _, candidate = target_git_repository(root)
+        plan = target_release_plan(
+            "v11.0.1",
+            candidate,
+            main_ref="main",
+            root=root,
+        )
+        plan_file = root / "plan.json"
+        plan_file.write_text(json.dumps(plan), encoding="utf-8")
+        dist = root / "dist"
+        dist.mkdir()
+        write_distributions(dist, "11.0.1")
+        bundle_dir = root / "bundle"
+        bundle = create_target_release_bundle(plan_file, dist, bundle_dir)
+        recovery_plan = json.loads(json.dumps(plan))
+        recovery_plan["qualification"] = classify_main_qualification(
+            candidate,
+            main_qualification_state(candidate),
+        )
+        bundle_files = tuple(
+            (path.relative_to(bundle_dir).as_posix(), path.read_bytes())
+            for path in sorted(bundle_dir.rglob("*"))
+            if path.is_file()
+        )
+        return TargetReleaseSeed(
+            candidate,
+            json.dumps(plan).encode(),
+            json.dumps(bundle).encode(),
+            bundle_files,
+            json.dumps(recovery_plan).encode(),
+        )
+
+
+@pytest.fixture
+def target_release_fixture(
+    target_release_seed: TargetReleaseSeed,
+    tmp_path: Path,
+) -> TargetReleaseFixture:
+    root = tmp_path / "release-fixture"
+    bundle_dir = root / "bundle"
+    for relative, content in target_release_seed.bundle_files:
+        path = bundle_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    recovery_plan_file = root / "trusted-recovery-plan.json"
+    recovery_plan_file.write_bytes(target_release_seed.recovery_plan_bytes)
+    return TargetReleaseFixture(
+        root,
+        target_release_seed.candidate,
+        json.loads(target_release_seed.plan_bytes),
+        bundle_dir,
+        json.loads(target_release_seed.bundle_bytes),
+        recovery_plan_file,
+    )
+
+
+def copy_target_bundle(fixture: TargetReleaseFixture, destination: Path) -> Path:
+    return Path(shutil.copytree(fixture.bundle_dir, destination))
 
 
 @pytest.mark.parametrize("annotated", [False, True])
@@ -427,31 +512,31 @@ def test_target_planning_is_deterministic_and_does_not_mutate_source() -> None:
         assert git(root, "rev-parse", "HEAD^{tree}") == before_tree
 
 
-def test_target_fragment_ledger_rejects_modification_rename_deletion_and_reuse() -> None:
-    operations = ("modify", "rename", "delete", "reuse")
-    for operation in operations:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "work"
-            root.mkdir()
-            _, candidate = target_git_repository(root)
-            path = root / "changes/visible-change.patch.md"
-            if operation == "modify":
-                path.write_text("Changed after merge.\n", encoding="utf-8")
-            elif operation == "rename":
-                path.rename(root / "changes/renamed.patch.md")
-            else:
-                path.unlink()
+@pytest.mark.parametrize("operation", ("modify", "rename", "delete", "reuse"))
+def test_target_fragment_ledger_rejects_append_only_violation(operation: str) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "work"
+        root.mkdir()
+        _, candidate = target_git_repository(root)
+        path = root / "changes/visible-change.patch.md"
+        if operation == "modify":
+            path.write_text("Changed after merge.\n", encoding="utf-8")
+        elif operation == "rename":
+            path.rename(root / "changes/renamed.patch.md")
+        else:
+            path.unlink()
+        git(root, "add", ".")
+        git(root, "commit", "-m", operation)
+        if operation == "reuse":
+            path.write_text("Reused path.\n", encoding="utf-8")
             git(root, "add", ".")
-            git(root, "commit", "-m", operation)
-            if operation == "reuse":
-                path.write_text("Reused path.\n", encoding="utf-8")
-                git(root, "add", ".")
-                git(root, "commit", "-m", "reuse path")
-            with pytest.raises(ReleaseError, match="append-only|reused"):
-                target_qualification("HEAD", root=root)
+            git(root, "commit", "-m", "reuse path")
+
+        with pytest.raises(ReleaseError, match="append-only|reused"):
+            target_qualification("HEAD", root=root)
 
 
-def test_target_state_classifiers_are_exact_and_fail_closed() -> None:
+def test_target_pypi_state_classifier_is_exact_and_fail_closed() -> None:
     hashes = {"a.whl": "a" * 64, "a.tar.gz": "b" * 64}
     assert classify_pypi_state(
         hashes, {"http_status": 404, "body": None}
@@ -515,6 +600,10 @@ def test_target_state_classifiers_are_exact_and_fail_closed() -> None:
     assert unexpected["state"] == "mismatch"
     assert unexpected["unexpected"] == ["unknown.whl"]
 
+
+
+def test_target_github_state_classifier_is_exact_and_fail_closed() -> None:
+    hashes = {"a.whl": "a" * 64, "a.tar.gz": "b" * 64}
     expected = {
         "tag": "v11.0.1",
         "commit": "1" * 40,
@@ -560,7 +649,7 @@ def test_target_state_classifiers_are_exact_and_fail_closed() -> None:
     assert wrong_commit["state"] == "mismatch"
 
 
-def test_target_bundle_retention_requires_exact_live_artifact_and_window() -> None:
+def bundle_retention_fixture() -> tuple[dict[str, object], dict[str, object]]:
     expected = {
         "run_id": 42,
         "name": "svc-release-v11.0.1",
@@ -592,6 +681,11 @@ def test_target_bundle_retention_requires_exact_live_artifact_and_window() -> No
             },
         },
     }
+    return expected, observed
+
+
+def test_target_bundle_retention_accepts_the_exact_live_artifact() -> None:
+    expected, observed = bundle_retention_fixture()
     result = classify_bundle_retention(
         expected,
         observed,
@@ -599,45 +693,54 @@ def test_target_bundle_retention_requires_exact_live_artifact_and_window() -> No
     )
     assert result["state"] == "available"
     assert result["artifact_id"] == 7
-    observed["run"]["body"]["path"] = ".github/workflows/ci.yml"
+
+
+@pytest.mark.parametrize(
+    ("field", "wrong_value"),
+    (
+        ("path", ".github/workflows/ci.yml"),
+        ("head_sha", "2" * 40),
+        ("event", "pull_request"),
+        ("status", "in_progress"),
+    ),
+)
+def test_target_bundle_retention_rejects_wrong_run_identity_or_status(
+    field: str,
+    wrong_value: object,
+) -> None:
+    expected, observed = bundle_retention_fixture()
+    run = observed["run"]
+    assert isinstance(run, dict)
+    body = run["body"]
+    assert isinstance(body, dict)
+    body[field] = wrong_value
+
     assert classify_bundle_retention(
         expected,
         observed,
         now="2026-09-01T00:00:00Z",
     )["state"] == "mismatch"
-    observed["run"]["body"]["path"] = ".github/workflows/publish.yml@main"
-    observed["run"]["body"]["head_sha"] = "2" * 40
-    assert classify_bundle_retention(
-        expected,
-        observed,
-        now="2026-09-01T00:00:00Z",
-    )["state"] == "mismatch"
-    observed["run"]["body"]["head_sha"] = "1" * 40
-    observed["run"]["body"]["event"] = "pull_request"
-    assert classify_bundle_retention(
-        expected,
-        observed,
-        now="2026-09-01T00:00:00Z",
-    )["state"] == "mismatch"
-    observed["run"]["body"]["event"] = "push"
-    observed["run"]["body"]["status"] = "in_progress"
-    assert classify_bundle_retention(
-        expected,
-        observed,
-        now="2026-09-01T00:00:00Z",
-    )["state"] == "mismatch"
-    observed["run"]["body"]["status"] = "completed"
-    observed["artifacts"]["body"]["artifacts"][0]["expired"] = True
+
+
+def test_target_bundle_retention_enforces_expiry_and_minimum_window() -> None:
+    expected, observed = bundle_retention_fixture()
+    artifacts = observed["artifacts"]
+    assert isinstance(artifacts, dict)
+    body = artifacts["body"]
+    assert isinstance(body, dict)
+    entries = body["artifacts"]
+    assert isinstance(entries, list)
+    artifact = entries[0]
+    assert isinstance(artifact, dict)
+    artifact["expired"] = True
     assert classify_bundle_retention(
         expected,
         observed,
         now="2026-09-01T00:00:00Z",
     )["state"] == "expired"
 
-    observed["artifacts"]["body"]["artifacts"][0]["expired"] = False
-    observed["artifacts"]["body"]["artifacts"][0][
-        "expires_at"
-    ] = "2026-09-02T00:00:00Z"
+    artifact["expired"] = False
+    artifact["expires_at"] = "2026-09-02T00:00:00Z"
     assert classify_bundle_retention(
         expected,
         observed,
@@ -651,112 +754,119 @@ def test_target_bundle_retention_requires_exact_live_artifact_and_window() -> No
     )["state"] == "available"
 
 
-def test_target_bundle_and_external_plans_use_original_manifest_bound_bytes() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp) / "work"
-        root.mkdir()
-        _, candidate = target_git_repository(root)
-        plan = target_release_plan(
-            "v11.0.1",
-            candidate,
-            main_ref="main",
-            root=root,
-        )
-        plan_file = root / "plan.json"
-        plan_file.write_text(json.dumps(plan), encoding="utf-8")
-        dist = root / "dist"
-        dist.mkdir()
-        write_distributions(dist, "11.0.1")
-        bundle_dir = root / "bundle"
-        bundle = create_target_release_bundle(plan_file, dist, bundle_dir)
-        assert bundle["notes"] == "RELEASE_NOTES.md"
-        assert bundle["title"] == "SVC 11.0.1"
-        assert verify_target_release_bundle(
-            bundle_dir / "svc-target-release-plan.json",
+def test_target_bundle_accepts_original_and_trusted_recovery_plan(
+    target_release_fixture: TargetReleaseFixture,
+    tmp_path: Path,
+) -> None:
+    fixture = target_release_fixture
+    bundle = fixture.bundle
+    assert bundle["notes"] == "RELEASE_NOTES.md"
+    assert bundle["title"] == "SVC 11.0.1"
+    assert verify_target_release_bundle(
+        fixture.bundle_dir / "svc-target-release-plan.json",
+        fixture.bundle_dir,
+    )["commit"] == fixture.candidate
+    assert verify_target_release_bundle(
+        fixture.recovery_plan_file,
+        fixture.bundle_dir,
+    )["commit"] == fixture.candidate
+
+    changed_semantics = json.loads(
+        fixture.recovery_plan_file.read_text(encoding="utf-8")
+    )
+    changed_semantics["notes"] = "untrusted replacement\n"
+    changed_plan_file = tmp_path / "changed-plan.json"
+    changed_plan_file.write_text(json.dumps(changed_semantics), encoding="utf-8")
+    with pytest.raises(ReleaseError, match="semantics differ|notes differ"):
+        verify_target_release_bundle(changed_plan_file, fixture.bundle_dir)
+
+
+def test_target_pypi_plan_stages_only_missing_manifest_bound_distribution(
+    target_release_fixture: TargetReleaseFixture,
+    tmp_path: Path,
+) -> None:
+    fixture = target_release_fixture
+    files = fixture.bundle["files"]
+    assert isinstance(files, dict)
+    wheel_name = "sustainable_vibe_coding-11.0.1-py3-none-any.whl"
+    wheel_digest = files[f"python/{wheel_name}"]
+    pypi_state = tmp_path / "pypi.json"
+    pypi_state.write_text(
+        json.dumps(
+            {
+                "http_status": 200,
+                "body": {
+                    "urls": [
+                        {
+                            "filename": wheel_name,
+                            "digests": {"sha256": wheel_digest},
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    pypi = target_pypi_plan(fixture.bundle_dir, pypi_state)
+
+    assert pypi["state"] == "exact-subset"
+    assert pypi["upload"] == [
+        "python/sustainable_vibe_coding-11.0.1.tar.gz"
+    ]
+    pypi_plan_file = tmp_path / "pypi-plan.json"
+    pypi_plan_file.write_text(json.dumps(pypi), encoding="utf-8")
+    staged = stage_target_pypi(
+        fixture.bundle_dir,
+        pypi_plan_file,
+        tmp_path / "pypi-stage",
+    )
+    assert staged == {
+        "staged": ["sustainable_vibe_coding-11.0.1.tar.gz"],
+        "count": 1,
+    }
+
+
+def test_target_github_plan_uses_manifest_bound_assets(
+    target_release_fixture: TargetReleaseFixture,
+    tmp_path: Path,
+) -> None:
+    github_state = tmp_path / "github.json"
+    github_state.write_text(
+        json.dumps({"http_status": 404, "body": None}),
+        encoding="utf-8",
+    )
+
+    github = target_github_plan(
+        target_release_fixture.bundle_dir,
+        github_state,
+    )
+
+    assert github["action"] == "create"
+    assert github["upload"] == target_release_fixture.bundle["assets"]
+
+
+def test_target_bundle_rejects_tampered_checker_without_executing_it(
+    target_release_fixture: TargetReleaseFixture,
+    tmp_path: Path,
+) -> None:
+    bundle_dir = copy_target_bundle(target_release_fixture, tmp_path / "bundle")
+    executed = tmp_path / "artifact-checker-executed"
+    (bundle_dir / "release-check.py").write_text(
+        f"from pathlib import Path\nPath({str(executed)!r}).touch()\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReleaseError, match="digest differs"):
+        verify_target_release_bundle(
+            target_release_fixture.recovery_plan_file,
             bundle_dir,
-        )["commit"] == candidate
-        recovery_plan = json.loads(json.dumps(plan))
-        recovery_plan["qualification"] = classify_main_qualification(
-            candidate,
-            main_qualification_state(candidate),
         )
-        recovery_plan_file = root / "trusted-recovery-plan.json"
-        recovery_plan_file.write_text(
-            json.dumps(recovery_plan),
-            encoding="utf-8",
-        )
-        assert verify_target_release_bundle(
-            recovery_plan_file,
-            bundle_dir,
-        )["commit"] == candidate
-
-        changed_semantics = json.loads(json.dumps(recovery_plan))
-        changed_semantics["notes"] = "untrusted replacement\n"
-        changed_plan_file = root / "changed-plan.json"
-        changed_plan_file.write_text(
-            json.dumps(changed_semantics),
-            encoding="utf-8",
-        )
-        with pytest.raises(ReleaseError, match="semantics differ|notes differ"):
-            verify_target_release_bundle(changed_plan_file, bundle_dir)
-
-        wheel_name = "sustainable_vibe_coding-11.0.1-py3-none-any.whl"
-        wheel_digest = bundle["files"][f"python/{wheel_name}"]
-        pypi_state = root / "pypi.json"
-        pypi_state.write_text(
-            json.dumps(
-                {
-                    "http_status": 200,
-                    "body": {
-                        "urls": [
-                            {
-                                "filename": wheel_name,
-                                "digests": {"sha256": wheel_digest},
-                            }
-                        ]
-                    },
-                }
-            ),
-            encoding="utf-8",
-        )
-        pypi = target_pypi_plan(bundle_dir, pypi_state)
-        assert pypi["state"] == "exact-subset"
-        assert pypi["upload"] == [
-            "python/sustainable_vibe_coding-11.0.1.tar.gz"
-        ]
-        pypi_plan_file = root / "pypi-plan.json"
-        pypi_plan_file.write_text(json.dumps(pypi), encoding="utf-8")
-        staged = stage_target_pypi(
-            bundle_dir,
-            pypi_plan_file,
-            root / "pypi-stage",
-        )
-        assert staged == {
-            "staged": ["sustainable_vibe_coding-11.0.1.tar.gz"],
-            "count": 1,
-        }
-
-        github_state = root / "github.json"
-        github_state.write_text(
-            json.dumps({"http_status": 404, "body": None}),
-            encoding="utf-8",
-        )
-        github = target_github_plan(bundle_dir, github_state)
-        assert github["action"] == "create"
-        assert github["upload"] == bundle["assets"]
-
-        executed = root / "artifact-checker-executed"
-        (bundle_dir / "release-check.py").write_text(
-            f"from pathlib import Path\nPath({str(executed)!r}).touch()\n",
-            encoding="utf-8",
-        )
-        with pytest.raises(ReleaseError, match="digest differs"):
-            verify_target_release_bundle(recovery_plan_file, bundle_dir)
-        assert not executed.exists()
+    assert not executed.exists()
 
 
-def test_target_preflight_requires_completed_predecessor_and_original_bundle() -> None:
-    baseline_github = {
+def cutover_baseline_expectation() -> dict[str, object]:
+    return {
         "tag": "v11.0.0",
         "commit": CUTOVER_BASELINE_COMMIT,
         "title": "SVC 11.0.0",
@@ -765,38 +875,46 @@ def test_target_preflight_requires_completed_predecessor_and_original_bundle() -
         "allow_legacy_mutable": True,
     }
 
-    def exact_observation(
-        expected: dict[str, object], *, immutable: bool
-    ) -> dict[str, object]:
-        assets = expected["assets"]
-        assert isinstance(assets, dict)
-        return {
-            "pypi": {
-                "http_status": 200,
-                "body": {
-                    "urls": [
-                        {"filename": name, "digests": {"sha256": digest}}
-                        for name, digest in assets.items()
-                    ]
-                },
-            },
-            "github": {
-                "http_status": 200,
-                "resolved_tag_commit": expected["commit"],
-                "asset_sha256": assets,
-                "body": {
-                    "tag_name": expected["tag"],
-                    "target_commitish": "main",
-                    "name": expected["title"],
-                    "body": expected["notes"],
-                    "draft": False,
-                    "immutable": immutable,
-                    "assets": [{"name": name} for name in assets],
-                },
-            },
-        }
 
-    predecessor_observed = exact_observation(baseline_github, immutable=False)
+def exact_external_observation(
+    expected: dict[str, object],
+    *,
+    immutable: bool,
+) -> dict[str, object]:
+    assets = expected["assets"]
+    assert isinstance(assets, dict)
+    return {
+        "pypi": {
+            "http_status": 200,
+            "body": {
+                "urls": [
+                    {"filename": name, "digests": {"sha256": digest}}
+                    for name, digest in assets.items()
+                ]
+            },
+        },
+        "github": {
+            "http_status": 200,
+            "resolved_tag_commit": expected["commit"],
+            "asset_sha256": assets,
+            "body": {
+                "tag_name": expected["tag"],
+                "target_commitish": "main",
+                "name": expected["title"],
+                "body": expected["notes"],
+                "draft": False,
+                "immutable": immutable,
+                "assets": [{"name": name} for name in assets],
+            },
+        },
+    }
+
+
+def preflight_fixture() -> tuple[dict[str, object], dict[str, object]]:
+    predecessor_observed = exact_external_observation(
+        cutover_baseline_expectation(),
+        immutable=False,
+    )
     state = {
         "now": "2026-09-01T00:00:00Z",
         "prior_run_id": None,
@@ -816,23 +934,11 @@ def test_target_preflight_requires_completed_predecessor_and_original_bundle() -
         "title": "SVC 11.0.1",
         "notes": "candidate notes\n",
     }
-    assert target_preflight(plan, state)["decision"] == "build"
+    return plan, state
 
-    state["candidate"]["pypi"] = {
-        "http_status": 200,
-        "body": {
-            "urls": [
-                {
-                    "filename": "svc-11.0.1.whl",
-                    "digests": {"sha256": "c" * 64},
-                }
-            ]
-        },
-    }
-    assert target_preflight(plan, state)["decision"] == "fail"
 
-    state["prior_run_id"] = 42
-    state["artifact"] = {
+def recovery_artifact_observation() -> dict[str, object]:
+    return {
         "run": {
             "http_status": 200,
             "body": {
@@ -858,11 +964,47 @@ def test_target_preflight_requires_completed_predecessor_and_original_bundle() -
             },
         },
     }
+
+
+def test_target_preflight_builds_for_complete_predecessor_and_absent_candidate() -> None:
+    plan, state = preflight_fixture()
+    assert target_preflight(plan, state)["decision"] == "build"
+
+
+def test_target_preflight_fails_for_unbound_candidate_artifact() -> None:
+    plan, state = preflight_fixture()
+    candidate = state["candidate"]
+    assert isinstance(candidate, dict)
+    candidate["pypi"] = {
+        "http_status": 200,
+        "body": {
+            "urls": [
+                {
+                    "filename": "svc-11.0.1.whl",
+                    "digests": {"sha256": "c" * 64},
+                }
+            ]
+        },
+    }
+    assert target_preflight(plan, state)["decision"] == "fail"
+
+
+def test_target_preflight_requires_the_original_bundle_for_recovery() -> None:
+    plan, state = preflight_fixture()
+    state["prior_run_id"] = 42
+    state["artifact"] = recovery_artifact_observation()
     recovered = target_preflight(plan, state)
     assert recovered["decision"] == "requires-bundle"
     assert recovered["bundle_state"] == "available"
 
-    state["candidate"]["github"] = {
+
+def test_target_preflight_preserves_existing_draft_during_recovery() -> None:
+    plan, state = preflight_fixture()
+    state["prior_run_id"] = 42
+    state["artifact"] = recovery_artifact_observation()
+    candidate = state["candidate"]
+    assert isinstance(candidate, dict)
+    candidate["github"] = {
         "http_status": 200,
         "resolved_tag_commit": "2" * 40,
         "asset_sha256": {},
@@ -881,122 +1023,76 @@ def test_target_preflight_requires_completed_predecessor_and_original_bundle() -
     assert draft_recovery["github_state"] == "draft-present"
 
 
-def test_target_preflight_derives_exact_complete_from_durable_manifest_assets() -> (
-    None
-):
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp) / "work"
-        root.mkdir()
-        _, candidate = target_git_repository(root)
-        plan = target_release_plan(
-            "v11.0.1",
-            candidate,
-            main_ref="main",
-            root=root,
-        )
-        plan_file = root / "plan.json"
-        plan_file.write_text(json.dumps(plan), encoding="utf-8")
-        dist = root / "dist"
-        dist.mkdir()
-        write_distributions(dist, "11.0.1")
-        bundle_dir = root / "bundle"
-        bundle = create_target_release_bundle(plan_file, dist, bundle_dir)
-        assets = bundle["assets"]
-        files = bundle["files"]
-        assert isinstance(assets, list)
-        assert isinstance(files, dict)
-        asset_sha256 = {
-            Path(relative).name: hashlib.sha256(
-                (bundle_dir / relative).read_bytes()
-            ).hexdigest()
-            for relative in assets
-        }
-        candidate_observation = {
-            "pypi": {
-                "http_status": 200,
-                "body": {
-                    "urls": [
-                        {
-                            "filename": Path(relative).name,
-                            "digests": {"sha256": files[relative]},
-                        }
-                        for relative in bundle["distributions"]
-                    ]
-                },
+def test_target_preflight_derives_exact_complete_from_durable_manifest_assets(
+    target_release_fixture: TargetReleaseFixture,
+) -> None:
+    fixture = target_release_fixture
+    assets = fixture.bundle["assets"]
+    files = fixture.bundle["files"]
+    distributions = fixture.bundle["distributions"]
+    assert isinstance(assets, list)
+    assert isinstance(files, dict)
+    assert isinstance(distributions, list)
+    asset_sha256 = {
+        Path(relative).name: hashlib.sha256(
+            (fixture.bundle_dir / relative).read_bytes()
+        ).hexdigest()
+        for relative in assets
+    }
+    candidate_observation = {
+        "pypi": {
+            "http_status": 200,
+            "body": {
+                "urls": [
+                    {
+                        "filename": Path(relative).name,
+                        "digests": {"sha256": files[relative]},
+                    }
+                    for relative in distributions
+                ]
             },
-            "github": {
-                "http_status": 200,
-                "resolved_tag_commit": candidate,
-                "asset_sha256": asset_sha256,
-                "asset_content": {
-                    "svc-release-manifest.json": (
-                        bundle_dir / "svc-release-manifest.json"
-                    ).read_text(encoding="utf-8"),
-                    "svc-release-metadata.json": (
-                        bundle_dir / "svc-release-metadata.json"
-                    ).read_text(encoding="utf-8"),
-                },
-                "body": {
-                    "tag_name": "v11.0.1",
-                    "target_commitish": "main",
-                    "name": plan["title"],
-                    "body": plan["notes"],
-                    "draft": False,
-                    "immutable": True,
-                    "assets": [
-                        {"name": Path(relative).name} for relative in assets
-                    ],
-                },
+        },
+        "github": {
+            "http_status": 200,
+            "resolved_tag_commit": fixture.candidate,
+            "asset_sha256": asset_sha256,
+            "asset_content": {
+                "svc-release-manifest.json": (
+                    fixture.bundle_dir / "svc-release-manifest.json"
+                ).read_text(encoding="utf-8"),
+                "svc-release-metadata.json": (
+                    fixture.bundle_dir / "svc-release-metadata.json"
+                ).read_text(encoding="utf-8"),
             },
-        }
-        baseline_github = {
-            "tag": "v11.0.0",
-            "commit": CUTOVER_BASELINE_COMMIT,
-            "title": "SVC 11.0.0",
-            "notes": "baseline",
-            "assets": CUTOVER_BASELINE_FILES,
-        }
+            "body": {
+                "tag_name": "v11.0.1",
+                "target_commitish": "main",
+                "name": fixture.plan["title"],
+                "body": fixture.plan["notes"],
+                "draft": False,
+                "immutable": True,
+                "assets": [
+                    {"name": Path(relative).name} for relative in assets
+                ],
+            },
+        },
+    }
+    state = {
+        "now": "2026-09-01T00:00:00Z",
+        "prior_run_id": None,
+        "predecessor": exact_external_observation(
+            cutover_baseline_expectation(),
+            immutable=False,
+        ),
+        "candidate": candidate_observation,
+        "artifact": {},
+    }
 
-        def baseline_state() -> dict[str, object]:
-            return {
-                "pypi": {
-                    "http_status": 200,
-                    "body": {
-                        "urls": [
-                            {"filename": name, "digests": {"sha256": digest}}
-                            for name, digest in CUTOVER_BASELINE_FILES.items()
-                        ]
-                    },
-                },
-                "github": {
-                    "http_status": 200,
-                    "resolved_tag_commit": CUTOVER_BASELINE_COMMIT,
-                    "asset_sha256": CUTOVER_BASELINE_FILES,
-                    "body": {
-                        "tag_name": baseline_github["tag"],
-                        "target_commitish": "main",
-                        "name": baseline_github["title"],
-                        "body": baseline_github["notes"],
-                        "draft": False,
-                        "immutable": False,
-                        "assets": [
-                            {"name": name} for name in CUTOVER_BASELINE_FILES
-                        ],
-                    },
-                },
-            }
+    exact = target_preflight(fixture.plan, state)
 
-        state = {
-            "now": "2026-09-01T00:00:00Z",
-            "prior_run_id": None,
-            "predecessor": baseline_state(),
-            "candidate": candidate_observation,
-            "artifact": {},
-        }
-        exact = target_preflight(plan, state)
-        assert exact["decision"] == "exact-complete"
-        assert exact["pypi_state"] == "all-exact"
-        assert exact["github_state"] == "published-exact"
+    assert exact["decision"] == "exact-complete"
+    assert exact["pypi_state"] == "all-exact"
+    assert exact["github_state"] == "published-exact"
 
 
 def test_sdist_round_trip_preserves_projected_version_and_catalog_without_scm() -> (

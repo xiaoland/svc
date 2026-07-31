@@ -75,7 +75,7 @@ def test_non_git_fallback_and_scope_specific_lock_identity() -> None:
             )
 
 
-def test_interpolation_is_constrained_and_provenance_requires_resolved_instance() -> None:
+def test_interpolation_is_constrained_to_declared_dev_tokens() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         workspace = resolve_workspace_identity(Path(tmp), namespace="fixture")
         value = interpolate_dev_value(
@@ -89,8 +89,15 @@ def test_interpolation_is_constrained_and_provenance_requires_resolved_instance(
             "tool",
             f"--id={workspace.worktree_id}",
         )
-        require_worktree_provenance("worktree", value, workspace)
-        with pytest.raises(SvcError, match="provenance"):
-            require_worktree_provenance("worktree", "http://static.localhost/health", workspace)
         with pytest.raises(SvcError, match="interpolation"):
             interpolate_dev_value("${HOME}", workspace, profile="worktree", target="frontend")
+
+
+def test_worktree_provenance_requires_the_resolved_instance() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workspace = resolve_workspace_identity(Path(tmp), namespace="fixture")
+        resolved = f"http://frontend-{workspace.instance}.localhost/health"
+
+        require_worktree_provenance("worktree", resolved, workspace)
+        with pytest.raises(SvcError, match="provenance"):
+            require_worktree_provenance("worktree", "http://static.localhost/health", workspace)

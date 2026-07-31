@@ -4,19 +4,16 @@ import copy
 from io import BytesIO
 import hashlib
 import json
-from pathlib import Path
-import tempfile
 import pytest
-import zipfile
 
 from svc_cli.telemetry.trajectory import (
     DEFAULT_NORMALIZATION_POLICY,
+    MAX_NATIVE_JSON_DEPTH,
     TrajectoryCollector,
     TrajectoryError,
     _validate_diagnostics,
     build_manifest,
     canonical_json_bytes,
-    validate_bundle,
     validate_manifest,
     zero_lossiness,
     validate_trajectory_bytes,
@@ -137,7 +134,7 @@ class TestTrajectory:
             collector.emit(invalid)
         assert (raised.value.code) == ("invalid-trajectory")
 
-    def test_validate_rejects_duplicate_keys_noncanonical_and_depth(self) -> None:
+    def test_validate_rejects_duplicate_keys_noncanonical_and_excessive_depth(self) -> None:
         data = b'{"type":"meta","type":"meta"}\n'
         with pytest.raises(TrajectoryError) as raised:
             validate_trajectory_bytes(data)
@@ -149,6 +146,13 @@ class TestTrajectory:
         with pytest.raises(TrajectoryError):
             validate_trajectory_bytes(noncanonical)
 
+        deep: object = {}
+        for _ in range(MAX_NATIVE_JSON_DEPTH + 1):
+            deep = {"nested": deep}
+        with pytest.raises(TrajectoryError) as raised:
+            validate_trajectory_bytes(canonical_json_bytes(deep, newline=True))
+        assert raised.value.code == "json-depth-exceeded"
+
     def test_validate_requires_leading_meta_and_contiguous_ids(self) -> None:
         with pytest.raises(TrajectoryError):
             validate_trajectory_bytes(canonical_json_bytes(message(0), newline=True))
@@ -157,7 +161,7 @@ class TestTrajectory:
         with pytest.raises(TrajectoryError):
             validate_trajectory_bytes(data)
 
-    def test_event_and_tool_shapes_are_validated(self) -> None:
+    def test_event_and_tool_records_emit_with_expected_counts(self) -> None:
         call = {
             "type": "tool_call", "record_id": "r000001", "record_index": 1,
             "timestamp": "2026-01-01T00:00:01Z", "source_ref": {"event_index": 1},
@@ -174,7 +178,9 @@ class TestTrajectory:
         collector = TrajectoryCollector()
         for item in (meta(), call, event):
             assert (collector.emit(item))
-        assert (collector.finish().tool_calls) == (1)
+        result = collector.finish()
+        assert result.tool_calls == 1
+        assert result.records_by_type["event"] == 1
 
     def test_relationship_hash_starting_with_d_is_not_a_duplicate_suffix(
         self,
@@ -196,28 +202,6 @@ class TestTrajectory:
         assert (collector.emit(meta()))
         with pytest.raises(TrajectoryError):
             collector.emit(invalid)
-
-    def test_historical_schema_v2_bundle_remains_validatable(self) -> None:
-        trajectory = self._trajectory()
-        manifest = self._manifest(trajectory)
-        with tempfile.TemporaryDirectory() as temp:
-            output = Path(temp) / "bundle.zip"
-            with zipfile.ZipFile(
-                output,
-                "w",
-                compression=zipfile.ZIP_DEFLATED,
-            ) as archive:
-                archive.writestr(
-                    "manifest.json",
-                    canonical_json_bytes(manifest, newline=True),
-                )
-                archive.writestr("trajectory.jsonl", trajectory)
-            with zipfile.ZipFile(output) as archive:
-                assert (archive.namelist()) == (["manifest.json", "trajectory.jsonl"])
-                assert (archive.read("manifest.json")) == (canonical_json_bytes(manifest, newline=True))
-                assert (archive.read("trajectory.jsonl")) == (trajectory)
-            validated = validate_bundle(output)
-            assert (validated.bundle_id) == (manifest["bundle_id"])
 
     @pytest.mark.parametrize(
         "invalid_timestamp",
@@ -242,15 +226,20 @@ class TestTrajectory:
         with pytest.raises(TrajectoryError):
             validate_manifest(invalid)
 
-    def test_manifest_diagnostics_require_refs_order_and_coalescing(
+    @pytest.mark.parametrize(
+        "diagnostic_case",
+        ("missing_source_ref", "unsorted", "duplicate", "unresolved_record_ref"),
+    )
+    def test_manifest_diagnostic_coordinates_are_ordered_and_resolvable(
         self,
+        diagnostic_case: str,
     ) -> None:
         trajectory = self._trajectory()
         base = self._manifest(trajectory)
 
-        missing_ref = copy.deepcopy(base)
-        missing_ref["diagnostics"] = [
-            {
+        if diagnostic_case == "missing_source_ref":
+            invalid = copy.deepcopy(base)
+            invalid["diagnostics"] = [{
                 "code": "invalid-json-line",
                 "severity": "warning",
                 "action": "drop",
@@ -258,11 +247,11 @@ class TestTrajectory:
                 "record_ref": None,
                 "source_ref": None,
                 "details": {},
-            }
-        ]
-        missing_ref["counts"]["diagnostics_emitted"] = 1
-        with pytest.raises(TrajectoryError):
-            validate_manifest(missing_ref)
+            }]
+            invalid["counts"]["diagnostics_emitted"] = 1
+            with pytest.raises(TrajectoryError):
+                validate_manifest(invalid)
+            return
 
         first = {
             "code": "noise-record-dropped",
@@ -278,21 +267,13 @@ class TestTrajectory:
             "source_ref": {"event_index": 1},
             "details": {"record_type": "world_state"},
         }
-        unsorted = copy.deepcopy(base)
-        unsorted["diagnostics"] = [first, second]
-        unsorted["counts"]["diagnostics_emitted"] = 2
-        with pytest.raises(TrajectoryError):
-            validate_manifest(unsorted)
-
-        duplicate = copy.deepcopy(base)
-        duplicate["diagnostics"] = [second, dict(second)]
-        duplicate["counts"]["diagnostics_emitted"] = 2
-        with pytest.raises(TrajectoryError):
-            validate_manifest(duplicate)
-
-        unresolved = copy.deepcopy(base)
-        unresolved["diagnostics"] = [
-            {
+        invalid = copy.deepcopy(base)
+        if diagnostic_case == "unsorted":
+            invalid["diagnostics"] = [first, second]
+        elif diagnostic_case == "duplicate":
+            invalid["diagnostics"] = [second, dict(second)]
+        else:
+            invalid["diagnostics"] = [{
                 "code": "orphan-tool-result",
                 "severity": "warning",
                 "action": "unavailable",
@@ -300,16 +281,24 @@ class TestTrajectory:
                 "record_ref": "r999999",
                 "source_ref": {"event_index": 1},
                 "details": {},
-            }
-        ]
-        unresolved["counts"]["diagnostics_emitted"] = 1
+            }]
+        invalid["counts"]["diagnostics_emitted"] = len(invalid["diagnostics"])
         with pytest.raises(TrajectoryError):
-            validate_manifest(
-                unresolved,
-                trajectory=validate_trajectory_bytes(trajectory),
-            )
+            validate_manifest(invalid, trajectory=validate_trajectory_bytes(trajectory))
 
-    def test_diagnostic_limit_marker_uses_declared_bound(self) -> None:
+    @pytest.mark.parametrize(
+        ("marker_details", "valid"),
+        (
+            ({"observed_count": 5, "limit_count": 3}, True),
+            ({"observed_count": 5, "limit_count": 256}, False),
+            ({"observed_count": 3, "limit_count": 3}, False),
+        ),
+    )
+    def test_diagnostic_limit_marker_uses_declared_bound(
+        self,
+        marker_details: dict[str, int],
+        valid: bool,
+    ) -> None:
         regular = [
             {
                 "code": "noise-record-dropped",
@@ -329,29 +318,14 @@ class TestTrajectory:
             "count": 1,
             "record_ref": None,
             "source_ref": None,
-            "details": {"observed_count": 5, "limit_count": 3},
+            "details": marker_details,
         }
-
-        validated = _validate_diagnostics(
-            regular + [marker],
-            diagnostic_limit=3,
-        )
-        assert (validated[-1]["details"]) == ({
-            "observed_count": 5,
-            "limit_count": 3,
-        })
-
-        for details in (
-            {"observed_count": 5, "limit_count": 256},
-            {"observed_count": 3, "limit_count": 3},
-        ):
-            invalid_marker = dict(marker)
-            invalid_marker["details"] = details
+        if valid:
+            validated = _validate_diagnostics(regular + [marker], diagnostic_limit=3)
+            assert validated[-1]["details"] == marker_details
+        else:
             with pytest.raises(TrajectoryError):
-                _validate_diagnostics(
-                    regular + [invalid_marker],
-                    diagnostic_limit=3,
-                )
+                _validate_diagnostics(regular + [marker], diagnostic_limit=3)
 
     def test_default_manifest_path_accepts_a_valid_limit_marker(self) -> None:
         manifest = copy.deepcopy(self._manifest(self._trajectory()))
@@ -392,27 +366,3 @@ class TestTrajectory:
         manifest["diagnostics"] = regular
         manifest["counts"]["diagnostics_emitted"] = 256
         validate_manifest(manifest)
-
-    def test_schema_v1_manifest_is_rejected_before_other_member_open(self) -> None:
-        opened: list[str] = []
-        with tempfile.TemporaryDirectory() as temp:
-            output = Path(temp) / "old.zip"
-            old_manifest = {
-                "schema_version": 1,
-                "exporter": {"name": "svc"},
-                "provider": {}, "thread": {}, "artifact": {},
-            }
-            with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr("manifest.json", canonical_json_bytes(old_manifest, newline=True))
-                archive.writestr("providers/codex/rollout.jsonl", b"sentinel")
-                archive.writestr("thread/index.json", b"sentinel")
-                archive.writestr("task-packets/tasks/x/packet.md", b"sentinel")
-
-            def opener(archive: zipfile.ZipFile, info: zipfile.ZipInfo):
-                opened.append(info.filename)
-                return archive.open(info)
-
-            with pytest.raises(TrajectoryError) as raised:
-                validate_bundle(output, member_open=opener)
-            assert (raised.value.code) == ("unsupported-agent-thread-bundle-schema")
-            assert (opened) == (["manifest.json"])

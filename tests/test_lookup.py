@@ -46,11 +46,13 @@ def test_keyword_is_deterministic_and_returns_paths_not_copied_bodies() -> None:
     assert result.excerpt is not None
 
 
-def test_invalid_regex_and_tampered_corpus_are_explicit_failures() -> None:
+def test_invalid_name_regex_is_an_explicit_failure() -> None:
     lookup = fixture_lookup()
     with pytest.raises(SvcError, match="Invalid --name"):
         lookup.lookup(LookupQuery("name", "["))
 
+
+def test_tampered_corpus_is_an_explicit_integrity_failure() -> None:
     bad = CorpusLookup(
         Catalog(1, "10.0.0", (CatalogEntry("sections/example.md", "Example", "0" * 64),)),
         lambda _: b"# Example\n",

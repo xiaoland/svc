@@ -84,57 +84,48 @@ def test_reference_style_links_ignore_code_fences() -> None:
         assert "<!-- Source: docs/ignored.md -->" not in content
 
 
-def test_missing_local_markdown_target_fails() -> None:
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        root = Path(tmp_dir) / "src"
-        root.mkdir(parents=True)
-        (root / "index.md").write_text(
-            "# Home\n\n[Missing](sections/missing.md)\n",
-            encoding="utf-8",
-        )
+@pytest.mark.parametrize(
+    ("document", "missing_path"),
+    (
+        ("# Home\n\n[Missing](sections/missing.md)\n", "sections/missing.md"),
+        ("# Home\n\n[Missing][child]\n\n[child]: missing.md\n", "missing.md"),
+    ),
+    ids=("inline", "reference-style"),
+)
+def test_missing_local_markdown_target_fails(
+    tmp_path: Path,
+    document: str,
+    missing_path: str,
+) -> None:
+    root = tmp_path / "src"
+    root.mkdir()
+    (root / "index.md").write_text(document, encoding="utf-8")
 
-        with pytest.raises(FileNotFoundError, match="sections/missing.md"):
-            MonolithBuilder(root).build(root / "index.md")
+    with pytest.raises(FileNotFoundError, match=missing_path):
+        MonolithBuilder(root).build(root / "index.md")
 
 
-def test_missing_local_markdown_fragment_fails() -> None:
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        root = Path(tmp_dir) / "src"
-        root.mkdir(parents=True)
-        (root / "index.md").write_text(
-            "# Home\n\n[Missing fragment](child.md#absent)\n",
-            encoding="utf-8",
-        )
+@pytest.mark.parametrize(
+    ("document", "child"),
+    (
+        ("# Home\n\n[Missing fragment](child.md#absent)\n", True),
+        ("# Home\n\n[Missing fragment](#absent)\n", False),
+    ),
+    ids=("cross-document", "same-document"),
+)
+def test_missing_markdown_fragment_fails(
+    tmp_path: Path,
+    document: str,
+    child: bool,
+) -> None:
+    root = tmp_path / "src"
+    root.mkdir()
+    (root / "index.md").write_text(document, encoding="utf-8")
+    if child:
         (root / "child.md").write_text("# Child\n", encoding="utf-8")
 
-        with pytest.raises(ValueError, match="#absent"):
-            MonolithBuilder(root).build(root / "index.md")
-
-
-def test_same_document_missing_fragment_fails() -> None:
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        root = Path(tmp_dir) / "src"
-        root.mkdir(parents=True)
-        (root / "index.md").write_text(
-            "# Home\n\n[Missing fragment](#absent)\n",
-            encoding="utf-8",
-        )
-
-        with pytest.raises(ValueError, match="#absent"):
-            MonolithBuilder(root).build(root / "index.md")
-
-
-def test_reference_style_missing_target_fails() -> None:
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        root = Path(tmp_dir) / "src"
-        root.mkdir(parents=True)
-        (root / "index.md").write_text(
-            "# Home\n\n[Missing][child]\n\n[child]: missing.md\n",
-            encoding="utf-8",
-        )
-
-        with pytest.raises(FileNotFoundError, match="missing.md"):
-            MonolithBuilder(root).build(root / "index.md")
+    with pytest.raises(ValueError, match="#absent"):
+        MonolithBuilder(root).build(root / "index.md")
 
 
 def test_undefined_reference_label_fails() -> None:

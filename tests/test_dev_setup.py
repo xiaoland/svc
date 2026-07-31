@@ -61,32 +61,27 @@ def test_vscode_jsonc_insert_is_surgical_idempotent_and_leaves_launch_untouched(
         assert plan_setup(root, "vscode").status == "noop"
 
 
-def test_vscode_edited_marker_or_reserved_label_blocks_without_writing() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        write_config(root)
-        initial = plan_setup(root, "vscode")
+@pytest.mark.parametrize("conflict", ("edited-managed-task", "reserved-consumer-label"))
+def test_vscode_ownership_conflicts_block_without_writing(tmp_path: Path, conflict: str) -> None:
+    write_config(tmp_path)
+    if conflict == "edited-managed-task":
+        initial = plan_setup(tmp_path, "vscode")
         apply_local_plan(initial, initial.digest)
-        tasks = root / ".vscode" / "tasks.json"
-        edited = tasks.read_bytes().replace(b'"command": "svc"', b'"command": "consumer"')
-        tasks.write_bytes(edited)
-        blocked = plan_setup(root, "vscode")
-        assert "invalid-vscode-tasks" in {item.code for item in blocked.blockers}
-        assert tasks.read_bytes() == edited
-
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        write_config(root)
-        (root / ".vscode").mkdir()
-        tasks = root / ".vscode" / "tasks.json"
+        tasks = tmp_path / ".vscode" / "tasks.json"
+        original = tasks.read_bytes().replace(b'"command": "svc"', b'"command": "consumer"')
+    else:
+        (tmp_path / ".vscode").mkdir()
+        tasks = tmp_path / ".vscode" / "tasks.json"
         original = b'{"version":"2.0.0","tasks":[{"label":"svc:dev:frontend"}]}'
-        tasks.write_bytes(original)
-        blocked = plan_setup(root, "vscode")
-        assert "invalid-vscode-tasks" in {item.code for item in blocked.blockers}
-        assert tasks.read_bytes() == original
+    tasks.write_bytes(original)
+
+    blocked = plan_setup(tmp_path, "vscode")
+
+    assert "invalid-vscode-tasks" in {item.code for item in blocked.blockers}
+    assert tasks.read_bytes() == original
 
 
-def test_npm_is_root_only_surgical_conflict_safe_and_preserves_mode() -> None:
+def test_npm_update_is_surgical_idempotent_and_preserves_mode() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         write_config(root)
@@ -103,13 +98,32 @@ def test_npm_is_root_only_surgical_conflict_safe_and_preserves_mode() -> None:
         assert stat.S_IMODE(package.stat().st_mode) == 0o640
         assert plan_setup(root, "npm").status == "noop"
 
-        package.write_bytes(updated.replace(b"svc dev ensure frontend", b"consumer command"))
-        conflict = plan_setup(root, "npm")
-        assert "invalid-package-json" in {item.code for item in conflict.blockers}
 
-        package.write_bytes(b'{"scripts":{"test":"ok",}}')
-        malformed = plan_setup(root, "npm")
-        assert "invalid-package-json" in {item.code for item in malformed.blockers}
+def test_npm_rejects_managed_script_drift(tmp_path: Path) -> None:
+    write_config(tmp_path)
+    package = tmp_path / "package.json"
+    package.write_text('{"name":"consumer"}', encoding="utf-8")
+    initial = plan_setup(tmp_path, "npm")
+    apply_local_plan(initial, initial.digest)
+    drifted = package.read_bytes().replace(b"svc dev ensure frontend", b"consumer command")
+    package.write_bytes(drifted)
+
+    blocked = plan_setup(tmp_path, "npm")
+
+    assert "invalid-package-json" in {item.code for item in blocked.blockers}
+    assert package.read_bytes() == drifted
+
+
+def test_npm_rejects_malformed_package_json(tmp_path: Path) -> None:
+    write_config(tmp_path)
+    package = tmp_path / "package.json"
+    malformed = b'{"scripts":{"test":"ok",}}'
+    package.write_bytes(malformed)
+
+    blocked = plan_setup(tmp_path, "npm")
+
+    assert "invalid-package-json" in {item.code for item in blocked.blockers}
+    assert package.read_bytes() == malformed
 
 
 def test_plan_digest_binds_config_and_destination_bytes() -> None:

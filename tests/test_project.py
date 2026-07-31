@@ -32,7 +32,7 @@ def tree_bytes(root: Path) -> dict[str, bytes]:
     }
 
 
-def test_init_is_deterministic_plan_first_and_idempotent() -> None:
+def test_init_plan_is_deterministic_and_side_effect_free() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         before = tree_bytes(root)
@@ -48,6 +48,11 @@ def test_init_is_deterministic_plan_first_and_idempotent() -> None:
             ".gitignore",
         }
 
+
+def test_init_apply_produces_a_healthy_idempotent_project() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        first = plan_init(root)
         result = apply_local_plan(first, first.digest)
         assert result["status"] == "applied"
         assert parse_project_state((root / PROJECT_FILE).read_bytes()).svc_version == first.target_version
@@ -81,20 +86,34 @@ def test_init_preserves_unmarked_consumer_content_and_creates_docs_index() -> No
         assert b"svc:begin navigation" in (root / DOCS_INDEX_FILE).read_bytes()
 
 
-def test_modified_skill_or_navigation_blocks_without_overwrite() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        initial = plan_init(root)
-        apply_local_plan(initial, initial.digest)
-        agents = root / AGENTS_FILE
-        agents.write_text(agents.read_text(encoding="utf-8").replace("This project uses", "This project secretly uses"), encoding="utf-8")
-        before = tree_bytes(root)
+@pytest.mark.parametrize(
+    ("relative_path", "old", "new", "expected_code"),
+    (
+        (AGENTS_FILE, b"This project uses", b"This project secretly uses", "generated-guidance-drift"),
+        (CODEX_SKILL_FILE, b"name: svc", b"name: consumer-svc", "generated-skill-drift"),
+    ),
+)
+def test_modified_generated_surface_blocks_without_overwrite(
+    tmp_path: Path,
+    relative_path: str,
+    old: bytes,
+    new: bytes,
+    expected_code: str,
+) -> None:
+    initial = plan_init(tmp_path)
+    apply_local_plan(initial, initial.digest)
+    surface = tmp_path / relative_path
+    content = surface.read_bytes()
+    assert old in content
+    surface.write_bytes(content.replace(old, new, 1))
+    before = tree_bytes(tmp_path)
 
-        plan = plan_init(root)
-        assert "generated-guidance-drift" in {blocker.code for blocker in plan.blockers}
-        with pytest.raises(SvcError, match="unresolved blockers"):
-            apply_local_plan(plan, plan.digest)
-        assert tree_bytes(root) == before
+    plan = plan_init(tmp_path)
+
+    assert expected_code in {blocker.code for blocker in plan.blockers}
+    with pytest.raises(SvcError, match="unresolved blockers"):
+        apply_local_plan(plan, plan.digest)
+    assert tree_bytes(tmp_path) == before
 
 
 def test_unowned_existing_skill_is_never_replaced() -> None:
@@ -111,7 +130,7 @@ def test_unowned_existing_skill_is_never_replaced() -> None:
         assert tree_bytes(root) == before
 
 
-def test_stale_plan_and_commit_or_postcondition_failure_leave_no_partial_project_tree(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stale_plan_detects_consumer_change_before_any_write() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         stale = plan_init(root)
@@ -120,10 +139,18 @@ def test_stale_plan_and_commit_or_postcondition_failure_leave_no_partial_project
             apply_local_plan(stale, stale.digest)
         assert not (root / PROJECT_FILE).exists()
 
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        plan = plan_init(root)
-        before = tree_bytes(root)
+
+@pytest.mark.parametrize("failure", ("commit", "postcondition"))
+def test_apply_failure_rolls_back_the_partial_project_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    plan = plan_init(tmp_path)
+    before = tree_bytes(tmp_path)
+    expected_code = "apply-failed" if failure == "commit" else "postcondition-failed"
+
+    if failure == "commit":
         original = plans._commit_write
         calls = 0
 
@@ -134,29 +161,19 @@ def test_stale_plan_and_commit_or_postcondition_failure_leave_no_partial_project
                 raise OSError("injected write failure")
             original(path, content)
 
-        with monkeypatch.context() as patch:
-            patch.setattr(plans, "_commit_write", fail_second)
-            with pytest.raises(SvcError) as raised:
-                apply_local_plan(plan, plan.digest)
-        assert raised.value.code == "apply-failed"
-        assert raised.value.details["rollback"] == "succeeded"
-        assert tree_bytes(root) == before
-
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        plan = plan_init(root)
-        before = tree_bytes(root)
-
+        monkeypatch.setattr(plans, "_commit_write", fail_second)
+    else:
         def fail_postconditions(*args: object, **kwargs: object) -> None:
             raise SvcError("postcondition-failed", "injected postcondition failure")
 
-        with monkeypatch.context() as patch:
-            patch.setattr(plans, "_verify_postconditions", fail_postconditions)
-            with pytest.raises(SvcError) as raised:
-                apply_local_plan(plan, plan.digest)
-        assert raised.value.code == "postcondition-failed"
-        assert raised.value.details["rollback"] == "succeeded"
-        assert tree_bytes(root) == before
+        monkeypatch.setattr(plans, "_verify_postconditions", fail_postconditions)
+
+    with pytest.raises(SvcError) as raised:
+        apply_local_plan(plan, plan.digest)
+
+    assert raised.value.code == expected_code
+    assert raised.value.details["rollback"] == "succeeded"
+    assert tree_bytes(tmp_path) == before
 
 
 def test_rollback_does_not_overwrite_an_intervening_consumer_change(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -183,7 +200,7 @@ def test_rollback_does_not_overwrite_an_intervening_consumer_change(monkeypatch:
         assert (root / PROJECT_FILE).read_text(encoding="utf-8") == "consumer change\n"
 
 
-def test_status_distinguishes_adoption_and_adopt_updates_only_project_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_distinguishes_adoption_and_adopt_updates_only_project_metadata() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         initial = plan_init(root)
@@ -198,7 +215,13 @@ def test_status_distinguishes_adoption_and_adopt_updates_only_project_metadata(m
         apply_local_plan(adopt, adopt.digest)
         assert inspect_status(root)["healthy"]
 
-        mismatch_version = "0.0.0" if adopt.target_version != "0.0.0" else "0.0.1"
+
+def test_status_reports_installed_runtime_version_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        initial = plan_init(root)
+        apply_local_plan(initial, initial.digest)
+        mismatch_version = "0.0.0" if initial.target_version != "0.0.0" else "0.0.1"
         with monkeypatch.context() as patch:
             patch.setattr(project, "installed_distribution_version", lambda: mismatch_version)
             mismatch = inspect_status(root)

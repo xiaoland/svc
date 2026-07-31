@@ -44,7 +44,7 @@ def write_config(root: Path, name: str, value: object) -> None:
     (root / name).write_text(json.dumps(value), encoding="utf-8")
 
 
-def test_complete_strict_base_and_stable_declaration_digests() -> None:
+def test_complete_strict_base_has_a_stable_canonical_model() -> None:
     document = base_document()
     first = parse_project_config(json.dumps(document).encode())
     second = parse_project_config(json.dumps(document, indent=2).encode())

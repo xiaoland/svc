@@ -43,16 +43,23 @@ def test_pip_plan_is_explicit_and_editable_or_unknown_installers_block(monkeypat
     assert "unsupported-installer" in {item.code for item in unsupported.blockers}
 
 
-def test_apply_requires_exact_unchanged_plan_and_verifies_in_a_fresh_interpreter(monkeypatch: pytest.MonkeyPatch) -> None:
-    plan = SelfUpdatePlan(
+def pip_update_plan() -> SelfUpdatePlan:
+    return SelfUpdatePlan(
         "10.0.0",
         ("python", "-m", "pip", "install", "--upgrade", "sustainable-vibe-coding"),
         "pip",
         (),
     )
+
+
+def test_apply_rejects_a_wrong_plan_digest() -> None:
+    plan = pip_update_plan()
     with pytest.raises(SvcError, match="does not match"):
         apply_self_update(plan, "0" * 64)
 
+
+def test_apply_verifies_the_updated_version_in_a_fresh_interpreter(monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = pip_update_plan()
     with monkeypatch.context() as patch:
         patch.setattr(update, "_installed_version", lambda: "10.0.0")
         patch.setattr(update, "_run_update", lambda _: SimpleNamespace(returncode=0, stderr=""))
@@ -62,6 +69,9 @@ def test_apply_requires_exact_unchanged_plan_and_verifies_in_a_fresh_interpreter
     assert result["previous_version"] == "10.0.0"
     assert result["installed_cli_version"] == "10.1.0"
 
+
+def test_apply_rejects_an_installed_version_changed_after_planning(monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = pip_update_plan()
     with monkeypatch.context() as patch:
         patch.setattr(update, "_installed_version", lambda: "10.0.1")
         with pytest.raises(SvcError, match="changed after planning"):

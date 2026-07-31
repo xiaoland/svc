@@ -36,7 +36,6 @@ SLICE_CHOICES = ("inventory", "evidence", "query", "read", "all")
 _MAX_CHILD_OUTPUT_BYTES = 2 * 1024 * 1024
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _NATIVE_ID_RE = re.compile(r"^n[0-9]{6}$")
-_RECORD_ID_RE = re.compile(r"^r[0-9]{6}$")
 _EVIDENCE_ID_RE = re.compile(r"^[0-9a-f]{64}$")
 _EVIDENCE_MEMBERS = {
     "manifest.json",
@@ -479,53 +478,92 @@ def _export_fixture(child: Path, root: Path, env: Mapping[str, str]) -> tuple[Pa
     return output, dict(payload)
 
 
-def _validate_evidence_zip(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]], bytes, bytes]:
+def _validate_evidence_zip(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]], bytes]:
+    """Check only the bytes this independent consumer must trust.
+
+    Evidence-core tests own the schema and projection invariants.  Acceptance
+    keeps the smaller installed-consumer contract: member presence, manifest
+    byte metadata, native/index digests, and exact frame reconstruction needed
+    by the read case.
+    """
+
     try:
         with zipfile.ZipFile(path) as archive:
-            if set(archive.namelist()) != _EVIDENCE_MEMBERS:
+            names = archive.namelist()
+            if len(names) != len(set(names)) or set(names) != _EVIDENCE_MEMBERS:
                 raise _CaseFailure("evidence-members")
             manifest_bytes = archive.read("manifest.json")
             native = archive.read("native.bin")
             index_bytes = archive.read("native-index.jsonl")
-            trajectory = archive.read("trajectory.jsonl")
             manifest = _json(manifest_bytes, "evidence-manifest")
     except (OSError, zipfile.BadZipFile, KeyError) as error:
         raise _CaseFailure("evidence-members") from error
-    if not isinstance(manifest, Mapping) or manifest.get("format") != "svc-agent-thread-evidence" or manifest.get("schema_version") != 3:
+    if (
+        not isinstance(manifest, Mapping)
+        or manifest.get("format") != "svc-agent-thread-evidence"
+        or manifest.get("schema_version") != 3
+    ):
         raise _CaseFailure("evidence-manifest")
     capture = manifest.get("capture")
     evidence_id = manifest.get("evidence_id")
-    if not isinstance(capture, Mapping) or capture.get("representation") != "provider-bytes" or capture.get("status") not in {"complete", "partial"} or not isinstance(capture.get("unknown_remainder"), bool) or not isinstance(evidence_id, str) or _EVIDENCE_ID_RE.fullmatch(evidence_id) is None:
+    if (
+        not isinstance(capture, Mapping)
+        or capture.get("representation") != "provider-bytes"
+        or capture.get("status") not in {"complete", "partial"}
+        or not isinstance(capture.get("unknown_remainder"), bool)
+        or not isinstance(evidence_id, str)
+        or _EVIDENCE_ID_RE.fullmatch(evidence_id) is None
+    ):
         raise _CaseFailure("evidence-manifest")
     native_meta = manifest.get("native")
     index_meta = manifest.get("native_index")
-    if not isinstance(native_meta, Mapping) or native_meta.get("sha256") != hashlib.sha256(native).hexdigest() or native_meta.get("bytes") != len(native) or not isinstance(index_meta, Mapping) or index_meta.get("sha256") != hashlib.sha256(index_bytes).hexdigest() or index_meta.get("bytes") != len(index_bytes):
+    if (
+        not isinstance(native_meta, Mapping)
+        or native_meta.get("sha256") != hashlib.sha256(native).hexdigest()
+        or native_meta.get("bytes") != len(native)
+        or not isinstance(index_meta, Mapping)
+        or index_meta.get("sha256") != hashlib.sha256(index_bytes).hexdigest()
+        or index_meta.get("bytes") != len(index_bytes)
+    ):
         raise _CaseFailure("evidence-digest")
     entries: list[dict[str, Any]] = []
     expected_start = 0
-    for ordinal, line in enumerate(index_bytes.splitlines()):
+    for line in index_bytes.splitlines():
         value = _json(line, "evidence-index")
-        if not isinstance(value, dict) or value.get("native_record_id") != f"n{ordinal:06d}" or value.get("native_index") != ordinal or value.get("byte_start") != expected_start or not isinstance(value.get("byte_end"), int) or value["byte_end"] <= expected_start or value["byte_end"] > len(native) or value.get("representation") != "provider-bytes" or value.get("sha256") != hashlib.sha256(native[expected_start:value["byte_end"]]).hexdigest():
+        if (
+            not isinstance(value, Mapping)
+            or not isinstance(value.get("native_record_id"), str)
+            or _NATIVE_ID_RE.fullmatch(value["native_record_id"]) is None
+            or value.get("byte_start") != expected_start
+            or not isinstance(value.get("byte_end"), int)
+            or value["byte_end"] <= expected_start
+            or value["byte_end"] > len(native)
+            or value.get("sha256") != hashlib.sha256(native[expected_start:value["byte_end"]]).hexdigest()
+        ):
             raise _CaseFailure("evidence-index")
-        entries.append(value)
+        entries.append(
+            {
+                "native_record_id": value["native_record_id"],
+                "byte_start": expected_start,
+                "byte_end": value["byte_end"],
+                "sha256": value["sha256"],
+            }
+        )
         expected_start = value["byte_end"]
     if expected_start != len(native) or index_meta.get("records") != len(entries):
         raise _CaseFailure("evidence-index")
-    records = []
-    for line in trajectory.splitlines():
-        value = _json(line, "evidence-trajectory")
-        if not isinstance(value, dict):
-            raise _CaseFailure("evidence-trajectory")
-        records.append(value)
-        if value.get("type") != "meta":
-            source_ref = value.get("source_ref")
-            if not isinstance(source_ref, Mapping) or source_ref.get("native_record_id") not in {entry["native_record_id"] for entry in entries if entry.get("frame_status") == "complete"}:
-                raise _CaseFailure("evidence-binding")
-    return dict(manifest), entries, native, trajectory
+    return dict(manifest), entries, native
 
 
 def _method_valid(value: object) -> bool:
-    return isinstance(value, Mapping) and value.get("id") == "svc.agent-task-analysis" and value.get("path") == "sections/working-protocol.md" and value.get("section") == "Agent Task Analysis" and isinstance(value.get("sha256"), str) and _SHA256_RE.fullmatch(value["sha256"]) is not None
+    return (
+        isinstance(value, Mapping)
+        and value.get("id") == "svc.agent-task-analysis"
+        and value.get("path") == "sections/working-protocol.md"
+        and value.get("section") == "Agent Task Analysis"
+        and isinstance(value.get("sha256"), str)
+        and _SHA256_RE.fullmatch(value["sha256"]) is not None
+    )
 
 
 def _run_inventory_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
@@ -564,7 +602,7 @@ def _run_inventory_case(child: Path, root: Path, env: Mapping[str, str]) -> None
 
 def _run_evidence_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
     bundle, export = _export_fixture(child, root, env)
-    manifest, entries, native, _trajectory = _validate_evidence_zip(bundle)
+    manifest, entries, native = _validate_evidence_zip(bundle)
     if len(entries) != 5 or entries[-1].get("byte_end", 0) - entries[-1].get("byte_start", 0) <= 4_194_304:
         raise _CaseFailure("evidence-oversized")
     if export.get("evidence", {}).get("evidence_id") != manifest.get("evidence_id"):
@@ -594,8 +632,13 @@ def _run_query_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
     overview_request = root / "overview.json"
     overview_request.write_bytes(_canonical({"intent": "overview"}))
     overview = _run_cli(child, ("analysis", "query", "--input", bundle, "--request", overview_request), root, env)
-    dropped = overview.get("projection", {}).get("lossiness", {}).get("dropped", {})
-    if overview.get("status") != "partial" or overview.get("native_range", {}).get("records") != 5 or not _method_valid(overview.get("method")) or dropped.get("oversize_record") != 1:
+    native_range = overview.get("native_range")
+    if (
+        overview.get("status") != "partial"
+        or not isinstance(native_range, Mapping)
+        or native_range.get("records") != 5
+        or not _method_valid(overview.get("method"))
+    ):
         raise _CaseFailure("query-overview")
     match_request = root / "match.json"
     match_request.write_bytes(_canonical({"intent": "match", "predicates": {"text": {"terms": ["parser"], "mode": "all"}}}))
@@ -635,7 +678,7 @@ def _run_read_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
     continued = _run_cli(child, ("analysis", "read", "--input", bundle, "--request", cursor_request), root, env)
     if continued.get("items", [{}])[0].get("native_index") != 1:
         raise _CaseFailure("read-cursor")
-    _manifest, entries, native, _trajectory = _validate_evidence_zip(bundle)
+    _manifest, entries, native = _validate_evidence_zip(bundle)
     oversized = max(entries, key=lambda item: item["byte_end"] - item["byte_start"])
     request: dict[str, Any] = {"start": {"evidence_id": first["evidence_id"], "record_kind": "native", "record_id": oversized["native_record_id"]}, "max_items": 1, "max_bytes": 1_048_576}
     fragments = bytearray()

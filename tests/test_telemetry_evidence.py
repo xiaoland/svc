@@ -161,42 +161,45 @@ def test_native_index_requires_exact_cover_and_digest() -> None:
     assert raised.value.code == "invalid-native-index"
 
 
-def test_trajectory_refs_must_resolve_complete_native_frames() -> None:
+@pytest.mark.parametrize("failure_case", ("missing", "incomplete"))
+def test_trajectory_refs_must_resolve_complete_native_frames(failure_case: str) -> None:
     manifest, native, native_index, trajectory = _fixture()
-    record = json.loads(trajectory.splitlines()[1])
-    del record["source_ref"]["native_record_id"]
-    missing_ref = canonical_json_bytes(_meta(), newline=True) + canonical_json_bytes(record, newline=True)
-    missing_manifest = dict(manifest)
-    missing_manifest["projection"] = _projection(missing_ref)
-    missing_manifest["evidence_id"] = build_evidence_id(missing_manifest, native, native_index, missing_ref)
+    if failure_case == "missing":
+        record = json.loads(trajectory.splitlines()[1])
+        del record["source_ref"]["native_record_id"]
+        broken_trajectory = canonical_json_bytes(_meta(), newline=True) + canonical_json_bytes(record, newline=True)
+        broken_index = native_index
+        broken_manifest = dict(manifest)
+        broken_manifest["projection"] = _projection(broken_trajectory)
+        broken_manifest["evidence_id"] = build_evidence_id(broken_manifest, native, broken_index, broken_trajectory)
+        expected_code = "native-reference-missing"
+    else:
+        broken_trajectory = trajectory
+        broken_index = build_native_index(
+            native,
+            [
+                (0, 5, {"event_index": 0, "line": 0, "byte_offset": 0}, "complete"),
+                (5, len(native), {"event_index": 1, "line": 1, "byte_offset": 5}, "incomplete"),
+            ],
+        )
+        broken_manifest = dict(manifest)
+        broken_manifest["native_index"] = {
+            **manifest["native_index"],
+            "sha256": hashlib.sha256(broken_index).hexdigest(),
+            "bytes": len(broken_index),
+        }
+        broken_manifest["capture"] = {
+            "status": "partial",
+            "unknown_remainder": True,
+            "representation": "provider-bytes",
+        }
+        broken_manifest["evidence_id"] = build_evidence_id(
+            broken_manifest, native, broken_index, broken_trajectory
+        )
+        expected_code = "native-reference-incomplete"
     with pytest.raises(EvidenceError) as raised:
-        validate_evidence_members(missing_manifest, native, native_index, missing_ref)
-    assert raised.value.code == "native-reference-missing"
-
-    incomplete_index = build_native_index(
-        native,
-        [
-            (0, 5, {"event_index": 0, "line": 0, "byte_offset": 0}, "complete"),
-            (5, len(native), {"event_index": 1, "line": 1, "byte_offset": 5}, "incomplete"),
-        ],
-    )
-    incomplete_manifest = dict(manifest)
-    incomplete_manifest["native_index"] = {
-        **manifest["native_index"],
-        "sha256": hashlib.sha256(incomplete_index).hexdigest(),
-        "bytes": len(incomplete_index),
-    }
-    incomplete_manifest["capture"] = {
-        "status": "partial",
-        "unknown_remainder": True,
-        "representation": "provider-bytes",
-    }
-    incomplete_manifest["evidence_id"] = build_evidence_id(
-        incomplete_manifest, native, incomplete_index, trajectory
-    )
-    with pytest.raises(EvidenceError) as raised:
-        validate_evidence_members(incomplete_manifest, native, incomplete_index, trajectory)
-    assert raised.value.code == "native-reference-incomplete"
+        validate_evidence_members(broken_manifest, native, broken_index, broken_trajectory)
+    assert raised.value.code == expected_code
 
 
 def test_incomplete_final_native_frame_derives_partial_capture_metadata() -> None:
@@ -223,9 +226,13 @@ def test_incomplete_final_native_frame_derives_partial_capture_metadata() -> Non
     }
 
 
-def test_schema_v2_is_rejected_before_reading_other_members(tmp_path: Path) -> None:
+@pytest.mark.parametrize("schema_version", (1, 2))
+def test_schema_v1_and_v2_are_rejected_before_reading_other_members(
+    tmp_path: Path,
+    schema_version: int,
+) -> None:
     target = tmp_path / "old.zip"
-    old_manifest = {"format": "svc-agent-thread-bundle", "schema_version": 2}
+    old_manifest = {"format": "svc-agent-thread-bundle", "schema_version": schema_version}
     with zipfile.ZipFile(target, "w") as archive:
         archive.writestr("manifest.json", canonical_json_bytes(old_manifest, newline=True))
         archive.writestr("native.bin", b"not-read")

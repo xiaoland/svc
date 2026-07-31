@@ -125,19 +125,14 @@ def evidence(
 
 def test_query_schema_is_directly_actionable_for_an_agent() -> None:
     schema = query_schema()
-    assert schema["composition"] == [
-        "overview",
-        "match to obtain native refs",
-        "read contiguous native context before concluding",
-    ]
+    assert schema["format"] == "svc.analysis.query.schema/v1"
+    assert set(schema["intents"]) == {"overview", "match"}
     match_contract = schema["intents"]["match"]
     assert match_contract["initial"]["required"] == ["intent", "predicates"]
+    assert match_contract["initial"]["additional_properties"] is False
     assert match_contract["continuation"]["required"] == ["intent", "cursor"]
-    assert match_contract["predicates"]["text"]["shape"] == {
-        "terms": ["<literal>"],
-        "mode": "any | all",
-        "case_sensitive": False,
-    }
+    assert match_contract["continuation"]["additional_properties"] is False
+    assert match_contract["predicates"]["text"]["shape"]["case_sensitive"] is False
     assert match_contract["predicates"]["text"]["bounds"] == {
         "terms": [1, 8],
         "term_code_points": [1, 256],
@@ -145,9 +140,10 @@ def test_query_schema_is_directly_actionable_for_an_agent() -> None:
     assert match_contract["predicates"]["native_range"]["reference"][
         "record_kind"
     ] == "native"
-    assert match_contract["predicates"]["native_range"]["semantics"] == (
-        "inclusive native-order endpoints"
-    )
+    assert match_contract["predicates"]["native_range"]["reference"][
+        "additional_properties"
+    ] is False
+    assert schema["response_format"] == "svc.analysis.query/v1"
     assert schema["method_lookup"]["read_section"] == "Agent Task Analysis"
 
 
@@ -292,5 +288,6 @@ def test_match_cursor_is_deterministic_and_scope_bound() -> None:
     ),
 )
 def test_query_union_and_predicates_are_closed(query_request: object) -> None:
-    with pytest.raises(AnalysisProtocolError):
+    with pytest.raises(AnalysisProtocolError) as raised:
         query_evidence(evidence(), query_request)
+    assert raised.value.code == "invalid-query-request"

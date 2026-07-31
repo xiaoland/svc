@@ -678,7 +678,6 @@ def validate_trajectory_bytes(data: bytes, *, policy: NormalizationPolicy = DEFA
 
 BUNDLE_FORMAT = "svc-agent-thread-bundle"
 BUNDLE_SCHEMA_VERSION = 2
-MAX_SCHEMA_V2_ZIP_BYTES = 67_108_864
 MAX_MANIFEST_BYTES = 1_048_576
 _MANIFEST_ROOT = {
     "format", "schema_version", "trajectory", "bundle_id", "exporter", "generated_at",
@@ -723,14 +722,6 @@ _DIAGNOSTIC_SPECS = {
     "record-limit-reached": ("partial", "warning", {"observed_count", "limit_count"}), "trajectory-limit-reached": ("partial", "warning", {"observed_bytes", "limit_bytes"}),
     "task-reference-limit-reached": ("truncate", "warning", {"observed_count", "limit_count"}), "diagnostic-limit-reached": ("truncate", "warning", {"observed_count", "limit_count"}),
 }
-
-
-@dataclass(frozen=True)
-class ValidatedBundle:
-    manifest: Mapping[str, Any]
-    trajectory: ValidatedTrajectory
-    bundle_id: str
-    path: Any = None
 
 
 def _plain(value: Any) -> Any:
@@ -1148,167 +1139,9 @@ def build_manifest(*, trajectory_source: bytes | BinaryIO | EncodedTrajectory, s
     return manifest
 
 
-def _safe_member_name(name: str) -> bool:
-    if not name or "\\" in name or name.startswith("/"):
-        return False
-    parts = name.split("/")
-    return all(part not in {"", ".", ".."} for part in parts)
-
-
-def _looks_schema_v1(manifest: Any) -> bool:
-    return (
-        isinstance(manifest, Mapping)
-        and manifest.get("schema_version") == 1
-        and isinstance(manifest.get("exporter"), Mapping)
-        and manifest["exporter"].get("name") == "svc"
-        and isinstance(manifest.get("provider"), Mapping)
-        and isinstance(manifest.get("thread"), Mapping)
-        and isinstance(manifest.get("artifact"), Mapping)
-    )
-
-
-def _member_open(archive: Any, info: Any, callback: Any) -> BinaryIO:
-    stream = callback(archive, info) if callback is not None else archive.open(info, mode="r")
-    if not hasattr(stream, "read"):
-        _fail("Bundle member opener returned a non-readable stream.")
-    return stream
-
-
-def _read_member(archive: Any, info: Any, callback: Any, limit: int) -> bytes:
-    if info.file_size > limit:
-        _fail("Bundle member byte bound exceeded.", code="member-limit-reached")
-    stream = _member_open(archive, info, callback)
-    try:
-        data = stream.read(limit + 1)
-    finally:
-        stream.close()
-    if not isinstance(data, bytes) or len(data) > limit:
-        _fail("Bundle member byte bound exceeded.", code="member-limit-reached")
-    return data
-
-
-def validate_bundle(path: Any, *, member_open: Any = None) -> ValidatedBundle:
-    """Validate a portable bundle without extracting it.
-
-    The optional opener is intentionally narrow and exists for tests to prove
-    that a schema-v1 manifest is the only member opened before rejection.
-    """
-
-    import os
-    import stat
-    import zipfile
-    from pathlib import Path
-    input_path = Path(path)
-    try:
-        before = input_path.lstat()
-    except OSError as error:
-        raise TrajectoryError("bundle-input-unreadable", "Bundle input cannot be inspected.") from error
-    if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
-        _fail("Bundle input must be a regular non-link file.", code="bundle-input-unsafe")
-    if before.st_size > MAX_SCHEMA_V2_ZIP_BYTES:
-        _fail("Bundle ZIP byte bound exceeded.", code="zip-limit-reached")
-    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    descriptor = -1
-    try:
-        descriptor = os.open(input_path, flags)
-        opened = os.fstat(descriptor)
-        before_identity = (
-            before.st_dev,
-            before.st_ino,
-            stat.S_IFMT(before.st_mode),
-            before.st_size,
-            before.st_mtime_ns,
-        )
-        opened_identity = (
-            opened.st_dev,
-            opened.st_ino,
-            stat.S_IFMT(opened.st_mode),
-            opened.st_size,
-            opened.st_mtime_ns,
-        )
-        if (
-            not stat.S_ISREG(opened.st_mode)
-            or before_identity != opened_identity
-        ):
-            _fail(
-                "Bundle input changed while being opened.",
-                code="bundle-input-mutated",
-            )
-        with os.fdopen(descriptor, "rb", closefd=True) as raw:
-            descriptor = -1
-            with zipfile.ZipFile(raw, mode="r") as archive:
-                infos = archive.infolist()
-                names = [info.filename for info in infos]
-                if len(names) != len(set(names)):
-                    _fail("Bundle ZIP contains duplicate member names.", code="bundle-invalid")
-                for info in infos:
-                    if not _safe_member_name(info.filename) or info.flag_bits & 0x1 or info.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
-                        _fail("Bundle ZIP contains an unsafe member.", code="bundle-invalid")
-                    if info.is_dir() or ((info.external_attr >> 16) & 0o170000) not in {0, stat.S_IFREG}:
-                        _fail("Bundle ZIP member is not a regular file.", code="bundle-invalid")
-                if "manifest.json" not in names:
-                    _fail("Bundle ZIP has no manifest member.", code="bundle-invalid")
-                manifest_info = next(info for info in infos if info.filename == "manifest.json")
-                manifest_bytes = _read_member(archive, manifest_info, member_open, MAX_MANIFEST_BYTES)
-                manifest = _strict_loads(manifest_bytes[:-1] if manifest_bytes.endswith(b"\n") else manifest_bytes)
-                if _looks_schema_v1(manifest):
-                    raise TrajectoryError("unsupported-agent-thread-bundle-schema", "Schema-v1 agent-thread archives are unsupported inputs; recollect from the provider source.")
-                if (
-                    not manifest_bytes.endswith(b"\n")
-                    or canonical_json_bytes(manifest, newline=True)
-                    != manifest_bytes
-                ):
-                    _fail(
-                        "Bundle manifest is not canonical JSON with final LF.",
-                        code="bundle-invalid",
-                    )
-                if set(names) != {"manifest.json", "trajectory.jsonl"}:
-                    _fail("Bundle ZIP contains unexpected members.", code="bundle-invalid")
-                trajectory_info = next(info for info in infos if info.filename == "trajectory.jsonl")
-                trajectory_bytes = _read_member(archive, trajectory_info, member_open, MAX_TRAJECTORY_BYTES)
-                trajectory = validate_trajectory_bytes(trajectory_bytes)
-                validate_manifest(manifest, trajectory=trajectory)
-                final_opened = os.fstat(raw.fileno())
-                try:
-                    after = input_path.lstat()
-                except OSError as error:
-                    raise TrajectoryError("bundle-input-mutated", "Bundle input disappeared during validation.") from error
-                final_identity = (
-                    final_opened.st_dev,
-                    final_opened.st_ino,
-                    stat.S_IFMT(final_opened.st_mode),
-                    final_opened.st_size,
-                    final_opened.st_mtime_ns,
-                )
-                after_identity = (
-                    after.st_dev,
-                    after.st_ino,
-                    stat.S_IFMT(after.st_mode),
-                    after.st_size,
-                    after.st_mtime_ns,
-                )
-                if (
-                    stat.S_ISLNK(after.st_mode)
-                    or not stat.S_ISREG(after.st_mode)
-                    or before_identity != final_identity
-                    or before_identity != after_identity
-                ):
-                    _fail("Bundle input changed during validation.", code="bundle-input-mutated")
-                return ValidatedBundle(manifest, trajectory, str(manifest["bundle_id"]), input_path)
-    except TrajectoryError:
-        raise
-    except (OSError, zipfile.BadZipFile, KeyError, ValueError) as error:
-        raise TrajectoryError("bundle-invalid", "Bundle ZIP is not a valid schema-v2 artifact.") from error
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-
-
 __all__ = [
     "BUNDLE_FORMAT", "BUNDLE_SCHEMA_VERSION", "CONTENT_PROFILE", "DEFAULT_NORMALIZATION_POLICY", "EncodedTrajectory", "MAX_NATIVE_JSON_DEPTH",
     "MAX_NATIVE_LINE_BYTES", "MAX_RECORDS", "MAX_TRAJECTORY_BYTES", "NormalizationPolicy",
-    "TRAJECTORY_SCHEMA", "TrajectoryCollector", "TrajectoryError", "ValidatedBundle", "ValidatedTrajectory",
-    "build_bundle_id", "build_manifest", "canonical_json_bytes", "encode_trajectory", "policy_dict", "validate_bundle", "validate_manifest", "validate_record", "validate_trajectory_bytes", "zero_lossiness",
+    "TRAJECTORY_SCHEMA", "TrajectoryCollector", "TrajectoryError", "ValidatedTrajectory",
+    "build_bundle_id", "build_manifest", "canonical_json_bytes", "encode_trajectory", "policy_dict", "validate_manifest", "validate_record", "validate_trajectory_bytes", "zero_lossiness",
 ]

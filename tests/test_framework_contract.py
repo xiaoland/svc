@@ -4,17 +4,30 @@ from pathlib import Path
 
 import pytest
 
-from tools.build_monolith import MonolithBuilder
+from tools.build_monolith import validate_markdown_corpus
 
 
-ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "src"
+def test_document_gate_validates_reachable_and_orphan_documents(tmp_path: Path) -> None:
+    root = tmp_path / "src"
+    root.mkdir()
+    (root / "index.md").write_text("# Home\n\n[Child](child.md)\n", encoding="utf-8")
+    (root / "child.md").write_text("# Child\n", encoding="utf-8")
+    (root / "orphan.md").write_text("# Orphan\n", encoding="utf-8")
+
+    assert validate_markdown_corpus(root) == (
+        root / "child.md",
+        root / "index.md",
+        root / "orphan.md",
+    )
 
 
-def canonical_markdown_files() -> list[Path]:
-    return sorted(path for path in SOURCE.rglob("*.md") if path.is_file())
+def test_document_gate_reports_invalid_orphan_fixture(tmp_path: Path) -> None:
+    root = tmp_path / "src"
+    root.mkdir()
+    (root / "index.md").write_text("# Home\n", encoding="utf-8")
+    (root / "orphan.md").write_text(
+        "# Orphan\n\n[Missing](missing.md)\n", encoding="utf-8"
+    )
 
-
-@pytest.mark.parametrize("path", canonical_markdown_files(), ids=lambda path: path.relative_to(SOURCE).as_posix())
-def test_all_canonical_markdown_links_resolve(path: Path) -> None:
-    MonolithBuilder(SOURCE).build(path)
+    with pytest.raises(FileNotFoundError, match=r"orphan\.md:.*missing\.md"):
+        validate_markdown_corpus(root)

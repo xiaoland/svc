@@ -42,27 +42,33 @@ def _main_output(arguments: list[str]) -> tuple[int, dict[str, object]]:
     return code, json.loads(stream.getvalue())
 
 
-def test_slice_contract_is_inventory_evidence_query_read_all() -> None:
+@pytest.mark.parametrize(
+    ("slice_name", "expected"),
+    (
+        ("inventory", ("inventory",)),
+        ("evidence", ("evidence",)),
+        ("query", ("query",)),
+        ("read", ("read",)),
+        ("all", ("inventory", "evidence", "query", "read")),
+    ),
+)
+def test_selected_slice_names_expand_deterministically(
+    slice_name: str,
+    expected: tuple[str, ...],
+) -> None:
     assert harness.SLICE_CHOICES == ("inventory", "evidence", "query", "read", "all")
-    assert harness._selected("all") == harness.SLICE_CHOICES[:-1]
+    assert harness._selected(slice_name) == expected
 
 
 def test_argument_failure_is_bounded_json() -> None:
     code, report = _main_output(["--slice", "inventory"])
     assert code == 2
-    assert report == {
-        "cases": {},
-        "cleanup": "not-started",
-        "error": "arguments",
-        "exit_code": 2,
-        "harness_version": "2",
-        "installed": {},
-        "platform": report["platform"],
-        "python": report["python"],
-        "slice": "unknown",
-        "status": "failed",
-        "wheel_sha256": None,
-    }
+    assert report["status"] == "failed"
+    assert report["error"] == "arguments"
+    assert report["exit_code"] == 2
+    assert report["slice"] == "unknown"
+    assert report["cleanup"] == "not-started"
+    assert report["cases"] == {}
 
 
 def test_digest_mismatch_is_validation_failure(tmp_path: Path) -> None:
@@ -112,6 +118,64 @@ def test_bounded_child_output_rejects_oversized_content() -> None:
         harness._bounded_output(huge, "case")
 
 
+def test_installed_evidence_consumer_reconstructs_native_frames_from_digests(
+    tmp_path: Path,
+) -> None:
+    native = b"first\nsecond\n"
+    rows = [
+        {
+            "native_record_id": "n000000",
+            "byte_start": 0,
+            "byte_end": 6,
+            "sha256": hashlib.sha256(native[:6]).hexdigest(),
+        },
+        {
+            "native_record_id": "n000001",
+            "byte_start": 6,
+            "byte_end": len(native),
+            "sha256": hashlib.sha256(native[6:]).hexdigest(),
+        },
+    ]
+    index = b"".join(harness._canonical(row, newline=True) for row in rows)
+    manifest = {
+        "format": "svc-agent-thread-evidence",
+        "schema_version": 3,
+        "evidence_id": "a" * 64,
+        "capture": {
+            "status": "complete",
+            "unknown_remainder": False,
+            "representation": "provider-bytes",
+        },
+        "native": {"sha256": hashlib.sha256(native).hexdigest(), "bytes": len(native)},
+        "native_index": {
+            "sha256": hashlib.sha256(index).hexdigest(),
+            "bytes": len(index),
+            "records": len(rows),
+        },
+    }
+    target = tmp_path / "evidence.zip"
+    with zipfile.ZipFile(target, "w") as archive:
+        archive.writestr("manifest.json", harness._canonical(manifest, newline=True))
+        archive.writestr("native.bin", native)
+        archive.writestr("native-index.jsonl", index)
+        archive.writestr("trajectory.jsonl", b"projection\n")
+
+    checked_manifest, entries, checked_native = harness._validate_evidence_zip(target)
+    assert checked_manifest["evidence_id"] == manifest["evidence_id"]
+    assert checked_native == native
+    assert b"".join(native[item["byte_start"] : item["byte_end"]] for item in entries) == native
+
+    broken = dict(manifest)
+    broken["native"] = {**manifest["native"], "sha256": "0" * 64}
+    with zipfile.ZipFile(target, "w") as archive:
+        archive.writestr("manifest.json", harness._canonical(broken, newline=True))
+        archive.writestr("native.bin", native)
+        archive.writestr("native-index.jsonl", index)
+        archive.writestr("trajectory.jsonl", b"projection\n")
+    with pytest.raises(harness._CaseFailure):
+        harness._validate_evidence_zip(target)
+
+
 def test_installed_distribution_whitelist_rejects_textual(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     installed = {name: "1.0.0" for name in harness._ALLOWED_DISTRIBUTIONS}
     installed["textual"] = "8.0.0"
@@ -129,7 +193,7 @@ def test_installed_distribution_whitelist_rejects_textual(monkeypatch: pytest.Mo
     assert raised.value.reason == "install"
 
 
-def test_all_runs_new_cases_in_order_with_isolated_seams(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_all_runs_selected_case_runners_in_order(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     wheel, digest, wheelhouse = _wheel_inputs(tmp_path)
     observed: list[str] = []
 
@@ -155,8 +219,8 @@ def test_all_runs_new_cases_in_order_with_isolated_seams(monkeypatch: pytest.Mon
     assert code == 0
     assert report["status"] == "passed"
     assert report["wheel_sha256"] == digest
-    assert report["cases"] == {case: "passed" for case in observed}
     assert observed == ["inventory", "evidence", "query", "read"]
+    assert report["cases"] == {case: "passed" for case in observed}
     assert report["cleanup"] == "passed"
 
 

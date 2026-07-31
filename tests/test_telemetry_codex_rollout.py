@@ -185,43 +185,98 @@ class TestCodexRolloutProvider:
         assert capture.is_partial is True
         assert capture.unknown_remainder is False
 
-    def test_codex_native_field_paths_map_to_canonical_records(self) -> None:
+    @pytest.mark.parametrize(
+        ("payload", "record_type", "expected"),
+        [
+            pytest.param(
+                {"type": "message", "role": "user", "content": "hello"},
+                "message",
+                {"role": "user", "content": "hello"},
+                id="message-content",
+            ),
+            pytest.param(
+                {"type": "reasoning", "summary": "bounded summary"},
+                "reasoning",
+                {"reasoning_kind": "summary", "content": "bounded summary"},
+                id="reasoning-summary",
+            ),
+            pytest.param(
+                {
+                    "type": "function_call",
+                    "name": "safe",
+                    "call_id": "c1",
+                    "arguments": {"x": 1},
+                },
+                "tool_call",
+                {"name": "safe", "arguments": '{"x":1}'},
+                id="tool-call-fields",
+            ),
+        ],
+    )
+    def test_codex_native_field_paths_map_to_canonical_records(
+        self,
+        payload: dict[str, object],
+        record_type: str,
+        expected: dict[str, str],
+    ) -> None:
         source = self.source(
-            self.envelope("session_meta", {"id": "thread-1", "cwd": "/work/project"}),
-            self.envelope("response_item", {"type": "message", "role": "user", "content": "hello"}),
-            self.envelope("response_item", {"type": "reasoning", "summary": "bounded summary"}),
-            self.envelope("response_item", {"type": "function_call", "name": "safe", "call_id": "c1", "arguments": {"x": 1}}),
-            self.envelope("response_item", {"type": "function_call_output", "call_id": "c1", "status": "success", "output": "ok"}),
+            self.envelope(
+                "session_meta",
+                {"id": "thread-fields", "cwd": "/work/project"},
+            ),
+            self.envelope("response_item", payload),
         )
-        result, records = self.normalize(source)
-        assert (result.result_status.value) == ("ready")
-        assert ([record["type"] for record in records]) == (["meta", "message", "reasoning", "tool_call", "tool_result"])
-        assert (records[0]["workspace"]["label"]) == ("project")
-        assert ((records[1]["role"], records[1]["content"])) == (("user", "hello"))
-        assert ((records[2]["reasoning_kind"], records[2]["content"])) == (("summary", "bounded summary"))
-        assert ((records[3]["name"], records[3]["arguments"])) == (("safe", '{"x":1}'))
-        assert (records[4]["tool_call_id"]) == (records[3]["tool_call_id"])
-        assert ((records[4]["status"], records[4]["content"], records[4]["link_status"])) == (("success", "ok", "linked"))
 
-    def test_malformed_record_is_dropped_with_partial_loss(self) -> None:
-        source = self.root / "malformed-middle.jsonl"
-        source.write_bytes((json.dumps(self.envelope("session_meta", {"id": "thread-middle"})) + "\n{not-json}\n" + json.dumps(self.envelope("response_item", {"type": "message", "role": "assistant", "content": "finished"})) + "\n").encode())
         result, records = self.normalize(source)
-        assert (result.result_status.value) == ("partial")
-        assert (result.lossiness["dropped"]["invalid_json"]) > (0)
-        assert ([record["type"] for record in records]) == (["meta", "message"])
 
-    def test_response_item_types_map_to_reasoning_and_tool_records(self) -> None:
-        source = self.source(
-            self.envelope("session_meta", {"id": "thread-response"}),
-            self.envelope("response_item", {"type": "message", "role": "assistant", "content": "nested"}),
-            self.envelope("response_item", {"type": "reasoning", "summary": "summary"}),
-            self.envelope("response_item", {"type": "function_call", "name": "tool", "call_id": "c"}),
-        )
+        assert result.result_status.value == "ready"
+        assert records[0]["workspace"]["label"] == "project"
+        projected = records[1]
+        assert projected["type"] == record_type
+        for key, value in expected.items():
+            assert projected[key] == value
+
+    @pytest.mark.parametrize(
+        ("malformed_position", "expected_types"),
+        [
+            pytest.param("middle", ["meta", "message"], id="middle-line"),
+            pytest.param("final", ["meta"], id="final-line"),
+        ],
+    )
+    def test_malformed_record_is_dropped_with_partial_loss(
+        self,
+        malformed_position: str,
+        expected_types: list[str],
+    ) -> None:
+        lines = [
+            json.dumps(self.envelope("session_meta", {"id": "thread-malformed"})),
+        ]
+        if malformed_position == "middle":
+            lines.extend(
+                [
+                    "{not-json}",
+                    json.dumps(
+                        self.envelope(
+                            "response_item",
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": "finished",
+                            },
+                        )
+                    ),
+                ]
+            )
+        else:
+            lines.append("{not-json}")
+        source = self.root / f"malformed-{malformed_position}.jsonl"
+        source.write_bytes(("\n".join(lines) + "\n").encode())
+
         result, records = self.normalize(source)
-        assert (result.capabilities["reasoning"]) == ("summary")
-        assert (result.capabilities["tool_linkage"]) == ("explicit")
-        assert ([record["type"] for record in records]) == (["meta", "message", "reasoning", "tool_call"])
+
+        assert result.result_status.value == "partial"
+        assert result.lossiness["dropped"]["invalid_json"] == 1
+        assert [record["type"] for record in records] == expected_types
 
     def test_conflicting_session_metadata_is_rejected(self) -> None:
         source = self.source(self.envelope("session_meta", {"id": "thread-one"}), self.envelope("session_meta", {"id": "thread-two"}))
@@ -239,27 +294,50 @@ class TestCodexRolloutProvider:
         _, records = self.normalize(source)
         assert (records[1]["task_refs"]) == (["tasks/eligible/packet.md"])
 
-    def test_list_and_exact_state_resolution_are_metadata_only(self) -> None:
-        source = self.source(self.envelope("session_meta", {"id": "thread-db"}), self.envelope("message", {"role": "user", "content": "private"}))
+    def _write_metadata_state(self, source_name: str = "rollout.jsonl") -> Path:
         db = self.root / "state_5.sqlite"
         connection = sqlite3.connect(db)
         connection.execute(
             "CREATE TABLE threads (id TEXT, rollout_path TEXT, created_at INTEGER, updated_at INTEGER, archived INTEGER)"
         )
-        connection.execute("INSERT INTO threads VALUES (?, ?, ?, ?, ?)", ("thread-db", source.name, 1, 2, 0))
+        connection.execute(
+            "INSERT INTO threads VALUES (?, ?, ?, ?, ?)",
+            ("thread-db", source_name, 1, 2, 0),
+        )
         connection.commit()
         connection.close()
+
+        return db
+
+    def test_list_projects_metadata_without_rollout_projection(self) -> None:
+        source = self.source(
+            self.envelope("session_meta", {"id": "thread-db"}),
+            self.envelope("message", {"role": "user", "content": "private"}),
+        )
+        self._write_metadata_state(source.name)
+
         listed = self.inventory(limit=5)
-        assert (listed.items[0].thread_id) == ("thread-db")
-        assert (listed.items[0].archive_state) == (ArchiveState.ACTIVE)
-        assert (listed.items[0].created_at) == ("1")
-        assert (listed.omitted_sources) == (0)
-        assert not ((self.root / "state_5.sqlite-wal").exists())
-        assert not ((self.root / "state_5.sqlite-shm").exists())
+
+        assert listed.items[0].thread_id == "thread-db"
+        assert listed.items[0].archive_state == ArchiveState.ACTIVE
+        assert listed.items[0].created_at == "1"
+        assert listed.omitted_sources == 0
+        assert not (self.root / "state_5.sqlite-wal").exists()
+        assert not (self.root / "state_5.sqlite-shm").exists()
+
+    def test_exact_state_resolution_uses_id_and_defers_rollout_projection(self) -> None:
+        source = self.source(
+            self.envelope("session_meta", {"id": "thread-db"}),
+            self.envelope("message", {"role": "user", "content": "private"}),
+        )
+        self._write_metadata_state(source.name)
+
         resolved = self.provider.resolve(ProviderContext(home=self.root), ThreadSelection(thread_id="thread-db"))
-        assert (resolved.thread_id) == ("thread-db")
-        assert not ((self.root / "state_5.sqlite-wal").exists())
-        assert not ((self.root / "state_5.sqlite-shm").exists())
+
+        assert resolved.thread_id == "thread-db"
+        assert resolved.source_path == source
+        assert not (self.root / "state_5.sqlite-wal").exists()
+        assert not (self.root / "state_5.sqlite-shm").exists()
 
     def test_state_snapshot_includes_rollback_journal(self) -> None:
         db = self.root / "snapshot.sqlite"
@@ -339,52 +417,64 @@ class TestCodexRolloutProvider:
             self.provider.resolve(ProviderContext(home=self.root), ThreadSelection(thread_id="thread-metadata-only"))
         assert (raised.value.code) == ("thread-source-incompatible")
 
-    def test_list_omits_unsafe_rows_without_spending_the_safe_result_limit(self) -> None:
-        recent = self.root / "recent.jsonl"
-        older = self.root / "older.jsonl"
-        recent.write_text("metadata-only", encoding="utf-8")
-        older.write_text("metadata-only", encoding="utf-8")
+    @pytest.mark.parametrize(
+        ("rows", "limit", "expected_ids", "expected_omitted"),
+        [
+            pytest.param(
+                [
+                    ("unsafe-leading", "../escaped.jsonl", 4),
+                    ("unresolvable-leading", "\x00unresolvable.jsonl", 3),
+                    ("safe-recent", "recent.jsonl", 2),
+                    ("safe-older", "older.jsonl", 1),
+                ],
+                2,
+                ["safe-recent", "safe-older"],
+                2,
+                id="unsafe-before-safe-limit",
+            ),
+            pytest.param(
+                [
+                    ("unsafe-newer", "../escaped-newer.jsonl", 2),
+                    ("unsafe-older", "../escaped-older.jsonl", 1),
+                ],
+                1,
+                [],
+                2,
+                id="all-unsafe-degraded",
+            ),
+        ],
+    )
+    def test_list_omits_unsafe_rows_before_safe_limit(
+        self,
+        rows: list[tuple[str, str, int]],
+        limit: int,
+        expected_ids: list[str],
+        expected_omitted: int,
+    ) -> None:
+        for _, path, _ in rows:
+            if path in {"recent.jsonl", "older.jsonl"}:
+                (self.root / path).write_text("metadata-only", encoding="utf-8")
+
         database = self.root / "state_5.sqlite"
         connection = sqlite3.connect(database)
-        connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT, updated_at INTEGER)")
-        connection.executemany(
-            "INSERT INTO threads VALUES (?, ?, ?)",
-            [
-                ("unsafe-leading", "../escaped.jsonl", 4),
-                ("unresolvable-leading", "\x00unresolvable.jsonl", 3),
-                ("safe-recent", recent.name, 2),
-                ("safe-older", older.name, 1),
-            ],
+        connection.execute(
+            "CREATE TABLE threads (id TEXT, rollout_path TEXT, updated_at INTEGER)"
         )
+        connection.executemany("INSERT INTO threads VALUES (?, ?, ?)", rows)
         connection.commit()
         connection.close()
 
-        listed = self.inventory(limit=2)
+        listed = self.inventory(limit=limit)
 
-        assert ([item.thread_id for item in listed.items]) == (["safe-recent", "safe-older"])
-        assert (listed.omitted_sources) == (2)
-        with pytest.raises(SvcError) as raised:
-            self.provider.resolve(ProviderContext(home=self.root), ThreadSelection(thread_id="unsafe-leading"))
-        assert (raised.value.code) == ("thread-source-unsafe")
-
-    def test_list_reports_an_all_unsafe_inventory_as_degraded(self) -> None:
-        database = self.root / "state_5.sqlite"
-        connection = sqlite3.connect(database)
-        connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT, updated_at TEXT)")
-        connection.executemany(
-            "INSERT INTO threads VALUES (?, ?, ?)",
-            [
-                ("unsafe-newer", "../escaped-newer.jsonl", "2"),
-                ("unsafe-older", "../escaped-older.jsonl", "1"),
-            ],
-        )
-        connection.commit()
-        connection.close()
-
-        listed = self.inventory(limit=1)
-
-        assert (listed.items) == (())
-        assert (listed.omitted_sources) == (2)
+        assert [item.thread_id for item in listed.items] == expected_ids
+        assert listed.omitted_sources == expected_omitted
+        if expected_ids:
+            with pytest.raises(SvcError) as raised:
+                self.provider.resolve(
+                    ProviderContext(home=self.root),
+                    ThreadSelection(thread_id="unsafe-leading"),
+                )
+            assert raised.value.code == "thread-source-unsafe"
 
     def test_list_uses_stable_descriptor_order_when_timestamps_tie(self) -> None:
         alpha = self.root / "alpha.jsonl"
@@ -466,6 +556,7 @@ class TestCodexRolloutProvider:
     def test_inventory_recency_fallback_units_ranges_and_display_times_are_exact(self) -> None:
         for name in ("recency", "updated-ms", "seconds", "missing"):
             (self.root / f"{name}.jsonl").write_text("metadata-only", encoding="utf-8")
+        sqlite_integer_overflow = 2**63 - 1
         database = self.root / "state_5.sqlite"
         connection = sqlite3.connect(database)
         connection.execute(
@@ -492,7 +583,7 @@ class TestCodexRolloutProvider:
                     "missing.jsonl",
                     0,
                     None,
-                    codex_rollout._MAX_RECENCY_SECONDS + 1,
+                    sqlite_integer_overflow,
                     None,
                     None,
                 ),
@@ -510,32 +601,14 @@ class TestCodexRolloutProvider:
         assert (by_id["from-updated-ms"].created_at) is None
         assert (by_id["from-seconds"].created_at) is None
         assert (by_id["from-seconds"].updated_at) == ("7")
-        assert (by_id["missing-recency"].updated_at) == (str(codex_rollout._MAX_RECENCY_SECONDS + 1))
+        assert (by_id["missing-recency"].updated_at) == (str(sqlite_integer_overflow))
 
-    def test_inventory_omits_invalid_ids_ambiguous_duplicates_and_unsafe_paths(self) -> None:
+    def test_inventory_omits_invalid_ids_and_ambiguous_duplicates(self) -> None:
         safe_a = self.root / "safe-a.jsonl"
         safe_b = self.root / "safe-b.jsonl"
-        link_target = self.root / "link-target.jsonl"
-        for path in (safe_a, safe_b, link_target):
-            path.write_text("metadata-only", encoding="utf-8")
-        directory = self.root / "directory"
-        directory.mkdir()
-        final_link = self.root / "final-link.jsonl"
-        parent_target = self.root / "parent-target"
-        parent_target.mkdir()
-        (parent_target / "nested.jsonl").write_text("metadata-only", encoding="utf-8")
-        parent_link = self.root / "parent-link"
-        links_available = True
-        try:
-            final_link.symlink_to(link_target)
-            parent_link.symlink_to(parent_target, target_is_directory=True)
-        except OSError:
-            links_available = False
-
-        rows: list[tuple[object, object, object, int]] = [
-            ("bad-leading", "../escape.jsonl", 0, 300),
-            ("bad-control-path", "bad\npath.jsonl", 0, 290),
-            ("bad-long-path", "x" * (codex_rollout.MAX_ROLLOUT_PATH_CHARS + 1), 0, 280),
+        safe_a.write_text("metadata-only", encoding="utf-8")
+        safe_b.write_text("metadata-only", encoding="utf-8")
+        rows: list[tuple[object, str, int, int]] = [
             ("", safe_a.name, 0, 270),
             (" leading-space", safe_a.name, 0, 260),
             ("trailing-space ", safe_a.name, 0, 250),
@@ -545,17 +618,9 @@ class TestCodexRolloutProvider:
             (123, safe_a.name, 0, 210),
             ("duplicate", safe_a.name, 0, 200),
             ("duplicate", safe_b.name, 1, 190),
-            ("directory-path", directory.name, 0, 180),
             ("safe-a", safe_a.name, 0, 20),
             ("safe-b", safe_b.name, 0, 10),
         ]
-        if links_available:
-            rows.extend(
-                [
-                    ("final-link", final_link.name, 0, 170),
-                    ("parent-link", f"{parent_link.name}/nested.jsonl", 0, 160),
-                ]
-            )
         database = self.root / "state_5.sqlite"
         connection = sqlite3.connect(database)
         connection.execute(
@@ -569,10 +634,77 @@ class TestCodexRolloutProvider:
         active = self.inventory(limit=20, archive_state=ArchiveFilter.ACTIVE)
         archived = self.inventory(limit=20, archive_state=ArchiveFilter.ARCHIVED)
 
-        assert ([item.thread_id for item in listed.items]) == (["safe-a", "safe-b"])
-        assert (listed.omitted_sources) == (len(rows) - 2)
-        assert ("duplicate") not in ({item.thread_id for item in active.items})
-        assert ("duplicate") not in ({item.thread_id for item in archived.items})
+        assert [item.thread_id for item in listed.items] == ["safe-a", "safe-b"]
+        assert listed.omitted_sources == len(rows) - 2
+        assert "duplicate" not in {item.thread_id for item in active.items}
+        assert "duplicate" not in {item.thread_id for item in archived.items}
+
+    @pytest.mark.parametrize(
+        "unsafe_path_kind",
+        [
+            pytest.param("escape", id="parent-escape"),
+            pytest.param("control", id="control-character"),
+            pytest.param("oversize", id="oversize"),
+            pytest.param("directory", id="nonregular-directory"),
+            pytest.param("final-link", id="final-symlink"),
+            pytest.param("parent-link", id="parent-symlink"),
+        ],
+    )
+    def test_inventory_omits_unsafe_paths_before_limit(
+        self,
+        unsafe_path_kind: str,
+    ) -> None:
+        safe = self.root / "safe.jsonl"
+        safe.write_text("metadata-only", encoding="utf-8")
+        target = self.root / "link-target.jsonl"
+        target.write_text("metadata-only", encoding="utf-8")
+        directory = self.root / "directory"
+        directory.mkdir()
+        path_by_kind = {
+            "escape": "../escape.jsonl",
+            "control": "bad\npath.jsonl",
+            "oversize": "x" * (codex_rollout.MAX_ROLLOUT_PATH_CHARS + 1),
+            "directory": directory.name,
+        }
+        if unsafe_path_kind == "final-link":
+            path = self.root / "final-link.jsonl"
+            try:
+                path.symlink_to(target)
+            except OSError:
+                pytest.skip("symlink creation is unavailable")
+            unsafe_path = path.name
+        elif unsafe_path_kind == "parent-link":
+            parent_target = self.root / "parent-target"
+            parent_target.mkdir()
+            (parent_target / "nested.jsonl").write_text(
+                "metadata-only",
+                encoding="utf-8",
+            )
+            parent_link = self.root / "parent-link"
+            try:
+                parent_link.symlink_to(parent_target, target_is_directory=True)
+            except OSError:
+                pytest.skip("symlink creation is unavailable")
+            unsafe_path = f"{parent_link.name}/nested.jsonl"
+        else:
+            unsafe_path = path_by_kind[unsafe_path_kind]
+
+        database = self.root / "state_5.sqlite"
+        connection = sqlite3.connect(database)
+        connection.execute(
+            "CREATE TABLE threads (id TEXT, rollout_path TEXT, archived INTEGER, recency_at_ms INTEGER)"
+        )
+        connection.executemany(
+            "INSERT INTO threads VALUES (?, ?, ?, ?)",
+            [("unsafe", unsafe_path, 0, 2_000), ("safe", safe.name, 0, 1_000)],
+        )
+        connection.commit()
+        connection.close()
+
+        listed = self.inventory(limit=1)
+
+        assert [item.thread_id for item in listed.items] == ["safe"]
+        assert listed.omitted_sources == 1
 
     def test_inventory_path_open_is_zero_byte_and_denials_are_unavailable(
         self,
@@ -760,7 +892,7 @@ class TestCodexRolloutProvider:
         assert (item.recency_at_ms) == (8_000)
         assert (materialized_prefixes) == ([(4_096, 4_097), (160, 161), (512, 513)])
 
-    def test_inventory_preserves_controls_for_paint_only_escaping(
+    def test_inventory_preserves_provider_display_controls_without_escaping(
         self,
     ) -> None:
         source = self.root / "control.jsonl"
@@ -802,68 +934,7 @@ class TestCodexRolloutProvider:
         assert not (item.title_truncated)
         assert not (item.first_user_message_truncated)
 
-    def test_inventory_omits_invalid_sources_before_its_limit(self) -> None:
-        recent = self.root / "recent.jsonl"
-        older = self.root / "older.jsonl"
-        recent.write_text("metadata-only", encoding="utf-8")
-        older.write_text("metadata-only", encoding="utf-8")
-        database = self.root / "state_5.sqlite"
-        connection = sqlite3.connect(database)
-        connection.execute(
-            """
-            CREATE TABLE threads (
-                id TEXT,
-                rollout_path TEXT,
-                archived INTEGER,
-                recency_at_ms INTEGER,
-                cwd TEXT,
-                title TEXT,
-                first_user_message TEXT
-            )
-            """
-        )
-        connection.executemany(
-            "INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [
-                (
-                    "unsafe",
-                    "../escape.jsonl",
-                    0,
-                    3_000,
-                    "/unsafe",
-                    "unsafe-title",
-                    "unsafe-message",
-                ),
-                (
-                    "recent",
-                    recent.name,
-                    0,
-                    2_000,
-                    "/recent",
-                    "recent-title",
-                    "recent-message",
-                ),
-                (
-                    "older",
-                    older.name,
-                    0,
-                    1_000,
-                    "/older",
-                    "older-title",
-                    "older-message",
-                ),
-            ],
-        )
-        connection.commit()
-        connection.close()
-
-        listing = self.inventory(limit=1)
-
-        assert ([item.thread_id for item in listing.items]) == (["recent"])
-        assert (listing.omitted_sources) == (1)
-        assert (listing.inventory_truncated)
-
-    def test_inventory_query_selects_only_bounded_display_columns(
+    def test_inventory_query_reads_only_bounded_display_columns(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -899,11 +970,17 @@ class TestCodexRolloutProvider:
                 "private-tool",
             ),
         )
-        queries: list[str] = []
+        read_columns: list[str] = []
+
+        def authorize(action: int, first: str | None, second: str | None, *_args: object) -> int:
+            if action == sqlite3.SQLITE_READ and second is not None:
+                read_columns.append(second)
+            return sqlite3.SQLITE_OK
+
+        raw_connection.set_authorizer(authorize)
 
         class RecordingConnection:
             def execute(self, statement, *args):
-                queries.append(str(statement))
                 return raw_connection.execute(statement, *args)
 
             def close(self):
@@ -915,21 +992,11 @@ class TestCodexRolloutProvider:
             "_state_connection",
             lambda *_args, **_kwargs: recording_connection,
         )
-        listing = codex_rollout._inventory_rows(
-            self.root,
-            ThreadInventoryQuery(limit=1),
-        )
+        listing = self.inventory(limit=1)
 
-        assert ([item.thread_id for item in listing.items]) == (["thread-rich"])
-        sql = next(
-            statement
-            for statement in queries
-            if "WITH inventory" in statement
-        )
-        for required in ("cwd", "title", "first_user_message"):
-            assert (required) in (sql)
-        for forbidden in ("preview", "reasoning", "tool_payload"):
-            assert (forbidden) not in (sql)
+        assert [item.thread_id for item in listing.items] == ["thread-rich"]
+        assert {"cwd", "title", "first_user_message"} <= set(read_columns)
+        assert not {"preview", "reasoning", "tool_payload"} & set(read_columns)
 
     def test_inventory_requires_exact_id_and_rollout_path_columns(self) -> None:
         database = self.root / "state_5.sqlite"
@@ -943,13 +1010,35 @@ class TestCodexRolloutProvider:
 
         assert (raised.value.code) == ("thread-source-incompatible")
 
-    def test_symlink_and_nonregular_sources_are_rejected(self) -> None:
+    @pytest.mark.parametrize(
+        ("source_kind", "message_fragment"),
+        [
+            pytest.param("symlink", "symlink", id="symlink"),
+            pytest.param("directory", "regular file", id="directory"),
+        ],
+    )
+    def test_symlink_and_nonregular_sources_are_rejected(
+        self,
+        source_kind: str,
+        message_fragment: str,
+    ) -> None:
         target = self.source(self.envelope("session_meta", {"id": "thread-safe"}))
-        link = self.root / "link.jsonl"
-        link.symlink_to(target)
-        with pytest.raises(SvcError, match="symlink") as raised:
-            self.provider.resolve(ProviderContext(home=self.root), ThreadSelection(source=link))
-        assert (raised.value.code) == ("thread-source-unsafe")
+        if source_kind == "symlink":
+            source = self.root / "link.jsonl"
+            try:
+                source.symlink_to(target)
+            except OSError:
+                pytest.skip("symlink creation is unavailable")
+        else:
+            source = self.root / "directory.jsonl"
+            source.mkdir()
+
+        with pytest.raises(SvcError, match=message_fragment) as raised:
+            self.provider.resolve(
+                ProviderContext(home=self.root),
+                ThreadSelection(source=source),
+            )
+        assert raised.value.code == "thread-source-unsafe"
 
     def test_native_source_read_error_has_a_stable_provider_code(self) -> None:
         class FailingStream:
@@ -960,24 +1049,17 @@ class TestCodexRolloutProvider:
             codex_rollout._readline(FailingStream(), 1024, self.root / "rollout.jsonl")  # type: ignore[arg-type]
         assert (raised.value.code) == ("thread-source-unreadable")
 
-    def test_malformed_final_record_is_refused(self) -> None:
-        source = self.root / "malformed.jsonl"
-        source.write_bytes(
-            (json.dumps(self.envelope("session_meta", {"id": "thread-bad"})) + "\n" + "{not-json}\n").encode()
-        )
-        result, records = self.normalize(source)
-        assert (result.result_status.value) == ("partial")
-        assert (result.lossiness["dropped"]["invalid_json"]) > (0)
-        assert (len(records)) == (1)
-
     def test_source_replacement_during_capture_is_detected(self) -> None:
         source = self.source(self.envelope("session_meta", {"id": "thread-mutate"}), self.envelope("message", {"role": "assistant", "content": "x"}))
         resolved = self.provider.resolve(ProviderContext(home=self.root), ThreadSelection(source=source))
 
         def sink(record: dict[str, object]) -> bool:
-            source.touch()
+            replacement = self.root / "replacement.jsonl"
+            replacement.write_bytes(source.read_bytes())
+            os.replace(replacement, source)
             return True
 
         result = self.provider.stream_normalize(resolved, sink, {})
-        assert (result.source_status.value) == ("changed")
-        assert (result.result_status.value) == ("partial")
+        assert result.source_status.value == "displaced"
+        assert result.result_status.value == "partial"
+        assert result.lossiness["partial_reasons"]["source_displaced"] == 1

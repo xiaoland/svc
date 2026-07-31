@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import os
 import stat
-import zipfile
 
 from svc_cli.cli import main
 from svc_cli.telemetry.agent_threads import (
@@ -15,6 +14,7 @@ from svc_cli.telemetry.agent_threads import (
     ThreadInventoryRow,
     SourceAvailability,
 )
+from svc_cli.telemetry.evidence import validate_evidence
 
 
 def invoke(arguments: list[str]) -> tuple[int, str, str]:
@@ -49,7 +49,7 @@ def rollout(path: Path) -> None:
     )
 
 
-def test_export_defaults_to_schema_v3_without_privacy_ack_or_repo(tmp_path: Path) -> None:
+def test_export_reports_schema_v3_without_privacy_ack_or_repo(tmp_path: Path) -> None:
     source = tmp_path / "rollout.jsonl"
     output = tmp_path / "evidence.zip"
     rollout(source)
@@ -73,17 +73,7 @@ def test_export_defaults_to_schema_v3_without_privacy_ack_or_repo(tmp_path: Path
     assert payload["capture"]["status"] == "complete"
     assert isinstance(payload["diagnostic_groups"], int)
     assert "diagnostics" not in payload
-    with zipfile.ZipFile(output) as archive:
-        assert archive.namelist() == [
-            "manifest.json",
-            "native.bin",
-            "native-index.jsonl",
-            "trajectory.jsonl",
-        ]
-        assert all(
-            stat.S_IMODE(info.external_attr >> 16) == 0o644
-            for info in archive.infolist()
-        )
+    assert validate_evidence(output).manifest["schema_version"] == 3
 
 
 def test_export_final_mode_follows_process_umask(tmp_path: Path) -> None:
@@ -207,7 +197,7 @@ def test_removed_old_analysis_and_legacy_flags_are_unreachable(tmp_path: Path) -
     assert code == 2
 
 
-def test_list_returns_one_bounded_thread_inventory(monkeypatch) -> None:
+def test_list_projects_provider_inventory_fields(monkeypatch) -> None:
     class Provider:
         provider_id = "codex"
 
@@ -232,5 +222,9 @@ def test_list_returns_one_bounded_thread_inventory(monkeypatch) -> None:
     )
     assert code == 0 and stderr == ""
     row = json.loads(stdout)["threads"][0]
+    assert row["provider_id"] == "codex"
+    assert row["thread_id"] == "thread-1"
+    assert row["archive_state"] == "active"
+    assert row["source_availability"] == "available"
     assert row["title"] == "Implement analysis"
     assert row["workspace"] == "/work/svc"

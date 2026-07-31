@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
-import os
 from pathlib import Path
 import stat
 import zipfile
@@ -144,45 +143,31 @@ def _write_evidence(source: Path, output: Path) -> dict[str, object]:
     )
 
 
-def test_collector_limits_use_the_actual_policy_and_attempt() -> None:
+@pytest.mark.parametrize("limit_kind", ("records", "trajectory_bytes"))
+def test_collector_limits_use_actual_policy_and_attempt(limit_kind: str) -> None:
     records = (_meta(), _message())
-    record_collector = TrajectoryCollector(
-        policy=replace(DEFAULT_NORMALIZATION_POLICY, records=1)
-    )
-    assert record_collector.emit(records[0])
-    assert not record_collector.emit(records[1])
-    record_collector.finish()
-
-    _, record_loss, diagnostics, status = _finalize_normalization(
-        _normalization_result(), record_collector
-    )
-    assert status == "partial"
-    assert record_loss["partial_reasons"]["record_limit"] == 1
-    assert diagnostics[-1]["details"] == {
-        "observed_count": 2,
-        "limit_count": 1,
-    }
-
     meta_bytes = len(canonical_json_bytes(records[0], newline=True))
     message_bytes = len(canonical_json_bytes(records[1], newline=True))
-    byte_collector = TrajectoryCollector(
-        policy=replace(
-            DEFAULT_NORMALIZATION_POLICY,
-            trajectory_bytes=meta_bytes + 1,
-        )
+    policy_limit = 1 if limit_kind == "records" else meta_bytes + 1
+    collector = TrajectoryCollector(
+        policy=replace(DEFAULT_NORMALIZATION_POLICY, **{limit_kind: policy_limit})
     )
-    assert byte_collector.emit(records[0])
-    assert not byte_collector.emit(records[1])
-    byte_collector.finish()
+    assert collector.emit(records[0])
+    assert not collector.emit(records[1])
+    collector.finish()
 
-    _, byte_loss, diagnostics, _ = _finalize_normalization(
-        _normalization_result(), byte_collector
+    _, lossiness, diagnostics, status = _finalize_normalization(
+        _normalization_result(), collector
     )
-    assert byte_loss["partial_reasons"]["trajectory_limit"] == 1
-    assert diagnostics[-1]["details"] == {
-        "observed_bytes": meta_bytes + message_bytes,
-        "limit_bytes": meta_bytes + 1,
-    }
+    assert status == "partial"
+    reason = "record_limit" if limit_kind == "records" else "trajectory_limit"
+    assert lossiness["partial_reasons"][reason] == 1
+    expected = (
+        {"observed_count": 2, "limit_count": 1}
+        if limit_kind == "records"
+        else {"observed_bytes": meta_bytes + message_bytes, "limit_bytes": meta_bytes + 1}
+    )
+    assert diagnostics[-1]["details"] == expected
 
 
 def test_core_limit_preserves_provider_diagnostic_cap_accounting() -> None:
@@ -193,6 +178,7 @@ def test_core_limit_preserves_provider_diagnostic_cap_accounting() -> None:
     assert not collector.emit(_message())
     collector.finish()
     result = _normalization_result()
+    diagnostic_limit = DEFAULT_NORMALIZATION_POLICY.diagnostics
     regular = tuple(
         {
             "code": "message-truncated",
@@ -211,7 +197,7 @@ def test_core_limit_preserves_provider_diagnostic_cap_accounting() -> None:
                 "retained_code_points": 1,
             },
         }
-        for index in range(255)
+        for index in range(diagnostic_limit - 1)
     )
     marker = {
         "code": "diagnostic-limit-reached",
@@ -220,13 +206,13 @@ def test_core_limit_preserves_provider_diagnostic_cap_accounting() -> None:
         "count": 1,
         "record_ref": None,
         "source_ref": None,
-        "details": {"observed_count": 300, "limit_count": 256},
+        "details": {"observed_count": 300, "limit_count": diagnostic_limit},
     }
     lossiness = {group: dict(values) for group, values in result.lossiness.items()}
     lossiness["truncated"]["diagnostics"] = 45
     capped = replace(
         result,
-        counts={"diagnostics_emitted": 256, "diagnostics_suppressed": 45},
+        counts={"diagnostics_emitted": diagnostic_limit, "diagnostics_suppressed": 45},
         lossiness=lossiness,
         diagnostics=regular + (marker,),
     )
@@ -235,11 +221,11 @@ def test_core_limit_preserves_provider_diagnostic_cap_accounting() -> None:
         capped, collector
     )
 
-    assert len(diagnostics) == 256
+    assert len(diagnostics) == diagnostic_limit
     assert diagnostics[-1]["code"] == "diagnostic-limit-reached"
     assert diagnostics[-1]["details"] == {
         "observed_count": 301,
-        "limit_count": 256,
+        "limit_count": diagnostic_limit,
     }
     assert final_counts["diagnostics_suppressed"] == 46
     assert final_loss["truncated"]["diagnostics"] == 46
@@ -342,16 +328,3 @@ def test_provider_errors_publish_no_artifact(tmp_path: Path) -> None:
     with pytest.raises(SvcError):
         _write_evidence(source, output)
     assert not output.exists()
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX umask contract")
-def test_published_container_honors_normal_creation_umask(tmp_path: Path) -> None:
-    source = _rollout_source(tmp_path)
-    output = tmp_path / "evidence.zip"
-    previous = os.umask(0o027)
-    try:
-        _write_evidence(source, output)
-    finally:
-        os.umask(previous)
-
-    assert stat.S_IMODE(output.stat().st_mode) == 0o640

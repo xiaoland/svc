@@ -72,15 +72,14 @@ def payload_bytes(item: dict[str, object]) -> bytes:
 
 def test_read_schema_explains_ref_continuation_and_fragment_fidelity() -> None:
     schema = read_schema()
+    assert schema["format"] == "svc.analysis.read.schema/v1"
     assert schema["request"]["initial"]["start"]["record_kind"] == "native"
+    assert schema["request"]["initial"]["additional_properties"] is False
     assert schema["request"]["continuation"]["required"] == ["cursor"]
-    assert schema["response"]["payload_encoding"] == {
-        "utf-8": "preferred exact text when the fragment decodes losslessly",
-        "base64": "exact fallback for arbitrary bytes",
-    }
-    assert schema["response"]["pagination"] == (
-        "next_cursor means more output, not partial evidence"
-    )
+    assert schema["request"]["continuation"]["additional_properties"] is False
+    assert set(schema["response"]["payload_encoding"]) == {"utf-8", "base64"}
+    assert schema["response"]["integrity"] == ["frame_sha256", "fragment_sha256"]
+    assert schema["response_format"] == "svc.analysis.read/v1"
     assert schema["method_lookup"]["read_section"] == "Agent Task Analysis"
 
 

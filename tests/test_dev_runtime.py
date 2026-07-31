@@ -73,11 +73,13 @@ def test_http_probe_pins_the_validated_address_instead_of_resolving_again() -> N
         thread.join()
 
 
-def test_tcp_and_exec_probes_have_bounded_declared_behavior() -> None:
+def test_tcp_probe_failure_is_a_bounded_observation() -> None:
     tcp = TcpProbe(kind="tcp", host="127.0.0.1", port=9, timeout=1)
     observation = probe_tcp(tcp, tcp.host, timeout=0.1, resolver=lambda host, port: ("127.0.0.1",))
     assert not observation.healthy
 
+
+def test_exec_probe_enforces_its_declared_output_limit() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         probe = ExecProbe(kind="exec", argv=[sys.executable, "-c", "print('x' * 100)"], output_limit=10)
         result = probe_exec(probe, tuple(probe.argv), Path(tmp), timeout=1)
