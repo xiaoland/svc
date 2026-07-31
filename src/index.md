@@ -81,27 +81,75 @@ Interpolation is limited to `${dev.instance}`, `${dev.worktree.id}`, `${dev.prof
 
 `svc dev setup` is the optional plan-first bridge to Consumer-owned editor/package surfaces. It adds only marked VS Code Tasks or reserved exact root `package.json` scripts that call `svc dev ensure <target>`; apply requires the current exact digest. It never reads `launch.json`, infers a package manager, creates package metadata, removes orphans, or replaces a conflicting Consumer entry.
 
-## Local Agent-Thread Observability
+## Local Agent-Thread Evidence and Analysis
 
-`svc telemetry agent-thread list|export|analyze` is an explicit local observability family for improving SVC from real human-Agent collaboration. It never implies automatic collection, network egress, upload, anonymous metrics, or a model-generated judgment. The first provider adapter reads a validated local Codex rollout from `$CODEX_HOME` (default `~/.codex`) or an explicit source path; it does not require a PATH-installed `codex`, a running App or VS Code extension, or a network connection.
+`telemetry agent-thread list|export` is the explicit local acquisition surface;
+`analysis query|read` is the machine-first consumer surface. The calling Agent
+owns semantic interpretation, hypotheses, comparison, and conclusions. SVC
+owns only bounded read-only capture, evidence integrity, provenance, and
+deterministic structural navigation. Neither surface uploads data, contacts a
+network service, invokes a model, or promises audit completeness.
 
 ```text
-svc telemetry agent-thread list [--archive-state active|archived|all] [--codex-home <path>] [--limit <1-100>] [--json]
-svc telemetry agent-thread export --thread-id <uuid> --output /safe/export-dir/evidence.zip --include-sensitive
-svc telemetry agent-thread export --source <rollout.jsonl> --output /safe/export-dir/evidence.zip --include-sensitive
-svc telemetry agent-thread analyze [--archive-state active|archived|all] [--codex-home <path>]
-svc telemetry agent-thread analyze (--input <bundle.zip> | --thread-id <uuid> | --source <rollout.jsonl>) --json
+svc telemetry agent-thread list [selection options] [--json]
+svc telemetry agent-thread export (--thread-id <id> | --source <path>) --output <absent.zip> [--json]
+
+svc analysis query --schema
+svc analysis query --input <evidence-v3.zip> --request <file|->
+svc analysis read --schema
+svc analysis read --input <evidence-v3.zip> --request <file|->
 ```
 
-`list` keeps the existing non-sensitive schema-v1 envelope and descriptor keys. It does not print message bodies, tool values, reasoning, title, first-user-message preview, workspace/CWD, or full local paths. `--archive-state active|archived|all` filters provider-reported lifecycle before ordering and the safe result `--limit`; `all` is the default and the only mode that includes lifecycle `unknown`. Lifecycle is independent from source availability (`available`, `missing`, `unavailable`, or `unknown`): a missing rollout does not become archived, and an archived thread may still be unavailable. The existing `source_state` field remains a compatibility projection, not lifecycle authority; it may honestly report `unknown` or `unavailable` instead of inferring from a path, and an archived thread with a missing rollout remains `missing`. Unsafe state rows are omitted without spending a result slot. A recognition surface that shows bounded workspace, title, or first-user-message values must be explicitly entered and sensitive; this automation-safe list never emits them. When source rows must be omitted, the successful JSON response adds exactly `"warnings":[{"code":"thread-source-omitted","count":N}]`; it contains no path or rollout-derived content. An empty list with that warning is a degraded inventory, distinct from a missing, corrupt, or unreadable state database failure.
+The inventory is one bounded list, not a safe/sensitive split; provider-
+truthful lifecycle, availability, recognition, and local provenance remain
+distinct. Export requires one exact selection and an absent destination, keeps
+the source read-only, refuses overwrite and source/output aliasing, and leaves
+output-location and exposure responsibility with the caller. The former
+`--include-sensitive` acknowledgement, `--repo` boundary, TTY gate, private
+mode policy, and Textual navigator are removed.
 
-`analyze` without an input or selector requires a TTY and explicitly enters the sensitive local navigator, defaulting to active threads. Its separately bounded Codex query retains at most 5,000 safe rows and reads only exact `cwd`, `title`, and `first_user_message` recognition fields in addition to the safe identity/lifecycle columns; it never selects preview, reasoning, or tool-content columns. Workspace paths are provenance grouped lexically as POSIX, drive, UNC, relative, truncated, or unknown paths and are never resolved or walked. The Textual alternate-screen UI shows bounded title and first-user-message recognition, lifecycle, recency, availability, and deterministic overview/timeline/tool/lane/context/task/terminal/loss views. Control and format characters are escaped only when painted; private recognition and trajectory values are not logged, cached, placed in widget IDs, or emitted as diagnostics. Unavailable sources remain recognizable but disabled. Archive-filter and asynchronous selection generations prevent an older load from replacing a newer one.
+Export publishes schema-v3 evidence with exactly four members:
+`manifest.json`, `native.bin`, `native-index.jsonl`, and `trajectory.jsonl`.
+`native.bin` is the captured provider-byte authority in source order;
+`native-index.jsonl` is the framing authority over every retained byte and
+records deterministic native IDs, contiguous ranges, digests, source
+coordinates, and `complete|incomplete` status. `trajectory.jsonl` is a
+manifest-bound derived structural index: every non-meta record resolves to a
+complete native frame and no projection field substitutes for native content.
+The manifest binds evidence identity, source/capture status, capabilities,
+digests, provenance, and declared loss. Schema-v1 and schema-v2 artifacts are
+historical cutoffs, not query/read authorities: after bounded manifest
+identification SVC returns `unsupported-agent-thread-bundle-schema` and never
+converts or falls back; recollection requires the original provider-local
+source.
 
-`export` requires exactly one explicit thread ID or source, `--include-sensitive`, and an absent destination outside the selected repository. It never selects a latest thread implicitly, writes the provider source, scans task packets, or permits its output to become repository evidence. The result is a schema-v2 ZIP containing exactly private `manifest.json` and canonical `trajectory.jsonl` members. The trajectory is a provider-neutral, intentionally lossy analysis input: provider envelopes, UI/rate-limit/world-state noise, duplicate bookkeeping, and opaque metadata are discarded; messages, context, reasoning, tool values, task references, diagnostics, records, source bytes, and artifact bytes are bounded before retention. The manifest declares capabilities, every frozen loss counter, diagnostics, source status (`stable`, `grew`, `changed`, or `displaced`), and `ready` or `partial` result status. The collector reads only the descriptor-bound initial source extent and does not chase appends; a race can therefore yield honest partial evidence rather than an invented complete transcript. Opaque, unavailable, or redacted reasoning remains so and is never fabricated, decrypted, or recovered.
+`query` accepts only the closed `overview` and `match` intents. It returns
+evidence identity, capture/capability/loss status, stable refs, structural
+ranges, and deterministic bounded predicates over record type, role, tool,
+relationship, native range, or literal text. Arbitrary field selection,
+SQL/JSONPath, regex programs, joins, grouping, scoring, and natural-language
+prompts are outside the contract. `read` is forward-only native reading from
+the beginning or an exact native ref, with bounded preceding records and
+scope-bound cursors for continuation. It returns captured native bytes/values,
+exact ranges and fragments, digests, provenance, capture gaps, and
+continuation. Exact UTF-8 fragments are directly readable as text, with base64
+reserved as the lossless fallback for arbitrary bytes. Read never filters,
+reorders, summarizes, or silently returns normalized content.
 
-This artifact is not a raw/debug archive and contains no provider-native transcript, old structural index, copied task file, or derived analysis member. Released schema-v1 raw archives are cut off: SVC adds no reader, converter, re-export selector, or transition mode. Once a bounded root manifest identifies schema v1, analysis fails with `unsupported-agent-thread-bundle-schema` before opening its native, index, or task members; recollection requires an available provider-local source. Codex is the first provider (`codex`, via `codex-rollout-v1`), while normalized records and validation remain provider-neutral.
+Responses use `complete`, `partial`, or `unavailable`; pagination alone never
+changes evidence status. Acquisition loss leaves a final incomplete native
+frame readable but unavailable for normalized records, while projection loss
+can make query coverage partial without deleting native evidence. Query/read
+responses include a compact packaged method reference. The canonical reasoning
+method is discoverable with:
 
-`analyze --json` requires exactly one explicit schema-v2 bundle, thread ID, or source. A bundle is provider-home independent; a direct thread/source selection runs the same normalizer ephemerally and publishes nothing. `--archive-state` is valid only for the no-selector navigator, and `--codex-home` is invalid with `--input`. Without `--json`, an explicit input or selector also requires a TTY and opens the same human analysis surface; a non-TTY caller must use `--json`. Analysis uses normalized record order—not timestamps or provider-native fields—as authority. It deterministically projects ten dimensions: task evidence, interaction transitions, constraint evidence, tool outcomes, retry/loop candidates, explicit lanes, terminal coverage, SVC signals, context changes, and evidence coverage/loss. The compact schema-v1 Agent JSON contains only bounded structural metrics, stable finding/unknown codes, and same-bundle record references; it does not copy message, reasoning, tool, workspace-path, or provider-native content. Missing capabilities and declared loss reduce a dimension to `partial` or `unavailable` rather than inviting a guess. Analysis performs no network call, model invocation, cross-thread synthesis, or source/output mutation.
+```text
+svc lookup --name 'sections/working-protocol\.md' --all --json
+```
+
+The old `telemetry agent-thread analyze` command, normalized-only schema-v2
+authority, and TUI are removed. Use the packaged method and the two explicit
+tools together; SVC does not decide what the evidence means.
 
 ## Update and Migration Guidance
 

@@ -6,8 +6,12 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Never, Sequence, cast
 
+from .analysis.protocol import AnalysisProtocolError
+from .analysis.query import query_schema
+from .analysis.read import read_schema
+from .analysis.service import execute_query, execute_read
 from .errors import SvcError
 from .dev.runtime import ensure_target, inspect_dev_identity, inspect_dev_status
 from .dev.setup import plan_setup
@@ -18,10 +22,9 @@ from .telemetry.agent_threads import ArchiveFilter
 from .telemetry.service import (
     export_agent_thread,
     list_agent_threads,
-    prepare_agent_thread_analysis,
 )
 from .update import apply_self_update, plan_self_update
-from .plans import apply_local_plan
+from .plans import LocalPlan, apply_local_plan
 
 
 EXIT_OK = 0
@@ -30,8 +33,17 @@ EXIT_CONFLICT = 3
 EXIT_FAILURE = 4
 
 
+class CliUsageError(ValueError):
+    """Argument grammar error raised without argparse writing side effects."""
+
+
+class SvcArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> Never:
+        raise CliUsageError(message)
+
+
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = SvcArgumentParser(
         prog="svc",
         description="Local Sustainable Vibe Coding corpus and project integration CLI.",
     )
@@ -88,11 +100,11 @@ def _parser() -> argparse.ArgumentParser:
     setup_mode.add_argument("--apply", metavar="PLAN_DIGEST")
     dev_setup.add_argument("--json", action="store_true", dest="json_output")
 
-    telemetry = subparsers.add_parser("telemetry", help="Collect and analyze explicit local observability evidence")
+    telemetry = subparsers.add_parser("telemetry", help="Collect explicit local observability evidence")
     telemetry_resources = telemetry.add_subparsers(dest="telemetry_resource", required=True)
-    agent_thread = telemetry_resources.add_parser("agent-thread", help="List or normalize provider-obtainable agent-thread evidence")
+    agent_thread = telemetry_resources.add_parser("agent-thread", help="List or capture provider-obtainable Agent-thread evidence")
     agent_thread_commands = agent_thread.add_subparsers(dest="agent_thread_command", required=True)
-    thread_list = agent_thread_commands.add_parser("list", help="List safe Codex thread selection metadata")
+    thread_list = agent_thread_commands.add_parser("list", help="List bounded Codex thread selection context")
     thread_list.add_argument("--codex-home", type=Path)
     thread_list.add_argument(
         "--archive-state",
@@ -104,56 +116,48 @@ def _parser() -> argparse.ArgumentParser:
     thread_list.add_argument("--json", action="store_true", dest="json_output")
     thread_export = agent_thread_commands.add_parser(
         "export",
-        help="Normalize one exact local thread into a sensitive schema-v2 ZIP bundle",
+        help="Capture one exact local thread into a schema-v3 evidence ZIP",
     )
     selector = thread_export.add_mutually_exclusive_group(required=True)
     selector.add_argument("--thread-id")
     selector.add_argument("--source", type=Path, help="Exact Codex rollout JSONL source")
-    thread_export.add_argument("--output", required=True, type=Path, help="Absent .zip destination outside --repo")
-    thread_export.add_argument("--repo", default=".", type=Path, help="Repository the output must remain outside")
+    thread_export.add_argument("--output", required=True, type=Path, help="Absent .zip destination distinct from the source")
     thread_export.add_argument("--codex-home", type=Path)
-    thread_export.add_argument(
-        "--include-sensitive",
-        action="store_true",
-        help="Acknowledge bounded conversation, tool, and reasoning content",
-    )
     thread_export.add_argument("--json", action="store_true", dest="json_output")
-    thread_analyze = agent_thread_commands.add_parser(
-        "analyze",
-        help="Analyze one normalized thread or enter the sensitive local navigator",
+
+    analysis = subparsers.add_parser(
+        "analysis",
+        help="Query or read immutable Agent-thread evidence; read the packaged Agent Task Analysis method first",
     )
-    analysis_selector = thread_analyze.add_mutually_exclusive_group()
-    analysis_selector.add_argument(
-        "--input",
-        dest="input_bundle",
-        type=Path,
-        help="Exact schema-v2 normalized bundle",
-    )
-    analysis_selector.add_argument("--thread-id")
-    analysis_selector.add_argument(
-        "--source",
-        type=Path,
-        help="Exact Codex rollout JSONL source",
-    )
-    thread_analyze.add_argument(
-        "--archive-state",
-        choices=tuple(state.value for state in ArchiveFilter),
-        default=None,
-        help="Interactive lifecycle filter (default: active)",
-    )
-    thread_analyze.add_argument("--codex-home", type=Path)
-    thread_analyze.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_output",
-        help="Emit compact deterministic Agent JSON; requires an explicit selector",
-    )
+    analysis_tools = analysis.add_subparsers(dest="analysis_tool", required=True)
+    for name, help_text in (
+        ("query", "Inspect boundaries or match deterministic navigation predicates"),
+        ("read", "Read ordered native evidence from start, exact ref, or cursor"),
+    ):
+        tool = analysis_tools.add_parser(name, help=help_text)
+        tool.add_argument("--schema", action="store_true", help="Return the tool contract and Agent method reference")
+        tool.add_argument("--input", type=Path, help="Exact schema-v3 evidence ZIP")
+        tool.add_argument("--request", help="JSON request file or - for stdin")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _parser()
-    args = parser.parse_args(argv)
+    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    try:
+        args = parser.parse_args(raw_argv)
+    except CliUsageError as error:
+        if raw_argv[:1] == ["analysis"]:
+            _emit_json(
+                {
+                    "code": "invalid-cli-usage",
+                    "message": str(error),
+                },
+                stream=sys.stderr,
+            )
+        else:
+            print(f"svc: invalid-cli-usage: {error}", file=sys.stderr)
+        return EXIT_USAGE
     json_output = bool(getattr(args, "json_output", False))
     try:
         if args.command == "lookup":
@@ -184,16 +188,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _emit(payload, json_output)
                 return EXIT_OK if payload["healthy"] else EXIT_CONFLICT
             if args.dev_command == "setup":
-                plan = plan_setup(Path(args.repo), args.integration, args.target)
+                setup_plan = plan_setup(Path(args.repo), args.integration, args.target)
                 if args.apply:
-                    payload = {"schema_version": 1, "command": plan.command, **apply_local_plan(plan, args.apply)}
+                    payload = {"schema_version": 1, "command": setup_plan.command, **apply_local_plan(cast(LocalPlan, setup_plan), args.apply)}
                     _emit(payload, json_output)
                     return EXIT_OK
-                _emit_local_plan(plan, json_output)
-                return EXIT_CONFLICT if plan.blockers else EXIT_OK
+                _emit_local_plan(setup_plan, json_output)
+                return EXIT_CONFLICT if setup_plan.blockers else EXIT_OK
             payload = ensure_target(Path(args.repo), args.target)
             _emit(payload, json_output)
             return EXIT_OK
+
+        if args.command == "analysis":
+            return _run_analysis_tool(args)
 
         if args.command == "telemetry":
             if (
@@ -203,169 +210,109 @@ def main(argv: Sequence[str] | None = None) -> int:
                 payload = list_agent_threads(args.codex_home, args.limit, args.archive_state)
                 _emit_telemetry_list(payload, json_output)
                 return EXIT_OK
-            if args.agent_thread_command == "analyze":
-                return _run_agent_thread_analysis(args)
             payload = export_agent_thread(
                 codex_home=args.codex_home,
                 thread_id=args.thread_id,
                 source=args.source,
-                repository=args.repo,
                 output=args.output,
-                include_sensitive=args.include_sensitive,
             )
             _emit_telemetry_export(payload, json_output)
             return EXIT_OK
 
         if args.command == "self-update":
-            plan = plan_self_update()
+            update_plan = plan_self_update()
             if args.apply:
-                payload = {"schema_version": 1, "command": "self-update", **apply_self_update(plan, args.apply)}
+                payload = {"schema_version": 1, "command": "self-update", **apply_self_update(update_plan, args.apply)}
                 _emit(payload, json_output)
                 return EXIT_OK
-            _emit_update_plan(plan, json_output)
-            return EXIT_CONFLICT if plan.blockers else EXIT_OK
+            _emit_update_plan(update_plan, json_output)
+            return EXIT_CONFLICT if update_plan.blockers else EXIT_OK
 
         if args.command == "init":
-            plan = plan_init(Path(args.repo), args.agent)
+            local_plan = plan_init(Path(args.repo), args.agent)
         else:
-            plan = plan_adopt(Path(args.repo), args.version)
+            local_plan = plan_adopt(Path(args.repo), args.version)
         if args.apply:
-            payload = {"schema_version": 1, "command": plan.command, **apply_local_plan(plan, args.apply)}
+            payload = {"schema_version": 1, "command": local_plan.command, **apply_local_plan(local_plan, args.apply)}
             _emit(payload, json_output)
             return EXIT_OK
-        _emit_local_plan(plan, json_output)
-        return EXIT_CONFLICT if plan.blockers else EXIT_OK
+        _emit_local_plan(local_plan, json_output)
+        return EXIT_CONFLICT if local_plan.blockers else EXIT_OK
     except SvcError as error:
         _emit_error(error, json_output)
         return _exit_code(error)
+    except AnalysisProtocolError as error:
+        _emit_json(error.as_dict(), stream=sys.stderr)
+        return _analysis_exit_code(error)
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
         _emit_error(SvcError("invalid-release", str(error)), json_output)
         return EXIT_FAILURE
 
 
-def _is_interactive_terminal() -> bool:
-    return bool(sys.stdin.isatty() and sys.stdout.isatty())
-
-
-def _write_analysis_json(data: bytes) -> None:
-    output = sys.stdout
-    binary = getattr(output, "buffer", None)
-    if binary is not None:
-        binary.write(data)
-        binary.flush()
-        return
-    output.write(data.decode("utf-8"))
-
-
-def _run_agent_thread_analysis(args: argparse.Namespace) -> int:
-    explicit = any(
-        value is not None
-        for value in (
-            args.input_bundle,
-            args.thread_id,
-            args.source,
-        )
-    )
-    if explicit and args.archive_state is not None:
-        raise SvcError(
-            "invalid-analysis-request",
-            "--archive-state is valid only without an explicit analysis "
-            "selector.",
-        )
-    if args.input_bundle is not None and args.codex_home is not None:
-        raise SvcError(
-            "invalid-analysis-request",
-            "--codex-home is not valid with --input.",
-        )
-    if args.json_output and not explicit:
-        raise SvcError(
-            "invalid-analysis-request",
-            "--json requires --input, --thread-id, or --source.",
-        )
-    if not args.json_output and not _is_interactive_terminal():
-        raise SvcError(
-            "analysis-tty-required",
-            "Interactive analysis requires a TTY; use --json with an "
-            "explicit selector for automation.",
+def _analysis_request(source: str) -> object:
+    if source == "-":
+        text = sys.stdin.read(1_048_577)
+    else:
+        try:
+            with Path(source).open("r", encoding="utf-8") as stream:
+                text = stream.read(1_048_577)
+        except (OSError, UnicodeDecodeError) as error:
+            raise AnalysisProtocolError(
+                "analysis-request-unreadable",
+                "Analysis request could not be read as UTF-8 JSON.",
+                {"path": source, "reason": str(error)},
+            ) from error
+    if len(text.encode("utf-8")) > 1_048_576:
+        raise AnalysisProtocolError(
+            "analysis-request-too-large",
+            "Analysis request exceeds its byte bound.",
         )
 
-    if args.json_output:
-        prepared = prepare_agent_thread_analysis(
-            input_bundle=args.input_bundle,
-            thread_id=args.thread_id,
-            source=args.source,
-            codex_home=args.codex_home,
-        )
-        _write_analysis_json(prepared.analysis.json_bytes)
-        return EXIT_OK
-
-    return _run_agent_thread_tui(args, explicit=explicit)
-
-
-def _run_agent_thread_tui(
-    args: argparse.Namespace,
-    *,
-    explicit: bool,
-) -> int:
-    """Import Textual only after the command and TTY gates are satisfied."""
+    def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
+        value: dict[str, object] = {}
+        for key, item in items:
+            if key in value:
+                raise ValueError(f"duplicate JSON key: {key}")
+            value[key] = item
+        return value
 
     try:
-        from .telemetry.tui import (
-            AgentThreadAnalysisApp,
-            AnalysisDocument,
+        return json.loads(
+            text,
+            object_pairs_hook=pairs,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite number: {token}")
+            ),
         )
-    except ImportError as error:
-        raise SvcError(
-            "interactive-analysis-unavailable",
-            "The local analysis interface is unavailable.",
+    except (json.JSONDecodeError, ValueError) as error:
+        raise AnalysisProtocolError(
+            "invalid-analysis-request-json",
+            "Analysis request is not strict JSON.",
+            {"reason": str(error)},
         ) from error
 
-    if explicit:
-        prepared = prepare_agent_thread_analysis(
-            input_bundle=args.input_bundle,
-            thread_id=args.thread_id,
-            source=args.source,
-            codex_home=args.codex_home,
-        )
-        app = AgentThreadAnalysisApp(
-            initial_document=AnalysisDocument(
-                prepared.bundle,
-                prepared.analysis,
+
+def _run_analysis_tool(args: argparse.Namespace) -> int:
+    if args.schema:
+        if args.input is not None or args.request is not None:
+            raise AnalysisProtocolError(
+                "invalid-cli-usage",
+                "--schema cannot be combined with --input or --request.",
             )
+        payload = query_schema() if args.analysis_tool == "query" else read_schema()
+        _emit_json(payload)
+        return EXIT_OK
+    if args.input is None or args.request is None:
+        raise AnalysisProtocolError(
+            "invalid-cli-usage",
+            "Analysis execution requires --input and --request.",
         )
+    request = _analysis_request(args.request)
+    if args.analysis_tool == "query":
+        payload = execute_query(args.input, request)
     else:
-        from .telemetry.service import list_sensitive_agent_threads
-
-        archive_state = (
-            args.archive_state
-            if args.archive_state is not None
-            else ArchiveFilter.ACTIVE.value
-        )
-
-        def inventory_loader(selected: ArchiveFilter):
-            return list_sensitive_agent_threads(
-                args.codex_home,
-                selected,
-            )
-
-        def analysis_loader(reference):
-            prepared = prepare_agent_thread_analysis(
-                input_bundle=None,
-                thread_id=reference.thread_id,
-                source=None,
-                codex_home=args.codex_home,
-            )
-            return AnalysisDocument(
-                prepared.bundle,
-                prepared.analysis,
-            )
-
-        app = AgentThreadAnalysisApp(
-            inventory_loader=inventory_loader,
-            analysis_loader=analysis_loader,
-            archive_state=archive_state,
-        )
-    app.run()
+        payload = execute_read(args.input, request)
+    _emit_json(payload)
     return EXIT_OK
 
 
@@ -426,7 +373,7 @@ def _emit_update_plan(plan: Any, json_output: bool) -> None:
         print(f"Apply with: --apply {plan.digest}")
 
 
-def _emit_status(payload: dict[str, object], json_output: bool) -> None:
+def _emit_status(payload: dict[str, Any], json_output: bool) -> None:
     if json_output:
         _emit_json(payload)
         return
@@ -447,7 +394,7 @@ def _emit_status(payload: dict[str, object], json_output: bool) -> None:
     print("Healthy" if payload["healthy"] else "Action required")
 
 
-def _emit_telemetry_list(payload: dict[str, object], json_output: bool) -> None:
+def _emit_telemetry_list(payload: dict[str, Any], json_output: bool) -> None:
     if json_output:
         _emit_json(payload)
         return
@@ -457,35 +404,30 @@ def _emit_telemetry_list(payload: dict[str, object], json_output: bool) -> None:
         if not isinstance(descriptor, dict):
             continue
         updated = descriptor.get("updated_at") or "unknown-time"
-        print(f"  {descriptor.get('thread_id')}  {descriptor.get('source_state')}  {updated}")
-    warnings = payload.get("warnings")
-    if isinstance(warnings, list):
-        omitted_sources = sum(
-            warning["count"]
-            for warning in warnings
-            if isinstance(warning, dict)
-            and warning.get("code") == "thread-source-omitted"
-            and isinstance(warning.get("count"), int)
-            and not isinstance(warning.get("count"), bool)
+        print(
+            f"  {descriptor.get('thread_id')}  "
+            f"{descriptor.get('archive_state')}/"
+            f"{descriptor.get('source_availability')}  {updated}"
         )
-        if omitted_sources:
-            print(f"  Degraded: {omitted_sources} source row(s) omitted")
+    omitted_sources = payload.get("omitted_sources")
+    if isinstance(omitted_sources, int) and omitted_sources:
+        print(f"  Degraded: {omitted_sources} source row(s) omitted")
 
 
-def _emit_telemetry_export(payload: dict[str, object], json_output: bool) -> None:
+def _emit_telemetry_export(payload: dict[str, Any], json_output: bool) -> None:
     if json_output:
         _emit_json(payload)
         return
-    bundle = payload["bundle"]
-    if isinstance(bundle, dict):
-        print(f"SVC telemetry agent-thread export: exported {bundle.get('path')}")
+    evidence = payload["evidence"]
+    if isinstance(evidence, dict):
+        print(f"SVC telemetry agent-thread export: exported {evidence.get('path')}")
     else:
         print("SVC telemetry agent-thread export: exported")
-    diagnostics = payload.get("diagnostics")
-    if isinstance(diagnostics, list) and diagnostics:
+    diagnostic_groups = payload.get("diagnostic_groups")
+    if isinstance(diagnostic_groups, int) and diagnostic_groups:
         print(
-            f"  {len(diagnostics)} normalized diagnostic group(s); "
-            "inspect manifest.json in the bundle"
+            f"  {diagnostic_groups} normalized diagnostic group(s); "
+            "inspect manifest.json in the evidence archive"
         )
 
 
@@ -542,6 +484,28 @@ def _exit_code(error: SvcError) -> int:
     }:
         return EXIT_FAILURE
     return EXIT_CONFLICT
+
+
+def _analysis_exit_code(error: AnalysisProtocolError) -> int:
+    if error.code in {
+        "invalid-cli-usage",
+        "invalid-analysis-request-json",
+        "invalid-query-request",
+        "invalid-read-request",
+        "analysis-request-too-large",
+    }:
+        return EXIT_USAGE
+    if error.code in {
+        "cursor-scope-mismatch",
+        "invalid-cursor",
+        "invalid-reference",
+        "reference-kind-mismatch",
+        "reference-not-found",
+        "reference-scope-mismatch",
+        "query-page-budget-too-small",
+    }:
+        return EXIT_CONFLICT
+    return EXIT_FAILURE
 
 
 if __name__ == "__main__":

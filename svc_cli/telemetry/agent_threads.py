@@ -11,11 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Protocol
+from typing import Any, BinaryIO, Callable, Iterable, Mapping, Protocol
 import unicodedata
 
 
-MAX_INTERACTIVE_ROWS = 5_000
+MAX_INVENTORY_ROWS = 100
 MAX_WORKSPACE_CHARS = 4_096
 MAX_TITLE_CHARS = 160
 MAX_FIRST_MESSAGE_CHARS = 512
@@ -33,7 +33,7 @@ class ArchiveState(StrEnum):
 
 
 class ArchiveFilter(StrEnum):
-    """Safe inventory lifecycle filter; ``all`` is not a lifecycle state."""
+    """Inventory lifecycle filter; ``all`` is not a lifecycle state."""
 
     ACTIVE = "active"
     ARCHIVED = "archived"
@@ -65,6 +65,13 @@ class NormalizationStatus(StrEnum):
     PARTIAL = "partial"
 
 
+class NativeFrameStatus(StrEnum):
+    """Whether one captured native frame contains its full provider record."""
+
+    COMPLETE = "complete"
+    INCOMPLETE = "incomplete"
+
+
 @dataclass(frozen=True)
 class ProviderContext:
     """Explicit, provider-owned local source location; never an implicit scan root."""
@@ -86,84 +93,6 @@ class ThreadSelection:
             raise ValueError("thread_id must not be blank")
 
 
-@dataclass(frozen=True)
-class ThreadDescriptor:
-    """Selection metadata deliberately excluding transcript and title content."""
-
-    provider_id: str
-    thread_id: str
-    source_state: str
-    created_at: str | None = None
-    updated_at: str | None = None
-
-    def as_dict(self) -> dict[str, str | None]:
-        return {
-            "provider_id": self.provider_id,
-            "thread_id": self.thread_id,
-            "source_state": self.source_state,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-        }
-
-
-@dataclass(frozen=True)
-class ThreadInventoryQuery:
-    """Provider-neutral bounded query for safe thread inventory."""
-
-    archive_state: ArchiveFilter = ArchiveFilter.ALL
-    limit: int = 20
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.archive_state, ArchiveFilter):
-            try:
-                object.__setattr__(self, "archive_state", ArchiveFilter(self.archive_state))
-            except (TypeError, ValueError) as error:
-                raise ValueError("archive_state must be active, archived, or all") from error
-        if isinstance(self.limit, bool) or not isinstance(self.limit, int) or not 1 <= self.limit <= 100:
-            raise ValueError("limit must be an integer between 1 and 100")
-
-
-@dataclass(frozen=True)
-class ThreadInventoryItem:
-    """Provider-neutral inventory facts before the released safe projection."""
-
-    provider_id: str
-    thread_id: str
-    archive_state: ArchiveState
-    source_availability: SourceAvailability
-    created_at: str | None = None
-    updated_at: str | None = None
-
-    def as_descriptor(self) -> ThreadDescriptor:
-        """Project independent facts into the released schema-v1 descriptor."""
-        try:
-            availability = SourceAvailability(self.source_availability)
-        except (TypeError, ValueError):
-            availability = SourceAvailability.UNKNOWN
-        if availability is SourceAvailability.AVAILABLE:
-            try:
-                source_state = ArchiveState(self.archive_state).value
-            except (TypeError, ValueError):
-                source_state = ArchiveState.UNKNOWN.value
-        else:
-            source_state = availability.value
-        return ThreadDescriptor(
-            provider_id=self.provider_id,
-            thread_id=self.thread_id,
-            source_state=source_state,
-            created_at=self.created_at,
-            updated_at=self.updated_at,
-        )
-
-
-@dataclass(frozen=True)
-class ThreadInventoryListing:
-    """Bounded inventory items plus a redacted count of omitted rows."""
-
-    items: tuple[ThreadInventoryItem, ...]
-    omitted_sources: int = 0
-
-
 def _has_forbidden_control(value: str) -> bool:
     return any(
         unicodedata.category(character) in _CONTROL_CATEGORIES
@@ -182,7 +111,7 @@ def _validate_utf8(value: str, *, field_name: str) -> None:
 
 @dataclass(frozen=True, slots=True)
 class ThreadRef:
-    """Stable provider/thread identity for sensitive in-process selection."""
+    """Stable provider/thread identity for in-process selection."""
 
     provider_id: str
     thread_id: str
@@ -210,8 +139,8 @@ class ThreadRef:
 
 
 @dataclass(frozen=True, slots=True)
-class SensitiveInventoryRow:
-    """One provider-bounded row for the explicitly sensitive navigator."""
+class ThreadInventoryRow:
+    """One provider-bounded row for explicit thread selection."""
 
     provider_id: str
     thread_id: str
@@ -298,7 +227,7 @@ class SensitiveInventoryRow:
 
     def __repr__(self) -> str:
         return (
-            "SensitiveInventoryRow("
+            "ThreadInventoryRow("
             f"provider_id={self.provider_id!r}, "
             f"thread_id={self.thread_id!r}, "
             f"archive_state={str(self.archive_state)!r}, "
@@ -311,11 +240,11 @@ class SensitiveInventoryRow:
 
 
 @dataclass(frozen=True, slots=True)
-class SensitiveInventoryQuery:
+class ThreadInventoryQuery:
     """Bounded interactive query; active is the deliberate default."""
 
     archive_state: ArchiveFilter | str = ArchiveFilter.ACTIVE
-    limit: int = MAX_INTERACTIVE_ROWS
+    limit: int = MAX_INVENTORY_ROWS
 
     def __post_init__(self) -> None:
         try:
@@ -328,11 +257,11 @@ class SensitiveInventoryQuery:
         if (
             isinstance(self.limit, bool)
             or not isinstance(self.limit, int)
-            or not 1 <= self.limit <= MAX_INTERACTIVE_ROWS
+            or not 1 <= self.limit <= MAX_INVENTORY_ROWS
         ):
             raise ValueError(
                 f"limit must be an integer between 1 and "
-                f"{MAX_INTERACTIVE_ROWS}"
+                f"{MAX_INVENTORY_ROWS}"
             )
 
     @property
@@ -340,8 +269,8 @@ class SensitiveInventoryQuery:
         return ArchiveFilter(self.archive_state)
 
 
-def _sensitive_row_order(
-    row: SensitiveInventoryRow,
+def _inventory_row_order(
+    row: ThreadInventoryRow,
 ) -> tuple[bool, int, bytes, bytes]:
     recency_at_ms = row.recency_at_ms
     missing = recency_at_ms is None
@@ -355,18 +284,18 @@ def _sensitive_row_order(
 
 
 @dataclass(frozen=True, slots=True)
-class SensitiveInventoryListing:
+class ThreadInventoryListing:
     """A bounded listing plus an honest non-counting truncation signal."""
 
-    items: tuple[SensitiveInventoryRow, ...]
+    items: tuple[ThreadInventoryRow, ...]
     inventory_truncated: bool = False
     omitted_sources: int = 0
 
     def __post_init__(self) -> None:
         items = tuple(self.items)
-        if len(items) > MAX_INTERACTIVE_ROWS:
+        if len(items) > MAX_INVENTORY_ROWS:
             raise ValueError(
-                f"listing cannot retain more than {MAX_INTERACTIVE_ROWS} rows"
+                f"listing cannot retain more than {MAX_INVENTORY_ROWS} rows"
             )
         if (
             isinstance(self.omitted_sources, bool)
@@ -381,22 +310,22 @@ class SensitiveInventoryListing:
     @classmethod
     def from_rows(
         cls,
-        rows: Iterable[SensitiveInventoryRow],
+        rows: Iterable[ThreadInventoryRow],
         *,
         archive_state: ArchiveFilter | str = ArchiveFilter.ACTIVE,
-        limit: int = MAX_INTERACTIVE_ROWS,
+        limit: int = MAX_INVENTORY_ROWS,
         omitted_sources: int = 0,
-    ) -> "SensitiveInventoryListing":
-        query = SensitiveInventoryQuery(
+    ) -> "ThreadInventoryListing":
+        query = ThreadInventoryQuery(
             archive_state=archive_state,
             limit=limit,
         )
-        retained: list[SensitiveInventoryRow] = []
+        retained: list[ThreadInventoryRow] = []
         truncated = False
         for row in rows:
-            if not isinstance(row, SensitiveInventoryRow):
+            if not isinstance(row, ThreadInventoryRow):
                 raise TypeError(
-                    "rows must contain SensitiveInventoryRow values"
+                    "rows must contain ThreadInventoryRow values"
                 )
             if (
                 query.archive_filter is not ArchiveFilter.ALL
@@ -408,7 +337,7 @@ class SensitiveInventoryListing:
                 truncated = True
                 continue
             retained.append(row)
-        retained.sort(key=_sensitive_row_order)
+        retained.sort(key=_inventory_row_order)
         return cls(
             tuple(retained),
             inventory_truncated=truncated,
@@ -439,7 +368,55 @@ class ResolvedThread:
             raise ValueError("thread_id must not be blank")
 
 
-NormalizedRecordSink = Callable[[Mapping[str, object]], bool]
+NormalizedRecordSink = Callable[[Mapping[str, Any]], bool]
+
+
+@dataclass(frozen=True, slots=True)
+class NativeCaptureResult:
+    """Descriptor-bound facts for one immutable native capture.
+
+    Providers own native record framing and source-race observation.  The
+    evidence core owns canonical index encoding, validation, identity, and
+    publication.  ``frames`` therefore contains JSON-ready framing facts but
+    never the captured content itself.
+    """
+
+    provider_id: str
+    adapter_id: str
+    source_format: str
+    source_status: SourceStatus | str
+    frames: tuple[Mapping[str, Any], ...]
+    native_bytes: int
+    unknown_remainder: bool = False
+    read_interrupted: bool = False
+    source_snapshot: "SourceSnapshot | None" = None
+    final_snapshot: "SourceSnapshot | None" = None
+
+    def __post_init__(self) -> None:
+        try:
+            object.__setattr__(self, "source_status", SourceStatus(self.source_status))
+        except (TypeError, ValueError) as error:
+            raise ValueError("invalid native capture source status") from error
+        frames = tuple(self.frames)
+        object.__setattr__(self, "frames", frames)
+        if (
+            isinstance(self.native_bytes, bool)
+            or not isinstance(self.native_bytes, int)
+            or self.native_bytes < 0
+        ):
+            raise ValueError("native_bytes must be a non-negative integer")
+
+    @property
+    def is_partial(self) -> bool:
+        return (
+            self.source_status is not SourceStatus.STABLE
+            or self.unknown_remainder
+            or self.read_interrupted
+            or any(
+                frame.get("frame_status") == NativeFrameStatus.INCOMPLETE.value
+                for frame in self.frames
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -456,13 +433,13 @@ class NormalizationResult:
     adapter_id: str
     source_format: str
     thread_ref: str
-    workspace: Mapping[str, object]
+    workspace: Mapping[str, Any]
     source_status: SourceStatus | str
     result_status: NormalizationStatus | str
     capabilities: Mapping[str, str]
-    counts: Mapping[str, object]
-    lossiness: Mapping[str, object]
-    diagnostics: tuple[Mapping[str, object], ...] = ()
+    counts: Mapping[str, Any]
+    lossiness: Mapping[str, Any]
+    diagnostics: tuple[Mapping[str, Any], ...] = ()
     source_snapshot: "SourceSnapshot | None" = None
     final_snapshot: "SourceSnapshot | None" = None
 
@@ -493,7 +470,7 @@ class SourceSnapshot:
 
 
 class ThreadProvider(Protocol):
-    """A static provider adapter for safe inventory and trajectory collection."""
+    """A static provider adapter for inventory and trajectory collection."""
 
     provider_id: str
 
@@ -509,13 +486,21 @@ class ThreadProvider(Protocol):
     ) -> NormalizationResult: ...
 
 
-class SensitiveInventoryProvider(Protocol):
-    """The separately invoked recognition-bearing inventory capability."""
+class EvidenceThreadProvider(ThreadProvider, Protocol):
+    """Provider capable of immutable native capture and captured projection."""
 
-    provider_id: str
-
-    def list_sensitive_inventory(
+    def capture_native(
         self,
-        context: ProviderContext,
-        query: SensitiveInventoryQuery,
-    ) -> SensitiveInventoryListing: ...
+        resolved: ResolvedThread,
+        output: BinaryIO,
+        bounds: Mapping[str, int],
+    ) -> NativeCaptureResult: ...
+
+    def stream_normalize_captured(
+        self,
+        resolved: ResolvedThread,
+        native: BinaryIO,
+        capture: NativeCaptureResult,
+        sink: NormalizedRecordSink,
+        bounds: Mapping[str, int],
+    ) -> NormalizationResult: ...

@@ -8,6 +8,7 @@ payloads beyond the small amount of metadata needed for indexing.
 from __future__ import annotations
 
 import errno
+import hashlib
 import json
 import os
 import shutil
@@ -17,28 +18,26 @@ import tempfile
 import unicodedata
 from pathlib import Path
 from dataclasses import replace
-from typing import BinaryIO, Iterable, Mapping
+from typing import Any, BinaryIO, Iterable, Mapping, cast
 from ...errors import SvcError
 from ..agent_threads import (
+    ArchiveFilter,
     ArchiveState,
     MAX_FIRST_MESSAGE_CHARS,
-    MAX_INTERACTIVE_ROWS,
     MAX_TITLE_CHARS,
     MAX_WORKSPACE_CHARS,
+    NativeCaptureResult,
     NormalizationResult,
     NormalizedRecordSink,
     NormalizationStatus,
     ProviderContext,
     ResolvedThread,
-    SensitiveInventoryListing,
-    SensitiveInventoryQuery,
-    SensitiveInventoryRow,
     SourceAvailability,
     SourceSnapshot,
     SourceStatus,
-    ThreadInventoryItem,
     ThreadInventoryListing,
     ThreadInventoryQuery,
+    ThreadInventoryRow,
     ThreadSelection,
 )
 from .codex_trajectory import CodexTrajectoryNormalizer, DEFAULT_BOUNDS
@@ -59,7 +58,7 @@ def _is_link_or_reparse_point(info: os.stat_result) -> bool:
     return stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & reparse)
 
 
-def _error(code: str, message: str, **details: object) -> SvcError:
+def _error(code: str, message: str, **details: Any) -> SvcError:
     return SvcError(code, message, details)
 
 
@@ -136,7 +135,7 @@ def _state_signature(info: os.stat_result) -> tuple[int, int, int, int]:
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
 
 
-def _resolve_path(home: Path, value: object) -> Path:
+def _resolve_path(home: Path, value: Any) -> Path:
     if not isinstance(value, str) or not value.strip():
         raise _error("thread-source-incompatible", "State database has no usable rollout path.")
     try:
@@ -163,7 +162,7 @@ def _resolve_path(home: Path, value: object) -> Path:
     return candidate
 
 
-def _columns(connection: sqlite3.Connection) -> list[str]:
+def _columns(connection: Any) -> list[str]:
     try:
         rows = connection.execute("PRAGMA table_info(threads)").fetchall()
     except sqlite3.DatabaseError as exc:
@@ -184,7 +183,7 @@ class _SnapshotConnection:
         self._connection = connection
         self._directory = directory
 
-    def execute(self, *args: object, **kwargs: object):
+    def execute(self, *args: Any, **kwargs: Any):
         return self._connection.execute(*args, **kwargs)
 
     def close(self) -> None:
@@ -246,8 +245,9 @@ def _state_snapshot(path: Path) -> tuple[Path, str]:
         try:
             stable = True
             for candidate in (path, *sidecars):
-                if before[candidate] is not None:
-                    if not _copy_snapshot_member(candidate, Path(directory) / candidate.name, before[candidate]):
+                expected = before[candidate]
+                if expected is not None:
+                    if not _copy_snapshot_member(candidate, Path(directory) / candidate.name, expected):
                         stable = False
                         break
             if not stable:
@@ -304,7 +304,7 @@ def _state_connection(path: Path) -> _SnapshotConnection:
                 shutil.rmtree(directory, ignore_errors=True)
 
 
-def _archive_state(value: object) -> ArchiveState:
+def _archive_state(value: Any) -> ArchiveState:
     """Map only the exact Codex lifecycle authority."""
     if isinstance(value, int) and not isinstance(value, bool):
         if value == 0:
@@ -319,7 +319,7 @@ def _forbidden_inventory_text(value: str) -> bool:
     return any(unicodedata.category(character) in forbidden_categories for character in value)
 
 
-def _bounded_sqlite_text(value: object, *, sqlite_type: object, max_chars: int) -> str | None:
+def _bounded_sqlite_text(value: Any, *, sqlite_type: Any, max_chars: int) -> str | None:
     """Decode one SQL-bounded text prefix without replacement or normalization."""
     if sqlite_type != "text":
         return None
@@ -341,7 +341,7 @@ def _bounded_sqlite_text(value: object, *, sqlite_type: object, max_chars: int) 
     return decoded
 
 
-def _safe_thread_id(sqlite_type: object, prefix: object, has_nul: object) -> str | None:
+def _safe_thread_id(sqlite_type: Any, prefix: Any, has_nul: Any) -> str | None:
     thread_id = _bounded_sqlite_text(prefix, sqlite_type=sqlite_type, max_chars=MAX_THREAD_ID_CHARS)
     if (
         thread_id is None
@@ -356,7 +356,7 @@ def _safe_thread_id(sqlite_type: object, prefix: object, has_nul: object) -> str
 
 
 def _inventory_failure(error: OSError) -> SourceAvailability | None:
-    """Classify a path-inspection failure without retaining its sensitive value."""
+    """Classify a path-inspection failure without retaining its path value."""
     if error.errno in {errno.ENOENT, errno.ENOTDIR}:
         return SourceAvailability.MISSING
     if error.errno in {errno.ELOOP, errno.ENAMETOOLONG}:
@@ -370,9 +370,9 @@ def _inventory_failure(error: OSError) -> SourceAvailability | None:
 
 def _inventory_source_availability(
     home: Path,
-    sqlite_type: object,
-    prefix: object,
-    has_nul: object,
+    sqlite_type: Any,
+    prefix: Any,
+    has_nul: Any,
 ) -> SourceAvailability | None:
     """Inspect a SQL-bounded rollout path without following links or reading it."""
     if sqlite_type == "null":
@@ -443,148 +443,7 @@ def _inventory_source_availability(
             os.close(fd)
 
 
-def _metadata_rows(home: Path, query: ThreadInventoryQuery) -> ThreadInventoryListing:
-    database = home / "state_5.sqlite"
-    connection = _state_connection(database)
-    try:
-        columns = _columns(connection)
-        if "id" not in columns or "rollout_path" not in columns:
-            raise _error("thread-source-incompatible", "Codex threads table does not expose exact ID and rollout path columns.", columns=columns)
-
-        archive_value = (
-            """CASE
-                WHEN typeof("archived") = 'integer' AND "archived" IN (0, 1)
-                THEN "archived"
-                ELSE NULL
-            END"""
-            if "archived" in columns
-            else "NULL"
-        )
-        archive_state = (
-            """CASE
-                WHEN typeof("archived") = 'integer' AND "archived" = 0 THEN 'active'
-                WHEN typeof("archived") = 'integer' AND "archived" = 1 THEN 'archived'
-                ELSE 'unknown'
-            END"""
-            if "archived" in columns
-            else "'unknown'"
-        )
-
-        def non_negative_integer(column: str) -> str:
-            if column not in columns:
-                return "NULL"
-            return f"""CASE
-                WHEN typeof("{column}") = 'integer' AND "{column}" >= 0
-                THEN "{column}"
-                ELSE NULL
-            END"""
-
-        recency_candidates: list[str] = []
-        for column in ("recency_at_ms", "updated_at_ms"):
-            if column in columns:
-                recency_candidates.append(
-                    f"""WHEN typeof("{column}") = 'integer'
-                        AND "{column}" BETWEEN 0 AND {_MAX_SQLITE_INTEGER}
-                    THEN "{column}" """
-                )
-        if "updated_at" in columns:
-            recency_candidates.append(
-                f"""WHEN typeof("updated_at") = 'integer'
-                    AND "updated_at" BETWEEN 0 AND {_MAX_RECENCY_SECONDS}
-                THEN "updated_at" * 1000 """
-            )
-        recency = "CASE " + " ".join(recency_candidates) + " ELSE NULL END" if recency_candidates else "NULL"
-
-        sql = f"""
-            WITH inventory AS (
-                SELECT
-                    typeof("id") AS id_type,
-                    CASE WHEN typeof("id") = 'text'
-                        THEN CAST(substr("id", 1, {MAX_THREAD_ID_CHARS + 1}) AS BLOB)
-                        ELSE NULL
-                    END AS id_prefix,
-                    CASE WHEN typeof("id") = 'text'
-                        THEN instr("id", char(0)) > 0
-                        ELSE 0
-                    END AS id_has_nul,
-                    typeof("rollout_path") AS path_type,
-                    CASE WHEN typeof("rollout_path") = 'text'
-                        THEN CAST(substr("rollout_path", 1, {MAX_ROLLOUT_PATH_CHARS + 1}) AS BLOB)
-                        ELSE NULL
-                    END AS path_prefix,
-                    CASE WHEN typeof("rollout_path") = 'text'
-                        THEN instr("rollout_path", char(0)) > 0
-                        ELSE 0
-                    END AS path_has_nul,
-                    {archive_value} AS archive_value,
-                    {archive_state} AS archive_state,
-                    {non_negative_integer("created_at")} AS created_at,
-                    {non_negative_integer("updated_at")} AS updated_at,
-                    {recency} AS recency,
-                    COUNT(*) OVER (
-                        PARTITION BY typeof("id"), CAST("id" AS BLOB)
-                    ) AS duplicate_count
-                FROM threads
-            )
-            SELECT
-                id_type, id_prefix, id_has_nul,
-                path_type, path_prefix, path_has_nul,
-                archive_value, created_at, updated_at, duplicate_count
-            FROM inventory
-            WHERE ? = 'all' OR archive_state = ?
-            ORDER BY recency IS NULL ASC, recency DESC, id_prefix ASC
-        """
-        archive_filter = query.archive_state.value
-        rows = connection.execute(sql, (archive_filter, archive_filter))
-        result: list[ThreadInventoryItem] = []
-        omitted_sources = 0
-        for row in rows:
-            (
-                id_type,
-                id_prefix,
-                id_has_nul,
-                path_type,
-                path_prefix,
-                path_has_nul,
-                raw_archive_value,
-                created_at,
-                updated_at,
-                duplicate_count,
-            ) = row
-            thread_id = _safe_thread_id(id_type, id_prefix, id_has_nul)
-            if thread_id is None or duplicate_count != 1:
-                omitted_sources += 1
-                continue
-            availability = _inventory_source_availability(
-                home,
-                path_type,
-                path_prefix,
-                path_has_nul,
-            )
-            if availability is None:
-                omitted_sources += 1
-                continue
-            # Inspect every ordered row so the degradation count is complete,
-            # while the query limit caps only safe returned inventory items.
-            if len(result) < query.limit:
-                result.append(ThreadInventoryItem(
-                    provider_id="codex",
-                    thread_id=thread_id,
-                    archive_state=_archive_state(raw_archive_value),
-                    source_availability=availability,
-                    created_at=None if created_at is None else str(created_at),
-                    updated_at=None if updated_at is None else str(updated_at),
-                ))
-        return ThreadInventoryListing(tuple(result), omitted_sources)
-    except SvcError:
-        raise
-    except sqlite3.DatabaseError as exc:
-        raise _error("thread-source-incompatible", "Codex state database metadata cannot be read.", path=str(database), reason=str(exc)) from exc
-    finally:
-        connection.close()
-
-
-def _sensitive_text_projection(
+def _inventory_text_projection(
     columns: Iterable[str],
     column: str,
     maximum_code_points: int,
@@ -595,7 +454,7 @@ def _sensitive_text_projection(
     at most ``maximum + 1`` code points.  SQLite text functions stop at an
     embedded NUL, so that exceptional branch retains at most the same number
     of raw UTF-8 bytes; the mapper either decodes that bounded prefix exactly
-    or treats the optional recognition value as unavailable.
+    or treats the optional display value as unavailable.
     """
 
     if column not in columns:
@@ -629,10 +488,10 @@ def _sensitive_text_projection(
     return sqlite_type, prefix, overflow
 
 
-def _decode_sensitive_prefix(
-    sqlite_type: object,
-    prefix: object,
-    byte_overflow: object,
+def _decode_inventory_prefix(
+    sqlite_type: Any,
+    prefix: Any,
+    byte_overflow: Any,
     *,
     maximum_code_points: int,
     discard_when_truncated: bool,
@@ -672,11 +531,11 @@ def _decode_sensitive_prefix(
     return decoded, False
 
 
-def _sensitive_metadata_rows(
+def _inventory_rows(
     home: Path,
-    query: SensitiveInventoryQuery,
-) -> SensitiveInventoryListing:
-    """Materialize only the separately bounded, explicitly sensitive view."""
+    query: ThreadInventoryQuery,
+) -> ThreadInventoryListing:
+    """Materialize the bounded inventory view."""
 
     database = home / "state_5.sqlite"
     connection = _state_connection(database)
@@ -744,20 +603,20 @@ def _sensitive_metadata_rows(
             else "NULL"
         )
 
-        cwd_type, cwd_prefix, cwd_overflow = _sensitive_text_projection(
+        cwd_type, cwd_prefix, cwd_overflow = _inventory_text_projection(
             columns,
             "cwd",
             MAX_WORKSPACE_CHARS,
         )
         title_type, title_prefix, title_overflow = (
-            _sensitive_text_projection(
+            _inventory_text_projection(
                 columns,
                 "title",
                 MAX_TITLE_CHARS,
             )
         )
         message_type, message_prefix, message_overflow = (
-            _sensitive_text_projection(
+            _inventory_text_projection(
                 columns,
                 "first_user_message",
                 MAX_FIRST_MESSAGE_CHARS,
@@ -828,12 +687,12 @@ def _sensitive_metadata_rows(
                 recency DESC,
                 id_prefix ASC
         """
-        archive_filter = query.archive_state.value
+        archive_filter = ArchiveFilter(query.archive_state).value
         rows = connection.execute(
             sql,
             (archive_filter, archive_filter),
         )
-        result: list[SensitiveInventoryRow] = []
+        result: list[ThreadInventoryRow] = []
         omitted_sources = 0
         inventory_truncated = False
         for row in rows:
@@ -881,14 +740,14 @@ def _sensitive_metadata_rows(
                 inventory_truncated = True
                 break
 
-            workspace, workspace_truncated = _decode_sensitive_prefix(
+            workspace, workspace_truncated = _decode_inventory_prefix(
                 cwd_type_value,
                 cwd_prefix_value,
                 cwd_overflow_value,
                 maximum_code_points=MAX_WORKSPACE_CHARS,
                 discard_when_truncated=True,
             )
-            title, title_truncated = _decode_sensitive_prefix(
+            title, title_truncated = _decode_inventory_prefix(
                 title_type_value,
                 title_prefix_value,
                 title_overflow_value,
@@ -896,7 +755,7 @@ def _sensitive_metadata_rows(
                 discard_when_truncated=False,
             )
             first_message, first_message_truncated = (
-                _decode_sensitive_prefix(
+                _decode_inventory_prefix(
                     message_type_value,
                     message_prefix_value,
                     message_overflow_value,
@@ -905,7 +764,7 @@ def _sensitive_metadata_rows(
                 )
             )
             result.append(
-                SensitiveInventoryRow(
+                ThreadInventoryRow(
                     provider_id="codex",
                     thread_id=thread_id,
                     archive_state=_archive_state(raw_archive_value),
@@ -931,7 +790,7 @@ def _sensitive_metadata_rows(
                     recency_at_ms=recency_at_ms,
                 )
             )
-        return SensitiveInventoryListing(
+        return ThreadInventoryListing(
             tuple(result),
             inventory_truncated=inventory_truncated,
             omitted_sources=omitted_sources,
@@ -941,7 +800,7 @@ def _sensitive_metadata_rows(
     except sqlite3.DatabaseError as exc:
         raise _error(
             "thread-source-incompatible",
-            "Codex state database sensitive metadata cannot be read.",
+            "Codex state database inventory metadata cannot be read.",
             path=str(database),
             reason=str(exc),
         ) from exc
@@ -949,7 +808,7 @@ def _sensitive_metadata_rows(
         connection.close()
 
 
-def _extract_thread_id(payload: object) -> str | None:
+def _extract_thread_id(payload: Any) -> str | None:
     if not isinstance(payload, dict):
         return None
     for key in ("thread_id", "threadId", "session_id", "sessionId", "id"):
@@ -959,7 +818,7 @@ def _extract_thread_id(payload: object) -> str | None:
     return None
 
 
-def _is_envelope(value: object) -> bool:
+def _is_envelope(value: Any) -> bool:
     return isinstance(value, dict) and isinstance(value.get("type"), str) and "payload" in value and "timestamp" in value
 
 
@@ -1014,19 +873,7 @@ class CodexRolloutProvider:
         if not isinstance(query, ThreadInventoryQuery):
             raise _error("invalid-inventory-query", "Thread inventory query is invalid.")
         home = _home(context)
-        return _metadata_rows(home, query)
-
-    def list_sensitive_inventory(
-        self,
-        context: ProviderContext,
-        query: SensitiveInventoryQuery,
-    ) -> SensitiveInventoryListing:
-        if not isinstance(query, SensitiveInventoryQuery):
-            raise _error(
-                "invalid-inventory-query",
-                "Sensitive thread inventory query is invalid.",
-            )
-        return _sensitive_metadata_rows(_home(context), query)
+        return _inventory_rows(home, query)
 
     def resolve(self, context: ProviderContext, selection: ThreadSelection) -> ResolvedThread:
         home = _home(context)
@@ -1127,5 +974,339 @@ class CodexRolloutProvider:
             result = replace(result, lossiness=lossiness, diagnostics=tuple(result.diagnostics) + ({"code": f"source-{status.value}-during-collection", "severity": "warning", "action": "partial", "count": 1, "record_ref": None, "source_ref": None, "details": {"source_status": status.value}},))
             result = replace(result, result_status=NormalizationStatus.PARTIAL)
         return replace(result, source_status=status, source_snapshot=initial, final_snapshot=final)
+
+    def capture_native(
+        self,
+        resolved: ResolvedThread,
+        output: BinaryIO,
+        bounds: Mapping[str, int],
+    ) -> NativeCaptureResult:
+        """Copy and frame the descriptor-bound initial rollout extent once."""
+
+        if (
+            resolved.provider_id != self.provider_id
+            or resolved.source_format != _SOURCE_FORMAT
+        ):
+            raise _error(
+                "thread-source-incompatible",
+                "Resolved source does not belong to codex-rollout-v1.",
+            )
+        source_limit = int(bounds.get("source_bytes", DEFAULT_BOUNDS["source_bytes"]))
+        if source_limit <= 0:
+            raise ValueError("source_bytes must be a positive integer")
+        source = Path(resolved.source_path)
+        stream, initial_info = _open_source(source)
+        initial = _source_snapshot(initial_info)
+        extent = min(initial.size, source_limit)
+        remaining = extent
+        captured = 0
+        frame_start = 0
+        frame_digest = hashlib.sha256()
+        frames: list[dict[str, Any]] = []
+        read_interrupted = False
+        final: SourceSnapshot | None = None
+
+        def finish_frame(end: int, status: str) -> None:
+            ordinal = len(frames)
+            frames.append(
+                {
+                    "native_record_id": f"n{ordinal:06d}",
+                    "native_index": ordinal,
+                    "byte_start": frame_start,
+                    "byte_end": end,
+                    "sha256": frame_digest.hexdigest(),
+                    "representation": "provider-bytes",
+                    "frame_status": status,
+                    "source_coordinate": {
+                        "event_index": ordinal,
+                        "line": ordinal,
+                        "byte_offset": frame_start,
+                    },
+                }
+            )
+
+        try:
+            while remaining:
+                try:
+                    chunk = stream.read(min(1024 * 1024, remaining))
+                except OSError:
+                    read_interrupted = True
+                    break
+                if not chunk:
+                    read_interrupted = True
+                    break
+                output.write(chunk)
+                cursor = 0
+                while True:
+                    newline = chunk.find(b"\n", cursor)
+                    if newline < 0:
+                        frame_digest.update(chunk[cursor:])
+                        break
+                    frame_digest.update(chunk[cursor : newline + 1])
+                    captured += newline + 1 - cursor
+                    finish_frame(captured, "complete")
+                    frame_start = captured
+                    frame_digest = hashlib.sha256()
+                    cursor = newline + 1
+                captured += len(chunk) - cursor
+                remaining -= len(chunk)
+            final = _source_snapshot(os.fstat(stream.fileno()))
+        except OSError as error:
+            raise _error(
+                "thread-source-unreadable",
+                "Codex rollout source cannot be captured.",
+                path=str(source),
+            ) from error
+        finally:
+            stream.close()
+
+        unknown_remainder = initial.size > captured or read_interrupted
+        if frame_start < captured:
+            finish_frame(
+                captured,
+                "incomplete" if unknown_remainder else "complete",
+            )
+
+        status = SourceStatus.STABLE
+        try:
+            post = _source_snapshot(
+                _lstat_regular(source, what="rollout source")
+            )
+        except SvcError:
+            status = SourceStatus.DISPLACED
+        else:
+            assert final is not None
+            if (
+                post != final
+                or post.device != initial.device
+                or post.inode != initial.inode
+            ):
+                status = SourceStatus.DISPLACED
+            elif final.size < initial.size or (
+                final.size == initial.size
+                and final.mtime_ns != initial.mtime_ns
+            ):
+                status = SourceStatus.CHANGED
+            elif final.size > initial.size:
+                status = SourceStatus.GREW
+
+        output.seek(0)
+        return NativeCaptureResult(
+            provider_id=self.provider_id,
+            adapter_id=_ADAPTER_ID,
+            source_format=_SOURCE_FORMAT,
+            source_status=status,
+            frames=tuple(frames),
+            native_bytes=captured,
+            unknown_remainder=unknown_remainder,
+            read_interrupted=read_interrupted,
+            source_snapshot=initial,
+            final_snapshot=final,
+        )
+
+    def stream_normalize_captured(
+        self,
+        resolved: ResolvedThread,
+        native: BinaryIO,
+        capture: NativeCaptureResult,
+        sink: NormalizedRecordSink,
+        bounds: Mapping[str, int],
+    ) -> NormalizationResult:
+        """Derive the trajectory only from the immutable captured bytes."""
+
+        if capture.provider_id != self.provider_id:
+            raise _error(
+                "thread-source-incompatible",
+                "Captured source does not belong to codex-rollout-v1.",
+            )
+        effective = dict(DEFAULT_BOUNDS)
+        effective.update(
+            {
+                key: int(value)
+                for key, value in bounds.items()
+                if isinstance(value, int)
+                and not isinstance(value, bool)
+                and value > 0
+            }
+        )
+        projection = tempfile.SpooledTemporaryFile(
+            max_size=1024 * 1024,
+            mode="w+b",
+        )
+        omitted_frames: list[Mapping[str, Any]] = []
+        try:
+            for frame in capture.frames:
+                start = int(frame["byte_start"])
+                end = int(frame["byte_end"])
+                size = end - start
+                if (
+                    frame["frame_status"] != "complete"
+                    or size > effective["native_line_bytes"]
+                ):
+                    omitted_frames.append(frame)
+                    projection.write(
+                        json.dumps(
+                            {
+                                "type": "session_meta",
+                                "payload": {"id": resolved.thread_id},
+                            },
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                        + b"\n"
+                    )
+                    continue
+                native.seek(start)
+                data = native.read(size)
+                if not isinstance(data, bytes) or len(data) != size:
+                    raise _error(
+                        "thread-source-unreadable",
+                        "Captured Codex rollout frame cannot be read.",
+                    )
+                projection.write(data)
+            projection_size = projection.tell()
+            projection.seek(0)
+
+            def mapped_sink(record: Mapping[str, Any]) -> bool:
+                if record.get("type") == "meta":
+                    return sink(record)
+                source_ref = record.get("source_ref")
+                if not isinstance(source_ref, Mapping):
+                    raise _error(
+                        "thread-source-incompatible",
+                        "Normalized record omitted its source coordinate.",
+                    )
+                ordinal = source_ref.get("event_index")
+                if (
+                    not isinstance(ordinal, int)
+                    or isinstance(ordinal, bool)
+                    or not 0 <= ordinal < len(capture.frames)
+                ):
+                    raise _error(
+                        "thread-source-incompatible",
+                        "Normalized record source coordinate is outside the capture.",
+                    )
+                mapped = dict(record)
+                mapped_source = dict(source_ref)
+                mapped_source["native_record_id"] = capture.frames[ordinal][
+                    "native_record_id"
+                ]
+                mapped["source_ref"] = mapped_source
+                return sink(mapped)
+
+            synthetic_snapshot = SourceSnapshot(
+                device=0,
+                inode=0,
+                size=projection_size,
+                mtime_ns=0,
+            )
+            result = CodexTrajectoryNormalizer().normalize(
+                cast(BinaryIO, projection),
+                resolved,
+                mapped_sink,
+                effective,
+                synthetic_snapshot,
+            )
+        finally:
+            projection.close()
+
+        lossiness = {
+            name: dict(values)
+            for name, values in result.lossiness.items()
+        }
+        diagnostics = list(result.diagnostics)
+        result_status = result.result_status
+        oversized = [
+            frame
+            for frame in omitted_frames
+            if int(frame["byte_end"]) - int(frame["byte_start"])
+            > effective["native_line_bytes"]
+        ]
+        if oversized:
+            lossiness["dropped"]["oversize_record"] += len(oversized)
+            for frame in oversized:
+                diagnostics.append(
+                    {
+                        "code": "record-oversize-dropped",
+                        "severity": "warning",
+                        "action": "drop",
+                        "count": 1,
+                        "record_ref": None,
+                        "source_ref": {
+                            **dict(frame["source_coordinate"]),
+                            "component": "envelope",
+                            "native_record_id": frame["native_record_id"],
+                        },
+                        "details": {
+                            "observed_bytes": int(frame["byte_end"])
+                            - int(frame["byte_start"]),
+                            "limit_bytes": effective["native_line_bytes"],
+                        },
+                    }
+                )
+            result_status = NormalizationStatus.PARTIAL
+        if capture.unknown_remainder:
+            lossiness["partial_reasons"]["input_limit"] += 1
+            diagnostics.append(
+                {
+                    "code": "input-limit-reached",
+                    "severity": "warning",
+                    "action": "partial",
+                    "count": 1,
+                    "record_ref": None,
+                    "source_ref": None,
+                    "details": {
+                        "observed_bytes": capture.native_bytes,
+                        "limit_bytes": effective["source_bytes"],
+                    },
+                }
+            )
+            result_status = NormalizationStatus.PARTIAL
+        if capture.read_interrupted:
+            lossiness["partial_reasons"]["source_read_interrupted"] += 1
+            diagnostics.append(
+                {
+                    "code": "source-read-interrupted",
+                    "severity": "error",
+                    "action": "partial",
+                    "count": 1,
+                    "record_ref": None,
+                    "source_ref": None,
+                    "details": {},
+                }
+            )
+            result_status = NormalizationStatus.PARTIAL
+        source_status = SourceStatus(capture.source_status)
+        source_reason = {
+            SourceStatus.GREW: "source_grew",
+            SourceStatus.CHANGED: "source_changed",
+            SourceStatus.DISPLACED: "source_displaced",
+        }.get(source_status)
+        if source_reason is not None:
+            lossiness["partial_reasons"][source_reason] += 1
+            diagnostics.append(
+                {
+                    "code": f"source-{source_status.value}-during-collection",
+                    "severity": "warning",
+                    "action": "partial",
+                    "count": 1,
+                    "record_ref": None,
+                    "source_ref": None,
+                    "details": {"source_status": source_status.value},
+                }
+            )
+            result_status = NormalizationStatus.PARTIAL
+        counts = dict(result.counts)
+        counts["source_bytes_read"] = capture.native_bytes
+        counts["source_events_seen"] = len(capture.frames)
+        return replace(
+            result,
+            source_status=capture.source_status,
+            result_status=result_status,
+            counts=counts,
+            lossiness=lossiness,
+            diagnostics=tuple(diagnostics),
+            source_snapshot=capture.source_snapshot,
+            final_snapshot=capture.final_snapshot,
+        )
 
 __all__ = ["CodexRolloutProvider"]

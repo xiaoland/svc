@@ -39,6 +39,12 @@ An Intent lens often points here, but only when the product promise changes. A d
 
 Use Product TDD for admitted cross-unit technical contracts, Unit TDD for admitted internal unit design, and Deployment for non-trivial runtime or recovery truth.
 
+## Agent Task-Performance Analysis
+
+SVC provides a local, Agent-driven evidence capability for understanding whether an Agent produced a good, complete, and sufficiently verified terminal task result under changing scope, dependencies, interruption, and context pressure. The calling Agent selects evidence and owns content use, semantic interpretation, competing explanations, and any SVC-mechanism hypothesis; SVC does not issue a quality score, causal verdict, or model-generated conclusion.
+
+The observable promise is bounded and evidence-led: an Agent can inspect immutable collected evidence, distinguish a supported observation from an unavailable boundary, and connect task outcome, possible contributors, verification or handoff horizon, and residual unknowns. Provider health, latency, token or memory use, throughput, and generic tool failure rates are not independent task-performance outcomes. Product evaluation requires evidence-grounded, decision-relevant insight from real task trajectories without forcing a defect or treating chronology as causality.
+
 ## Expansion Rule
 
 Split the single file only when real content has distinct consumers or change cadence. Common pressure-driven splits are drivers, behavior, scope, glossary, and derived domain structure. Every new file needs an owner and content at creation time.

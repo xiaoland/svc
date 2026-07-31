@@ -16,7 +16,7 @@ import json
 import math
 import re
 from types import MappingProxyType
-from typing import BinaryIO, Iterable, Mapping, Any
+from typing import Any, BinaryIO, Iterable, Mapping, Never
 
 
 TRAJECTORY_SCHEMA = "svc.trajectory/v1"
@@ -45,6 +45,7 @@ RELATIONSHIP_KEYS = ("turn_ref", "actor_ref", "parent_actor_ref", "lane_ref", "c
 REF_PREFIXES = {"thread", "turn", "call", "actor", "lane", "concurrency", "workspace"}
 _HEX_REF = re.compile(r"^(?:thread|turn|call|actor|lane|concurrency|workspace)_[0-9a-f]{64}(?:_d[0-9]{6})?$")
 _RECORD_ID = re.compile(r"^r[0-9]{6}$")
+_NATIVE_RECORD_ID = re.compile(r"^n[0-9]{6}$")
 _COMPONENT = re.compile(r"^[a-z][a-z0-9_-]{0,127}$")
 _TIMESTAMP = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$"
@@ -54,14 +55,14 @@ _TIMESTAMP = re.compile(
 class TrajectoryError(ValueError):
     """Stable executable trajectory error with a machine-readable code."""
 
-    def __init__(self, code: str, message: str, details: Mapping[str, object] | None = None) -> None:
+    def __init__(self, code: str, message: str, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.details = MappingProxyType(dict(details or {}))
 
-    def as_dict(self) -> dict[str, object]:
-        value: dict[str, object] = {"code": self.code, "message": self.message}
+    def as_dict(self) -> dict[str, Any]:
+        value: dict[str, Any] = {"code": self.code, "message": self.message}
         if self.details:
             value["details"] = dict(self.details)
         return value
@@ -104,7 +105,7 @@ class NormalizationPolicy:
 DEFAULT_NORMALIZATION_POLICY = NormalizationPolicy()
 
 
-def policy_dict(policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY) -> Mapping[str, object]:
+def policy_dict(policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY) -> Mapping[str, Any]:
     """Return the exact manifest policy object as ordinary JSON-ready data."""
 
     if not isinstance(policy, NormalizationPolicy):
@@ -144,19 +145,19 @@ def policy_dict(policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY) -> M
     }
 
 
-def _fail(message: str, *, code: str = "invalid-trajectory", **details: object) -> None:
+def _fail(message: str, *, code: str = "invalid-trajectory", **details: Any) -> Never:
     raise TrajectoryError(code, message, details)
 
 
-def _is_bool(value: object) -> bool:
+def _is_bool(value: Any) -> bool:
     return isinstance(value, bool)
 
 
-def _is_int(value: object) -> bool:
+def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _is_string(value: object) -> bool:
+def _is_string(value: Any) -> bool:
     if not isinstance(value, str):
         return False
     try:
@@ -166,7 +167,7 @@ def _is_string(value: object) -> bool:
     return not any(0xD800 <= ord(char) <= 0xDFFF for char in value)
 
 
-def _exact_keys(value: Mapping[str, object], required: set[str], optional: set[str] = set()) -> None:
+def _exact_keys(value: Mapping[str, Any], required: set[str], optional: set[str] = set()) -> None:
     keys = set(value)
     allowed = required | optional
     if not required <= keys or not keys <= allowed:
@@ -175,7 +176,7 @@ def _exact_keys(value: Mapping[str, object], required: set[str], optional: set[s
         _fail("Record keys do not match the schema.", missing=missing, extra=extra)
 
 
-def _check_ref(value: object, *, prefix: str | None = None) -> None:
+def _check_ref(value: Any, *, prefix: str | None = None) -> None:
     if not isinstance(value, str) or not _HEX_REF.fullmatch(value):
         _fail("Relationship reference has an invalid hash shape.")
     if prefix is not None and not value.startswith(prefix + "_"):
@@ -184,7 +185,7 @@ def _check_ref(value: object, *, prefix: str | None = None) -> None:
         _fail("Only duplicate call references may carry an occurrence suffix.")
 
 
-def _check_timestamp(value: object) -> None:
+def _check_timestamp(value: Any) -> None:
     if value is None:
         return
     if not isinstance(value, str) or not _TIMESTAMP.fullmatch(value):
@@ -195,7 +196,7 @@ def _check_timestamp(value: object) -> None:
         _fail("Timestamp is not a valid UTC instant.")
 
 
-def _check_bounded_text(value: object, meta: object, *, max_code_points: int, allow_null: bool = False) -> None:
+def _check_bounded_text(value: Any, meta: Any, *, max_code_points: int, allow_null: bool = False) -> None:
     if value is None and allow_null:
         if not isinstance(meta, Mapping):
             _fail("Null text requires bounded metadata.")
@@ -221,7 +222,7 @@ def _check_bounded_text(value: object, meta: object, *, max_code_points: int, al
         _fail("Untruncated text must retain all observed code points.")
 
 
-def _check_source_ref(value: object, *, meta: bool) -> None:
+def _check_source_ref(value: Any, *, meta: bool) -> None:
     if not isinstance(value, Mapping):
         _fail("source_ref must be an object.")
     if meta:
@@ -231,7 +232,14 @@ def _check_source_ref(value: object, *, meta: bool) -> None:
         return
     if "event_index" not in value or not _is_int(value["event_index"]) or value["event_index"] < 0:
         _fail("Provider source_ref requires a non-negative event_index.")
-    allowed = {"event_index", "line", "byte_offset", "component_index", "component"}
+    allowed = {
+        "event_index",
+        "line",
+        "byte_offset",
+        "component_index",
+        "component",
+        "native_record_id",
+    }
     if not set(value) <= allowed:
         _fail("source_ref contains an unsupported key.")
     for key in ("line", "byte_offset", "component_index"):
@@ -239,16 +247,21 @@ def _check_source_ref(value: object, *, meta: bool) -> None:
             _fail("source_ref offsets must be non-negative integers.")
     if "component" in value and (not isinstance(value["component"], str) or not _COMPONENT.fullmatch(value["component"])):
         _fail("source_ref component is invalid.")
+    if "native_record_id" in value and (
+        not isinstance(value["native_record_id"], str)
+        or not _NATIVE_RECORD_ID.fullmatch(value["native_record_id"])
+    ):
+        _fail("source_ref native_record_id is invalid.")
 
 
-def _valid_task_ref(value: object) -> bool:
+def _valid_task_ref(value: Any) -> bool:
     if not isinstance(value, str) or len(value) > MAX_TASK_REFERENCE_CODE_POINTS or "\\" in value:
         return False
     parts = value.split("/")
     return len(parts) >= 3 and parts[0] == "tasks" and parts[-1] == "packet.md" and all(part not in {"", ".", ".."} for part in parts[1:-1])
 
 
-def _check_workspace(value: object) -> None:
+def _check_workspace(value: Any) -> None:
     if not isinstance(value, Mapping):
         _fail("workspace must be an object.")
     _exact_keys(value, {"status", "flavor", "label", "ref", "label_truncated", "observed_code_points", "retained_code_points"})
@@ -276,7 +289,7 @@ def _check_workspace(value: object) -> None:
         _fail("workspace bounds metadata has invalid types.")
 
 
-def _check_attributes(value: object, meta: object) -> None:
+def _check_attributes(value: Any, meta: Any) -> None:
     if not isinstance(value, Mapping) or not isinstance(meta, Mapping):
         _fail("Context attributes must be objects.")
     allowed = {"model", "reasoning_effort", "approval_mode", "sandbox_mode", "collaboration_mode", "tool_names"}
@@ -318,7 +331,7 @@ def _fingerprint(prefix: bytes, value: bytes) -> str:
     return hashlib.sha256(prefix + value).hexdigest()
 
 
-def _validate_tool_fingerprints(record: Mapping[str, object]) -> None:
+def _validate_tool_fingerprints(record: Mapping[str, Any]) -> None:
     name_meta = record["name_meta"]
     if isinstance(name_meta, Mapping) and name_meta.get("truncated") is False:
         expected = _fingerprint(b"svc-tool-name-v1\0", str(record["name"]).encode("utf-8"))
@@ -347,7 +360,7 @@ def _validate_tool_fingerprints(record: Mapping[str, object]) -> None:
             _fail("Tool argument fingerprint does not match canonical arguments.")
 
 
-def _validate_context_fingerprint(record: Mapping[str, object]) -> None:
+def _validate_context_fingerprint(record: Mapping[str, Any]) -> None:
     payload = {
         "context_kind": record["context_kind"],
         "content": record["content"],
@@ -360,7 +373,7 @@ def _validate_context_fingerprint(record: Mapping[str, object]) -> None:
         _fail("Context fingerprint does not match canonical context.")
 
 
-def validate_record(record: Mapping[str, object], *, expected_index: int | None = None) -> Mapping[str, object]:
+def validate_record(record: Mapping[str, Any], *, expected_index: int | None = None) -> Mapping[str, Any]:
     """Validate one schema-v1 trajectory record and return it unchanged."""
 
     if not isinstance(record, Mapping):
@@ -453,20 +466,21 @@ def validate_record(record: Mapping[str, object], *, expected_index: int | None 
         if record["event_kind"] not in kinds:
             _fail("Event kind is invalid.")
         outcome = record["outcome"]
-        allowed = {
+        outcomes_by_kind: dict[str, set[Any]] = {
             "approval": {"requested", "granted", "denied", "cancelled", "unknown"},
             "turn_complete": {"completed", "error", "aborted", "unknown"},
             "agent_complete": {"completed", "error", "aborted", "unknown"},
             "turn_abort": {"aborted"},
             "error": {"error"},
             "turn_start": {None}, "agent_start": {None}, "compaction": {None},
-        }[record["event_kind"]]
-        if outcome not in allowed:
+        }
+        event_outcomes = outcomes_by_kind[record["event_kind"]]
+        if outcome not in event_outcomes:
             _fail("Event outcome is incompatible with event kind.")
     return record
 
 
-def canonical_json_bytes(value: object, *, newline: bool = False) -> bytes:
+def canonical_json_bytes(value: Any, *, newline: bool = False) -> bytes:
     """Encode strict compact/sorted-key UTF-8 JSON."""
 
     try:
@@ -477,11 +491,11 @@ def canonical_json_bytes(value: object, *, newline: bool = False) -> bytes:
     return encoded + (b"\n" if newline else b"")
 
 
-def _strict_loads(data: bytes) -> object:
+def _strict_loads(data: bytes) -> Any:
     try:
         text = data.decode("utf-8", errors="strict")
-        def reject_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
-            result: dict[str, object] = {}
+        def reject_duplicates(pairs: list[tuple[str, object]]) -> dict[str, Any]:
+            result: dict[str, Any] = {}
             for key, value in pairs:
                 if key in result:
                     _fail("Duplicate JSON object key.", code="invalid-json")
@@ -495,7 +509,7 @@ def _strict_loads(data: bytes) -> object:
     return value
 
 
-def _json_depth(value: object, depth: int = 1) -> int:
+def _json_depth(value: Any, depth: int = 1) -> int:
     if isinstance(value, Mapping):
         return max([depth, *(_json_depth(item, depth + 1) for item in value.values())])
     if isinstance(value, list):
@@ -552,7 +566,7 @@ class TrajectoryCollector:
     def records(self) -> int:
         return self._records
 
-    def emit(self, record: Mapping[str, object]) -> bool:
+    def emit(self, record: Mapping[str, Any]) -> bool:
         if self._finished:
             _fail("Trajectory collector is already finished.", code="collector-finished")
         validate_record(record, expected_index=self._records)
@@ -613,7 +627,7 @@ class TrajectoryCollector:
         )
 
 
-def encode_trajectory(records: Iterable[Mapping[str, object]], *, policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY, output: BinaryIO | None = None) -> EncodedTrajectory:
+def encode_trajectory(records: Iterable[Mapping[str, Any]], *, policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY, output: BinaryIO | None = None) -> EncodedTrajectory:
     collector = TrajectoryCollector(output, policy=policy)
     for record in records:
         if not collector.emit(record):
@@ -623,7 +637,7 @@ def encode_trajectory(records: Iterable[Mapping[str, object]], *, policy: Normal
 
 @dataclass(frozen=True)
 class ValidatedTrajectory:
-    records: tuple[Mapping[str, object], ...]
+    records: tuple[Mapping[str, Any], ...]
     trajectory_bytes: bytes
     trajectory_sha256: str
 
@@ -635,7 +649,7 @@ def validate_trajectory_bytes(data: bytes, *, policy: NormalizationPolicy = DEFA
         _fail("Trajectory byte bound exceeded.", code="trajectory-limit-reached")
     if not data or not data.endswith(b"\n"):
         _fail("Trajectory must be LF terminated.")
-    records: list[Mapping[str, object]] = []
+    records: list[Mapping[str, Any]] = []
     offset = 0
     for line in data.splitlines(keepends=True):
         if not line.endswith(b"\n") or line == b"\n":
@@ -713,13 +727,13 @@ _DIAGNOSTIC_SPECS = {
 
 @dataclass(frozen=True)
 class ValidatedBundle:
-    manifest: Mapping[str, object]
+    manifest: Mapping[str, Any]
     trajectory: ValidatedTrajectory
     bundle_id: str
     path: Any = None
 
 
-def _plain(value: object) -> object:
+def _plain(value: Any) -> Any:
     if isinstance(value, Mapping):
         return {str(key): _plain(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -729,9 +743,10 @@ def _plain(value: object) -> object:
 
 def _read_trajectory_source(source: bytes | BinaryIO | EncodedTrajectory) -> bytes:
     if isinstance(source, EncodedTrajectory):
-        if source.trajectory_bytes is None:
+        data = source.trajectory_bytes
+        if data is None:
             _fail("Encoded trajectory has no retained bytes; pass the rewindable source.")
-        return source.trajectory_bytes
+        return data
     if isinstance(source, bytes):
         return source
     if not hasattr(source, "read") or not hasattr(source, "seek") or not hasattr(source, "tell"):
@@ -748,7 +763,7 @@ def _read_trajectory_source(source: bytes | BinaryIO | EncodedTrajectory) -> byt
     return data
 
 
-def _identity_metadata(manifest: Mapping[str, object]) -> dict[str, object]:
+def _identity_metadata(manifest: Mapping[str, Any]) -> dict[str, Any]:
     exporter = manifest["exporter"]
     return {
         "normalizer_name": exporter["normalizer_name"],
@@ -763,12 +778,12 @@ def _identity_metadata(manifest: Mapping[str, object]) -> dict[str, object]:
     }
 
 
-def build_bundle_id(manifest: Mapping[str, object], trajectory_bytes: bytes) -> str:
+def build_bundle_id(manifest: Mapping[str, Any], trajectory_bytes: bytes) -> str:
     identity = canonical_json_bytes(_identity_metadata(manifest))
     return hashlib.sha256(b"svc-agent-thread-bundle-v2\0" + trajectory_bytes + b"\0" + identity).hexdigest()
 
 
-def _validate_lossiness(lossiness: object) -> dict[str, dict[str, int]]:
+def _validate_lossiness(lossiness: Any) -> dict[str, dict[str, int]]:
     if not isinstance(lossiness, Mapping):
         _fail("Manifest lossiness must be an object.")
     result: dict[str, dict[str, int]] = {}
@@ -789,10 +804,10 @@ def zero_lossiness() -> dict[str, dict[str, int]]:
     return {group: {key: 0 for key in keys} for group, keys in _LOSS_KEYS.items()}
 
 
-def _validate_counts(counts: object, encoded: EncodedTrajectory | None = None) -> dict[str, object]:
+def _validate_counts(counts: Any, encoded: EncodedTrajectory | None = None) -> dict[str, Any]:
     if not isinstance(counts, Mapping) or set(counts) != set(_COUNT_KEYS):
         _fail("Manifest counts have an invalid shape.")
-    result: dict[str, object] = {}
+    result: dict[str, Any] = {}
     for key in ("source_bytes_read", "source_events_seen", "records_emitted", "trajectory_bytes", "tool_calls", "tool_results", "task_references", "diagnostics_emitted", "diagnostics_suppressed"):
         value = counts[key]
         if not _is_int(value) or value < 0:
@@ -833,15 +848,15 @@ def _validate_counts(counts: object, encoded: EncodedTrajectory | None = None) -
 
 
 def _validate_diagnostics(
-    diagnostics: object,
+    diagnostics: Any,
     *,
     diagnostic_limit: int,
-) -> list[dict[str, object]]:
+) -> list[dict[str, Any]]:
     if not _is_int(diagnostic_limit) or diagnostic_limit <= 0:
         _fail("Manifest diagnostics bound is invalid.")
     if not isinstance(diagnostics, list) or len(diagnostics) > diagnostic_limit:
         _fail("Manifest diagnostics exceed their bound.")
-    result: list[dict[str, object]] = []
+    result: list[dict[str, Any]] = []
     required_source_ref = {
         "invalid-json-line",
         "timestamp-invalid",
@@ -920,7 +935,7 @@ def _validate_diagnostics(
     missing_coordinate = 2**63 - 1
 
     def order_key(
-        item: Mapping[str, object],
+        item: Mapping[str, Any],
     ) -> tuple[tuple[int, int, int, int], bytes, bytes]:
         source = item["source_ref"]
         coordinates = tuple(
@@ -957,7 +972,7 @@ def _validate_diagnostics(
     return result
 
 
-def _validate_capabilities(capabilities: Mapping[str, object], trajectory: ValidatedTrajectory, lossiness: Mapping[str, Mapping[str, int]]) -> None:
+def _validate_capabilities(capabilities: Mapping[str, Any], trajectory: ValidatedTrajectory, lossiness: Mapping[str, Mapping[str, int]]) -> None:
     records = trajectory.records
     reasoning = [record for record in records if record["type"] == "reasoning"]
     if capabilities["reasoning"] in {"opaque", "absent"} and reasoning:
@@ -992,7 +1007,7 @@ def _validate_capabilities(capabilities: Mapping[str, object], trajectory: Valid
         _fail("Unavailable terminal capability forbids terminal events.")
 
 
-def validate_manifest(manifest: Mapping[str, object], *, trajectory: ValidatedTrajectory | None = None) -> Mapping[str, object]:
+def validate_manifest(manifest: Mapping[str, Any], *, trajectory: ValidatedTrajectory | None = None) -> Mapping[str, Any]:
     if not isinstance(manifest, Mapping):
         _fail("Manifest must be an object.")
     _exact_keys(manifest, _MANIFEST_ROOT)
@@ -1104,7 +1119,7 @@ def validate_manifest(manifest: Mapping[str, object], *, trajectory: ValidatedTr
     return manifest
 
 
-def build_manifest(*, trajectory_source: bytes | BinaryIO | EncodedTrajectory, source: Mapping[str, object], result_status: str, capabilities: Mapping[str, object], lossiness: Mapping[str, object], diagnostics: Iterable[Mapping[str, object]], counts: Mapping[str, object], exporter_version: str | None = None, generated_at: str | None = None, policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY) -> Mapping[str, object]:
+def build_manifest(*, trajectory_source: bytes | BinaryIO | EncodedTrajectory, source: Mapping[str, Any], result_status: str, capabilities: Mapping[str, Any], lossiness: Mapping[str, Any], diagnostics: Iterable[Mapping[str, Any]], counts: Mapping[str, Any], exporter_version: str | None = None, generated_at: str | None = None, policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY) -> Mapping[str, Any]:
     if exporter_version is None:
         from ..release import runtime_version
 
@@ -1113,7 +1128,7 @@ def build_manifest(*, trajectory_source: bytes | BinaryIO | EncodedTrajectory, s
     validated = validate_trajectory_bytes(trajectory_bytes, policy=policy)
     encoded = EncodedTrajectory(trajectory_bytes, validated.trajectory_sha256, len(trajectory_bytes), len(validated.records), MappingProxyType({key: sum(record["type"] == key for record in validated.records) for key in RECORD_TYPES}), MappingProxyType({"user": sum(record.get("role") == "user" for record in validated.records if record["type"] == "message"), "assistant": sum(record.get("role") == "assistant" for record in validated.records if record["type"] == "message")}), sum(record["type"] == "tool_call" for record in validated.records), sum(record["type"] == "tool_result" for record in validated.records), sum(len(record["task_refs"]) for record in validated.records if record["type"] == "message"))
     normalized_counts = _validate_counts(counts, encoded)
-    manifest: dict[str, object] = {
+    manifest: dict[str, Any] = {
         "format": BUNDLE_FORMAT,
         "schema_version": BUNDLE_SCHEMA_VERSION,
         "trajectory": {"schema": TRAJECTORY_SCHEMA, "member": "trajectory.jsonl", "sha256": encoded.trajectory_sha256, "bytes": encoded.trajectory_size, "records": encoded.records},
@@ -1133,15 +1148,6 @@ def build_manifest(*, trajectory_source: bytes | BinaryIO | EncodedTrajectory, s
     return manifest
 
 
-def _zip_info(name: str) -> Any:
-    import zipfile
-    info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
-    info.compress_type = zipfile.ZIP_DEFLATED
-    info.create_system = 3
-    info.external_attr = (0o600 & 0xFFFF) << 16
-    return info
-
-
 def _safe_member_name(name: str) -> bool:
     if not name or "\\" in name or name.startswith("/"):
         return False
@@ -1149,84 +1155,7 @@ def _safe_member_name(name: str) -> bool:
     return all(part not in {"", ".", ".."} for part in parts)
 
 
-def _trajectory_from_source(source: bytes | BinaryIO | EncodedTrajectory) -> ValidatedTrajectory:
-    data = _read_trajectory_source(source)
-    return validate_trajectory_bytes(data)
-
-
-def write_bundle_stream(binary_file: BinaryIO, manifest: Mapping[str, object], trajectory: bytes | BinaryIO | EncodedTrajectory) -> ValidatedBundle:
-    """Write exactly the schema-v2 members into a caller-owned file object."""
-
-    import zipfile
-    if not hasattr(binary_file, "write"):
-        _fail("Bundle output must be a binary writable stream.")
-    trajectory_value = _trajectory_from_source(trajectory)
-    validate_manifest(manifest, trajectory=trajectory_value)
-    manifest_bytes = canonical_json_bytes(manifest, newline=True)
-    if len(manifest_bytes) > MAX_MANIFEST_BYTES:
-        _fail("Manifest byte bound exceeded.", code="manifest-limit-reached")
-    try:
-        binary_file.seek(0)
-        binary_file.truncate(0)
-        with zipfile.ZipFile(binary_file, mode="w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
-            archive.writestr(_zip_info("manifest.json"), manifest_bytes)
-            with archive.open(_zip_info("trajectory.jsonl"), mode="w") as destination:
-                destination.write(trajectory_value.trajectory_bytes)
-        binary_file.flush()
-        end = binary_file.tell()
-    except (OSError, zipfile.BadZipFile, ValueError) as error:
-        raise TrajectoryError("bundle-write-failed", "Bundle ZIP could not be written.") from error
-    if end > MAX_SCHEMA_V2_ZIP_BYTES:
-        _fail("Bundle ZIP byte bound exceeded.", code="zip-limit-reached")
-    return ValidatedBundle(manifest, trajectory_value, str(manifest["bundle_id"]), None)
-
-
-def write_bundle(path: Any, manifest: Mapping[str, object], trajectory: bytes | BinaryIO | EncodedTrajectory) -> ValidatedBundle:
-    """Convenience writer with absent-target/private temporary publication."""
-
-    import os
-    import stat
-    import tempfile
-    from pathlib import Path
-    output = Path(path)
-    if output.exists() or os.path.lexists(output):
-        raise TrajectoryError("output-exists", "Bundle output already exists and was not replaced.")
-    if not output.parent.exists() or not output.parent.is_dir():
-        _fail("Bundle output parent must be an existing directory.")
-    fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", suffix=".tmp", dir=output.parent)
-    temp_path = Path(temporary)
-    try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w+b") as stream:
-            fd = -1
-            result = write_bundle_stream(stream, manifest, trajectory)
-            stream.flush()
-            os.fsync(stream.fileno())
-        if os.name == "nt":
-            os.rename(temp_path, output)
-        else:
-            os.link(temp_path, output)
-            temp_path.unlink()
-        result = ValidatedBundle(result.manifest, result.trajectory, result.bundle_id, output)
-        try:
-            mode = stat.S_IMODE(output.stat().st_mode)
-            if os.name != "nt" and mode != 0o600:
-                os.chmod(output, 0o600)
-        except OSError:
-            pass
-        return result
-    except FileExistsError as error:
-        raise TrajectoryError("output-exists", "Bundle output already exists and was not replaced.") from error
-    finally:
-        if fd != -1:
-            os.close(fd)
-        try:
-            temp_path.unlink()
-        except OSError:
-            pass
-
-
-def _looks_schema_v1(manifest: object) -> bool:
+def _looks_schema_v1(manifest: Any) -> bool:
     return (
         isinstance(manifest, Mapping)
         and manifest.get("schema_version") == 1
@@ -1381,5 +1310,5 @@ __all__ = [
     "BUNDLE_FORMAT", "BUNDLE_SCHEMA_VERSION", "CONTENT_PROFILE", "DEFAULT_NORMALIZATION_POLICY", "EncodedTrajectory", "MAX_NATIVE_JSON_DEPTH",
     "MAX_NATIVE_LINE_BYTES", "MAX_RECORDS", "MAX_TRAJECTORY_BYTES", "NormalizationPolicy",
     "TRAJECTORY_SCHEMA", "TrajectoryCollector", "TrajectoryError", "ValidatedBundle", "ValidatedTrajectory",
-    "build_bundle_id", "build_manifest", "canonical_json_bytes", "encode_trajectory", "policy_dict", "validate_bundle", "validate_manifest", "validate_record", "validate_trajectory_bytes", "write_bundle", "write_bundle_stream", "zero_lossiness",
+    "build_bundle_id", "build_manifest", "canonical_json_bytes", "encode_trajectory", "policy_dict", "validate_bundle", "validate_manifest", "validate_record", "validate_trajectory_bytes", "zero_lossiness",
 ]

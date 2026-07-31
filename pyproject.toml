@@ -8,7 +8,6 @@ dependencies = [
     "pydantic<3,>=2.13",
     "platformdirs<5,>=4",
     "filelock<4,>=3.29",
-    "textual>=8.2.8,<9",
 ]
 
 [dependency-groups]
@@ -57,10 +56,21 @@ source-includes = ["src", "tools", "tests", "pdm_build.py"]
 [tool.mypy]
 python_version = "3.11"
 files = [
+    "svc_cli/cli.py",
     "svc_cli/config.py",
+    "svc_cli/errors.py",
+    "svc_cli/analysis/__init__.py",
+    "svc_cli/analysis/protocol.py",
+    "svc_cli/analysis/query.py",
+    "svc_cli/analysis/read.py",
+    "svc_cli/analysis/service.py",
     "svc_cli/telemetry/agent_threads.py",
-    "svc_cli/telemetry/navigation.py",
-    "svc_cli/telemetry/tui.py",
+    "svc_cli/telemetry/archive.py",
+    "svc_cli/telemetry/evidence.py",
+    "svc_cli/telemetry/service.py",
+    "svc_cli/telemetry/trajectory.py",
+    "svc_cli/telemetry/providers/codex_rollout.py",
+    "svc_cli/telemetry/providers/codex_trajectory.py",
 ]
 plugins = ["pydantic.mypy"]
 check_untyped_defs = true
@@ -77,15 +87,22 @@ root_package = "svc_cli"
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Navigation remains render and provider neutral"
+name = "Analysis core remains provider UI and network neutral"
 type = "forbidden"
-source_modules = ["svc_cli.telemetry.navigation"]
+source_modules = [
+    "svc_cli.analysis.protocol",
+    "svc_cli.analysis.query",
+    "svc_cli.analysis.read",
+]
 forbidden_modules = [
     "svc_cli.telemetry.providers",
     "textual",
     "rich",
-    "os",
-    "pathlib",
+    "urllib",
+    "http",
+    "socket",
+    "requests",
+    "httpx",
 ]
 allow_indirect_imports = true
 

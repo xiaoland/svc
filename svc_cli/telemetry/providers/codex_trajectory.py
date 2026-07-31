@@ -15,7 +15,7 @@ import json
 import math
 from pathlib import PurePosixPath
 import re
-from typing import Any, BinaryIO, Mapping
+from typing import Any, BinaryIO, Mapping, Sequence
 
 from ...errors import SvcError
 from ..agent_threads import (
@@ -95,7 +95,7 @@ def _empty_lossiness() -> dict[str, dict[str, int]]:
     return {name: {key: 0 for key in keys} for name, keys in _LOSS_KEYS.items()}
 
 
-def _canonical(value: object) -> bytes:
+def _canonical(value: Any) -> bytes:
     return json.dumps(
         value,
         ensure_ascii=False,
@@ -105,8 +105,8 @@ def _canonical(value: object) -> bytes:
     ).encode("utf-8")
 
 
-def _reject_duplicate_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
+def _reject_duplicate_pairs(pairs: list[tuple[str, object]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
             raise ValueError("duplicate JSON key")
@@ -118,7 +118,7 @@ def _reject_constant(value: str) -> None:
     raise ValueError(f"non-finite JSON value: {value}")
 
 
-def _json_loads(value: bytes | str) -> object:
+def _json_loads(value: bytes | str) -> Any:
     if isinstance(value, bytes):
         value = value.decode("utf-8")
     return json.loads(
@@ -128,7 +128,7 @@ def _json_loads(value: bytes | str) -> object:
     )
 
 
-def _depth(value: object, current: int = 1) -> int:
+def _depth(value: Any, current: int = 1) -> int:
     if isinstance(value, dict):
         return max((current, *(_depth(child, current + 1) for child in value.values())))
     if isinstance(value, list):
@@ -159,7 +159,7 @@ def synthetic_ref(kind: str, provider_id: str, event_index: int, component_index
     return f"call_{_sha(domain, b'')}"
 
 
-def _bounded(value: object, limit: int, strategy: str = "head_tail") -> tuple[str, dict[str, object]]:
+def _bounded(value: Any, limit: int, strategy: str = "head_tail") -> tuple[str, dict[str, Any]]:
     text = value if isinstance(value, str) else str(value)
     observed = len(text)
     if observed <= limit:
@@ -182,7 +182,7 @@ def _bounded(value: object, limit: int, strategy: str = "head_tail") -> tuple[st
     }
 
 
-def _timestamp(value: object) -> tuple[str | None, bool]:
+def _timestamp(value: Any) -> tuple[str | None, bool]:
     if value is None:
         return None, False
     try:
@@ -224,25 +224,25 @@ def _timestamp(value: object) -> tuple[str | None, bool]:
         return None, False
 
 
-def _timestamp_fraction_digits(value: object) -> int:
+def _timestamp_fraction_digits(value: Any) -> int:
     if not isinstance(value, str):
         return 0
     match = re.search(r"\.([0-9]+)(?:Z|[+-][0-9]{2}:[0-9]{2})$", value.strip())
     return len(match.group(1)) if match else 0
 
 
-def _find(payload: Mapping[str, object], keys: tuple[str, ...]) -> object | None:
+def _find(payload: Mapping[str, Any], keys: tuple[str, ...]) -> Any | None:
     for key in keys:
         if key in payload:
             return payload[key]
     return None
 
 
-def _payload_map(payload: object) -> Mapping[str, object]:
+def _payload_map(payload: Any) -> Mapping[str, Any]:
     return payload if isinstance(payload, Mapping) else {}
 
 
-def _normalized_text(value: object) -> str:
+def _normalized_text(value: Any) -> str:
     """Render provider-visible structured text deterministically."""
 
     if isinstance(value, str):
@@ -252,7 +252,7 @@ def _normalized_text(value: object) -> str:
     return str(value)
 
 
-def _relation(payload: Mapping[str, object], kind: str, provider_id: str) -> str | None:
+def _relation(payload: Mapping[str, Any], kind: str, provider_id: str) -> str | None:
     passthrough = payload.get("internal_chat_message_metadata_passthrough")
     passthrough_map = passthrough if isinstance(passthrough, Mapping) else {}
     nested_keys = {
@@ -281,7 +281,7 @@ def _relation(payload: Mapping[str, object], kind: str, provider_id: str) -> str
     return native_ref(ref_kind, provider_id, text)
 
 
-def _relations(payload: Mapping[str, object], provider_id: str) -> dict[str, str]:
+def _relations(payload: Mapping[str, Any], provider_id: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for key in ("turn", "actor", "parent", "lane", "concurrency"):
         value = _relation(payload, key, provider_id)
@@ -291,7 +291,7 @@ def _relations(payload: Mapping[str, object], provider_id: str) -> dict[str, str
     return result
 
 
-def _known_ui_loss(marker: str, payload: Mapping[str, object]) -> tuple[str, str] | None:
+def _known_ui_loss(marker: str, payload: Mapping[str, Any]) -> tuple[str, str] | None:
     """Classify known non-trajectory provider shapes without calling them unknown."""
 
     raw = str(payload.get("type") or payload.get("event") or payload.get("kind") or "").lower()
@@ -309,7 +309,7 @@ def _known_ui_loss(marker: str, payload: Mapping[str, object]) -> tuple[str, str
     return None
 
 
-def _completion_kind(marker: str, payload: Mapping[str, object]) -> bool:
+def _completion_kind(marker: str, payload: Mapping[str, Any]) -> bool:
     raw = str(payload.get("type") or payload.get("event") or payload.get("kind") or "").lower()
     text = f"{marker}:{raw}"
     return any(token in text for token in (
@@ -320,7 +320,7 @@ def _completion_kind(marker: str, payload: Mapping[str, object]) -> bool:
     ))
 
 
-def _completion_status(payload: Mapping[str, object]) -> str:
+def _completion_status(payload: Mapping[str, Any]) -> str:
     success = payload.get("success")
     if isinstance(success, bool):
         return "success" if success else "error"
@@ -343,7 +343,7 @@ def _completion_status(payload: Mapping[str, object]) -> str:
     return "unknown"
 
 
-def _source_ref(event_index: int, line: int, component: str, component_index: int = 0) -> dict[str, object]:
+def _source_ref(event_index: int, line: int, component: str, component_index: int = 0) -> dict[str, Any]:
     # Both coordinates are frozen provider-stream coordinates, zero-based:
     # ``event_index`` counts physical JSONL events and ``line`` counts the
     # physical line containing the envelope/component.
@@ -362,10 +362,10 @@ def _task_refs(
     occurrence_limit: int,
     retained_before: int,
     loss: dict[str, dict[str, int]],
-) -> tuple[list[str], list[tuple[str, dict[str, object]]]]:
+) -> tuple[list[str], list[tuple[str, dict[str, Any]]]]:
     found: list[str] = []
     seen: set[str] = set()
-    diagnostics: list[tuple[str, dict[str, object]]] = []
+    diagnostics: list[tuple[str, dict[str, Any]]] = []
     # Absolute roots are consumed before relative matching so an embedded
     # ``tasks/`` suffix can never be reinterpreted as a safe relative ref.
     absolute_pattern = re.compile(
@@ -443,7 +443,7 @@ def _task_refs(
     return found, diagnostics
 
 
-def _workspace(provider_id: str, payload: Mapping[str, object], limit: int) -> dict[str, object]:
+def _workspace(provider_id: str, payload: Mapping[str, Any], limit: int) -> dict[str, Any]:
     value = _find(payload, ("cwd", "workspace", "working_directory", "workingDirectory"))
     if not isinstance(value, str) or not value:
         return {
@@ -487,9 +487,9 @@ class CodexTrajectoryNormalizer:
         if bounds:
             effective.update({key: int(value) for key, value in bounds.items() if isinstance(value, int) and not isinstance(value, bool) and value > 0})
         loss = _empty_lossiness()
-        diagnostics: list[dict[str, object]] = []
+        diagnostics: list[dict[str, Any]] = []
         diagnostic_keys: set[tuple[str, bytes]] = set()
-        counts: dict[str, object] = {
+        counts: dict[str, Any] = {
             "source_bytes_read": 0,
             "source_events_seen": 0,
             "records_emitted": 0,
@@ -509,7 +509,7 @@ class CodexTrajectoryNormalizer:
         stopped = False
         call_occurrences: dict[str, int] = {}
         result_occurrences: dict[str, int] = {}
-        completion_cache: dict[str, dict[str, object]] = {}
+        completion_cache: dict[str, dict[str, Any]] = {}
         tool_call_count = 0
         explicit_tool_call_count = 0
         synthesized_tool_call_count = 0
@@ -531,7 +531,7 @@ class CodexTrajectoryNormalizer:
         remaining_extent = initial_extent
         input_limited = initial_size > effective["source_bytes"]
 
-        def add_diagnostic(code: str, severity: str, action: str, source: dict[str, object] | None, details: dict[str, object] | None = None) -> None:
+        def add_diagnostic(code: str, severity: str, action: str, source: dict[str, Any] | None, details: dict[str, Any] | None = None) -> None:
             nonlocal diagnostics
             detail = details or {}
             key = (code, _canonical(detail))
@@ -543,7 +543,7 @@ class CodexTrajectoryNormalizer:
             diagnostic_keys.add(key)
             diagnostics.append({"code": code, "severity": severity, "action": action, "count": 1, "record_ref": None, "source_ref": source, "details": detail})
 
-        def emit(record: dict[str, object]) -> bool:
+        def emit(record: dict[str, Any]) -> bool:
             nonlocal emitted, stopped
             if emitted >= effective["records"]:
                 loss["partial_reasons"]["record_limit"] += 1
@@ -576,7 +576,7 @@ class CodexTrajectoryNormalizer:
             emitted += 1
             counts["records_emitted"] = emitted
             record_type = record["type"]
-            counts["records_by_type"][record_type] += 1  # type: ignore[index]
+            counts["records_by_type"][record_type] += 1
             return True
 
         def read_initial_line() -> bytes:
@@ -615,7 +615,7 @@ class CodexTrajectoryNormalizer:
                 pass
 
         thread_ref = native_ref("thread", self.provider_id, resolved.thread_id)
-        meta_payload: dict[str, object] = {
+        meta_payload: dict[str, Any] = {
             "type": "meta", "record_id": "r000000", "record_index": 0,
             "timestamp": None, "source_ref": {"event_index": None, "component": "meta"},
             "trajectory_schema": TRAJECTORY_SCHEMA, "provider_id": self.provider_id,
@@ -626,15 +626,15 @@ class CodexTrajectoryNormalizer:
         if not emit(meta_payload):
             return self._result(resolved, thread_ref, workspace, capabilities, counts, loss, diagnostics, initial_snapshot, None)
 
-        def common(kind: str, timestamp: str | None, source: dict[str, object], payload: Mapping[str, object], index: int) -> dict[str, object]:
-            record: dict[str, object] = {
+        def common(kind: str, timestamp: str | None, source: dict[str, Any], payload: Mapping[str, Any], index: int) -> dict[str, Any]:
+            record: dict[str, Any] = {
                 "type": kind, "record_id": f"r{index:06d}", "record_index": index,
                 "timestamp": timestamp, "source_ref": source,
             }
             record.update(_relations(payload, self.provider_id))
             return record
 
-        def parse_component(value: object, line: int, source: dict[str, object]) -> None:
+        def parse_component(value: Any, line: int, source: dict[str, Any]) -> None:
             nonlocal event_index, workspace, saw_tool, saw_reasoning, saw_valid_timestamp, saw_invalid_timestamp, saw_terminal, saw_concurrency, tool_call_count, explicit_tool_call_count, synthesized_tool_call_count, task_references_retained
             if stopped:
                 return
@@ -732,7 +732,7 @@ class CodexTrajectoryNormalizer:
                     loss["truncated"]["message"] += 1
                     add_diagnostic("message-truncated", "info", "truncate", source, {"observed_code_points": content_meta["observed_code_points"], "retained_code_points": content_meta["retained_code_points"]})
                 counts["task_references"] += len(task_refs)
-                counts["messages_by_role"][role] += 1  # type: ignore[index]
+                counts["messages_by_role"][role] += 1
                 record = common("message", timestamp, source, payload, emitted)
                 record.update({"role": role, "content": content, "content_meta": content_meta, "task_refs": task_refs})
                 if not emit(record):
@@ -806,7 +806,7 @@ class CodexTrajectoryNormalizer:
                         add_diagnostic("duplicate-tool-call-id", "warning", "synthesize", source, {"occurrence": occurrence})
                 name_value = _find(payload, ("name", "tool_name", "toolName"))
                 if name_value is None and isinstance(payload.get("function"), Mapping):
-                    name_value = payload["function"].get("name")  # type: ignore[index]
+                    name_value = payload["function"].get("name")
                 if name_value is None:
                     name_value = {"custom_tool_call": "custom_tool", "tool_search_call": "tool_search", "web_search_call": "web_search"}.get(inner_type)
                 name, name_meta = _bounded(name_value or "unknown", effective["tool_name_code_points"], "head")
@@ -849,17 +849,19 @@ class CodexTrajectoryNormalizer:
             if any(token in marker for token in ("function_output", "function_call_output", "tool_result", "tool_output", "tool_result")) or is_custom_output or is_web_output:
                 saw_tool = True
                 raw_id = _find(payload, ("tool_call_id", "call_id", "callId", "id"))
+                result_base_id: str | None
+                result_explicit_occurrence: int | None
                 if raw_id is None or not str(raw_id):
                     call_id = synthetic_ref("result", self.provider_id, event_index, 0)
-                    base_id = None
-                    explicit_occurrence = None
+                    result_base_id = None
+                    result_explicit_occurrence = None
                 else:
-                    base_id = native_ref("call", self.provider_id, str(raw_id))
+                    result_base_id = native_ref("call", self.provider_id, str(raw_id))
                     occurrence_value = _find(
                         payload,
                         ("call_occurrence", "callOccurrence", "occurrence"),
                     )
-                    explicit_occurrence = (
+                    result_explicit_occurrence = (
                         occurrence_value
                         if isinstance(occurrence_value, int)
                         and not isinstance(occurrence_value, bool)
@@ -867,9 +869,9 @@ class CodexTrajectoryNormalizer:
                         else None
                     )
                     call_id = (
-                        base_id
-                        if explicit_occurrence in (None, 1)
-                        else f"{base_id}_d{explicit_occurrence:06d}"
+                        result_base_id
+                        if result_explicit_occurrence in (None, 1)
+                        else f"{result_base_id}_d{result_explicit_occurrence:06d}"
                     )
                 result_occurrence = result_occurrences.get(call_id, 0) + 1
                 result_occurrences[call_id] = result_occurrence
@@ -913,11 +915,11 @@ class CodexTrajectoryNormalizer:
                 if cached_completion is not None and isinstance(cached_completion.get("relations"), Mapping):
                     record.update(cached_completion["relations"])
                 realized_occurrences = (
-                    call_occurrences.get(base_id, 0)
-                    if base_id is not None
+                    call_occurrences.get(result_base_id, 0)
+                    if result_base_id is not None
                     else 0
                 )
-                target_occurrence = explicit_occurrence or 1
+                target_occurrence = result_explicit_occurrence or 1
                 record.update({
                     "tool_call_id": call_id,
                     "content": content,
@@ -951,7 +953,7 @@ class CodexTrajectoryNormalizer:
                 if context_kind not in {"system", "developer", "tool_config", "turn"}:
                     context_kind = "turn"
                 context_kinds.add(context_kind)
-                content = None
+                context_content: str | None = None
                 content_meta = {"truncated": False, "observed_code_points": 0, "retained_code_points": 0, "strategy": "none"}
                 if isinstance(payload.get("context"), Mapping):
                     context_source = payload["context"]
@@ -965,15 +967,15 @@ class CodexTrajectoryNormalizer:
                 if context_kind in {"system", "developer"}:
                     raw = _find(context_source, ("content", "text", "value"))
                     if raw is not None:
-                        content, content_meta = _bounded(
+                        context_content, content_meta = _bounded(
                             _normalized_text(raw),
                             effective["message_context_code_points"],
                         )
                         if content_meta["truncated"]:
                             loss["truncated"]["context_content"] += 1
                             add_diagnostic("context-content-truncated", "info", "truncate", source, {"content_kind": context_kind, "observed_code_points": content_meta["observed_code_points"], "retained_code_points": content_meta["retained_code_points"]})
-                attributes: dict[str, object] = {}
-                attrs_meta: dict[str, object] = {}
+                attributes: dict[str, Any] = {}
+                attrs_meta: dict[str, Any] = {}
                 attribute_aliases = {
                     "model": (("model", None),),
                     "reasoning_effort": (
@@ -1019,19 +1021,19 @@ class CodexTrajectoryNormalizer:
                             add_diagnostic("context-attribute-truncated", "info", "truncate", source, {"content_kind": key, "observed_code_points": metadata["observed_code_points"], "retained_code_points": metadata["retained_code_points"]})
                 names = context_source.get("tool_names")
                 if isinstance(names, list):
-                    emitted_names: list[dict[str, object]] = []
+                    emitted_names: list[dict[str, Any]] = []
                     for item in sorted({str(item) for item in names})[: effective["tool_config_names"]]:
                         retained, metadata = _bounded(item, effective["tool_name_code_points"], "head")
                         emitted_names.append({"name": retained, "name_meta": metadata, "name_fingerprint": _sha(b"svc-tool-name-v1\0", item.encode())})
                     attributes["tool_names"] = emitted_names
                     attrs_meta["tool_names"] = {"observed_items": len(names), "retained_items": len(emitted_names), "truncated": len(set(map(str, names))) > len(emitted_names)}
-                    if attrs_meta["tool_names"]["truncated"]:  # type: ignore[index]
+                    if attrs_meta["tool_names"]["truncated"]:
                         loss["truncated"]["tool_config_names"] += 1
                         add_diagnostic("tool-config-name-limit-reached", "warning", "truncate", source, {"observed_count": len(set(map(str, names))), "limit_count": effective["tool_config_names"]})
-                canonical_context = {"context_kind": context_kind, "content": content, "content_meta": content_meta, "attributes": attributes, "attributes_meta": attrs_meta}
+                canonical_context = {"context_kind": context_kind, "content": context_content, "content_meta": content_meta, "attributes": attributes, "attributes_meta": attrs_meta}
                 fingerprint = _sha(b"svc-context-v1\0", _canonical(canonical_context))
                 record = common("context", timestamp, source, payload, emitted)
-                record.update({"context_kind": context_kind, "content": content, "content_meta": content_meta, "attributes": attributes, "attributes_meta": attrs_meta, "fingerprint": fingerprint})
+                record.update({"context_kind": context_kind, "content": context_content, "content_meta": content_meta, "attributes": attributes, "attributes_meta": attrs_meta, "fingerprint": fingerprint})
                 emit(record)
                 return
             event_kind = _event_kind(marker, payload)
@@ -1174,7 +1176,7 @@ class CodexTrajectoryNormalizer:
         counts["diagnostics_emitted"] = sum(int(item["count"]) for item in diagnostics)
         return self._result(resolved, thread_ref, workspace, capabilities, counts, loss, diagnostics, initial_snapshot, None, result_status)
 
-    def _result(self, resolved: ResolvedThread, thread_ref: str, workspace: Mapping[str, object], capabilities: Mapping[str, str], counts: Mapping[str, object], loss: Mapping[str, object], diagnostics: list[Mapping[str, object]], source_snapshot: SourceSnapshot | None, final_snapshot: SourceSnapshot | None, result_status: NormalizationStatus = NormalizationStatus.READY) -> NormalizationResult:
+    def _result(self, resolved: ResolvedThread, thread_ref: str, workspace: Mapping[str, Any], capabilities: Mapping[str, str], counts: Mapping[str, Any], loss: Mapping[str, Any], diagnostics: Sequence[Mapping[str, Any]], source_snapshot: SourceSnapshot | None, final_snapshot: SourceSnapshot | None, result_status: NormalizationStatus = NormalizationStatus.READY) -> NormalizationResult:
         return NormalizationResult(
             provider_id=self.provider_id, adapter_id=self.adapter_id, source_format=self.source_format,
             thread_ref=thread_ref, workspace=workspace, source_status=SourceStatus.STABLE,
@@ -1184,7 +1186,7 @@ class CodexTrajectoryNormalizer:
         )
 
 
-def _event_kind(marker: str, payload: Mapping[str, object]) -> str | None:
+def _event_kind(marker: str, payload: Mapping[str, Any]) -> str | None:
     raw = str(payload.get("event_kind") or payload.get("event") or payload.get("kind") or payload.get("type") or "").lower()
     aliases = {
         "task_started": "turn_start", "task_start": "turn_start", "task_complete": "turn_complete",
@@ -1198,7 +1200,7 @@ def _event_kind(marker: str, payload: Mapping[str, object]) -> str | None:
     return None
 
 
-def _event_outcome(event_kind: str, payload: Mapping[str, object]) -> str | None:
+def _event_outcome(event_kind: str, payload: Mapping[str, Any]) -> str | None:
     raw = str(payload.get("outcome") or payload.get("status") or "").lower()
     if event_kind == "approval":
         return raw if raw in {"requested", "granted", "denied", "cancelled", "unknown"} else "unknown"

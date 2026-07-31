@@ -1,0 +1,1 @@
+SVC 12.0.0 replaces telemetry schema-v2 normalized-only `analyze`/TUI with schema-v3 native evidence and the Agent-facing `analysis query|read` contract; existing v1/v2 bundles require recollection and removed privacy/output controls no longer apply.

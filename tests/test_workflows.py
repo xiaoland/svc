@@ -73,6 +73,10 @@ def test_ci_exposes_stable_pr_and_main_qualification_checks() -> None:
     assert distribution.index("target-qualify") < distribution.index("pdm build")
     assert "pdm run build-monolith" in distribution
     assert "Smoke-test the installed wheel" in distribution
+    assert "tools/accept_agent_thread.py" in distribution
+    assert "--slice all" in distribution
+    assert "--expected-sha256" in distribution
+    assert "--wheelhouse /tmp/svc-wheelhouse" in distribution
     assert "svc lookup --name" in distribution
     assert "svc init" in distribution
     assert "svc status" in distribution
@@ -178,6 +182,10 @@ def test_publish_has_one_tag_authoritative_writer_and_prebuild_recovery_gate() -
     assert "pdm run lint-workflows" in bundle
     assert "pdm run build-monolith" in bundle
     assert "Smoke-test the exact release wheel" in bundle
+    assert "tools/accept_agent_thread.py" in bundle
+    assert "--slice all" in bundle
+    assert "--expected-sha256" in bundle
+    assert "--wheelhouse /tmp/svc-release-wheelhouse" in bundle
     assert "svc lookup --name" in bundle
     assert "svc init" in bundle
     assert "svc status" in bundle

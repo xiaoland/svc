@@ -17,7 +17,6 @@ from svc_cli.telemetry.agent_threads import (
     ArchiveFilter,
     ArchiveState,
     ProviderContext,
-    SensitiveInventoryQuery,
     SourceAvailability,
     ThreadInventoryQuery,
     ThreadSelection,
@@ -51,20 +50,6 @@ class TestCodexRolloutProvider:
             ThreadInventoryQuery(archive_state=archive_state, limit=limit),
         )
 
-    def sensitive_inventory(
-        self,
-        *,
-        limit: int = 5_000,
-        archive_state: ArchiveFilter = ArchiveFilter.ACTIVE,
-    ):
-        return self.provider.list_sensitive_inventory(
-            ProviderContext(home=self.root),
-            SensitiveInventoryQuery(
-                archive_state=archive_state,
-                limit=limit,
-            ),
-        )
-
     @staticmethod
     def envelope(record_type: str, payload: object, timestamp: str = "2026-01-01T00:00:00Z") -> dict[str, object]:
         return {"timestamp": timestamp, "type": record_type, "payload": payload}
@@ -74,6 +59,131 @@ class TestCodexRolloutProvider:
         records: list[dict[str, object]] = []
         result = self.provider.stream_normalize(resolved, lambda record: records.append(dict(record)) or True, bounds or {})
         return result, records
+
+    def capture(
+        self,
+        source: Path,
+        bounds: dict[str, int] | None = None,
+    ) -> tuple[object, bytes, list[dict[str, object]]]:
+        resolved = self.provider.resolve(
+            ProviderContext(home=self.root),
+            ThreadSelection(source=source),
+        )
+        native = BytesIO()
+        capture = self.provider.capture_native(
+            resolved,
+            native,
+            bounds or {},
+        )
+        records: list[dict[str, object]] = []
+        result = self.provider.stream_normalize_captured(
+            resolved,
+            native,
+            capture,
+            lambda record: records.append(dict(record)) or True,
+            bounds or {},
+        )
+        return capture, native.getvalue(), records
+
+    def test_native_capture_exactly_frames_original_bytes_and_binds_projection(
+        self,
+    ) -> None:
+        source = self.source(
+            self.envelope("session_meta", {"id": "thread-capture"}),
+            self.envelope(
+                "response_item",
+                {"type": "message", "role": "user", "content": "raw"},
+            ),
+            trailing_newline=False,
+        )
+        capture, native, records = self.capture(source)
+
+        assert native == source.read_bytes()
+        assert capture.unknown_remainder is False
+        assert [frame["frame_status"] for frame in capture.frames] == [
+            "complete",
+            "complete",
+        ]
+        assert capture.frames[0]["byte_start"] == 0
+        assert capture.frames[-1]["byte_end"] == len(native)
+        assert records[0]["type"] == "meta"
+        assert "native_record_id" not in records[0]["source_ref"]
+        assert records[1]["source_ref"]["native_record_id"] == "n000001"
+
+    def test_acquisition_cut_retains_one_readable_incomplete_final_frame(
+        self,
+    ) -> None:
+        source = self.source(
+            self.envelope("session_meta", {"id": "thread-cut"}),
+            self.envelope(
+                "response_item",
+                {"type": "message", "role": "assistant", "content": "later"},
+            ),
+        )
+        first_line = source.read_bytes().find(b"\n") + 1
+        limit = first_line + 12
+        capture, native, records = self.capture(
+            source,
+            {"source_bytes": limit},
+        )
+
+        assert len(native) == limit
+        assert capture.unknown_remainder is True
+        assert capture.frames[-1]["frame_status"] == "incomplete"
+        assert capture.frames[-1]["byte_end"] == limit
+        assert [record["type"] for record in records] == ["meta"]
+
+    def test_projection_line_limit_does_not_remove_large_native_frame(self) -> None:
+        source = self.source(
+            self.envelope("session_meta", {"id": "thread-large"}),
+            self.envelope(
+                "response_item",
+                {"type": "message", "role": "user", "content": "x" * 256},
+            ),
+        )
+        capture, native, records = self.capture(
+            source,
+            {"native_line_bytes": 80},
+        )
+
+        assert native == source.read_bytes()
+        assert capture.frames[1]["frame_status"] == "complete"
+        assert capture.frames[1]["byte_end"] - capture.frames[1]["byte_start"] > 80
+        assert [record["type"] for record in records] == ["meta"]
+
+    def test_native_capture_freezes_initial_extent_and_declares_source_growth(
+        self,
+    ) -> None:
+        source = self.source(
+            self.envelope("session_meta", {"id": "thread-growth"}),
+            self.envelope(
+                "response_item",
+                {"type": "message", "role": "user", "content": "initial"},
+            ),
+        )
+        initial = source.read_bytes()
+
+        class GrowingOutput(BytesIO):
+            grew = False
+
+            def write(inner_self, value: bytes) -> int:
+                if not inner_self.grew:
+                    with source.open("ab") as appended:
+                        appended.write(b'{"type":"late"}\n')
+                    inner_self.grew = True
+                return super().write(value)
+
+        resolved = self.provider.resolve(
+            ProviderContext(home=self.root),
+            ThreadSelection(source=source),
+        )
+        output = GrowingOutput()
+        capture = self.provider.capture_native(resolved, output, {})
+
+        assert output.getvalue() == initial
+        assert capture.source_status.value == "grew"
+        assert capture.is_partial is True
+        assert capture.unknown_remainder is False
 
     def test_codex_native_field_paths_map_to_canonical_records(self) -> None:
         source = self.source(
@@ -530,76 +640,7 @@ class TestCodexRolloutProvider:
             patched.setattr(codex_rollout.os, "fstat", lambda _descriptor: displaced)
             assert (codex_rollout._inventory_source_availability(self.root, "text", prefix, 0)) is None
 
-    def test_safe_inventory_sql_never_selects_recognition_columns(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        source = self.root / "source.jsonl"
-        source.write_text("metadata-only", encoding="utf-8")
-        raw_connection = sqlite3.connect(":memory:")
-        raw_connection.execute(
-            """
-            CREATE TABLE threads (
-                id TEXT,
-                rollout_path TEXT,
-                archived INTEGER,
-                title TEXT,
-                cwd TEXT,
-                first_user_message TEXT,
-                preview TEXT,
-                reasoning TEXT,
-                tool_payload TEXT
-            )
-            """
-        )
-        raw_connection.execute(
-            "INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                "thread-safe",
-                source.name,
-                0,
-                "private-title",
-                "private-cwd",
-                "private-first-message",
-                "private-preview",
-                "private-reasoning",
-                "private-tool",
-            ),
-        )
-        queries: list[str] = []
-
-        class RecordingConnection:
-            def execute(self, statement, *args):
-                queries.append(str(statement))
-                return raw_connection.execute(statement, *args)
-
-            def close(self):
-                raw_connection.close()
-
-        recording_connection = RecordingConnection()
-        monkeypatch.setattr(
-            codex_rollout,
-            "_state_connection",
-            lambda *_args, **_kwargs: recording_connection,
-        )
-        listed = codex_rollout._metadata_rows(
-            self.root,
-            ThreadInventoryQuery(limit=1),
-        )
-
-        assert ([item.thread_id for item in listed.items]) == (["thread-safe"])
-        inventory_sql = next(statement for statement in queries if "WITH inventory" in statement)
-        for private_column in (
-            "title",
-            "cwd",
-            "first_user_message",
-            "preview",
-            "reasoning",
-            "tool_payload",
-        ):
-            assert (private_column) not in (inventory_sql)
-
-    def test_sensitive_inventory_is_separate_bounded_and_filter_before_limit(
+    def test_inventory_is_bounded_and_filters_before_limit(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -679,7 +720,7 @@ class TestCodexRolloutProvider:
         connection.close()
 
         materialized_prefixes: list[tuple[int, int]] = []
-        original_decode = codex_rollout._decode_sensitive_prefix
+        original_decode = codex_rollout._decode_inventory_prefix
 
         def recording_decode(sqlite_type, prefix, overflow, **kwargs):
             materialized_prefixes.append(
@@ -697,10 +738,10 @@ class TestCodexRolloutProvider:
 
         monkeypatch.setattr(
             codex_rollout,
-            "_decode_sensitive_prefix",
+            "_decode_inventory_prefix",
             recording_decode,
         )
-        listing = self.sensitive_inventory(
+        listing = self.inventory(
             archive_state=ArchiveFilter.ACTIVE,
             limit=1,
         )
@@ -719,7 +760,7 @@ class TestCodexRolloutProvider:
         assert (item.recency_at_ms) == (8_000)
         assert (materialized_prefixes) == ([(4_096, 4_097), (160, 161), (512, 513)])
 
-    def test_sensitive_inventory_preserves_controls_for_paint_only_escaping(
+    def test_inventory_preserves_controls_for_paint_only_escaping(
         self,
     ) -> None:
         source = self.root / "control.jsonl"
@@ -754,14 +795,14 @@ class TestCodexRolloutProvider:
         connection.commit()
         connection.close()
 
-        item = self.sensitive_inventory(limit=1).items[0]
+        item = self.inventory(limit=1).items[0]
 
         assert (item.title) == (title)
         assert (item.first_user_message) == (first_message)
         assert not (item.title_truncated)
         assert not (item.first_user_message_truncated)
 
-    def test_sensitive_inventory_omits_unsafe_before_its_safe_cap(self) -> None:
+    def test_inventory_omits_invalid_sources_before_its_limit(self) -> None:
         recent = self.root / "recent.jsonl"
         older = self.root / "older.jsonl"
         recent.write_text("metadata-only", encoding="utf-8")
@@ -816,13 +857,13 @@ class TestCodexRolloutProvider:
         connection.commit()
         connection.close()
 
-        listing = self.sensitive_inventory(limit=1)
+        listing = self.inventory(limit=1)
 
         assert ([item.thread_id for item in listing.items]) == (["recent"])
         assert (listing.omitted_sources) == (1)
         assert (listing.inventory_truncated)
 
-    def test_sensitive_inventory_query_selects_only_frozen_private_columns(
+    def test_inventory_query_selects_only_bounded_display_columns(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -847,7 +888,7 @@ class TestCodexRolloutProvider:
         raw_connection.execute(
             "INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                "thread-sensitive",
+                "thread-rich",
                 source.name,
                 0,
                 "/work",
@@ -874,12 +915,12 @@ class TestCodexRolloutProvider:
             "_state_connection",
             lambda *_args, **_kwargs: recording_connection,
         )
-        listing = codex_rollout._sensitive_metadata_rows(
+        listing = codex_rollout._inventory_rows(
             self.root,
-            SensitiveInventoryQuery(limit=1),
+            ThreadInventoryQuery(limit=1),
         )
 
-        assert ([item.thread_id for item in listing.items]) == (["thread-sensitive"])
+        assert ([item.thread_id for item in listing.items]) == (["thread-rich"])
         sql = next(
             statement
             for statement in queries
@@ -890,7 +931,7 @@ class TestCodexRolloutProvider:
         for forbidden in ("preview", "reasoning", "tool_payload"):
             assert (forbidden) not in (sql)
 
-    def test_safe_inventory_requires_exact_id_and_rollout_path_columns(self) -> None:
+    def test_inventory_requires_exact_id_and_rollout_path_columns(self) -> None:
         database = self.root / "state_5.sqlite"
         connection = sqlite3.connect(database)
         connection.execute("CREATE TABLE threads (thread_id TEXT, rolloutPath TEXT)")

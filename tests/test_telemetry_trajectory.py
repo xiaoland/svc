@@ -18,7 +18,6 @@ from svc_cli.telemetry.trajectory import (
     canonical_json_bytes,
     validate_bundle,
     validate_manifest,
-    write_bundle,
     zero_lossiness,
     validate_trajectory_bytes,
 )
@@ -198,22 +197,27 @@ class TestTrajectory:
         with pytest.raises(TrajectoryError):
             collector.emit(invalid)
 
-    def test_manifest_build_and_exact_bundle_round_trip(self) -> None:
+    def test_historical_schema_v2_bundle_remains_validatable(self) -> None:
         trajectory = self._trajectory()
         manifest = self._manifest(trajectory)
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp) / "bundle.zip"
-            result = write_bundle(output, manifest, trajectory)
-            assert (result.bundle_id) == (manifest["bundle_id"])
+            with zipfile.ZipFile(
+                output,
+                "w",
+                compression=zipfile.ZIP_DEFLATED,
+            ) as archive:
+                archive.writestr(
+                    "manifest.json",
+                    canonical_json_bytes(manifest, newline=True),
+                )
+                archive.writestr("trajectory.jsonl", trajectory)
             with zipfile.ZipFile(output) as archive:
                 assert (archive.namelist()) == (["manifest.json", "trajectory.jsonl"])
                 assert (archive.read("manifest.json")) == (canonical_json_bytes(manifest, newline=True))
                 assert (archive.read("trajectory.jsonl")) == (trajectory)
             validated = validate_bundle(output)
-            assert (validated.bundle_id) == (result.bundle_id)
-            with pytest.raises(TrajectoryError) as raised:
-                write_bundle(output, manifest, trajectory)
-            assert (raised.value.code) == ("output-exists")
+            assert (validated.bundle_id) == (manifest["bundle_id"])
 
     @pytest.mark.parametrize(
         "invalid_timestamp",

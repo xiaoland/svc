@@ -1,35 +1,41 @@
-"""Safe publication of normalized agent-thread bundles."""
+"""Safe collection and publication of schema-v3 Agent-thread evidence."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import errno
-from io import BytesIO
 import os
 from pathlib import Path
 import secrets
 import stat
 import tempfile
-from typing import BinaryIO, Mapping
+from typing import Any, BinaryIO, Callable, Mapping, cast
 
 from ..errors import SvcError
 from ..release import runtime_version
 from .agent_threads import (
     NormalizationResult,
     NormalizationStatus,
+    EvidenceThreadProvider,
     ProviderContext,
-    ThreadProvider,
+    ResolvedThread,
     ThreadSelection,
+    SourceStatus,
+)
+from .evidence import (
+    EvidenceError,
+    ValidatedEvidence,
+    build_evidence_manifest,
+    encode_native_index,
+    validate_evidence_members,
+    write_evidence_stream,
 )
 from .trajectory import (
     DEFAULT_NORMALIZATION_POLICY,
     TrajectoryCollector,
     TrajectoryError,
-    ValidatedBundle,
     build_manifest,
     policy_dict,
-    validate_trajectory_bytes,
-    write_bundle_stream,
 )
 
 
@@ -38,7 +44,6 @@ _FILE_ATTRIBUTE_REPARSE_POINT = 0x0400
 
 @dataclass(frozen=True)
 class _OutputTarget:
-    repository: Path
     output: Path
     parent_identity: tuple[int, int, int]
 
@@ -74,7 +79,6 @@ def _regular_file_identity(
 def _verify_output_parent(
     parent: Path,
     identity: tuple[int, int, int],
-    repository: Path,
 ) -> None:
     try:
         info = parent.lstat()
@@ -88,66 +92,48 @@ def _verify_output_parent(
         or resolved != parent
     ):
         raise ValueError("Bundle output parent changed after validation")
-    try:
-        parent.relative_to(repository)
-    except ValueError:
-        return
-    raise ValueError(
-        "Bundle output must remain outside the repository"
-    )
 
 
-def _canonical_repository_and_output(
-    repository: Path,
+def _canonical_evidence_output(
     output: Path,
+    *,
+    source: Path | None = None,
 ) -> _OutputTarget:
-    requested_repository = Path(repository).expanduser()
-    requested_output = Path(output).expanduser()
-    if requested_output.suffix != ".zip":
-        raise ValueError("Bundle output must have an explicit .zip suffix")
-    if not requested_repository.exists() or not requested_repository.is_dir():
-        raise ValueError("Repository must be an existing directory")
+    """Resolve an absent evidence target without imposing a privacy location."""
+
+    requested = Path(output).expanduser()
+    if requested.suffix != ".zip":
+        raise ValueError("Evidence output must have an explicit .zip suffix")
     try:
-        requested_parent_info = requested_output.parent.lstat()
-    except OSError as error:
-        raise ValueError(
-            "Bundle output parent must be an existing directory"
-        ) from error
-    if _is_link_or_reparse_point(requested_parent_info) or not stat.S_ISDIR(
-        requested_parent_info.st_mode
-    ):
-        raise ValueError(
-            "Bundle output parent must be an existing non-link directory"
-        )
-    try:
-        physical_repository = requested_repository.resolve(strict=True)
-        physical_parent = requested_output.parent.resolve(strict=True)
+        requested_parent = requested.parent.lstat()
+        physical_parent = requested.parent.resolve(strict=True)
+        physical_info = physical_parent.lstat()
     except (OSError, RuntimeError) as error:
         raise ValueError(
-            "Repository or bundle output parent cannot be resolved safely"
+            "Evidence output parent must be an existing directory"
         ) from error
-    physical_parent_info = physical_parent.lstat()
     if (
-        not physical_repository.is_dir()
-        or _is_link_or_reparse_point(physical_parent_info)
-        or not stat.S_ISDIR(physical_parent_info.st_mode)
+        _is_link_or_reparse_point(requested_parent)
+        or not stat.S_ISDIR(requested_parent.st_mode)
+        or _is_link_or_reparse_point(physical_info)
+        or not stat.S_ISDIR(physical_info.st_mode)
     ):
         raise ValueError(
-            "Repository and bundle output parent must resolve to directories"
+            "Evidence output parent must be an existing non-link directory"
         )
-    physical_output = physical_parent / requested_output.name
-    if os.path.lexists(requested_output) or os.path.lexists(physical_output):
-        raise FileExistsError(f"Bundle output already exists: {requested_output}")
-    try:
-        physical_output.relative_to(physical_repository)
-    except ValueError:
-        return _OutputTarget(
-            repository=physical_repository,
-            output=physical_output,
-            parent_identity=_directory_identity(physical_parent_info),
-        )
-    raise ValueError(
-        "Bundle output must remain outside the repository"
+    physical_output = physical_parent / requested.name
+    if source is not None:
+        try:
+            physical_source = Path(source).expanduser().resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise ValueError("Evidence source cannot be resolved safely") from error
+        if physical_output == physical_source:
+            raise ValueError("Evidence output must differ from the selected source")
+    if os.path.lexists(requested) or os.path.lexists(physical_output):
+        raise FileExistsError(f"Evidence output already exists: {requested}")
+    return _OutputTarget(
+        output=physical_output,
+        parent_identity=_directory_identity(physical_info),
     )
 
 
@@ -197,7 +183,7 @@ def _create_anchored_temp(
     for _ in range(32):
         name = f".{output_name}.{secrets.token_hex(16)}.tmp"
         try:
-            return os.open(name, flags, 0o600, dir_fd=parent_fd), name
+            return os.open(name, flags, 0o666, dir_fd=parent_fd), name
         except FileExistsError:
             continue
     raise OSError("Could not allocate a unique bundle staging filename")
@@ -252,12 +238,114 @@ def _publish_without_overwrite(temp_path: Path, output: Path) -> None:
             pass
 
 
+def _create_fallback_temp(parent: Path, output_name: str) -> tuple[int, Path]:
+    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
+    for _ in range(32):
+        candidate = parent / f".{output_name}.{secrets.token_hex(16)}.tmp"
+        try:
+            return os.open(candidate, flags, 0o666), candidate
+        except FileExistsError:
+            continue
+    raise OSError("Could not allocate a unique archive staging filename")
+
+
+def _publish_output(
+    target: _OutputTarget,
+    writer: Callable[[BinaryIO], object],
+) -> None:
+    """Write and atomically publish one absent-target archive."""
+
+    parent = target.output.parent
+    temp_path: Path | None = None
+    temp_name: str | None = None
+    parent_fd: int | None = None
+    staging_fd: int | None = None
+    staging_identity: tuple[int, int, int, int, int] | None = None
+    try:
+        _verify_output_parent(
+            parent,
+            target.parent_identity,
+        )
+        if _supports_anchored_publication():
+            parent_fd = _open_output_directory(
+                parent,
+                target.parent_identity,
+            )
+            staging_fd, temp_name = _create_anchored_temp(
+                parent_fd,
+                target.output.name,
+            )
+        else:
+            staging_fd, temp_path = _create_fallback_temp(
+                parent,
+                target.output.name,
+            )
+        with os.fdopen(staging_fd, "w+b") as archive_stream:
+            staging_fd = None
+            writer(archive_stream)
+            archive_stream.flush()
+            os.fsync(archive_stream.fileno())
+            staging_identity = _regular_file_identity(
+                os.fstat(archive_stream.fileno()),
+                description="Archive staging file",
+            )
+
+        _verify_output_parent(
+            parent,
+            target.parent_identity,
+        )
+        if parent_fd is not None:
+            assert temp_name is not None
+            _publish_anchored_without_overwrite(
+                parent_fd,
+                temp_name,
+                target.output.name,
+            )
+            temp_name = None
+            published = os.stat(
+                target.output.name,
+                dir_fd=parent_fd,
+                follow_symlinks=False,
+            )
+        else:
+            assert temp_path is not None
+            _publish_without_overwrite(temp_path, target.output)
+            temp_path = None
+            published = target.output.lstat()
+        if _regular_file_identity(
+            published,
+            description="Published archive",
+        ) != staging_identity:
+            raise SvcError(
+                "bundle-output-mutated",
+                "Archive output changed during atomic publication.",
+            )
+    finally:
+        if staging_fd is not None:
+            try:
+                os.close(staging_fd)
+            except OSError:
+                pass
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+        if parent_fd is not None:
+            if temp_name is not None:
+                try:
+                    os.unlink(temp_name, dir_fd=parent_fd)
+                except OSError:
+                    pass
+            os.close(parent_fd)
+
+
 def _diagnostic_sort_key(
-    diagnostic: Mapping[str, object],
+    diagnostic: Mapping[str, Any],
 ) -> tuple[tuple[int, int, int, int], bytes, bytes]:
     source = diagnostic.get("source_ref")
     missing = 2**63 - 1
-    coordinates = tuple(
+    coordinates = cast(tuple[int, int, int, int], tuple(
         (
             source.get(key, missing)
             if isinstance(source, Mapping)
@@ -265,11 +353,11 @@ def _diagnostic_sort_key(
             else missing
         )
         for key in ("event_index", "line", "byte_offset", "component_index")
-    )
+    ))
     from .trajectory import canonical_json_bytes
 
     return (
-        coordinates,  # type: ignore[arg-type]
+        coordinates,
         str(diagnostic.get("code", "")).encode("ascii"),
         canonical_json_bytes(diagnostic.get("details", {})),
     )
@@ -280,7 +368,7 @@ def _finalize_normalization(
     collector: TrajectoryCollector,
     *,
     diagnostic_limit: int = DEFAULT_NORMALIZATION_POLICY.diagnostics,
-) -> tuple[dict[str, object], dict[str, dict[str, int]], list[dict[str, object]], str]:
+) -> tuple[dict[str, Any], dict[str, dict[str, int]], list[dict[str, Any]], str]:
     lossiness = {
         group: dict(values)
         for group, values in result.lossiness.items()
@@ -318,7 +406,7 @@ def _finalize_normalization(
     diagnostics_suppressed = int(
         result.counts.get("diagnostics_suppressed", 0)
     )
-    status = result.result_status.value
+    status = NormalizationStatus(result.result_status).value
     if collector.limit_reason is not None:
         reason = collector.limit_reason
         # A provider sees sink backpressure only and may conservatively report
@@ -412,27 +500,49 @@ def _finalize_normalization(
     return counts, lossiness, diagnostics, status
 
 
-def _normalize_to_stream(
-    provider: ThreadProvider,
+def _normalize_captured_to_streams(
+    provider: EvidenceThreadProvider,
     context: ProviderContext,
     selection: ThreadSelection,
+    native_stream: BinaryIO,
     trajectory_stream: BinaryIO,
-) -> dict[str, object]:
-    """Run the one shared normalizer into a caller-owned bounded stream."""
+    *,
+    resolved: ResolvedThread | None = None,
+) -> tuple[dict[str, Any], bytes, bytes, bytes]:
+    """Capture once, then build the native-bound projection from that capture."""
 
-    resolved = provider.resolve(context, selection)
+    resolved = resolved or provider.resolve(context, selection)
     if resolved.provider_id != provider.provider_id:
         raise ValueError(
             "Resolved thread provider_id does not match provider"
         )
-
-    collector = TrajectoryCollector(trajectory_stream)
     bounds = policy_dict()["bounds"]
     assert isinstance(bounds, Mapping)
-    result = provider.stream_normalize(
+    native_stream.seek(0)
+    native_stream.truncate(0)
+    capture = provider.capture_native(
         resolved,
+        native_stream,
+        cast(Mapping[str, int], bounds),
+    )
+    if (
+        capture.provider_id != resolved.provider_id
+        or capture.adapter_id != resolved.adapter_id
+        or capture.source_format != resolved.source_format
+    ):
+        raise ValueError("Captured source identity does not match selection")
+    native_index = encode_native_index(capture.frames)
+
+    trajectory_stream.seek(0)
+    trajectory_stream.truncate(0)
+    collector = TrajectoryCollector(trajectory_stream)
+    native_stream.seek(0)
+    result = provider.stream_normalize_captured(
+        resolved,
+        native_stream,
+        capture,
         collector.emit,
-        bounds,
+        cast(Mapping[str, int], bounds),
     )
     encoded = collector.finish()
     counts, lossiness, diagnostics, result_status = (
@@ -454,17 +564,16 @@ def _normalize_to_stream(
         }
     )
     trajectory_stream.seek(0)
-    source = {
-        "provider_id": result.provider_id,
-        "adapter_id": result.adapter_id,
-        "source_format": result.source_format,
-        "thread_ref": result.thread_ref,
-        "source_status": result.source_status.value,
-    }
-    return dict(
+    projection = dict(
         build_manifest(
             trajectory_source=trajectory_stream,
-            source=source,
+            source={
+                "provider_id": result.provider_id,
+                "adapter_id": result.adapter_id,
+                "source_format": result.source_format,
+                "thread_ref": result.thread_ref,
+                "source_status": SourceStatus(result.source_status).value,
+            },
             result_status=result_status,
             capabilities=result.capabilities,
             lossiness=lossiness,
@@ -473,156 +582,112 @@ def _normalize_to_stream(
             exporter_version=runtime_version(),
         )
     )
+    native_stream.seek(0)
+    native_bytes = native_stream.read()
+    trajectory_stream.seek(0)
+    trajectory_bytes = trajectory_stream.read()
+    if not isinstance(native_bytes, bytes) or not isinstance(
+        trajectory_bytes,
+        bytes,
+    ):
+        raise ValueError("Evidence staging streams must return bytes")
+    manifest = dict(
+        build_evidence_manifest(
+            native=native_bytes,
+            native_index=native_index,
+            projection=projection,
+            trajectory=trajectory_bytes,
+            capture={
+                "status": "partial" if capture.is_partial else "complete",
+                "unknown_remainder": capture.unknown_remainder,
+                "representation": "provider-bytes",
+            },
+        )
+    )
+    return manifest, native_bytes, native_index, trajectory_bytes
 
 
-def normalize_agent_thread(
-    provider: ThreadProvider,
+def normalize_agent_thread_evidence(
+    provider: EvidenceThreadProvider,
     context: ProviderContext,
     selection: ThreadSelection,
-) -> ValidatedBundle:
-    """Normalize an explicit local source ephemerally without publication."""
+) -> ValidatedEvidence:
+    """Collect schema-v3 evidence ephemerally without publication."""
 
-    stream = BytesIO()
-    try:
-        manifest = _normalize_to_stream(
-            provider,
-            context,
-            selection,
-            stream,
-        )
-        trajectory = validate_trajectory_bytes(stream.getvalue())
-        return ValidatedBundle(
-            manifest=manifest,
-            trajectory=trajectory,
-            bundle_id=str(manifest["bundle_id"]),
-            path=None,
-        )
-    except TrajectoryError as error:
-        raise SvcError(error.code, error.message) from error
-    finally:
-        stream.close()
-
-
-def write_agent_thread_bundle(
-    provider: ThreadProvider,
-    context: ProviderContext,
-    selection: ThreadSelection,
-    repository: Path,
-    output: Path,
-) -> dict[str, object]:
-    """Normalize one exact local source and atomically publish schema v2."""
-
-    target = _canonical_repository_and_output(repository, output)
-    parent = target.output.parent
-
-    trajectory_temp = tempfile.SpooledTemporaryFile(
+    native = tempfile.SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b")
+    trajectory = tempfile.SpooledTemporaryFile(
         max_size=1024 * 1024,
         mode="w+b",
     )
-    temp_path: Path | None = None
-    temp_name: str | None = None
-    parent_fd: int | None = None
-    staging_fd: int | None = None
-    staging_identity: tuple[int, int, int, int, int] | None = None
     try:
-        manifest = _normalize_to_stream(
-            provider,
-            context,
-            selection,
-            trajectory_temp,
+        manifest, native_bytes, native_index, trajectory_bytes = (
+            _normalize_captured_to_streams(
+                provider,
+                context,
+                selection,
+                cast(BinaryIO, native),
+                cast(BinaryIO, trajectory),
+            )
         )
-
-        _verify_output_parent(
-            parent,
-            target.parent_identity,
-            target.repository,
+        return validate_evidence_members(
+            manifest,
+            native_bytes,
+            native_index,
+            trajectory_bytes,
         )
-        if _supports_anchored_publication():
-            parent_fd = _open_output_directory(
-                parent,
-                target.parent_identity,
-            )
-            staging_fd, temp_name = _create_anchored_temp(
-                parent_fd,
-                target.output.name,
-            )
-        else:
-            staging_fd, fallback_name = tempfile.mkstemp(
-                prefix=f".{target.output.name}.",
-                suffix=".tmp",
-                dir=parent,
-            )
-            temp_path = Path(fallback_name)
-        if os.name != "nt":
-            os.fchmod(staging_fd, 0o600)
-        with os.fdopen(staging_fd, "w+b") as bundle_stream:
-            staging_fd = None
-            trajectory_temp.seek(0)
-            write_bundle_stream(bundle_stream, manifest, trajectory_temp)
-            bundle_stream.flush()
-            os.fsync(bundle_stream.fileno())
-            staging_identity = _regular_file_identity(
-                os.fstat(bundle_stream.fileno()),
-                description="Bundle staging file",
-            )
-
-        _verify_output_parent(
-            parent,
-            target.parent_identity,
-            target.repository,
-        )
-        if parent_fd is not None:
-            assert temp_name is not None
-            _publish_anchored_without_overwrite(
-                parent_fd,
-                temp_name,
-                target.output.name,
-            )
-            temp_name = None
-            published = os.stat(
-                target.output.name,
-                dir_fd=parent_fd,
-                follow_symlinks=False,
-            )
-        else:
-            assert temp_path is not None
-            _publish_without_overwrite(temp_path, target.output)
-            temp_path = None
-            published = target.output.lstat()
-        published_identity = _regular_file_identity(
-            published,
-            description="Published bundle",
-        )
-        if published_identity != staging_identity:
-            raise SvcError(
-                "bundle-output-mutated",
-                "Bundle output changed during atomic publication.",
-            )
-        return manifest
-    except TrajectoryError as error:
+    except (TrajectoryError, EvidenceError) as error:
         raise SvcError(error.code, error.message) from error
     finally:
-        trajectory_temp.close()
-        if staging_fd is not None:
-            try:
-                os.close(staging_fd)
-            except OSError:
-                pass
-        if temp_path is not None:
-            try:
-                temp_path.unlink()
-            except OSError:
-                pass
-        if parent_fd is not None:
-            if temp_name is not None:
-                try:
-                    os.unlink(temp_name, dir_fd=parent_fd)
-                except OSError:
-                    pass
-            os.close(parent_fd)
+        native.close()
+        trajectory.close()
+
+
+def write_agent_thread_evidence(
+    provider: EvidenceThreadProvider,
+    context: ProviderContext,
+    selection: ThreadSelection,
+    output: Path,
+) -> dict[str, Any]:
+    """Capture and atomically publish one schema-v3 evidence archive."""
+
+    resolved = provider.resolve(context, selection)
+    target = _canonical_evidence_output(output, source=resolved.source_path)
+    native = tempfile.SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b")
+    trajectory = tempfile.SpooledTemporaryFile(
+        max_size=1024 * 1024,
+        mode="w+b",
+    )
+    try:
+        manifest, native_bytes, native_index, trajectory_bytes = (
+            _normalize_captured_to_streams(
+                provider,
+                context,
+                selection,
+                cast(BinaryIO, native),
+                cast(BinaryIO, trajectory),
+                resolved=resolved,
+            )
+        )
+
+        def write(stream: BinaryIO) -> Any:
+            return write_evidence_stream(
+                stream,
+                manifest,
+                native_bytes,
+                native_index,
+                trajectory_bytes,
+            )
+
+        _publish_output(target, write)
+        return manifest
+    except (TrajectoryError, EvidenceError) as error:
+        raise SvcError(error.code, error.message) from error
+    finally:
+        native.close()
+        trajectory.close()
 
 
 __all__ = [
-    "normalize_agent_thread",
-    "write_agent_thread_bundle",
+    "normalize_agent_thread_evidence",
+    "write_agent_thread_evidence",
 ]

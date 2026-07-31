@@ -1,13 +1,12 @@
 """Static local telemetry provider adapters."""
 
-from ..agent_threads import ThreadProvider
 from .codex_rollout import CodexRolloutProvider
 
 
 _FACTORIES = {"codex": CodexRolloutProvider}
 
 
-def provider(provider_id: str = "codex") -> ThreadProvider:
+def provider(provider_id: str = "codex") -> CodexRolloutProvider:
     """Return a reviewed in-process provider; no dynamic plugin loading exists."""
 
     try:

@@ -434,6 +434,16 @@ jobs:
       - name: Smoke-test the exact release wheel
         if: needs.plan.outputs.decision == 'build'
         run: |
+          wheel=(dist/python/*.whl)
+          test "${#wheel[@]}" -eq 1
+          mkdir -p /tmp/svc-release-wheelhouse
+          python -m pip download --dest /tmp/svc-release-wheelhouse "${wheel[0]}"
+          sha=$(python -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "${wheel[0]}")
+          python tools/accept_agent_thread.py \
+            --slice all \
+            --wheel "${wheel[0]}" \
+            --expected-sha256 "$sha" \
+            --wheelhouse /tmp/svc-release-wheelhouse
           python -m venv /tmp/svc-release
           /tmp/svc-release/bin/pip install dist/python/*.whl
           /tmp/svc-release/bin/svc --help
