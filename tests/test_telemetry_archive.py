@@ -6,14 +6,18 @@ import zipfile
 
 import pytest
 
-from svc_cli.errors import SvcError
 from svc_cli.telemetry.agent_threads import ProviderContext, ThreadSelection
 from svc_cli.telemetry.archive import write_agent_thread_evidence
-from svc_cli.telemetry.evidence import EVIDENCE_MEMBERS, validate_evidence
+from svc_cli.telemetry.evidence import (
+    EVIDENCE_MEMBERS,
+    EVIDENCE_OPTIONAL_MEMBERS,
+    ValidatedEvidence,
+    validate_evidence,
+)
 from svc_cli.telemetry.providers.codex_rollout import CodexRolloutProvider
 
 
-def _rollout(path: Path, *, valid: bool = True) -> bytes:
+def _rollout(path: Path) -> bytes:
     records = (
         {
             "timestamp": "2026-01-01T00:00:00Z",
@@ -31,18 +35,13 @@ def _rollout(path: Path, *, valid: bool = True) -> bytes:
         },
     )
     content = (
-        b"{}\n"
-        if not valid
-        else (
-            "\n".join(json.dumps(item, separators=(",", ":")) for item in records)
-            + "\n"
-        ).encode()
-    )
+        "\n".join(json.dumps(item, separators=(",", ":")) for item in records) + "\n"
+    ).encode()
     path.write_bytes(content)
     return content
 
 
-def _export(source: Path, output: Path) -> dict[str, object]:
+def _export(source: Path, output: Path) -> ValidatedEvidence:
     return write_agent_thread_evidence(
         CodexRolloutProvider(),
         ProviderContext(home=source.parent),
@@ -56,17 +55,21 @@ def test_export_preserves_one_native_authority(tmp_path: Path) -> None:
     native = _rollout(source)
     output = tmp_path / "evidence.zip"
 
-    manifest = _export(source, output)
+    exported = _export(source, output)
     evidence = validate_evidence(output)
 
     assert evidence.native == native == source.read_bytes()
-    assert evidence.evidence_id == manifest["evidence_id"]
+    assert evidence.evidence_id == exported.evidence_id
+    assert evidence.trajectory is not None
     assert [
-        record["source_ref"].get("native_record_id")
+        getattr(record.source_ref, "native_record_id", None)
         for record in evidence.trajectory.records
     ] == [None, "n000001"]
     with zipfile.ZipFile(output) as archive:
-        assert tuple(archive.namelist()) == EVIDENCE_MEMBERS
+        assert tuple(archive.namelist()) == (
+            *EVIDENCE_MEMBERS,
+            *EVIDENCE_OPTIONAL_MEMBERS,
+        )
 
 
 def test_export_never_overwrites_a_valid_bundle(tmp_path: Path) -> None:
@@ -79,14 +82,3 @@ def test_export_never_overwrites_a_valid_bundle(tmp_path: Path) -> None:
         _export(source, output)
 
     assert validate_evidence(output).native == native
-
-
-def test_provider_failure_leaves_no_artifact(tmp_path: Path) -> None:
-    source = tmp_path / "invalid.jsonl"
-    _rollout(source, valid=False)
-    output = tmp_path / "evidence.zip"
-
-    with pytest.raises(SvcError):
-        _export(source, output)
-
-    assert not output.exists()

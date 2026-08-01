@@ -443,9 +443,6 @@ def _emit_telemetry_export(payload: dict[str, Any], json_output: bool) -> None:
         print(f"SVC telemetry agent-thread export: exported {evidence.get('path')}")
     else:
         print("SVC telemetry agent-thread export: exported")
-    diagnostic_groups = payload.get("diagnostic_groups")
-    if isinstance(diagnostic_groups, int) and diagnostic_groups:
-        print(f"  {diagnostic_groups} normalized diagnostic group(s); inspect manifest.json in the evidence archive")
 
 
 def _emit_lookup(response: Any, json_output: bool) -> None:

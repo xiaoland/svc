@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
-import hashlib
 import json
 from types import MappingProxyType
-from typing import Mapping
+from typing import Any, Mapping, Never
+
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..release import catalog
-from ..telemetry.evidence import ValidatedEvidence
-from ..telemetry.trajectory import canonical_json_bytes
 
 
 ANALYSIS_CONTRACT_VERSION = 1
@@ -44,18 +42,46 @@ class AnalysisProtocolError(ValueError):
         return value
 
 
-@dataclass(frozen=True, slots=True)
-class EvidenceRef:
+class AnalysisModel(BaseModel):
+    """Strict immutable base for every typed analysis boundary object."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+
+class EvidenceRef(AnalysisModel):
+    """Stable reference into one validated evidence snapshot."""
+
     evidence_id: str
     record_kind: str
     record_id: str
 
-    def as_dict(self) -> dict[str, str]:
-        return {
-            "evidence_id": self.evidence_id,
-            "record_kind": self.record_kind,
-            "record_id": self.record_id,
-        }
+    def require_scope(
+        self,
+        evidence_id: str,
+        *,
+        expected_kind: str | None = None,
+    ) -> None:
+        if self.evidence_id != evidence_id:
+            raise AnalysisProtocolError(
+                "reference-scope-mismatch",
+                "Evidence reference belongs to a different evidence snapshot.",
+            )
+        if expected_kind is not None and self.record_kind != expected_kind:
+            raise AnalysisProtocolError(
+                "reference-kind-mismatch",
+                f"Evidence reference must identify a {expected_kind} record.",
+            )
+
+
+def adapt_validation_error(
+    error: ValidationError,
+    *,
+    code: str,
+    message: str,
+) -> Never:
+    """Hide Pydantic diagnostics behind the stable analysis error family."""
+
+    raise AnalysisProtocolError(code, message) from error
 
 
 def method_reference() -> dict[str, str]:
@@ -80,73 +106,57 @@ def method_reference() -> dict[str, str]:
 
 
 def evidence_ref(
-    evidence: ValidatedEvidence,
+    evidence_id: str,
     record_kind: str,
     record_id: str,
 ) -> dict[str, str]:
-    return EvidenceRef(
-        evidence.evidence_id,
-        record_kind,
-        record_id,
-    ).as_dict()
-
-
-def parse_ref(
-    value: object,
-    evidence: ValidatedEvidence,
-    *,
-    expected_kind: str | None = None,
-) -> EvidenceRef:
-    if not isinstance(value, Mapping) or set(value) != {
-        "evidence_id",
-        "record_kind",
-        "record_id",
-    }:
-        raise AnalysisProtocolError(
-            "invalid-reference",
-            "Evidence reference has an invalid shape.",
-        )
-    evidence_id = value["evidence_id"]
-    record_kind = value["record_kind"]
-    record_id = value["record_id"]
-    if not (isinstance(evidence_id, str) and isinstance(record_kind, str) and isinstance(record_id, str)):
-        raise AnalysisProtocolError(
-            "invalid-reference",
-            "Evidence reference fields must be strings.",
-        )
     reference = EvidenceRef(
-        evidence_id,
-        record_kind,
-        record_id,
+        evidence_id=evidence_id,
+        record_kind=record_kind,
+        record_id=record_id,
     )
-    if reference.evidence_id != evidence.evidence_id:
-        raise AnalysisProtocolError(
-            "reference-scope-mismatch",
-            "Evidence reference belongs to a different evidence snapshot.",
-        )
-    if expected_kind is not None and reference.record_kind != expected_kind:
-        raise AnalysisProtocolError(
-            "reference-kind-mismatch",
-            f"Evidence reference must identify a {expected_kind} record.",
-        )
-    return reference
+    return {
+        "evidence_id": reference.evidence_id,
+        "record_kind": reference.record_kind,
+        "record_id": reference.record_id,
+    }
 
 
-def request_fingerprint(value: Mapping[str, object]) -> str:
-    return hashlib.sha256(b"svc-analysis-request-v1\0" + canonical_json_bytes(value)).hexdigest()
+def encode_cursor(payload: BaseModel | Mapping[str, object]) -> str:
+    """Encode one already-validated cursor model as opaque URL-safe text."""
+
+    value = (
+        payload.model_dump(mode="json")
+        if isinstance(payload, BaseModel)
+        else dict(payload)
+    )
+    raw = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
-def encode_cursor(payload: Mapping[str, object]) -> str:
-    encoded = base64.urlsafe_b64encode(canonical_json_bytes(payload))
-    return encoded.rstrip(b"=").decode("ascii")
+def decode_cursor(value: object) -> dict[str, Any]:
+    """Decode cursor transport only; each tool owns its typed cursor model."""
 
-
-def decode_cursor(value: object, *, tool: str) -> Mapping[str, object]:
     if not isinstance(value, str) or not value or len(value) > 8192:
         raise AnalysisProtocolError(
             "invalid-cursor",
             "Cursor must be bounded non-empty text.",
         )
+
+    def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, item in items:
+            if key in result:
+                raise ValueError("duplicate cursor key")
+            result[key] = item
+        return result
+
     try:
         padding = "=" * (-len(value) % 4)
         raw = base64.b64decode(
@@ -154,34 +164,32 @@ def decode_cursor(value: object, *, tool: str) -> Mapping[str, object]:
             altchars=b"-_",
             validate=True,
         )
-        payload = json.loads(raw.decode("utf-8"))
+        payload = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=pairs,
+            parse_constant=lambda token: (_ for _ in ()).throw(ValueError(token)),
+        )
     except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise AnalysisProtocolError(
             "invalid-cursor",
             "Cursor is not a valid analysis continuation.",
         ) from error
-    if not isinstance(payload, Mapping):
+    if not isinstance(payload, dict):
         raise AnalysisProtocolError(
             "invalid-cursor",
             "Cursor payload has an invalid shape.",
-        )
-    payload = dict(payload)
-    if payload.get("version") != ANALYSIS_CONTRACT_VERSION or payload.get("tool") != tool:
-        raise AnalysisProtocolError(
-            "cursor-scope-mismatch",
-            "Cursor belongs to a different analysis contract or tool.",
         )
     return payload
 
 
 __all__ = [
     "ANALYSIS_CONTRACT_VERSION",
+    "AnalysisModel",
     "AnalysisProtocolError",
     "EvidenceRef",
+    "adapt_validation_error",
     "decode_cursor",
     "encode_cursor",
     "evidence_ref",
     "method_reference",
-    "parse_ref",
-    "request_fingerprint",
 ]

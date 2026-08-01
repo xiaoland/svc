@@ -14,13 +14,16 @@ from .agent_threads import (
 )
 from .archive import write_agent_thread_evidence
 from .providers import provider as local_provider
+from .trajectory import projection_summary
 
 
 TELEMETRY_SCHEMA_VERSION = 3
 
 
 def _context(codex_home: Path | None) -> ProviderContext:
-    return ProviderContext(home=(Path(codex_home).expanduser() if codex_home is not None else None))
+    return ProviderContext(
+        home=(Path(codex_home).expanduser() if codex_home is not None else None)
+    )
 
 
 def list_agent_threads(
@@ -80,7 +83,7 @@ def export_agent_thread(
     except ValueError as error:
         raise SvcError("invalid-thread-selector", str(error)) from error
     try:
-        manifest = write_agent_thread_evidence(
+        evidence = write_agent_thread_evidence(
             local_provider(),
             _context(codex_home),
             selection,
@@ -101,25 +104,32 @@ def export_agent_thread(
             {"path": str(output), "reason": str(error)},
         ) from error
 
-    projection = manifest["projection"]
-    assert isinstance(projection, dict)
+    manifest = evidence.manifest
+    projection = (
+        projection_summary(evidence.trajectory)
+        if evidence.trajectory is not None
+        else {
+            "result_status": "projection-unavailable",
+            "capabilities": {},
+            "lossiness": {},
+        }
+    )
     return {
         "schema_version": TELEMETRY_SCHEMA_VERSION,
         "command": "telemetry agent-thread export",
         "status": "exported",
         "evidence": {
             "path": str(output),
-            "evidence_id": manifest["evidence_id"],
-            "schema_version": manifest["schema_version"],
-            "native": manifest["native"],
-            "native_index": manifest["native_index"],
+            "evidence_id": manifest.evidence_id,
+            "schema_version": manifest.schema_version,
+            "native_bytes": len(evidence.native),
+            "native_records": len(evidence.native_index),
         },
-        "capture": manifest["capture"],
-        "source": projection["source"],
+        "capture": manifest.capture.model_dump(mode="json"),
+        "source": manifest.source.model_dump(mode="json"),
         "projection_status": projection["result_status"],
         "capabilities": projection["capabilities"],
         "lossiness": projection["lossiness"],
-        "diagnostic_groups": len(projection["diagnostics"]),
     }
 
 

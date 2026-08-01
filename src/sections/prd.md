@@ -54,14 +54,14 @@ running as the same user, or adversarial path replacement. Provider data may
 still be malformed, oversized, unreadable, or changing, and SVC must report
 those ordinary input and capture boundaries honestly.
 
-SVC protects the selected source from its own writes, the fidelity and
-provenance of successfully collected evidence, bounded resource use, an
-existing output from replacement, Consumer-owned project files, and release
-artifact integrity. The native evidence authority may contain every selected
-provider byte. Structural projection and omission are not redaction, and SVC
-does not provide confidentiality, a privacy mode, or a sandbox. The caller
-owns source selection, output storage, access control, retention, and
-disclosure.
+SVC protects the selected source from its own writes, captured native fidelity,
+snapshot identity, an existing output from replacement, Consumer-owned project
+files, and release artifact integrity. Resource policy is limited to source,
+frame, request, and response-page boundaries. The native evidence authority may
+contain every selected provider byte. Structural projection and omission are
+derived navigation, not redaction; SVC provides no confidentiality, privacy
+mode, or sandbox. The caller owns source selection, output storage, access
+control, retention, and disclosure.
 
 ## Expansion Rule
 

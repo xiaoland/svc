@@ -25,14 +25,19 @@ evidence. Retain or delete it only under the owning repository's normal policy.
 
 ## Understand schema-v3 authority
 
-The four-member export is:
+Every export has a three-member evidence core:
 
 - `native.bin`: captured provider bytes/values and source order;
-- `native-index.jsonl`: validated contiguous native ordinals, byte ranges,
-  source coordinates, per-frame digests, and `complete|incomplete` status;
-- `trajectory.jsonl`: a digest-bound derived structural index;
-- `manifest.json`: evidence identity, provenance, capture status, capabilities,
-  member digests, and declared loss.
+- `native-index.jsonl`: stable native record IDs, contiguous byte ranges, source
+  coordinates, and `complete|incomplete` framing status;
+- `manifest.json`: the evidence ID plus the selected source and capture facts.
+
+`trajectory.jsonl` is an optional derived cache. Query rebuilds it from the
+evidence core when it is missing or invalid; read does not require it. The one
+evidence ID binds the native bytes and framing bytes. Frame and fragment
+digests are computed when read returns them instead of being stored as a
+second identity system. Counts, capabilities, projection status, and lossiness
+are likewise derived from trajectory records rather than manifest authority.
 
 Read native material through `analysis read`; do not treat trajectory fields as
 native content. A final incomplete acquisition frame remains readable but
@@ -61,6 +66,10 @@ captured native bytes/values, exact frame or fragment offsets, digests,
 provenance, capture gaps, and continuation. UTF-8 fragments are exposed as
 exact text, while arbitrary bytes use a lossless base64 fallback. Read does not
 filter, summarize, score, reorder, or silently substitute normalized text.
+Query cursors bind the evidence ID, query kind, typed filters, and position;
+read cursors bind the evidence ID, native range, and position. Equivalent
+JSON request spellings therefore share a scope without a canonical request
+fingerprint.
 
 Both tools emit JSON by default, return structured errors, and expose a compact
 method reference. Load the packaged Agent Task Analysis method before
@@ -80,9 +89,10 @@ generated summary.
 Remove `--include-sensitive`, `--repo`, TTY-only analysis branches, and any
 assumption that exported members are private-mode files. The caller now owns
 content exposure and output location, while SVC retains source immutability,
-absent-target/no-overwrite behavior, source/output separation, bounds,
-canonical order, and integrity checks. SVC does not promise atomic visibility,
-symlink/reparse exclusion, hostile same-user defense, or path-race protection;
-see the local-trust-boundary migration note. Update automation from the old
-`analyze --json` response to the query/read request and response schemas; bind
-saved cursors and refs to the same evidence ID and request scope.
+absent-target/no-overwrite behavior, source/output separation, acquisition and
+response bounds, deterministic navigation, and native/framing identity. SVC
+does not promise atomic visibility, symlink/reparse exclusion, hostile same-user
+defense, or path-race protection; see the local-trust-boundary migration note.
+Update automation from the old `analyze --json` response to the query/read
+request and response schemas; bind saved cursors and refs to the same evidence
+ID and typed request scope.

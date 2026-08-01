@@ -20,6 +20,8 @@ MAX_WORKSPACE_CHARS = 4_096
 MAX_TITLE_CHARS = 160
 MAX_FIRST_MESSAGE_CHARS = 512
 MAX_THREAD_ID_CHARS = 512
+MAX_SOURCE_BYTES = 256 * 1024 * 1024
+MAX_NATIVE_FRAME_BYTES = 4 * 1024 * 1024
 _SIGNED_64_MAX = 9_223_372_036_854_775_807
 _CONTROL_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
 
@@ -84,7 +86,9 @@ class ThreadSelection:
 
 
 def _has_forbidden_control(value: str) -> bool:
-    return any(unicodedata.category(character) in _CONTROL_CATEGORIES for character in value)
+    return any(
+        unicodedata.category(character) in _CONTROL_CATEGORIES for character in value
+    )
 
 
 def _validate_utf8(value: str, *, field_name: str) -> None:
@@ -141,7 +145,9 @@ class ThreadInventoryRow:
         try:
             archive_state = ArchiveState(self.archive_state)
         except (TypeError, ValueError) as error:
-            raise ValueError("archive_state must be active, archived, or unknown") from error
+            raise ValueError(
+                "archive_state must be active, archived, or unknown"
+            ) from error
         object.__setattr__(self, "archive_state", archive_state)
 
         workspace = self.workspace
@@ -207,10 +213,18 @@ class ThreadInventoryQuery:
         try:
             archive_state = ArchiveFilter(self.archive_state)
         except (TypeError, ValueError) as error:
-            raise ValueError("archive_state must be active, archived, or all") from error
+            raise ValueError(
+                "archive_state must be active, archived, or all"
+            ) from error
         object.__setattr__(self, "archive_state", archive_state)
-        if isinstance(self.limit, bool) or not isinstance(self.limit, int) or not 1 <= self.limit <= MAX_INVENTORY_ROWS:
-            raise ValueError(f"limit must be an integer between 1 and {MAX_INVENTORY_ROWS}")
+        if (
+            isinstance(self.limit, bool)
+            or not isinstance(self.limit, int)
+            or not 1 <= self.limit <= MAX_INVENTORY_ROWS
+        ):
+            raise ValueError(
+                f"limit must be an integer between 1 and {MAX_INVENTORY_ROWS}"
+            )
 
     @property
     def archive_filter(self) -> ArchiveFilter:
@@ -241,7 +255,9 @@ class ThreadInventoryListing:
     def __post_init__(self) -> None:
         items = tuple(self.items)
         if len(items) > MAX_INVENTORY_ROWS:
-            raise ValueError(f"listing cannot retain more than {MAX_INVENTORY_ROWS} rows")
+            raise ValueError(
+                f"listing cannot retain more than {MAX_INVENTORY_ROWS} rows"
+            )
         object.__setattr__(self, "items", items)
 
     @classmethod
@@ -308,9 +324,10 @@ class NativeCaptureResult:
     """Descriptor-bound facts for one immutable native capture.
 
     Providers own native record framing and source-change observation.  The
-    evidence core owns canonical index encoding, validation, identity, and
-    publication.  ``frames`` therefore contains JSON-ready framing facts but
-    never the captured content itself.
+    evidence core owns typed index encoding, validation, snapshot identity,
+    and publication. ``frames`` contains only JSON-ready byte boundaries and
+    source coordinates; digests are computed from the captured authority when
+    a reader needs them.
     """
 
     provider_id: str
@@ -329,7 +346,11 @@ class NativeCaptureResult:
             raise ValueError("invalid native capture source status") from error
         frames = tuple(self.frames)
         object.__setattr__(self, "frames", frames)
-        if isinstance(self.native_bytes, bool) or not isinstance(self.native_bytes, int) or self.native_bytes < 0:
+        if (
+            isinstance(self.native_bytes, bool)
+            or not isinstance(self.native_bytes, int)
+            or self.native_bytes < 0
+        ):
             raise ValueError("native_bytes must be a non-negative integer")
 
     @property
@@ -338,39 +359,34 @@ class NativeCaptureResult:
             self.source_status is not SourceStatus.STABLE
             or self.unknown_remainder
             or self.read_interrupted
-            or any(frame.get("frame_status") == NativeFrameStatus.INCOMPLETE.value for frame in self.frames)
+            or any(
+                frame.get("frame_status") == NativeFrameStatus.INCOMPLETE.value
+                for frame in self.frames
+            )
         )
 
 
 @dataclass(frozen=True)
 class NormalizationResult:
-    """Bounded provider facts returned after streaming normalized records.
+    """Small derived-view summary returned after streaming records.
 
-    ``counts``, ``lossiness``, and ``diagnostics`` are manifest-facing values;
-    the bundle core validates and serializes them.  The provider does not
-    retain the emitted records.
+    Source identity and capture state already belong to ``ResolvedThread`` and
+    ``NativeCaptureResult``. Record counts are computed from the emitted
+    trajectory, so providers return only facts that cannot be recovered by
+    counting its records.
     """
 
-    provider_id: str
-    adapter_id: str
-    source_format: str
-    thread_ref: str
-    workspace: Mapping[str, Any]
-    source_status: SourceStatus | str
     result_status: NormalizationStatus | str
     capabilities: Mapping[str, str]
-    counts: Mapping[str, Any]
     lossiness: Mapping[str, Any]
-    diagnostics: tuple[Mapping[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         try:
-            object.__setattr__(self, "source_status", SourceStatus(self.source_status))
-            object.__setattr__(self, "result_status", NormalizationStatus(self.result_status))
+            object.__setattr__(
+                self, "result_status", NormalizationStatus(self.result_status)
+            )
         except (TypeError, ValueError) as error:
             raise ValueError("invalid normalization status") from error
-        if not isinstance(self.thread_ref, str) or not self.thread_ref.startswith("thread_"):
-            raise ValueError("thread_ref must be an opaque thread reference")
 
 
 class EvidenceThreadProvider(Protocol):

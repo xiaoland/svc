@@ -7,18 +7,18 @@
 - **Guardrails**:
   - This is a fresh current-source review. Do not read, reuse, compare with, or
     derive conclusions from any other `tasks/` packet or historical audit.
-  - Slice 1 test restructuring is authorized and complete. Do not modify runtime
-    code, dependencies, or durable product documents until the user explicitly
-    starts another approved implementation slice.
-  - Existing CLI commands, inputs, outputs, archive formats, references,
-    cursors, status/error semantics, determinism, and supported workflows are
-    immutable compatibility contracts. Internal replacement must be proven by
-    black-box characterization, not by deleting or weakening those behaviors.
+  - Slice 1 test restructuring is complete and committed as `aafe5a7`. Slice 2
+    runtime, schema, test, and durable-owner changes are explicitly authorized.
+  - Preserve the Agent-facing purpose of export/query/read, exact native
+    recovery, stable snapshot-scoped references, honest capture status, and
+    same-user local trust boundary. The still-unreleased schema-v3 archive,
+    cursor representation, derived projection fields, and fine-grained resource
+    policy may change under the pending Behavioral SemVer MAJOR release.
   - Static typing, the compiler, linters, schemas, and mature library contracts
     own what they can prove; do not duplicate those facts in pytest.
-  - Do not reinterpret earlier permission to question product requirements as
-    permission to remove current external behavior. New analysis capability may
-    be proposed, but compatibility remains the floor.
+  - Do not preserve a derived field, digest, validator, or limit merely because
+    the current unreleased implementation exposes it. Each retained contract
+    must protect native fidelity, useful analysis, or an actual boundary.
   - Preserve unrelated modified and untracked task material.
 - **Verification**:
   - Measure production LOC, test LOC, pytest item count, fixture complexity,
@@ -76,10 +76,10 @@
     unions and suitable manifest/index/trajectory shapes. Translate validation
     failures back into the exact existing stable error protocol. Pydantic is
     already a locked runtime dependency, so this adds no dependency surface.
-  - Retain the current strict JSON decoder and canonical serializer. Pydantic's
-    JSON parser accepts duplicate keys by keeping the last value and can admit
-    non-finite values through open nested data; its serializer does not own
-    SVC's sorted canonical digest bytes.
+  - Retain one strict JSON transport decoder for user-authored requests. Do not
+    make canonical JSON input a bundle-validity requirement. Deterministic
+    writer bytes remain an implementation property, while snapshot identity
+    binds the stored native and framing bytes directly.
   - Do not add JMESPath to implement the current five closed predicates. It
     cannot replace native byte text semantics, refs, ranges, budgets, cursors,
     coverage, or canonical ordering, and the compatibility adapter would be at
@@ -172,30 +172,91 @@
     retry or unresolved facts, locate verification/terminal horizons, or qualify
     a metric by field-level evidence coverage.
   - A new case/episode response should contain rule and method versions, request
-    fingerprint, bounded scope, stable episode IDs, ordered evidence-linked
-    observations, coverage-qualified metrics, horizons, unknowns, and gaps.
+    scope, stable episode IDs, ordered evidence-linked observations,
+    coverage-qualified metrics, horizons, unknowns, and gaps.
     Empty-complete, not-observed, partial, ambiguous, and unavailable must remain
     distinct. Native payload stays refs-first and is read through the existing
     `read` tool.
 - **Implementation Slices Requiring Approval**:
   1. Freeze the public compatibility corpus and replace implementation-coupled
      tests with the black-box test shape; no production behavior change.
-  2. Introduce Pydantic request and evidence/trajectory boundary models behind
-     exact error/serialization adapters; run old/new differential verification,
-     then remove hand-written shape branches and redundant tests.
+  2. Introduce Pydantic request/evidence/trajectory boundaries and reshape the
+     unreleased schema-v3 artifact around its minimal native authority. This
+     slice may remove unreleased projection/digest/limit contracts while keeping
+     export/query/read purpose and native recovery intact.
   3. Design and add the new case/episode analysis contract as an additive
      Behavioral SemVer feature, with real-thread dogfood before implementation.
   4. Only after the first three slices, prototype an app-server metadata adapter
      and retain it only if it deletes more compatibility code/tests than it adds.
 - **Success Measure**:
-  - Zero externally observable regressions under a frozen compatibility corpus.
+  - Preserve export/query/read purpose, native recovery, snapshot-scoped refs,
+    and honest capture/query status. Deliberate schema-v3 wire changes are
+    recorded under the pending Behavioral SemVer MAJOR release.
   - Fewer hand-written validators, parsers, query branches, fixtures, and
     implementation-coupled tests.
   - A smaller set of end-to-end contract cases plus model/property/static checks
     that cover the same externally reachable behavior.
   - `svc analysis` has explicit semantic outputs that cannot be reproduced by a
     direct `jq`/`rg` selection recipe alone.
-- **Next Step**: Review Slice 1 results, then obtain explicit approval before
-  Slice 2 introduces Pydantic boundary models. The analysis case/episode
-  contract remains a separate product-design decision and must not be smuggled
-  into that compatibility refactor.
+- **Slice 2 Approved Authority**:
+  - Schema-v3 is still unreleased and is reshaped in place; do not add a v4
+    compatibility layer for an artifact that has not shipped.
+  - `manifest.json`, `native.bin`, and `native-index.jsonl` are the required
+    authority core. `trajectory.jsonl` is an optional derived cache: export may
+    include it, query may rebuild it, and read never depends on it.
+  - The minimal manifest stores only format/version, one `evidence_id`, provider
+    recipe identity needed for rebuild, and observed source/capture state.
+  - `evidence_id` is the only snapshot identity and binds the stored native and
+    framing bytes. Member, projection, bundle, tool, and context digests are not
+    parallel identities. Frame and fragment SHA values are calculated when read
+    results need them rather than persisted as framing authority.
+  - Framing retains stable native IDs, exact contiguous byte ranges, source
+    coordinates, and complete/incomplete state. Redundant ordinal,
+    representation, and precomputed digest fields are removed.
+  - Projection records retain only structure needed by query and future
+    evidence-chain analysis. Counts are computed from records; capabilities,
+    loss, and projection status are derived cache metadata, never manifest or
+    evidence identity.
+  - Bundle readers validate semantics with Pydantic and accept non-canonical
+    equivalent JSON. Duplicate/non-finite rejection remains only at the
+    user-authored analysis request boundary.
+  - Resource policy is reduced to selected-source bytes, one native-frame size,
+    request bytes, and response-page bounds. Query no longer exposes an exact
+    caller-selected `max_bytes`; read keeps byte pagination for exact native
+    reconstruction.
+  - Query cursors carry typed request scope directly instead of a canonical
+    request fingerprint. They remain unsigned local continuation state.
+- **Slice 2 Result**:
+  - Evidence authority is now the minimal Pydantic-validated three-member core.
+    One raw native/framing digest is the snapshot ID; stored member/frame/cache
+    digests, canonical-input requirements, redundant ordinals/representation,
+    and manifest projection policy are removed.
+  - Trajectory is a typed, frozen, optional cache. Export omits it when derived
+    projection fails; query rebuilds a missing or invalid cache in memory from
+    the provider recipe and core bytes; read never depends on it. Counts are
+    computed from records, while capabilities and four structural loss counters
+    live only in the cache's leading meta record.
+  - Analysis requests, refs, predicates, and cursors use Pydantic discriminated
+    models. Query removed caller `max_bytes` and request fingerprints; typed
+    cursor scope carries the actual query/read selector. Read computes frame and
+    fragment SHA values from native bytes at response time.
+  - Resource policy now has only shared source/frame acquisition limits, strict
+    request limits, and response-page limits. Record IDs can grow beyond six
+    digits; projection content/diagnostic/record/trajectory/member/ZIP limit
+    systems and their tests are gone.
+  - Relative to committed Slice 1 (`aafe5a7`), directly affected production
+    code fell from 6,347 to 5,492 lines (855, 13%); focused test/acceptance
+    support fell from 3,154 to 2,866 lines (288, 9%). Focused pytest items fell
+    from 37 to 36 and the repository suite from 112 to 111.
+- **Slice 2 Verification**:
+  - Full suite: 111 passed in 1.33 seconds.
+  - Ruff, mypy, import-linter, document validation, and `git diff --check` pass.
+  - A fresh 11.0.1 wheel (the repository still awaits its v12 release-preparation
+    commit) passed the installed acceptance harness for `inventory`, `evidence`,
+    `query`, and `read`; cleanup passed. Verified wheel SHA-256:
+    `ef0fa29ad5bac0272e0b70bab5aa67f89c43a1f3d499d9222b473ed935a977db`.
+  - Verification was performed directly by the implementation workflow; no
+    independent QA run was added, per user direction.
+- **Next Step**: Review the Slice 2 diff and decide whether to commit it. The
+  case/episode analysis contract remains the separate Slice 3 product-design
+  decision.

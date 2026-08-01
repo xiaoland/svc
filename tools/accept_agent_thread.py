@@ -34,14 +34,14 @@ HARNESS_VERSION = "2"
 SLICE_CHOICES = ("inventory", "evidence", "query", "read", "all")
 _MAX_CHILD_OUTPUT_BYTES = 2 * 1024 * 1024
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_NATIVE_ID_RE = re.compile(r"^n[0-9]{6}$")
 _EVIDENCE_ID_RE = re.compile(r"^[0-9a-f]{64}$")
-_EVIDENCE_MEMBERS = {
+_EVIDENCE_CORE_MEMBERS = {
     "manifest.json",
     "native.bin",
     "native-index.jsonl",
-    "trajectory.jsonl",
 }
+_EVIDENCE_OPTIONAL_MEMBERS = {"trajectory.jsonl"}
+_EVIDENCE_ID_DOMAIN = b"svc-agent-thread-evidence-id\x00v3\x00"
 _BLOCKED_WHEEL_PARTS = {"tasks", "textual", "tui"}
 _RAW_EVIDENCE_SUFFIXES = {".bin", ".db", ".jsonl", ".ndjson", ".sqlite", ".zip"}
 _BLOCKED_DEPENDENCIES = {"textual"}
@@ -419,28 +419,40 @@ def _export_fixture(child: Path, root: Path, env: Mapping[str, str]) -> tuple[Pa
     if (
         payload.get("status") != "exported"
         or payload.get("schema_version") != 3
-        or not isinstance(payload.get("diagnostic_groups"), int)
         or "diagnostics" in payload
         or not isinstance(evidence, Mapping)
         or evidence.get("schema_version") != 3
+        or not isinstance(evidence.get("native_bytes"), int)
+        or not isinstance(evidence.get("native_records"), int)
     ):
         raise _CaseFailure("evidence-export")
     return output, dict(payload)
+
+
+def _evidence_id(native: bytes, native_index: bytes) -> str:
+    digest = hashlib.sha256()
+    digest.update(_EVIDENCE_ID_DOMAIN)
+    for name, data in ((b"native.bin", native), (b"native-index.jsonl", native_index)):
+        digest.update(len(name).to_bytes(4, "big"))
+        digest.update(name)
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(data)
+    return digest.hexdigest()
 
 
 def _validate_evidence_zip(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]], bytes]:
     """Check only the bytes this independent consumer must trust.
 
     Evidence-core tests own the schema and projection invariants.  Acceptance
-    keeps the smaller installed-consumer contract: member presence, manifest
-    byte metadata, native/index digests, and exact frame reconstruction needed
-    by the read case.
+    keeps the smaller installed-consumer contract: core members, one snapshot
+    identity, and exact frame reconstruction needed by the read case.
     """
 
     try:
         with zipfile.ZipFile(path) as archive:
             names = archive.namelist()
-            if len(names) != len(set(names)) or set(names) != _EVIDENCE_MEMBERS:
+            present = set(names)
+            if len(names) != len(present) or not _EVIDENCE_CORE_MEMBERS <= present or not present <= _EVIDENCE_CORE_MEMBERS | _EVIDENCE_OPTIONAL_MEMBERS:
                 raise _CaseFailure("evidence-members")
             manifest_bytes = archive.read("manifest.json")
             native = archive.read("native.bin")
@@ -458,37 +470,31 @@ def _validate_evidence_zip(path: Path) -> tuple[dict[str, Any], list[dict[str, A
     evidence_id = manifest.get("evidence_id")
     if (
         not isinstance(capture, Mapping)
-        or capture.get("representation") != "provider-bytes"
         or capture.get("status") not in {"complete", "partial"}
         or not isinstance(capture.get("unknown_remainder"), bool)
+        or not isinstance(capture.get("read_interrupted"), bool)
         or not isinstance(evidence_id, str)
         or _EVIDENCE_ID_RE.fullmatch(evidence_id) is None
+        or evidence_id != _evidence_id(native, index_bytes)
     ):
         raise _CaseFailure("evidence-manifest")
-    native_meta = manifest.get("native")
-    index_meta = manifest.get("native_index")
-    if (
-        not isinstance(native_meta, Mapping)
-        or native_meta.get("sha256") != hashlib.sha256(native).hexdigest()
-        or native_meta.get("bytes") != len(native)
-        or not isinstance(index_meta, Mapping)
-        or index_meta.get("sha256") != hashlib.sha256(index_bytes).hexdigest()
-        or index_meta.get("bytes") != len(index_bytes)
-    ):
-        raise _CaseFailure("evidence-digest")
+    source = manifest.get("source")
+    if not isinstance(source, Mapping) or not all(isinstance(source.get(key), str) for key in ("provider_id", "adapter_id", "source_format", "thread_id", "source_status")):
+        raise _CaseFailure("evidence-manifest")
     entries: list[dict[str, Any]] = []
     expected_start = 0
-    for line in index_bytes.splitlines():
+    for ordinal, line in enumerate(index_bytes.splitlines()):
         value = _json(line, "evidence-index")
         if (
             not isinstance(value, Mapping)
-            or not isinstance(value.get("native_record_id"), str)
-            or _NATIVE_ID_RE.fullmatch(value["native_record_id"]) is None
+            or set(value) != {"native_record_id", "byte_start", "byte_end", "frame_status", "source_coordinate"}
+            or value.get("native_record_id") != f"n{ordinal:06d}"
             or value.get("byte_start") != expected_start
             or not isinstance(value.get("byte_end"), int)
             or value["byte_end"] <= expected_start
             or value["byte_end"] > len(native)
-            or value.get("sha256") != hashlib.sha256(native[expected_start:value["byte_end"]]).hexdigest()
+            or value.get("frame_status") not in {"complete", "incomplete"}
+            or not isinstance(value.get("source_coordinate"), Mapping)
         ):
             raise _CaseFailure("evidence-index")
         entries.append(
@@ -496,11 +502,11 @@ def _validate_evidence_zip(path: Path) -> tuple[dict[str, Any], list[dict[str, A
                 "native_record_id": value["native_record_id"],
                 "byte_start": expected_start,
                 "byte_end": value["byte_end"],
-                "sha256": value["sha256"],
+                "sha256": hashlib.sha256(native[expected_start:value["byte_end"]]).hexdigest(),
             }
         )
         expected_start = value["byte_end"]
-    if expected_start != len(native) or index_meta.get("records") != len(entries):
+    if expected_start != len(native):
         raise _CaseFailure("evidence-index")
     return dict(manifest), entries, native
 
@@ -548,7 +554,7 @@ def _run_inventory_case(child: Path, root: Path, env: Mapping[str, str]) -> None
 
 def _run_evidence_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
     bundle, export = _export_fixture(child, root, env)
-    manifest, entries, native = _validate_evidence_zip(bundle)
+    manifest, entries, _native = _validate_evidence_zip(bundle)
     if len(entries) != 5 or entries[-1].get("byte_end", 0) - entries[-1].get("byte_start", 0) <= 4_194_304:
         raise _CaseFailure("evidence-oversized")
     if export.get("evidence", {}).get("evidence_id") != manifest.get("evidence_id"):
@@ -566,8 +572,6 @@ def _run_evidence_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
     payload = _json(result.stderr, "legacy-cutoff")
     if result.returncode != 4 or not isinstance(payload, Mapping) or payload.get("code") != "unsupported-agent-thread-bundle-schema" or result.stdout:
         raise _CaseFailure("legacy-cutoff")
-    if hashlib.sha256(native).hexdigest() != manifest["native"]["sha256"]:
-        raise _CaseFailure("evidence-digest")
 
 
 def _run_query_case(child: Path, root: Path, env: Mapping[str, str]) -> None:

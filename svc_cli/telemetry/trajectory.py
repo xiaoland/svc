@@ -1,61 +1,74 @@
-"""Provider-neutral schema-v2 trajectory primitives.
+"""Typed derived trajectory records and deterministic JSONL writing.
 
-This module deliberately has no provider, archive, or UI dependencies.  It is
-the small executable boundary shared by normalizers and later bundle readers:
-records are validated before they become durable JSONL, and a collector writes
-canonical bytes incrementally to a caller-owned sink.
+The trajectory is a rebuildable projection over captured native evidence.  It
+therefore owns only the structural record shape and a deterministic writer;
+identity, manifests, retention policy, and source limits belong elsewhere.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-import hashlib
 import io
 import json
-import math
-import re
 from types import MappingProxyType
-from typing import Any, BinaryIO, Iterable, Mapping, Never
+from typing import Annotated, Any, BinaryIO, Iterable, Literal, Mapping, TypeAlias
 
-
-TRAJECTORY_SCHEMA = "svc.trajectory/v1"
-CONTENT_PROFILE = "bounded-normalized-v1"
-
-MAX_SOURCE_BYTES = 268_435_456
-MAX_NATIVE_LINE_BYTES = 4_194_304
-MAX_NATIVE_JSON_DEPTH = 64
-MAX_RECORDS = 50_000
-MAX_TRAJECTORY_BYTES = 33_554_432
-MAX_WORKSPACE_LABEL_CODE_POINTS = 256
-MAX_MESSAGE_CONTEXT_CODE_POINTS = 16_384
-MAX_REASONING_CODE_POINTS = 8_192
-MAX_TOOL_NAME_CODE_POINTS = 256
-MAX_TOOL_ARGUMENTS_CODE_POINTS = 20_000
-MAX_TOOL_RESULT_CODE_POINTS = 2_500
-MAX_CONTEXT_ATTRIBUTE_KEYS = 6
-MAX_CONTEXT_ATTRIBUTE_CODE_POINTS = 512
-MAX_TOOL_CONFIG_NAMES = 256
-MAX_TASK_REFERENCE_CODE_POINTS = 1_024
-MAX_TASK_REFERENCE_OCCURRENCES = 2_048
-MAX_STRUCTURAL_LABEL_ASCII = 128
-
-RECORD_TYPES = ("meta", "message", "reasoning", "tool_call", "tool_result", "context", "event")
-RELATIONSHIP_KEYS = ("turn_ref", "actor_ref", "parent_actor_ref", "lane_ref", "concurrency_group")
-REF_PREFIXES = {"thread", "turn", "call", "actor", "lane", "concurrency", "workspace"}
-_HEX_REF = re.compile(r"^(?:thread|turn|call|actor|lane|concurrency|workspace)_[0-9a-f]{64}(?:_d[0-9]{6})?$")
-_RECORD_ID = re.compile(r"^r[0-9]{6}$")
-_NATIVE_RECORD_ID = re.compile(r"^n[0-9]{6}$")
-_COMPONENT = re.compile(r"^[a-z][a-z0-9_-]{0,127}$")
-_TIMESTAMP = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$"
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
 )
 
 
-class TrajectoryError(ValueError):
-    """Stable executable trajectory error with a machine-readable code."""
+TRAJECTORY_SCHEMA = "svc.trajectory/v1"
+RECORD_TYPES = (
+    "meta",
+    "message",
+    "reasoning",
+    "tool_call",
+    "tool_result",
+    "context",
+    "event",
+)
 
-    def __init__(self, code: str, message: str, details: Mapping[str, Any] | None = None) -> None:
+_RECORD_ID_PATTERN = r"^r[0-9]{6,}$"
+_NATIVE_RECORD_ID_PATTERN = r"^n[0-9]{6,}$"
+_CALL_REFERENCE_PATTERN = r"^call_[0-9a-f]{64}(?:_d[0-9]{6,})?$"
+_TIMESTAMP_PATTERN = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$"
+_TASK_REFERENCE_PATTERN = r"^tasks/(?:[A-Za-z0-9_-][^/]*/)+packet\.md$"
+
+RecordId = Annotated[str, Field(pattern=_RECORD_ID_PATTERN)]
+NativeRecordId = Annotated[str, Field(pattern=_NATIVE_RECORD_ID_PATTERN)]
+CallReference = Annotated[str, Field(pattern=_CALL_REFERENCE_PATTERN)]
+ThreadReference = Annotated[str, Field(pattern=r"^thread_[0-9a-f]{64}$")]
+TurnReference = Annotated[str, Field(pattern=r"^turn_[0-9a-f]{64}$")]
+ActorReference = Annotated[str, Field(pattern=r"^actor_[0-9a-f]{64}$")]
+LaneReference = Annotated[str, Field(pattern=r"^lane_[0-9a-f]{64}$")]
+ConcurrencyReference = Annotated[
+    str,
+    Field(pattern=r"^concurrency_[0-9a-f]{64}$"),
+]
+WorkspaceReference = Annotated[
+    str,
+    Field(pattern=r"^workspace_[0-9a-f]{64}$"),
+]
+Timestamp = Annotated[str, Field(pattern=_TIMESTAMP_PATTERN)]
+TaskReference = Annotated[str, Field(pattern=_TASK_REFERENCE_PATTERN)]
+NonNegativeInt = Annotated[int, Field(ge=0)]
+
+
+class TrajectoryError(ValueError):
+    """Stable trajectory failure with a machine-readable code."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        details: Mapping[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
@@ -68,1073 +81,448 @@ class TrajectoryError(ValueError):
         return value
 
 
-@dataclass(frozen=True)
-class NormalizationPolicy:
-    """The frozen schema-v2 policy and resource bounds."""
-
-    profile: str = CONTENT_PROFILE
-    noise_policy: str = "structural-v1"
-    task_reference_policy: str = "lexical-relative-packet-v1"
-    timestamp_policy: str = "utc-rfc3339-nanosecond-v1"
-    source_bytes: int = MAX_SOURCE_BYTES
-    native_line_bytes: int = MAX_NATIVE_LINE_BYTES
-    native_json_depth: int = MAX_NATIVE_JSON_DEPTH
-    records: int = MAX_RECORDS
-    trajectory_bytes: int = MAX_TRAJECTORY_BYTES
-    schema_v2_zip_bytes: int = 67_108_864
-    manifest_bytes: int = 1_048_576
-    workspace_label_code_points: int = MAX_WORKSPACE_LABEL_CODE_POINTS
-    message_context_code_points: int = MAX_MESSAGE_CONTEXT_CODE_POINTS
-    reasoning_code_points: int = MAX_REASONING_CODE_POINTS
-    tool_name_code_points: int = MAX_TOOL_NAME_CODE_POINTS
-    tool_arguments_code_points: int = MAX_TOOL_ARGUMENTS_CODE_POINTS
-    tool_result_code_points: int = MAX_TOOL_RESULT_CODE_POINTS
-    context_attribute_keys: int = MAX_CONTEXT_ATTRIBUTE_KEYS
-    context_attribute_code_points: int = MAX_CONTEXT_ATTRIBUTE_CODE_POINTS
-    tool_config_names: int = MAX_TOOL_CONFIG_NAMES
-    task_reference_code_points: int = MAX_TASK_REFERENCE_CODE_POINTS
-    task_reference_occurrences: int = MAX_TASK_REFERENCE_OCCURRENCES
-    structural_label_ascii: int = MAX_STRUCTURAL_LABEL_ASCII
-    diagnostics: int = 256
-    diagnostic_detail_keys: int = 16
-    diagnostic_detail_ascii: int = 128
+class _StrictFrozenModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
 
-DEFAULT_NORMALIZATION_POLICY = NormalizationPolicy()
+class SourceRef(_StrictFrozenModel):
+    """Coordinate of a derived claim in the provider/native frame stream."""
+
+    event_index: NonNegativeInt
+    line: NonNegativeInt | None = None
+    byte_offset: NonNegativeInt | None = None
+    component_index: NonNegativeInt | None = None
+    component: str | None = None
+    native_record_id: NativeRecordId | None = None
 
 
-def policy_dict(policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY) -> Mapping[str, Any]:
-    """Return the exact manifest policy object as ordinary JSON-ready data."""
-
-    if not isinstance(policy, NormalizationPolicy):
-        raise TrajectoryError("invalid-policy", "Normalization policy has an invalid type.")
-    bounds = {
-        "source_bytes": policy.source_bytes,
-        "native_line_bytes": policy.native_line_bytes,
-        "native_json_depth": policy.native_json_depth,
-        "records": policy.records,
-        "trajectory_bytes": policy.trajectory_bytes,
-        "schema_v2_zip_bytes": policy.schema_v2_zip_bytes,
-        "manifest_bytes": policy.manifest_bytes,
-        "workspace_label_code_points": policy.workspace_label_code_points,
-        "message_context_code_points": policy.message_context_code_points,
-        "reasoning_code_points": policy.reasoning_code_points,
-        "tool_name_code_points": policy.tool_name_code_points,
-        "tool_arguments_code_points": policy.tool_arguments_code_points,
-        "tool_result_code_points": policy.tool_result_code_points,
-        "context_attribute_keys": policy.context_attribute_keys,
-        "context_attribute_code_points": policy.context_attribute_code_points,
-        "tool_config_names": policy.tool_config_names,
-        "task_reference_code_points": policy.task_reference_code_points,
-        "task_reference_occurrences": policy.task_reference_occurrences,
-        "structural_label_ascii": policy.structural_label_ascii,
-        "diagnostics": policy.diagnostics,
-        "diagnostic_detail_keys": policy.diagnostic_detail_keys,
-        "diagnostic_detail_ascii": policy.diagnostic_detail_ascii,
-    }
-    return {
-        "profile": policy.profile,
-        "noise_policy": policy.noise_policy,
-        "task_reference_policy": policy.task_reference_policy,
-        "timestamp_policy": policy.timestamp_policy,
-        "bounds": bounds,
-    }
+class MetaSourceRef(_StrictFrozenModel):
+    event_index: None
+    component: Literal["meta"]
 
 
-def _fail(message: str, *, code: str = "invalid-trajectory", **details: Any) -> Never:
-    raise TrajectoryError(code, message, details)
+class Relationships(_StrictFrozenModel):
+    """Structural chain edges retained for query and future derivations."""
+
+    turn_ref: TurnReference | None = None
+    actor_ref: ActorReference | None = None
+    parent_actor_ref: ActorReference | None = None
+    lane_ref: LaneReference | None = None
+    concurrency_group: ConcurrencyReference | None = None
 
 
-def _is_bool(value: Any) -> bool:
-    return isinstance(value, bool)
+class Workspace(_StrictFrozenModel):
+    status: Literal["present", "missing"]
+    flavor: Literal["posix", "windows", "unc"] | None
+    label: str | None
+    ref: WorkspaceReference | None
 
 
-def _is_int(value: Any) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
+class ProjectionCapabilities(_StrictFrozenModel):
+    reasoning: Literal["full", "summary", "opaque", "absent"]
+    tool_linkage: Literal["explicit", "mixed", "synthesized", "absent"]
+    context: Literal["full", "partial", "absent"]
+    task_references: Literal["available", "unavailable"]
+    explicit_concurrency: Literal["available", "unavailable"]
+    timestamps: Literal["full", "partial", "absent"]
+    terminal_events: Literal["available", "unavailable"]
 
 
-def _is_string(value: Any) -> bool:
-    if not isinstance(value, str):
-        return False
-    try:
-        value.encode("utf-8", errors="strict")
-    except UnicodeEncodeError:
-        return False
-    return not any(0xD800 <= ord(char) <= 0xDFFF for char in value)
+class ProjectionLossiness(_StrictFrozenModel):
+    """Only structural loss that changes interpretation of the projection."""
+
+    dropped_records: NonNegativeInt = 0
+    unavailable_records: NonNegativeInt = 0
+    synthesized_records: NonNegativeInt = 0
+    partial_frames: NonNegativeInt = 0
 
 
-def _exact_keys(value: Mapping[str, Any], required: set[str], optional: set[str] = set()) -> None:
-    keys = set(value)
-    allowed = required | optional
-    if not required <= keys or not keys <= allowed:
-        missing = sorted(required - keys)
-        extra = sorted(keys - allowed)
-        _fail("Record keys do not match the schema.", missing=missing, extra=extra)
+class ContextAttributes(_StrictFrozenModel):
+    model: str | None = None
+    reasoning_effort: str | None = None
+    approval_mode: str | None = None
+    sandbox_mode: str | None = None
+    collaboration_mode: str | None = None
+    tool_names: tuple[str, ...] | None = None
 
 
-def _check_ref(value: Any, *, prefix: str | None = None) -> None:
-    if not isinstance(value, str) or not _HEX_REF.fullmatch(value):
-        _fail("Relationship reference has an invalid hash shape.")
-    if prefix is not None and not value.startswith(prefix + "_"):
-        _fail("Relationship reference has an invalid kind.")
-    if re.search(r"_d[0-9]{6}$", value) and prefix != "call":
-        _fail("Only duplicate call references may carry an occurrence suffix.")
+class TrajectoryRecordBase(_StrictFrozenModel):
+    """Fields available on every typed trajectory record."""
+
+    type: str
+    record_id: RecordId
+    record_index: NonNegativeInt
+    timestamp: Timestamp | None
+    source_ref: SourceRef | MetaSourceRef
+    relationships: Relationships
+
+    @model_validator(mode="after")
+    def _record_id_matches_index(self) -> "TrajectoryRecordBase":
+        if self.record_id != f"r{self.record_index:06d}":
+            raise ValueError("record_id does not match record_index")
+        return self
 
 
-def _check_timestamp(value: Any) -> None:
-    if value is None:
-        return
-    if not isinstance(value, str) or not _TIMESTAMP.fullmatch(value):
-        _fail("Timestamp must be UTC RFC 3339 with seconds and a Z suffix.")
-    try:
-        datetime.fromisoformat(value[:-1] + "+00:00")
-    except ValueError:
-        _fail("Timestamp is not a valid UTC instant.")
+class MetaRecord(TrajectoryRecordBase):
+    type: Literal["meta"]
+    timestamp: None
+    source_ref: MetaSourceRef
+    trajectory_schema: Literal["svc.trajectory/v1"]
+    provider_id: str
+    adapter_id: str
+    source_format: str
+    thread_ref: ThreadReference
+    workspace: Workspace
+    result_status: Literal["ready", "partial"] | None = None
+    capabilities: ProjectionCapabilities | None = None
+    lossiness: ProjectionLossiness | None = None
 
 
-def _check_bounded_text(value: Any, meta: Any, *, max_code_points: int, allow_null: bool = False) -> None:
-    if value is None and allow_null:
-        if not isinstance(meta, Mapping):
-            _fail("Null text requires bounded metadata.")
-        _exact_keys(meta, {"truncated", "observed_code_points", "retained_code_points", "strategy"})
-        if meta.get("truncated") is not False or meta.get("observed_code_points") != 0 or meta.get("retained_code_points") != 0 or meta.get("strategy") != "none":
-            _fail("Null text metadata must have zero counts.")
-        return
-    if not _is_string(value) or not isinstance(meta, Mapping):
-        _fail("Bounded text has an invalid value or metadata object.")
-    _exact_keys(meta, {"truncated", "observed_code_points", "retained_code_points", "strategy"})
-    observed = meta["observed_code_points"]
-    retained = meta["retained_code_points"]
-    strategy = meta["strategy"]
-    if not _is_bool(meta["truncated"]) or not _is_int(observed) or not _is_int(retained):
-        _fail("Bounded text metadata has invalid scalar types.")
-    if observed < 0 or retained < 0 or retained != len(value) or retained > max_code_points or observed < retained:
-        _fail("Bounded text metadata is inconsistent with retained content.")
-    if strategy not in {"none", "head", "head_tail"}:
-        _fail("Bounded text strategy is invalid.")
-    if (strategy == "none") != (not meta["truncated"]):
-        _fail("Bounded text truncation flag and strategy disagree.")
-    if strategy == "none" and observed != retained:
-        _fail("Untruncated text must retain all observed code points.")
+class MessageRecord(TrajectoryRecordBase):
+    type: Literal["message"]
+    source_ref: SourceRef
+    role: Literal["user", "assistant"]
+    task_refs: tuple[TaskReference, ...]
 
 
-def _check_source_ref(value: Any, *, meta: bool) -> None:
-    if not isinstance(value, Mapping):
-        _fail("source_ref must be an object.")
-    if meta:
-        _exact_keys(value, {"event_index", "component"})
-        if value["event_index"] is not None or value["component"] != "meta":
-            _fail("Meta source_ref is invalid.")
-        return
-    if "event_index" not in value or not _is_int(value["event_index"]) or value["event_index"] < 0:
-        _fail("Provider source_ref requires a non-negative event_index.")
-    allowed = {
-        "event_index",
-        "line",
-        "byte_offset",
-        "component_index",
-        "component",
-        "native_record_id",
-    }
-    if not set(value) <= allowed:
-        _fail("source_ref contains an unsupported key.")
-    for key in ("line", "byte_offset", "component_index"):
-        if key in value and (not _is_int(value[key]) or value[key] < 0):
-            _fail("source_ref offsets must be non-negative integers.")
-    if "component" in value and (not isinstance(value["component"], str) or not _COMPONENT.fullmatch(value["component"])):
-        _fail("source_ref component is invalid.")
-    if "native_record_id" in value and (
-        not isinstance(value["native_record_id"], str)
-        or not _NATIVE_RECORD_ID.fullmatch(value["native_record_id"])
-    ):
-        _fail("source_ref native_record_id is invalid.")
+class ReasoningRecord(TrajectoryRecordBase):
+    type: Literal["reasoning"]
+    source_ref: SourceRef
+    reasoning_kind: Literal["full", "summary", "opaque"]
 
 
-def _valid_task_ref(value: Any) -> bool:
-    if not isinstance(value, str) or len(value) > MAX_TASK_REFERENCE_CODE_POINTS or "\\" in value:
-        return False
-    parts = value.split("/")
-    return len(parts) >= 3 and parts[0] == "tasks" and parts[-1] == "packet.md" and all(part not in {"", ".", ".."} for part in parts[1:-1])
+class ToolCallRecord(TrajectoryRecordBase):
+    type: Literal["tool_call"]
+    source_ref: SourceRef
+    tool_call_id: CallReference
+    name: str
+    arguments_kind: Literal["json", "text", "absent"]
 
 
-def _check_workspace(value: Any) -> None:
-    if not isinstance(value, Mapping):
-        _fail("workspace must be an object.")
-    _exact_keys(value, {"status", "flavor", "label", "ref", "label_truncated", "observed_code_points", "retained_code_points"})
-    status = value["status"]
-    if status not in {"present", "missing"}:
-        _fail("workspace status is invalid.")
-    if status == "missing":
-        if value["flavor"] is not None or value["label"] is not None or value["ref"] is not None:
-            _fail("Missing workspace cannot expose path-derived values.")
-        if value["observed_code_points"] != 0 or value["retained_code_points"] != 0:
-            _fail("Missing workspace must have zero counts.")
-    else:
-        if value["flavor"] not in {"posix", "windows", "unc"} or value["ref"] is None:
-            _fail("Present workspace has invalid flavor/ref.")
-        if not _is_string(value["label"]):
-            _fail("Present workspace must retain a lexical label string.")
-        _check_ref(value["ref"], prefix="workspace")
-        _check_bounded_text(value["label"], {
-            "truncated": value["label_truncated"],
-            "observed_code_points": value["observed_code_points"],
-            "retained_code_points": value["retained_code_points"],
-            "strategy": "head" if value["label_truncated"] else "none",
-        }, max_code_points=MAX_WORKSPACE_LABEL_CODE_POINTS, allow_null=True)
-    if not _is_bool(value["label_truncated"]) or not _is_int(value["observed_code_points"]) or not _is_int(value["retained_code_points"]):
-        _fail("workspace bounds metadata has invalid types.")
+class ToolResultRecord(TrajectoryRecordBase):
+    type: Literal["tool_result"]
+    source_ref: SourceRef
+    tool_call_id: CallReference
+    status: Literal["success", "error", "unknown"]
+    link_status: Literal["linked", "unresolved"]
 
 
-def _check_attributes(value: Any, meta: Any) -> None:
-    if not isinstance(value, Mapping) or not isinstance(meta, Mapping):
-        _fail("Context attributes must be objects.")
-    allowed = {"model", "reasoning_effort", "approval_mode", "sandbox_mode", "collaboration_mode", "tool_names"}
-    if not set(value) <= allowed or set(meta) != set(value):
-        _fail("Context attributes keys are inconsistent.")
-    if len(value) > MAX_CONTEXT_ATTRIBUTE_KEYS:
-        _fail("Context attribute key bound exceeded.")
-    for key, item in value.items():
-        if key == "tool_names":
-            if not isinstance(item, list) or not isinstance(meta[key], Mapping):
-                _fail("tool_names context attribute is invalid.")
-            _exact_keys(meta[key], {"observed_items", "retained_items", "truncated"})
-            if not _is_int(meta[key]["observed_items"]) or not _is_int(meta[key]["retained_items"]) or not _is_bool(meta[key]["truncated"]):
-                _fail("tool_names metadata has invalid types.")
-            if (
-                meta[key]["observed_items"] < meta[key]["retained_items"]
-                or meta[key]["retained_items"] < 0
-                or len(item) != meta[key]["retained_items"]
-                or len(item) > MAX_TOOL_CONFIG_NAMES
-            ):
-                _fail("tool_names metadata count is inconsistent.")
-            for name in item:
-                if not isinstance(name, Mapping):
-                    _fail("tool_names entries must be objects.")
-                _exact_keys(name, {"name", "name_meta", "name_fingerprint"})
-                _check_bounded_text(name["name"], name["name_meta"], max_code_points=MAX_TOOL_NAME_CODE_POINTS)
-                if not isinstance(name["name_fingerprint"], str) or not re.fullmatch(r"[0-9a-f]{64}", name["name_fingerprint"]):
-                    _fail("tool name fingerprint is invalid.")
-            names = [entry["name"].encode("utf-8") for entry in item]
-            if names != sorted(names) or len(set(names)) != len(names):
-                _fail("tool_names must be sorted and deduplicated by retained UTF-8 name.")
-            continue
-        if not isinstance(item, str):
-            _fail("Context scalar attributes must be strings.")
-        _check_bounded_text(item, meta[key], max_code_points=MAX_CONTEXT_ATTRIBUTE_CODE_POINTS)
+class ContextRecord(TrajectoryRecordBase):
+    type: Literal["context"]
+    source_ref: SourceRef
+    context_kind: Literal["system", "developer", "tool_config", "turn"]
+    attributes: ContextAttributes
 
 
-def _fingerprint(prefix: bytes, value: bytes) -> str:
-    return hashlib.sha256(prefix + value).hexdigest()
+class EventRecord(TrajectoryRecordBase):
+    type: Literal["event"]
+    source_ref: SourceRef
+    event_kind: Literal[
+        "turn_start",
+        "turn_complete",
+        "turn_abort",
+        "agent_start",
+        "agent_complete",
+        "compaction",
+        "approval",
+        "error",
+    ]
+    outcome: (
+        Literal[
+            "requested",
+            "granted",
+            "denied",
+            "cancelled",
+            "completed",
+            "error",
+            "aborted",
+            "unknown",
+        ]
+        | None
+    )
 
 
-def _validate_tool_fingerprints(record: Mapping[str, Any]) -> None:
-    name_meta = record["name_meta"]
-    if isinstance(name_meta, Mapping) and name_meta.get("truncated") is False:
-        expected = _fingerprint(b"svc-tool-name-v1\0", str(record["name"]).encode("utf-8"))
-        if record["name_fingerprint"] != expected:
-            _fail("Tool name fingerprint does not match canonical name.")
-    kind = record["arguments_kind"]
-    arguments = record["arguments"]
-    if kind == "absent":
-        return
-    assert isinstance(arguments, str)
-    arguments_meta = record["arguments_meta"]
-    argument_bytes: bytes
-    if kind == "json":
-        try:
-            parsed = _strict_loads(arguments.encode("utf-8"))
-            argument_bytes = canonical_json_bytes(parsed)
-        except TrajectoryError:
-            _fail("Untruncated JSON tool arguments are not canonical.")
-        if isinstance(arguments_meta, Mapping) and arguments_meta.get("truncated") is False and argument_bytes.decode("utf-8") != arguments:
-            _fail("JSON tool arguments must use canonical compact sorted-key encoding.")
-    else:
-        argument_bytes = arguments.encode("utf-8")
-    if isinstance(arguments_meta, Mapping) and arguments_meta.get("truncated") is False:
-        expected = _fingerprint(b"svc-tool-arguments-v1\0", argument_bytes)
-        if record["arguments_fingerprint"] != expected:
-            _fail("Tool argument fingerprint does not match canonical arguments.")
-
-
-def _validate_context_fingerprint(record: Mapping[str, Any]) -> None:
-    payload = {
-        "context_kind": record["context_kind"],
-        "content": record["content"],
-        "content_meta": record["content_meta"],
-        "attributes": record["attributes"],
-        "attributes_meta": record["attributes_meta"],
-    }
-    expected = _fingerprint(b"svc-context-v1\0", canonical_json_bytes(payload))
-    if record["fingerprint"] != expected:
-        _fail("Context fingerprint does not match canonical context.")
-
-
-def validate_record(record: Mapping[str, Any], *, expected_index: int | None = None) -> Mapping[str, Any]:
-    """Validate one schema-v1 trajectory record and return it unchanged."""
-
-    if not isinstance(record, Mapping):
-        _fail("Trajectory records must be JSON objects.")
-    if not isinstance(record.get("type"), str) or record["type"] not in RECORD_TYPES:
-        _fail("Trajectory record type is invalid.")
-    record_type = record["type"]
-    required = {"type", "record_id", "record_index", "timestamp", "source_ref"}
-    optional = set(RELATIONSHIP_KEYS)
-    fields = {
-        "meta": {"trajectory_schema", "provider_id", "adapter_id", "source_format", "thread_ref", "workspace", "content_profile"},
-        "message": {"role", "content", "content_meta", "task_refs"},
-        "reasoning": {"reasoning_kind", "content", "content_meta"},
-        "tool_call": {"tool_call_id", "name", "name_meta", "name_fingerprint", "arguments_kind", "arguments", "arguments_meta", "arguments_fingerprint"},
-        "tool_result": {"tool_call_id", "content", "content_meta", "status", "link_status"},
-        "context": {"context_kind", "content", "content_meta", "attributes", "attributes_meta", "fingerprint"},
-        "event": {"event_kind", "outcome"},
-    }[record_type]
-    _exact_keys(record, required | fields, optional)
-    if record_type == "meta" and any(key in record for key in optional):
-        _fail("Meta records cannot carry relationship references.")
-    if not isinstance(record["record_id"], str) or not _RECORD_ID.fullmatch(record["record_id"]):
-        _fail("record_id has invalid form.")
-    if not _is_int(record["record_index"]) or record["record_index"] < 0:
-        _fail("record_index must be non-negative.")
-    if expected_index is not None and record["record_index"] != expected_index:
-        _fail("record_index is not contiguous.")
-    if record["record_id"] != f"r{record['record_index']:06d}":
-        _fail("record_id does not match record_index.")
-    _check_timestamp(record["timestamp"])
-    _check_source_ref(record["source_ref"], meta=record_type == "meta")
-    for key in optional:
-        if key in record:
-            prefix = {"turn_ref": "turn", "actor_ref": "actor", "parent_actor_ref": "actor", "lane_ref": "lane", "concurrency_group": "concurrency"}[key]
-            _check_ref(record[key], prefix=prefix)
-
-    if record_type == "meta":
-        if record["timestamp"] is not None or record["trajectory_schema"] != TRAJECTORY_SCHEMA or record["content_profile"] != CONTENT_PROFILE:
-            _fail("Meta record has invalid schema/profile/timestamp.")
-        for key in ("provider_id", "adapter_id", "source_format"):
-            if not isinstance(record[key], str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", record[key]):
-                _fail("Meta provider identity is invalid.")
-        _check_ref(record["thread_ref"], prefix="thread")
-        _check_workspace(record["workspace"])
-    elif record_type == "message":
-        if record["role"] not in {"user", "assistant"} or not isinstance(record["task_refs"], list):
-            _fail("Message role/task_refs are invalid.")
-        _check_bounded_text(record["content"], record["content_meta"], max_code_points=MAX_MESSAGE_CONTEXT_CODE_POINTS)
-        if len(record["task_refs"]) > MAX_TASK_REFERENCE_OCCURRENCES:
-            _fail("Task-reference occurrence bound exceeded.")
-        if len(set(record["task_refs"])) != len(record["task_refs"]):
-            _fail("Task references must be unique within one message.")
-        for ref in record["task_refs"]:
-            if not _valid_task_ref(ref):
-                _fail("Task reference is invalid.")
-    elif record_type == "reasoning":
-        if record["reasoning_kind"] not in {"full", "summary"}:
-            _fail("Reasoning kind is invalid.")
-        _check_bounded_text(record["content"], record["content_meta"], max_code_points=MAX_REASONING_CODE_POINTS)
-    elif record_type == "tool_call":
-        _check_ref(record["tool_call_id"], prefix="call")
-        _check_bounded_text(record["name"], record["name_meta"], max_code_points=MAX_TOOL_NAME_CODE_POINTS)
-        if not isinstance(record["name_fingerprint"], str) or not re.fullmatch(r"[0-9a-f]{64}", record["name_fingerprint"]):
-            _fail("Tool name fingerprint is invalid.")
-        if record["arguments_kind"] not in {"json", "text", "absent"}:
-            _fail("Tool arguments kind is invalid.")
-        _check_bounded_text(record["arguments"], record["arguments_meta"], max_code_points=MAX_TOOL_ARGUMENTS_CODE_POINTS, allow_null=True)
-        if record["arguments_kind"] == "absent" and (record["arguments"] is not None or record["arguments_fingerprint"] is not None):
-            _fail("Absent tool arguments must be null.")
-        if record["arguments_kind"] != "absent" and (record["arguments"] is None or not isinstance(record["arguments_fingerprint"], str) or not re.fullmatch(r"[0-9a-f]{64}", record["arguments_fingerprint"] or "")):
-            _fail("Tool arguments fingerprint/value is invalid.")
-        _validate_tool_fingerprints(record)
-    elif record_type == "tool_result":
-        _check_ref(record["tool_call_id"], prefix="call")
-        _check_bounded_text(record["content"], record["content_meta"], max_code_points=MAX_TOOL_RESULT_CODE_POINTS)
-        if record["status"] not in {"success", "error", "unknown"} or record["link_status"] not in {"linked", "unresolved"}:
-            _fail("Tool result status/link status is invalid.")
-    elif record_type == "context":
-        if record["context_kind"] not in {"system", "developer", "tool_config", "turn"}:
-            _fail("Context kind is invalid.")
-        if record["context_kind"] in {"tool_config", "turn"} and record["content"] is not None:
-            _fail("Tool-config/turn context content must be null.")
-        _check_bounded_text(record["content"], record["content_meta"], max_code_points=MAX_MESSAGE_CONTEXT_CODE_POINTS, allow_null=True)
-        _check_attributes(record["attributes"], record["attributes_meta"])
-        if not isinstance(record["fingerprint"], str) or not re.fullmatch(r"[0-9a-f]{64}", record["fingerprint"]):
-            _fail("Context fingerprint is invalid.")
-        _validate_context_fingerprint(record)
-    else:
-        kinds = {"turn_start", "turn_complete", "turn_abort", "agent_start", "agent_complete", "compaction", "approval", "error"}
-        if record["event_kind"] not in kinds:
-            _fail("Event kind is invalid.")
-        outcome = record["outcome"]
-        outcomes_by_kind: dict[str, set[Any]] = {
-            "approval": {"requested", "granted", "denied", "cancelled", "unknown"},
-            "turn_complete": {"completed", "error", "aborted", "unknown"},
-            "agent_complete": {"completed", "error", "aborted", "unknown"},
-            "turn_abort": {"aborted"},
-            "error": {"error"},
-            "turn_start": {None}, "agent_start": {None}, "compaction": {None},
-        }
-        event_outcomes = outcomes_by_kind[record["event_kind"]]
-        if outcome not in event_outcomes:
-            _fail("Event outcome is incompatible with event kind.")
-    return record
+TrajectoryRecord: TypeAlias = Annotated[
+    MetaRecord
+    | MessageRecord
+    | ReasoningRecord
+    | ToolCallRecord
+    | ToolResultRecord
+    | ContextRecord
+    | EventRecord,
+    Field(discriminator="type"),
+]
+_RECORD_ADAPTER: TypeAdapter[TrajectoryRecord] = TypeAdapter(TrajectoryRecord)
 
 
 def canonical_json_bytes(value: Any, *, newline: bool = False) -> bytes:
-    """Encode strict compact/sorted-key UTF-8 JSON."""
+    """Encode one JSON-ready value deterministically for durable writing."""
 
+    if isinstance(value, BaseModel):
+        value = value.model_dump(mode="json", exclude_unset=True)
     try:
-        text = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        encoded = text.encode("utf-8", errors="strict")
+        encoded = json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8", errors="strict")
     except (TypeError, ValueError, UnicodeEncodeError) as error:
-        raise TrajectoryError("invalid-json", "Value cannot be encoded as canonical JSON.") from error
+        raise TrajectoryError(
+            "invalid-json",
+            "Value cannot be encoded as deterministic JSON.",
+        ) from error
     return encoded + (b"\n" if newline else b"")
 
 
-def _strict_loads(data: bytes) -> Any:
+def _record_from_mapping(record: Mapping[str, Any]) -> TrajectoryRecord:
     try:
-        text = data.decode("utf-8", errors="strict")
-        def reject_duplicates(pairs: list[tuple[str, object]]) -> dict[str, Any]:
-            result: dict[str, Any] = {}
-            for key, value in pairs:
-                if key in result:
-                    _fail("Duplicate JSON object key.", code="invalid-json")
-                result[key] = value
-            return result
-        value = json.loads(text, object_pairs_hook=reject_duplicates, parse_constant=lambda _: _fail("Non-finite JSON number.", code="invalid-json"))
-    except TrajectoryError:
-        raise
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise TrajectoryError("invalid-json", "Trajectory line is not valid UTF-8 JSON.") from error
-    return value
+        return _RECORD_ADAPTER.validate_json(canonical_json_bytes(record))
+    except ValidationError as error:
+        raise TrajectoryError(
+            "invalid-trajectory",
+            "Trajectory record does not match its typed schema.",
+            {"errors": error.errors(include_url=False)},
+        ) from error
 
 
-def _json_depth(value: Any, depth: int = 1) -> int:
-    if isinstance(value, Mapping):
-        return max([depth, *(_json_depth(item, depth + 1) for item in value.values())])
-    if isinstance(value, list):
-        return max([depth, *(_json_depth(item, depth + 1) for item in value)])
-    return depth
+def _coerce_record(record: Mapping[str, Any] | TrajectoryRecord) -> TrajectoryRecord:
+    if isinstance(record, TrajectoryRecordBase):
+        return record
+    if not isinstance(record, Mapping):
+        raise TrajectoryError(
+            "invalid-trajectory",
+            "Trajectory records must be objects.",
+        )
+    return _record_from_mapping(record)
 
 
-@dataclass(frozen=True)
-class EncodedTrajectory:
-    trajectory_bytes: bytes | None
-    trajectory_sha256: str
-    trajectory_size: int
-    records: int
-    records_by_type: Mapping[str, int]
-    messages_by_role: Mapping[str, int]
-    tool_calls: int
-    tool_results: int
-    task_references: int
+def _check_position(record: TrajectoryRecord, expected_index: int) -> None:
+    if record.record_index != expected_index:
+        raise TrajectoryError(
+            "invalid-trajectory",
+            "Trajectory record indexes must be contiguous.",
+            {"expected_index": expected_index, "record_index": record.record_index},
+        )
+    if expected_index == 0 and not isinstance(record, MetaRecord):
+        raise TrajectoryError(
+            "invalid-trajectory",
+            "Trajectory must begin with a meta record.",
+        )
+    if expected_index > 0 and isinstance(record, MetaRecord):
+        raise TrajectoryError(
+            "invalid-trajectory",
+            "Trajectory may contain only one leading meta record.",
+        )
 
 
 class TrajectoryCollector:
-    """Incremental canonical trajectory writer with exact caps."""
+    """Write typed records incrementally with only sequence invariants."""
 
-    def __init__(self, output: BinaryIO | None = None, *, policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY) -> None:
+    def __init__(self, output: BinaryIO | None = None) -> None:
         self._owned = output is None
         self._output = output or io.BytesIO()
-        self._policy = policy
-        self._digest = hashlib.sha256()
-        self._size = 0
-        self._records = 0
-        self._records_by_type = {name: 0 for name in RECORD_TYPES}
-        self._messages_by_role = {"user": 0, "assistant": 0}
-        self._tool_calls = 0
-        self._tool_results = 0
-        self._task_references = 0
+        self._next_index = 0
         self._finished = False
-        self._limit_reason: str | None = None
-        self._limit_observed: int | None = None
-        self._limit_value: int | None = None
 
-    @property
-    def limit_reason(self) -> str | None:
-        return self._limit_reason
-
-    @property
-    def limit_observed(self) -> int | None:
-        return self._limit_observed
-
-    @property
-    def limit_value(self) -> int | None:
-        return self._limit_value
-
-    @property
-    def records(self) -> int:
-        return self._records
-
-    def emit(self, record: Mapping[str, Any]) -> bool:
+    def emit(self, record: Mapping[str, Any] | TrajectoryRecord) -> bool:
         if self._finished:
-            _fail("Trajectory collector is already finished.", code="collector-finished")
-        validate_record(record, expected_index=self._records)
-        if _json_depth(record) > self._policy.native_json_depth:
-            _fail("Trajectory JSON depth bound exceeded.", code="json-depth-exceeded")
-        if self._records == 0 and record["type"] != "meta":
-            _fail("Trajectory must begin with a meta record.")
-        if self._records > 0 and record["type"] == "meta":
-            _fail("Trajectory may contain only one leading meta record.")
-        if self._records >= self._policy.records:
-            self._limit_reason = "record_limit"
-            self._limit_observed = self._records + 1
-            self._limit_value = self._policy.records
-            return False
-        line = canonical_json_bytes(record, newline=True)
-        if self._size + len(line) > self._policy.trajectory_bytes:
-            self._limit_reason = "trajectory_limit"
-            self._limit_observed = self._size + len(line)
-            self._limit_value = self._policy.trajectory_bytes
-            return False
+            raise TrajectoryError(
+                "collector-finished",
+                "Trajectory collector is already finished.",
+            )
+        typed = _coerce_record(record)
+        _check_position(typed, self._next_index)
+        line = canonical_json_bytes(typed, newline=True)
         try:
             self._output.write(line)
-        except OSError as error:
-            raise TrajectoryError("trajectory-write-failed", "Trajectory sink could not be written.") from error
-        self._digest.update(line)
-        self._size += len(line)
-        self._records += 1
-        record_type = str(record["type"])
-        self._records_by_type[record_type] += 1
-        if record_type == "message":
-            self._messages_by_role[str(record["role"])] += 1
-            self._task_references += len(record["task_refs"])
-        elif record_type == "tool_call":
-            self._tool_calls += 1
-        elif record_type == "tool_result":
-            self._tool_results += 1
+        except (OSError, ValueError) as error:
+            raise TrajectoryError(
+                "trajectory-write-failed",
+                "Trajectory sink could not be written.",
+            ) from error
+        self._next_index += 1
         return True
 
-    def finish(self) -> EncodedTrajectory:
+    def finish(self) -> bytes | None:
         if self._finished:
-            _fail("Trajectory collector is already finished.", code="collector-finished")
+            raise TrajectoryError(
+                "collector-finished",
+                "Trajectory collector is already finished.",
+            )
         self._finished = True
-        if self._records == 0:
-            _fail("Trajectory must contain a meta record.")
-        if self._records_by_type["meta"] != 1:
-            _fail("Trajectory must contain exactly one leading meta record.")
-        data = self._output.getvalue() if self._owned and isinstance(self._output, io.BytesIO) else None
-        return EncodedTrajectory(
-            trajectory_bytes=data,
-            trajectory_sha256=self._digest.hexdigest(),
-            trajectory_size=self._size,
-            records=self._records,
-            records_by_type=MappingProxyType(dict(self._records_by_type)),
-            messages_by_role=MappingProxyType(dict(self._messages_by_role)),
-            tool_calls=self._tool_calls,
-            tool_results=self._tool_results,
-            task_references=self._task_references,
-        )
+        if self._next_index == 0:
+            raise TrajectoryError(
+                "invalid-trajectory",
+                "Trajectory must contain a leading meta record.",
+            )
+        if self._owned and isinstance(self._output, io.BytesIO):
+            return self._output.getvalue()
+        return None
 
 
-def encode_trajectory(records: Iterable[Mapping[str, Any]], *, policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY, output: BinaryIO | None = None) -> EncodedTrajectory:
-    collector = TrajectoryCollector(output, policy=policy)
-    for record in records:
-        if not collector.emit(record):
-            break
-    return collector.finish()
-
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ValidatedTrajectory:
-    records: tuple[Mapping[str, Any], ...]
+    records: tuple[TrajectoryRecord, ...]
     trajectory_bytes: bytes
-    trajectory_sha256: str
 
 
-def validate_trajectory_bytes(data: bytes, *, policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY) -> ValidatedTrajectory:
-    if not isinstance(data, bytes):
-        _fail("Trajectory input must be bytes.")
-    if len(data) > policy.trajectory_bytes:
-        _fail("Trajectory byte bound exceeded.", code="trajectory-limit-reached")
-    if not data or not data.endswith(b"\n"):
-        _fail("Trajectory must be LF terminated.")
-    records: list[Mapping[str, Any]] = []
-    offset = 0
-    for line in data.splitlines(keepends=True):
-        if not line.endswith(b"\n") or line == b"\n":
-            _fail("Trajectory contains an empty or unterminated line.")
-        if len(line) > policy.native_line_bytes:
-            _fail("Trajectory line bound exceeded.", code="record-oversize-dropped")
-        value = _strict_loads(line[:-1])
-        if _json_depth(value) > policy.native_json_depth:
-            _fail("Trajectory JSON depth bound exceeded.", code="json-depth-exceeded")
-        if not isinstance(value, Mapping):
-            _fail("Trajectory lines must contain objects.")
-        canonical = canonical_json_bytes(value, newline=True)
-        if canonical != line:
-            _fail("Trajectory line is not canonical JSONL.")
-        validate_record(value, expected_index=len(records))
-        records.append(value)
-        if len(records) > policy.records:
-            _fail("Trajectory record bound exceeded.", code="record-limit-reached")
-        offset += len(line)
-    if not records or records[0]["type"] != "meta" or sum(record["type"] == "meta" for record in records) != 1:
-        _fail("Trajectory must contain exactly one leading meta record.")
-    return ValidatedTrajectory(tuple(records), data, hashlib.sha256(data).hexdigest())
-
-
-# ---- schema-v2 bundle ---------------------------------------------------
-
-BUNDLE_FORMAT = "svc-agent-thread-bundle"
-BUNDLE_SCHEMA_VERSION = 2
-MAX_MANIFEST_BYTES = 1_048_576
-_MANIFEST_ROOT = {
-    "format", "schema_version", "trajectory", "bundle_id", "exporter", "generated_at",
-    "source", "policy", "result_status", "capabilities", "counts", "lossiness", "diagnostics",
-}
-_CAPABILITY_VALUES = {
-    "reasoning": {"full", "summary", "opaque", "absent"},
-    "tool_linkage": {"explicit", "mixed", "synthesized", "absent"},
-    "context": {"full", "partial", "absent"},
-    "task_references": {"available", "unavailable"},
-    "explicit_concurrency": {"available", "unavailable"},
-    "timestamps": {"full", "partial", "absent"},
-    "terminal_events": {"available", "unavailable"},
-}
-_LOSS_KEYS = {
-    "dropped": ("provider_envelope", "ui_event", "rate_limit_noise", "world_state", "duplicate_bookkeeping", "opaque_metadata", "unsupported_record", "invalid_json", "oversize_record", "excessive_json_depth", "duplicate_tool_result", "absolute_task_reference", "invalid_task_reference", "oversize_task_reference"),
-    "truncated": ("timestamp_precision", "workspace_label", "message", "context_content", "context_attribute", "reasoning", "tool_name", "tool_config_names", "tool_arguments", "tool_result", "task_references", "diagnostics"),
-    "unavailable": ("reasoning", "tool_linkage", "context", "task_references", "explicit_concurrency", "timestamps", "terminal_events"),
-    "synthesized": ("tool_call_id",),
-    "partial_reasons": ("source_grew", "source_changed", "source_read_interrupted", "input_limit", "record_limit", "trajectory_limit"),
-}
-_COUNT_KEYS = ("source_bytes_read", "source_events_seen", "records_emitted", "trajectory_bytes", "records_by_type", "messages_by_role", "tool_calls", "tool_results", "task_references", "diagnostics_emitted", "diagnostics_suppressed")
-_DIAGNOSTIC_DETAIL_KEYS = {"record_type", "content_kind", "observed_bytes", "limit_bytes", "observed_code_points", "retained_code_points", "observed_digits", "retained_digits", "observed_depth", "limit_depth", "observed_count", "limit_count", "occurrence", "capability", "arguments_kind", "source_status"}
-_DIAGNOSTIC_RECORD_TYPES = {"envelope", "ui", "rate_limit", "world_state", "duplicate", "opaque", "unknown"}
-_DIAGNOSTIC_CONTENT_KINDS = {"system", "developer", "model", "reasoning_effort", "approval_mode", "sandbox_mode", "collaboration_mode", "tool_call_name", "tool_config_name"}
-_DIAGNOSTIC_SPECS = {
-    "noise-record-dropped": ("drop", "info", {"record_type"}), "unsupported-record-dropped": ("drop", "warning", {"record_type"}),
-    "invalid-json-line": ("drop", "warning", set()), "record-oversize-dropped": ("drop", "warning", {"observed_bytes", "limit_bytes"}),
-    "json-depth-exceeded": ("drop", "warning", {"observed_depth", "limit_depth"}), "timestamp-invalid": ("unavailable", "warning", set()),
-    "timestamp-precision-truncated": ("truncate", "info", {"observed_digits", "retained_digits"}), "workspace-label-truncated": ("truncate", "info", {"observed_code_points", "retained_code_points"}),
-    "message-truncated": ("truncate", "info", {"observed_code_points", "retained_code_points"}), "context-content-truncated": ("truncate", "info", {"content_kind", "observed_code_points", "retained_code_points"}),
-    "context-attribute-truncated": ("truncate", "info", {"content_kind", "observed_code_points", "retained_code_points"}), "reasoning-truncated": ("truncate", "info", {"observed_code_points", "retained_code_points"}),
-    "reasoning-unavailable": ("unavailable", "info", {"capability"}), "tool-name-truncated": ("truncate", "info", {"content_kind", "observed_code_points", "retained_code_points"}),
-    "tool-config-name-limit-reached": ("truncate", "warning", {"observed_count", "limit_count"}), "tool-arguments-text": ("normalize", "info", {"arguments_kind"}),
-    "tool-arguments-truncated": ("truncate", "info", {"observed_code_points", "retained_code_points"}), "tool-result-truncated": ("truncate", "info", {"observed_code_points", "retained_code_points"}),
-    "tool-call-id-synthesized": ("synthesize", "warning", {"occurrence"}), "duplicate-tool-call-id": ("synthesize", "warning", {"occurrence"}),
-    "duplicate-tool-result": ("drop", "warning", {"occurrence"}), "orphan-tool-result": ("unavailable", "warning", set()),
-    "absolute-task-reference-dropped": ("drop", "info", set()), "invalid-task-reference-dropped": ("drop", "info", set()),
-    "task-reference-oversize-dropped": ("drop", "warning", {"observed_code_points", "retained_code_points"}), "source-grew-during-collection": ("partial", "warning", {"source_status"}),
-    "source-changed-during-collection": ("partial", "warning", {"source_status"}),
-    "source-read-interrupted": ("partial", "error", set()), "input-limit-reached": ("partial", "warning", {"observed_bytes", "limit_bytes"}),
-    "record-limit-reached": ("partial", "warning", {"observed_count", "limit_count"}), "trajectory-limit-reached": ("partial", "warning", {"observed_bytes", "limit_bytes"}),
-    "task-reference-limit-reached": ("truncate", "warning", {"observed_count", "limit_count"}), "diagnostic-limit-reached": ("truncate", "warning", {"observed_count", "limit_count"}),
-}
-
-
-def _plain(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_plain(item) for item in value]
-    return value
-
-
-def _read_trajectory_source(source: bytes | BinaryIO | EncodedTrajectory) -> bytes:
-    if isinstance(source, EncodedTrajectory):
-        data = source.trajectory_bytes
-        if data is None:
-            _fail("Encoded trajectory has no retained bytes; pass the rewindable source.")
-        return data
-    if isinstance(source, bytes):
-        return source
-    if not hasattr(source, "read") or not hasattr(source, "seek") or not hasattr(source, "tell"):
-        _fail("Trajectory source must be bytes or a rewindable binary stream.")
-    try:
-        position = source.tell()
-        source.seek(0)
-        data = source.read(MAX_TRAJECTORY_BYTES + 1)
-        source.seek(position)
-    except (OSError, ValueError) as error:
-        raise TrajectoryError("trajectory-read-failed", "Trajectory source could not be read.") from error
-    if not isinstance(data, bytes):
-        _fail("Trajectory source returned non-bytes.")
-    return data
-
-
-def _identity_metadata(manifest: Mapping[str, Any]) -> dict[str, Any]:
-    exporter = manifest["exporter"]
-    return {
-        "normalizer_name": exporter["normalizer_name"],
-        "normalizer_version": exporter["normalizer_version"],
-        "source": manifest["source"],
-        "policy": manifest["policy"],
-        "result_status": manifest["result_status"],
-        "capabilities": manifest["capabilities"],
-        "counts": manifest["counts"],
-        "lossiness": manifest["lossiness"],
-        "diagnostics": manifest["diagnostics"],
-    }
-
-
-def build_bundle_id(manifest: Mapping[str, Any], trajectory_bytes: bytes) -> str:
-    identity = canonical_json_bytes(_identity_metadata(manifest))
-    return hashlib.sha256(b"svc-agent-thread-bundle-v2\0" + trajectory_bytes + b"\0" + identity).hexdigest()
-
-
-def _validate_lossiness(lossiness: Any) -> dict[str, dict[str, int]]:
-    if not isinstance(lossiness, Mapping):
-        _fail("Manifest lossiness must be an object.")
-    result: dict[str, dict[str, int]] = {}
-    for group, keys in _LOSS_KEYS.items():
-        if not isinstance(lossiness.get(group), Mapping) or set(lossiness[group]) != set(keys):
-            _fail("Manifest lossiness map has an invalid shape.")
-        group_value: dict[str, int] = {}
-        for key in keys:
-            value = lossiness[group][key]
-            if not _is_int(value) or value < 0:
-                _fail("Manifest lossiness values must be non-negative integers.")
-            group_value[key] = value
-        result[group] = group_value
-    return result
-
-
-def zero_lossiness() -> dict[str, dict[str, int]]:
-    return {group: {key: 0 for key in keys} for group, keys in _LOSS_KEYS.items()}
-
-
-def _validate_counts(counts: Any, encoded: EncodedTrajectory | None = None) -> dict[str, Any]:
-    if not isinstance(counts, Mapping) or set(counts) != set(_COUNT_KEYS):
-        _fail("Manifest counts have an invalid shape.")
-    result: dict[str, Any] = {}
-    for key in ("source_bytes_read", "source_events_seen", "records_emitted", "trajectory_bytes", "tool_calls", "tool_results", "task_references", "diagnostics_emitted", "diagnostics_suppressed"):
-        value = counts[key]
-        if not _is_int(value) or value < 0:
-            _fail("Manifest count values must be non-negative integers.")
-        result[key] = value
-    records_by_type = counts["records_by_type"]
-    messages_by_role = counts["messages_by_role"]
-    if not isinstance(records_by_type, Mapping) or set(records_by_type) != set(RECORD_TYPES):
-        _fail("records_by_type has an invalid shape.")
-    if not isinstance(messages_by_role, Mapping) or set(messages_by_role) != {"user", "assistant"}:
-        _fail("messages_by_role has an invalid shape.")
-    for mapping in (records_by_type, messages_by_role):
-        for value in mapping.values():
-            if not _is_int(value) or value < 0:
-                _fail("Nested manifest counts must be non-negative integers.")
-    result["records_by_type"] = dict(records_by_type)
-    result["messages_by_role"] = dict(messages_by_role)
-    if sum(records_by_type.values()) != result["records_emitted"]:
-        _fail("Manifest records_by_type total disagrees with records_emitted.")
-    if sum(messages_by_role.values()) != records_by_type["message"]:
-        _fail("Manifest messages_by_role total disagrees with message count.")
-    if result["tool_calls"] != records_by_type["tool_call"] or result["tool_results"] != records_by_type["tool_result"]:
-        _fail("Manifest tool totals disagree with records_by_type.")
-    if encoded is not None:
-        expected = {
-            "records_emitted": encoded.records,
-            "trajectory_bytes": encoded.trajectory_size,
-            "records_by_type": dict(encoded.records_by_type),
-            "messages_by_role": dict(encoded.messages_by_role),
-            "tool_calls": encoded.tool_calls,
-            "tool_results": encoded.tool_results,
-            "task_references": encoded.task_references,
-        }
-        for key, value in expected.items():
-            if result[key] != value:
-                _fail("Manifest counts disagree with trajectory records.", count=key)
-    return result
-
-
-def _validate_diagnostics(
-    diagnostics: Any,
+def _parse_trajectory_bytes(
+    data: bytes,
     *,
-    diagnostic_limit: int,
-) -> list[dict[str, Any]]:
-    if not _is_int(diagnostic_limit) or diagnostic_limit <= 0:
-        _fail("Manifest diagnostics bound is invalid.")
-    if not isinstance(diagnostics, list) or len(diagnostics) > diagnostic_limit:
-        _fail("Manifest diagnostics exceed their bound.")
-    result: list[dict[str, Any]] = []
-    required_source_ref = {
-        "invalid-json-line",
-        "timestamp-invalid",
-        "absolute-task-reference-dropped",
-        "invalid-task-reference-dropped",
-    }
-    required_record_ref = {"orphan-tool-result"}
-    for item in diagnostics:
-        if not isinstance(item, Mapping):
-            _fail("Manifest diagnostic must be an object.")
-        _exact_keys(item, {"code", "severity", "action", "count", "record_ref", "source_ref", "details"})
-        if not isinstance(item["code"], str) or item["code"] not in _DIAGNOSTIC_SPECS or not _is_int(item["count"]) or item["count"] <= 0:
-            _fail("Manifest diagnostic scalar is invalid.")
-        expected_action, expected_severity, expected_details = _DIAGNOSTIC_SPECS[item["code"]]
-        if item["severity"] != expected_severity or item["action"] != expected_action:
-            _fail("Manifest diagnostic severity/action does not match its code.")
-        if item["record_ref"] is not None and (not isinstance(item["record_ref"], str) or not _RECORD_ID.fullmatch(item["record_ref"])):
-            _fail("Manifest diagnostic record_ref is invalid.")
-        if item["source_ref"] is not None:
-            _check_source_ref(item["source_ref"], meta=False)
-        if (
-            item["code"] in required_source_ref
-            and item["source_ref"] is None
-        ):
-            _fail(
-                "Manifest diagnostic requires a source_ref.",
-                diagnostic_code=item["code"],
-            )
-        if (
-            item["code"] in required_record_ref
-            and item["record_ref"] is None
-        ):
-            _fail(
-                "Manifest diagnostic requires a record_ref.",
-                diagnostic_code=item["code"],
-            )
-        if not isinstance(item["details"], Mapping) or set(item["details"]) != expected_details or not set(item["details"]) <= _DIAGNOSTIC_DETAIL_KEYS:
-            _fail("Manifest diagnostic details are invalid.")
-        if len(item["details"]) > 16:
-            _fail("Manifest diagnostic details exceed their bound.")
-        for key, value in item["details"].items():
-            if key in {"observed_bytes", "limit_bytes", "observed_code_points", "retained_code_points", "observed_digits", "retained_digits", "observed_depth", "limit_depth", "observed_count", "limit_count", "occurrence"} and (not _is_int(value) or value < 0):
-                _fail("Manifest diagnostic numeric detail is invalid.")
-            if key == "record_type" and value not in _DIAGNOSTIC_RECORD_TYPES:
-                _fail("Manifest diagnostic record_type is invalid.")
-            if key == "content_kind" and value not in _DIAGNOSTIC_CONTENT_KINDS:
-                _fail("Manifest diagnostic content_kind is invalid.")
-            if key in {"capability", "arguments_kind", "source_status"} and not isinstance(value, str):
-                _fail("Manifest diagnostic enum detail is invalid.")
-        result.append(dict(item))
-    has_limit = bool(
-        result
-        and result[-1]["code"] == "diagnostic-limit-reached"
-    )
-    regular = result[:-1] if has_limit else result
-    if any(
-        item["code"] == "diagnostic-limit-reached"
-        for item in regular
-    ):
-        _fail(
-            "Diagnostic limit marker must be the final diagnostic."
+    require_summary: bool,
+) -> ValidatedTrajectory:
+    if not isinstance(data, bytes):
+        raise TrajectoryError(
+            "invalid-trajectory",
+            "Trajectory input must be bytes.",
         )
-    if has_limit:
-        marker = result[-1]
-        details = marker["details"]
-        if (
-            marker["count"] != 1
-            or marker["record_ref"] is not None
-            or marker["source_ref"] is not None
-            or details["limit_count"] != diagnostic_limit
-            or details["observed_count"] <= diagnostic_limit
-            or len(result) != diagnostic_limit
-        ):
-            _fail("Diagnostic limit marker is inconsistent.")
-    identities: set[tuple[str, bytes]] = set()
-    missing_coordinate = 2**63 - 1
-
-    def order_key(
-        item: Mapping[str, Any],
-    ) -> tuple[tuple[int, int, int, int], bytes, bytes]:
-        source = item["source_ref"]
-        coordinates = tuple(
-            (
-                source.get(key, missing_coordinate)
-                if isinstance(source, Mapping)
-                else missing_coordinate
-            )
-            for key in (
-                "event_index",
-                "line",
-                "byte_offset",
-                "component_index",
-            )
-        )
-        return (
-            coordinates,  # type: ignore[return-value]
-            str(item["code"]).encode("ascii"),
-            canonical_json_bytes(item["details"]),
+    if not data.strip():
+        raise TrajectoryError(
+            "invalid-trajectory",
+            "Trajectory must contain a leading meta record.",
         )
 
-    for item in regular:
-        identity = (
-            str(item["code"]),
-            canonical_json_bytes(item["details"]),
+    records: list[TrajectoryRecord] = []
+    for raw_line in data.splitlines():
+        if not raw_line.strip():
+            raise TrajectoryError(
+                "invalid-trajectory",
+                "Trajectory contains an empty line.",
+            )
+        try:
+            record = _RECORD_ADAPTER.validate_json(raw_line)
+        except ValidationError as error:
+            raise TrajectoryError(
+                "invalid-trajectory",
+                "Trajectory record does not match its typed schema.",
+                {"errors": error.errors(include_url=False)},
+            ) from error
+        _check_position(record, len(records))
+        records.append(record)
+
+    meta = records[0]
+    assert isinstance(meta, MetaRecord)
+    if require_summary and (
+        meta.result_status is None
+        or meta.capabilities is None
+        or meta.lossiness is None
+    ):
+        raise TrajectoryError(
+            "invalid-trajectory",
+            "Final trajectory meta is missing its projection summary.",
         )
-        if identity in identities:
-            _fail(
-                "Repeated diagnostic groups must be coalesced."
-            )
-        identities.add(identity)
-    if regular != sorted(regular, key=order_key):
-        _fail("Manifest diagnostics are not in canonical order.")
-    return result
+    return ValidatedTrajectory(tuple(records), data)
 
 
-def _validate_capabilities(capabilities: Mapping[str, Any], trajectory: ValidatedTrajectory, lossiness: Mapping[str, Mapping[str, int]]) -> None:
-    records = trajectory.records
-    reasoning = [record for record in records if record["type"] == "reasoning"]
-    if capabilities["reasoning"] in {"opaque", "absent"} and reasoning:
-        _fail("Reasoning capability forbids emitted reasoning records.")
-    if capabilities["reasoning"] == "summary" and any(record["reasoning_kind"] == "full" for record in reasoning):
-        _fail("Summary reasoning capability forbids full reasoning records.")
-    tools = [record for record in records if record["type"] in {"tool_call", "tool_result"}]
-    if capabilities["tool_linkage"] == "absent" and tools:
-        _fail("Absent tool linkage capability forbids tool records.")
-    if capabilities["tool_linkage"] == "explicit" and lossiness["synthesized"]["tool_call_id"]:
-        _fail("Explicit tool linkage cannot declare synthesized IDs.")
-    if capabilities["context"] == "absent" and any(record["type"] == "context" for record in records):
-        _fail("Absent context capability forbids context records.")
-    messages = [record for record in records if record["type"] == "message"]
-    if capabilities["task_references"] == "unavailable" and any(record["task_refs"] for record in messages):
-        _fail("Unavailable task-reference capability forbids retained task refs.")
-    if capabilities["explicit_concurrency"] == "unavailable" and any(
-        key in record for record in records for key in ("lane_ref", "parent_actor_ref", "concurrency_group")
-    ):
-        _fail("Unavailable concurrency capability forbids lane/parent/concurrency refs.")
-    timed = [record for record in records if record["type"] != "meta"]
-    timed_count = sum(record["timestamp"] is not None for record in timed)
-    expected_timestamps = "full" if timed and timed_count == len(timed) else "partial" if timed_count else "absent"
-    if timed:
-        valid_timestamp_caps = {expected_timestamps}
-    else:
-        valid_timestamp_caps = {"full", "absent"}
-    if capabilities["timestamps"] not in valid_timestamp_caps:
-        _fail("Timestamp capability disagrees with record timestamps.")
-    terminal_kinds = {"turn_start", "turn_complete", "turn_abort", "agent_start", "agent_complete", "error"}
-    if capabilities["terminal_events"] == "unavailable" and any(record["type"] == "event" and record["event_kind"] in terminal_kinds for record in records):
-        _fail("Unavailable terminal capability forbids terminal events.")
+def validate_trajectory_bytes(data: bytes) -> ValidatedTrajectory:
+    """Validate equivalent JSONL through the typed record boundary.
+
+    Input key order and insignificant JSON whitespace are deliberately not an
+    authority.  Deterministic bytes are produced only by the writer.
+    """
+
+    return _parse_trajectory_bytes(data, require_summary=True)
 
 
-def validate_manifest(manifest: Mapping[str, Any], *, trajectory: ValidatedTrajectory | None = None) -> Mapping[str, Any]:
-    if not isinstance(manifest, Mapping):
-        _fail("Manifest must be an object.")
-    _exact_keys(manifest, _MANIFEST_ROOT)
-    if manifest["format"] != BUNDLE_FORMAT or manifest["schema_version"] != BUNDLE_SCHEMA_VERSION or manifest["result_status"] not in {"ready", "partial"}:
-        _fail("Manifest format or schema version is invalid.")
-    if not isinstance(manifest["bundle_id"], str) or not re.fullmatch(r"[0-9a-f]{64}", manifest["bundle_id"]):
-        _fail("Manifest bundle_id is invalid.")
-    if not isinstance(manifest["generated_at"], str):
-        _fail("Manifest generated_at must be a UTC timestamp.")
-    _check_timestamp(manifest["generated_at"])
-    trajectory_shape = manifest["trajectory"]
-    if not isinstance(trajectory_shape, Mapping):
-        _fail("Manifest trajectory is invalid.")
-    _exact_keys(trajectory_shape, {"schema", "member", "sha256", "bytes", "records"})
-    if trajectory_shape["schema"] != TRAJECTORY_SCHEMA or trajectory_shape["member"] != "trajectory.jsonl" or not re.fullmatch(r"[0-9a-f]{64}", trajectory_shape["sha256"] or "") or not _is_int(trajectory_shape["bytes"]) or trajectory_shape["bytes"] < 0 or trajectory_shape["bytes"] > MAX_TRAJECTORY_BYTES or not _is_int(trajectory_shape["records"]) or not 1 <= trajectory_shape["records"] <= MAX_RECORDS:
-        _fail("Manifest trajectory shape is invalid.")
-    exporter = manifest["exporter"]
-    if not isinstance(exporter, Mapping):
-        _fail("Manifest exporter is invalid.")
-    _exact_keys(exporter, {"name", "version", "normalizer_name", "normalizer_version"})
-    if exporter["name"] != "svc" or not isinstance(exporter["version"], str) or exporter["normalizer_name"] != "svc-agent-thread-normalizer" or exporter["normalizer_version"] != 1:
-        _fail("Manifest exporter identity is invalid.")
-    source = manifest["source"]
-    if not isinstance(source, Mapping):
-        _fail("Manifest source is invalid.")
-    _exact_keys(source, {"provider_id", "adapter_id", "source_format", "thread_ref", "source_status"})
-    for key in ("provider_id", "adapter_id", "source_format"):
-        if not isinstance(source[key], str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", source[key]):
-            _fail("Manifest source identity is invalid.")
-    _check_ref(source["thread_ref"], prefix="thread")
-    if source["source_status"] not in {"stable", "grew", "changed"}:
-        _fail("Manifest source_status is invalid.")
-    if manifest["policy"] != policy_dict():
-        _fail("Manifest policy is not the exact bounded-normalized-v1 policy.")
-    # The exact-policy check freezes schema v1; use its declared bound as the
-    # marker contract so validation does not duplicate a numeric constant.
-    manifest_policy = manifest["policy"]
-    if (
-        not isinstance(manifest_policy, Mapping)
-        or not isinstance(manifest_policy.get("bounds"), Mapping)
-        or not _is_int(manifest_policy["bounds"].get("diagnostics"))
-    ):
-        _fail("Manifest policy diagnostics bound is invalid.")
-    diagnostic_limit = manifest_policy["bounds"]["diagnostics"]
-    capabilities = manifest["capabilities"]
-    if not isinstance(capabilities, Mapping) or set(capabilities) != set(_CAPABILITY_VALUES):
-        _fail("Manifest capabilities have an invalid shape.")
-    for key, values in _CAPABILITY_VALUES.items():
-        if capabilities[key] not in values:
-            _fail("Manifest capability value is invalid.", capability=key)
-    counts = _validate_counts(manifest["counts"], None)
-    lossiness = _validate_lossiness(manifest["lossiness"])
-    diagnostics = _validate_diagnostics(
-        manifest["diagnostics"],
-        diagnostic_limit=diagnostic_limit,
-    )
-    partial_drops = (
-        "unsupported_record",
-        "invalid_json",
-        "oversize_record",
-        "excessive_json_depth",
-        "duplicate_tool_result",
-    )
-    semantic_partial = any(lossiness["partial_reasons"].values()) or any(
-        lossiness["dropped"][key] for key in partial_drops
-    )
-    if semantic_partial and manifest["result_status"] != "partial":
-        _fail("Semantic evidence loss requires result_status=partial.")
-    expected_source_reason = {
-        "stable": None,
-        "grew": "source_grew",
-        "changed": "source_changed",
-    }[source["source_status"]]
-    for reason in ("source_grew", "source_changed"):
-        if bool(lossiness["partial_reasons"][reason]) != (reason == expected_source_reason):
-            _fail(
-                "Manifest source status and partial reason disagree.",
-                source_status=source["source_status"],
-            )
-    if (
-        counts["diagnostics_emitted"]
-        != sum(int(item["count"]) for item in diagnostics)
-        or counts["diagnostics_suppressed"]
-        != lossiness["truncated"]["diagnostics"]
-    ):
-        _fail("Manifest diagnostic counts disagree with diagnostics/lossiness.")
-    if trajectory is not None:
-        if trajectory.trajectory_sha256 != trajectory_shape["sha256"] or len(trajectory.trajectory_bytes) != trajectory_shape["bytes"] or len(trajectory.records) != trajectory_shape["records"]:
-            _fail("Manifest trajectory metadata disagrees with trajectory bytes.")
-        _validate_counts(counts, EncodedTrajectory(trajectory.trajectory_bytes, trajectory.trajectory_sha256, len(trajectory.trajectory_bytes), len(trajectory.records), MappingProxyType({key: sum(record["type"] == key for record in trajectory.records) for key in RECORD_TYPES}), MappingProxyType({"user": sum(record.get("role") == "user" for record in trajectory.records if record["type"] == "message"), "assistant": sum(record.get("role") == "assistant" for record in trajectory.records if record["type"] == "message")}), sum(record["type"] == "tool_call" for record in trajectory.records), sum(record["type"] == "tool_result" for record in trajectory.records), sum(len(record["task_refs"]) for record in trajectory.records if record["type"] == "message")))
-        _validate_capabilities(capabilities, trajectory, lossiness)
-        record_ids = {
-            str(record["record_id"])
-            for record in trajectory.records
+def attach_projection_summary(
+    trajectory_bytes: bytes,
+    *,
+    result_status: Literal["ready", "partial"],
+    capabilities: Mapping[str, Any] | ProjectionCapabilities,
+    lossiness: Mapping[str, Any] | ProjectionLossiness,
+) -> bytes:
+    """Attach the derived summary to the leading meta and rewrite JSONL."""
+
+    parsed = _parse_trajectory_bytes(trajectory_bytes, require_summary=False)
+    meta = parsed.records[0]
+    assert isinstance(meta, MetaRecord)
+    meta_value = meta.model_dump(mode="json", exclude_unset=True)
+    meta_value.update(
+        {
+            "result_status": result_status,
+            "capabilities": (
+                capabilities.model_dump(mode="json")
+                if isinstance(capabilities, ProjectionCapabilities)
+                else dict(capabilities)
+            ),
+            "lossiness": (
+                lossiness.model_dump(mode="json")
+                if isinstance(lossiness, ProjectionLossiness)
+                else dict(lossiness)
+            ),
         }
-        if any(
-            item["record_ref"] is not None
-            and item["record_ref"] not in record_ids
-            for item in diagnostics
-        ):
-            _fail(
-                "Manifest diagnostic record_ref does not resolve."
-            )
-        if build_bundle_id(manifest, trajectory.trajectory_bytes) != manifest["bundle_id"]:
-            _fail("Manifest bundle_id does not match trajectory and identity metadata.")
-    return manifest
+    )
+    final_meta = _record_from_mapping(meta_value)
+    records = (final_meta, *parsed.records[1:])
+    encoded = b"".join(canonical_json_bytes(record, newline=True) for record in records)
+    validate_trajectory_bytes(encoded)
+    return encoded
 
 
-def build_manifest(*, trajectory_source: bytes | BinaryIO | EncodedTrajectory, source: Mapping[str, Any], result_status: str, capabilities: Mapping[str, Any], lossiness: Mapping[str, Any], diagnostics: Iterable[Mapping[str, Any]], counts: Mapping[str, Any], exporter_version: str | None = None, generated_at: str | None = None, policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY) -> Mapping[str, Any]:
-    if exporter_version is None:
-        from ..release import runtime_version
+def projection_summary(
+    trajectory: ValidatedTrajectory | Iterable[TrajectoryRecord],
+) -> dict[str, Any]:
+    """Return the JSON-ready summary carried by the leading meta record."""
 
-        exporter_version = runtime_version()
-    trajectory_bytes = _read_trajectory_source(trajectory_source)
-    validated = validate_trajectory_bytes(trajectory_bytes, policy=policy)
-    encoded = EncodedTrajectory(trajectory_bytes, validated.trajectory_sha256, len(trajectory_bytes), len(validated.records), MappingProxyType({key: sum(record["type"] == key for record in validated.records) for key in RECORD_TYPES}), MappingProxyType({"user": sum(record.get("role") == "user" for record in validated.records if record["type"] == "message"), "assistant": sum(record.get("role") == "assistant" for record in validated.records if record["type"] == "message")}), sum(record["type"] == "tool_call" for record in validated.records), sum(record["type"] == "tool_result" for record in validated.records), sum(len(record["task_refs"]) for record in validated.records if record["type"] == "message"))
-    normalized_counts = _validate_counts(counts, encoded)
-    manifest: dict[str, Any] = {
-        "format": BUNDLE_FORMAT,
-        "schema_version": BUNDLE_SCHEMA_VERSION,
-        "trajectory": {"schema": TRAJECTORY_SCHEMA, "member": "trajectory.jsonl", "sha256": encoded.trajectory_sha256, "bytes": encoded.trajectory_size, "records": encoded.records},
-        "bundle_id": "0" * 64,
-        "exporter": {"name": "svc", "version": exporter_version, "normalizer_name": "svc-agent-thread-normalizer", "normalizer_version": 1},
-        "generated_at": generated_at or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
-        "source": _plain(source),
-        "policy": dict(policy_dict(policy)),
-        "result_status": result_status,
-        "capabilities": _plain(capabilities),
-        "counts": normalized_counts,
-        "lossiness": _plain(lossiness),
-        "diagnostics": [_plain(item) for item in diagnostics],
+    records = (
+        trajectory.records
+        if isinstance(trajectory, ValidatedTrajectory)
+        else tuple(trajectory)
+    )
+    if not records or not isinstance(records[0], MetaRecord):
+        raise TrajectoryError(
+            "invalid-trajectory",
+            "Trajectory must contain a leading meta record.",
+        )
+    meta = records[0]
+    if (
+        meta.result_status is None
+        or meta.capabilities is None
+        or meta.lossiness is None
+    ):
+        raise TrajectoryError(
+            "invalid-trajectory",
+            "Final trajectory meta is missing its projection summary.",
+        )
+    return {
+        "source": {
+            "provider_id": meta.provider_id,
+            "adapter_id": meta.adapter_id,
+            "source_format": meta.source_format,
+            "thread_ref": meta.thread_ref,
+            "workspace": meta.workspace.model_dump(mode="json"),
+        },
+        "result_status": meta.result_status,
+        "capabilities": meta.capabilities.model_dump(mode="json"),
+        "lossiness": meta.lossiness.model_dump(mode="json"),
     }
-    manifest["bundle_id"] = build_bundle_id(manifest, trajectory_bytes)
-    validate_manifest(manifest, trajectory=validated)
-    return manifest
 
 
 __all__ = [
-    "BUNDLE_FORMAT", "BUNDLE_SCHEMA_VERSION", "CONTENT_PROFILE", "DEFAULT_NORMALIZATION_POLICY", "EncodedTrajectory", "MAX_NATIVE_JSON_DEPTH",
-    "MAX_NATIVE_LINE_BYTES", "MAX_RECORDS", "MAX_TRAJECTORY_BYTES", "NormalizationPolicy",
-    "TRAJECTORY_SCHEMA", "TrajectoryCollector", "TrajectoryError", "ValidatedTrajectory",
-    "build_bundle_id", "build_manifest", "canonical_json_bytes", "encode_trajectory", "policy_dict", "validate_manifest", "validate_record", "validate_trajectory_bytes", "zero_lossiness",
+    "ContextAttributes",
+    "ContextRecord",
+    "EventRecord",
+    "MessageRecord",
+    "MetaRecord",
+    "ProjectionCapabilities",
+    "ProjectionLossiness",
+    "RECORD_TYPES",
+    "ReasoningRecord",
+    "Relationships",
+    "SourceRef",
+    "TRAJECTORY_SCHEMA",
+    "ToolCallRecord",
+    "ToolResultRecord",
+    "TrajectoryCollector",
+    "TrajectoryError",
+    "TrajectoryRecord",
+    "TrajectoryRecordBase",
+    "ValidatedTrajectory",
+    "Workspace",
+    "attach_projection_summary",
+    "canonical_json_bytes",
+    "projection_summary",
+    "validate_trajectory_bytes",
 ]

@@ -7,14 +7,12 @@ payloads beyond the small amount of metadata needed for indexing.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sqlite3
 import stat
 import tempfile
 from pathlib import Path
-from dataclasses import replace
 from typing import Any, BinaryIO, Iterable, Mapping, cast
 from ...errors import SvcError
 from ..agent_threads import (
@@ -104,7 +102,9 @@ def _readline(stream: BinaryIO, limit: int, path: Path) -> bytes:
 
 def _resolve_path(home: Path, value: Any) -> Path:
     if not isinstance(value, str) or not value.strip():
-        raise _error("thread-source-incompatible", "State database has no usable rollout path.")
+        raise _error(
+            "thread-source-incompatible", "State database has no usable rollout path."
+        )
     try:
         candidate = Path(value).expanduser()
         if not candidate.is_absolute():
@@ -199,7 +199,9 @@ def _bounded_sqlite_text(value: Any, *, sqlite_type: Any, max_chars: int) -> str
 
 
 def _thread_id(sqlite_type: Any, prefix: Any) -> str | None:
-    thread_id = _bounded_sqlite_text(prefix, sqlite_type=sqlite_type, max_chars=MAX_THREAD_ID_CHARS)
+    thread_id = _bounded_sqlite_text(
+        prefix, sqlite_type=sqlite_type, max_chars=MAX_THREAD_ID_CHARS
+    )
     return thread_id or None
 
 
@@ -318,7 +320,11 @@ def _inventory_rows(
                         AND {_MAX_RECENCY_SECONDS}
                     THEN "updated_at" * 1000 """
             )
-        recency = "CASE " + " ".join(recency_candidates) + " ELSE NULL END" if recency_candidates else "NULL"
+        recency = (
+            "CASE " + " ".join(recency_candidates) + " ELSE NULL END"
+            if recency_candidates
+            else "NULL"
+        )
 
         cwd_type, cwd_prefix, cwd_overflow = _inventory_text_projection(
             columns,
@@ -486,7 +492,10 @@ def _extract_thread_id(payload: Any) -> str | None:
 
 def _is_envelope(value: Any) -> bool:
     return (
-        isinstance(value, dict) and isinstance(value.get("type"), str) and "payload" in value and "timestamp" in value
+        isinstance(value, dict)
+        and isinstance(value.get("type"), str)
+        and "payload" in value
+        and "timestamp" in value
     )
 
 
@@ -533,11 +542,15 @@ class CodexRolloutProvider:
         query: ThreadInventoryQuery,
     ) -> ThreadInventoryListing:
         if not isinstance(query, ThreadInventoryQuery):
-            raise _error("invalid-inventory-query", "Thread inventory query is invalid.")
+            raise _error(
+                "invalid-inventory-query", "Thread inventory query is invalid."
+            )
         home = _home(context)
         return _inventory_rows(home, query)
 
-    def resolve(self, context: ProviderContext, selection: ThreadSelection) -> ResolvedThread:
+    def resolve(
+        self, context: ProviderContext, selection: ThreadSelection
+    ) -> ResolvedThread:
         home = _home(context)
         if selection.source is not None:
             source = Path(selection.source).expanduser()
@@ -609,7 +622,11 @@ class CodexRolloutProvider:
     ) -> NativeCaptureResult:
         """Copy and frame the descriptor-bound initial rollout extent once."""
 
-        if resolved.provider_id != self.provider_id or resolved.source_format != _SOURCE_FORMAT:
+        if (
+            resolved.provider_id != self.provider_id
+            or resolved.adapter_id != _ADAPTER_ID
+            or resolved.source_format != _SOURCE_FORMAT
+        ):
             raise _error(
                 "thread-source-incompatible",
                 "Resolved source does not belong to codex-rollout-v1.",
@@ -623,7 +640,6 @@ class CodexRolloutProvider:
         remaining = extent
         captured = 0
         frame_start = 0
-        frame_digest = hashlib.sha256()
         frames: list[dict[str, Any]] = []
         read_interrupted = False
         final_info: os.stat_result | None = None
@@ -633,11 +649,8 @@ class CodexRolloutProvider:
             frames.append(
                 {
                     "native_record_id": f"n{ordinal:06d}",
-                    "native_index": ordinal,
                     "byte_start": frame_start,
                     "byte_end": end,
-                    "sha256": frame_digest.hexdigest(),
-                    "representation": "provider-bytes",
                     "frame_status": status,
                     "source_coordinate": {
                         "event_index": ordinal,
@@ -662,13 +675,10 @@ class CodexRolloutProvider:
                 while True:
                     newline = chunk.find(b"\n", cursor)
                     if newline < 0:
-                        frame_digest.update(chunk[cursor:])
                         break
-                    frame_digest.update(chunk[cursor : newline + 1])
                     captured += newline + 1 - cursor
                     finish_frame(captured, "complete")
                     frame_start = captured
-                    frame_digest = hashlib.sha256()
                     cursor = newline + 1
                 captured += len(chunk) - cursor
                 remaining -= len(chunk)
@@ -692,7 +702,8 @@ class CodexRolloutProvider:
         status = SourceStatus.STABLE
         assert final_info is not None
         if final_info.st_size < initial_info.st_size or (
-            final_info.st_size == initial_info.st_size and final_info.st_mtime_ns != initial_info.st_mtime_ns
+            final_info.st_size == initial_info.st_size
+            and final_info.st_mtime_ns != initial_info.st_mtime_ns
         ):
             status = SourceStatus.CHANGED
         elif final_info.st_size > initial_info.st_size:
@@ -720,7 +731,14 @@ class CodexRolloutProvider:
     ) -> NormalizationResult:
         """Derive the trajectory only from the immutable captured bytes."""
 
-        if capture.provider_id != self.provider_id:
+        if (
+            resolved.provider_id != self.provider_id
+            or resolved.adapter_id != _ADAPTER_ID
+            or resolved.source_format != _SOURCE_FORMAT
+            or capture.provider_id != self.provider_id
+            or capture.adapter_id != _ADAPTER_ID
+            or capture.source_format != _SOURCE_FORMAT
+        ):
             raise _error(
                 "thread-source-incompatible",
                 "Captured source does not belong to codex-rollout-v1.",
@@ -743,7 +761,10 @@ class CodexRolloutProvider:
                 start = int(frame["byte_start"])
                 end = int(frame["byte_end"])
                 size = end - start
-                if frame["frame_status"] != "complete" or size > effective["native_line_bytes"]:
+                if (
+                    frame["frame_status"] != "complete"
+                    or size > effective["native_line_bytes"]
+                ):
                     omitted_frames.append(frame)
                     projection.write(
                         json.dumps(
@@ -776,14 +797,20 @@ class CodexRolloutProvider:
                         "Normalized record omitted its source coordinate.",
                     )
                 ordinal = source_ref.get("event_index")
-                if not isinstance(ordinal, int) or isinstance(ordinal, bool) or not 0 <= ordinal < len(capture.frames):
+                if (
+                    not isinstance(ordinal, int)
+                    or isinstance(ordinal, bool)
+                    or not 0 <= ordinal < len(capture.frames)
+                ):
                     raise _error(
                         "thread-source-incompatible",
                         "Normalized record source coordinate is outside the capture.",
                     )
                 mapped = dict(record)
                 mapped_source = dict(source_ref)
-                mapped_source["native_record_id"] = capture.frames[ordinal]["native_record_id"]
+                mapped_source["native_record_id"] = capture.frames[ordinal][
+                    "native_record_id"
+                ]
                 mapped["source_ref"] = mapped_source
                 return sink(mapped)
 
@@ -791,101 +818,32 @@ class CodexRolloutProvider:
                 cast(BinaryIO, projection),
                 resolved,
                 mapped_sink,
-                effective,
+                DEFAULT_BOUNDS,
             )
         finally:
             projection.close()
 
-        lossiness = {name: dict(values) for name, values in result.lossiness.items()}
-        diagnostics = list(result.diagnostics)
+        lossiness = dict(result.lossiness)
         result_status = result.result_status
         oversized = [
             frame
             for frame in omitted_frames
-            if int(frame["byte_end"]) - int(frame["byte_start"]) > effective["native_line_bytes"]
+            if frame["frame_status"] == "complete"
+            and int(frame["byte_end"]) - int(frame["byte_start"])
+            > effective["native_line_bytes"]
         ]
-        if oversized:
-            lossiness["dropped"]["oversize_record"] += len(oversized)
-            for frame in oversized:
-                diagnostics.append(
-                    {
-                        "code": "record-oversize-dropped",
-                        "severity": "warning",
-                        "action": "drop",
-                        "count": 1,
-                        "record_ref": None,
-                        "source_ref": {
-                            **dict(frame["source_coordinate"]),
-                            "component": "envelope",
-                            "native_record_id": frame["native_record_id"],
-                        },
-                        "details": {
-                            "observed_bytes": int(frame["byte_end"]) - int(frame["byte_start"]),
-                            "limit_bytes": effective["native_line_bytes"],
-                        },
-                    }
-                )
+        incomplete = [
+            frame for frame in omitted_frames if frame["frame_status"] != "complete"
+        ]
+        lossiness["dropped_records"] += len(oversized)
+        lossiness["unavailable_records"] += len(incomplete)
+        lossiness["partial_frames"] += len(incomplete)
+        if oversized or capture.is_partial:
             result_status = NormalizationStatus.PARTIAL
-        if capture.unknown_remainder and not capture.read_interrupted:
-            lossiness["partial_reasons"]["input_limit"] += 1
-            diagnostics.append(
-                {
-                    "code": "input-limit-reached",
-                    "severity": "warning",
-                    "action": "partial",
-                    "count": 1,
-                    "record_ref": None,
-                    "source_ref": None,
-                    "details": {
-                        "observed_bytes": capture.native_bytes,
-                        "limit_bytes": effective["source_bytes"],
-                    },
-                }
-            )
-            result_status = NormalizationStatus.PARTIAL
-        if capture.read_interrupted:
-            lossiness["partial_reasons"]["source_read_interrupted"] += 1
-            diagnostics.append(
-                {
-                    "code": "source-read-interrupted",
-                    "severity": "error",
-                    "action": "partial",
-                    "count": 1,
-                    "record_ref": None,
-                    "source_ref": None,
-                    "details": {},
-                }
-            )
-            result_status = NormalizationStatus.PARTIAL
-        source_status = SourceStatus(capture.source_status)
-        source_reason = {
-            SourceStatus.GREW: "source_grew",
-            SourceStatus.CHANGED: "source_changed",
-        }.get(source_status)
-        if source_reason is not None:
-            lossiness["partial_reasons"][source_reason] += 1
-            diagnostics.append(
-                {
-                    "code": f"source-{source_status.value}-during-collection",
-                    "severity": "warning",
-                    "action": "partial",
-                    "count": 1,
-                    "record_ref": None,
-                    "source_ref": None,
-                    "details": {"source_status": source_status.value},
-                }
-            )
-            result_status = NormalizationStatus.PARTIAL
-        counts = dict(result.counts)
-        counts["source_bytes_read"] = capture.native_bytes
-        counts["source_events_seen"] = len(capture.frames)
-        return replace(
-            result,
-            source_status=capture.source_status,
+        return NormalizationResult(
             result_status=result_status,
-            counts=counts,
+            capabilities=result.capabilities,
             lossiness=lossiness,
-            diagnostics=tuple(diagnostics),
         )
 
 

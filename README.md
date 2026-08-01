@@ -88,7 +88,7 @@ Telemetry acquires one explicitly selected local provider source; analysis reads
 one immutable evidence bundle. Neither surface uploads data, contacts a network
 service, invokes a model, or claims an audit-completeness verdict. The calling
 Agent owns semantic interpretation and conclusions; SVC owns bounded capture,
-integrity, provenance, and deterministic structural navigation.
+native fidelity, snapshot identity, and deterministic structural navigation.
 
 ```bash
 svc telemetry agent-thread list [selection options] [--json]
@@ -110,17 +110,15 @@ that must be removed before retry. The caller owns where exported evidence is
 stored and who may see it; there is no `--include-sensitive`
 acknowledgement, `--repo` boundary, TTY gate, or private member-mode promise.
 
-The export is a schema-v3 ZIP with exactly `manifest.json`, `native.bin`,
-`native-index.jsonl`, and `trajectory.jsonl`. `native.bin` is the captured
-provider-byte authority in source order. `native-index.jsonl` is the validated
-framing authority: contiguous native ordinals, byte ranges, digests, source
-coordinates, and `complete|incomplete` status cover every retained byte,
-including malformed or projection-unsupported frames. `trajectory.jsonl` is a
-manifest-bound derived structural index; it never substitutes for native
-content. The manifest binds evidence identity, source/capture status,
-capabilities, digests, and declared loss. A schema-v1 or schema-v2 bundle is a
-historical cutoff: query/read reject it after bounded manifest identification,
-without conversion or fallback; recollect from the provider-local source.
+The schema-v3 ZIP authority is `manifest.json`, `native.bin`, and
+`native-index.jsonl`. Native provider bytes remain in source order; framing
+records only stable IDs, contiguous byte ranges, source coordinates, and
+`complete|incomplete` state. One `evidence_id` binds native and framing bytes.
+`trajectory.jsonl` may be included as a derived structural cache, but it is not
+evidence authority and can be discarded and rebuilt. Its counts, capabilities,
+and loss summary likewise remain derived. A schema-v1 or schema-v2 bundle is a
+historical cutoff: query/read reject it after bounded identification; recollect
+from the provider-local source.
 
 This is a same-user local workflow, not a security sandbox. SVC does not
 protect against root, a hostile process under the same account, or adversarial
@@ -129,8 +127,9 @@ structural projection and omission are not confidentiality or redaction. The
 caller owns storage, access, retention, and disclosure.
 
 `query` is a closed machine-first protocol with `overview` and deterministic
-`match` intents. It returns evidence identity, capture/capability/loss status,
-stable native and trajectory references, structural ranges, and bounded
+`match` intents. It uses or rebuilds the structural cache and returns evidence
+identity, source/capture facts, derived capability/loss status, stable native
+and trajectory references, structural ranges, and bounded
 predicate matches over record type, role, tool, relationship, native range, or
 literal text. It does not accept arbitrary field selection, SQL/JSONPath,
 regular-expression programs, joins, grouping, scoring, or natural-language
@@ -138,17 +137,19 @@ prompts. `read` is forward-only native reading: start at the beginning or an
 exact native reference, optionally include bounded preceding records, and use a
 scope-bound cursor to continue. It returns captured native bytes/values with
 exact frame and fragment offsets, digests, provenance, and continuation.
-Cursors are unsigned local state, not authenticated capabilities.
+Cursors carry typed request scope and are unsigned local state, not
+authenticated capabilities. Frame and fragment digests are computed from the
+native bytes when read rather than stored as framing authority.
 Exact UTF-8 fragments are directly readable as text; arbitrary bytes use a
 lossless base64 fallback. Read never filters, reorders, summarizes, or silently
 returns normalized text.
 
 Responses distinguish `complete`, `partial`, and `unavailable`; pagination is
 not evidence loss. An incomplete acquisition frame remains readable but cannot
-produce a normalized record, while projection loss can make query coverage
-partial without removing native evidence. Query/read are JSON-first and expose
-their compact packaged method reference. To load the reasoning method and its
-owner boundary, use:
+produce a projection record. A missing or invalid cache is rebuilt from native
+evidence; failed rebuild makes structural query unavailable without preventing
+native read. Query/read are JSON-first and expose their compact packaged method
+reference. To load the reasoning method and its owner boundary, use:
 
 ```bash
 svc lookup --name 'sections/working-protocol\.md' --all --json

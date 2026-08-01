@@ -40,8 +40,7 @@ def _rollout(path: Path) -> None:
         },
     )
     path.write_text(
-        "\n".join(json.dumps(item, separators=(",", ":")) for item in records)
-        + "\n",
+        "\n".join(json.dumps(item, separators=(",", ":")) for item in records) + "\n",
         encoding="utf-8",
     )
 
@@ -90,7 +89,7 @@ def test_cli_export_query_and_read_contract(tmp_path: Path) -> None:
     assert exported["schema_version"] == exported["evidence"]["schema_version"] == 3
     assert exported["capture"]["status"] == "complete"
     assert "diagnostics" not in exported
-    assert isinstance(exported["diagnostic_groups"], int)
+    assert exported["evidence"]["native_records"] == 2
     assert validate_evidence(bundle).native == source.read_bytes()
 
     code, stdout, stderr = _invoke(["analysis", "query", "--schema"])
@@ -132,18 +131,21 @@ def test_analysis_errors_and_removed_grammar_are_json(tmp_path: Path) -> None:
     assert _invoke(["telemetry", "agent-thread", "analyze"])[0] == 2
     source = tmp_path / "source.jsonl"
     _rollout(source)
-    assert _invoke(
-        [
-            "telemetry",
-            "agent-thread",
-            "export",
-            "--source",
-            str(source),
-            "--output",
-            str(tmp_path / "x.zip"),
-            "--legacy-listing",
-        ]
-    )[0] == 2
+    assert (
+        _invoke(
+            [
+                "telemetry",
+                "agent-thread",
+                "export",
+                "--source",
+                str(source),
+                "--output",
+                str(tmp_path / "x.zip"),
+                "--legacy-listing",
+            ]
+        )[0]
+        == 2
+    )
 
 
 def test_list_projects_only_public_inventory_fields(monkeypatch) -> None:

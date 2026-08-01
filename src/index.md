@@ -86,7 +86,7 @@ Interpolation is limited to `${dev.instance}`, `${dev.worktree.id}`, `${dev.prof
 `telemetry agent-thread list|export` is the explicit local acquisition surface;
 `analysis query|read` is the machine-first consumer surface. The calling Agent
 owns semantic interpretation, hypotheses, comparison, and conclusions. SVC
-owns only bounded read-only capture, evidence integrity, provenance, and
+owns only bounded read-only capture, native fidelity, snapshot identity, and
 deterministic structural navigation. Neither surface uploads data, contacts a
 network service, invokes a model, or promises audit completeness.
 
@@ -110,19 +110,16 @@ interrupted, an invalid partial target may remain and must be removed before
 retry. The former `--include-sensitive` acknowledgement, `--repo` boundary,
 TTY gate, private mode policy, and Textual navigator are removed.
 
-Export publishes schema-v3 evidence with exactly four members:
-`manifest.json`, `native.bin`, `native-index.jsonl`, and `trajectory.jsonl`.
-`native.bin` is the captured provider-byte authority in source order;
-`native-index.jsonl` is the framing authority over every retained byte and
-records deterministic native IDs, contiguous ranges, digests, source
-coordinates, and `complete|incomplete` status. `trajectory.jsonl` is a
-manifest-bound derived structural index: every non-meta record resolves to a
-complete native frame and no projection field substitutes for native content.
-The manifest binds evidence identity, source/capture status, capabilities,
-digests, provenance, and declared loss. Schema-v1 and schema-v2 artifacts are
-historical cutoffs, not query/read authorities: after bounded manifest
-identification SVC returns `unsupported-agent-thread-bundle-schema` and never
-converts or falls back; recollection requires the original provider-local
+Schema-v3 evidence has a three-member authority core: minimal `manifest.json`,
+captured `native.bin`, and `native-index.jsonl` framing. The index gives every
+retained byte a deterministic native ID, contiguous range, source coordinate,
+and `complete|incomplete` state. One `evidence_id` binds the stored native and
+framing bytes; frame and fragment digests are computed when read results need
+them. An export may also carry `trajectory.jsonl` as a derived structural
+cache. The cache, its counts, capabilities, and loss summary are rebuildable,
+do not participate in evidence identity, and never substitute for native
+content. Schema-v1 and schema-v2 artifacts are historical cutoffs: SVC
+identifies and rejects them before recollection from an available provider
 source.
 
 This is a same-user local trust boundary, not a security sandbox. SVC does not
@@ -132,26 +129,29 @@ projection allowlists and bounds are structural navigation rules, not
 confidentiality or redaction. The caller owns storage, access, retention, and
 disclosure.
 
-`query` accepts only the closed `overview` and `match` intents. It returns
-evidence identity, capture/capability/loss status, stable refs, structural
-ranges, and deterministic bounded predicates over record type, role, tool,
-relationship, native range, or literal text. Arbitrary field selection,
+`query` accepts only the closed `overview` and `match` intents. It uses or
+rebuilds the structural cache and returns evidence identity, source/capture
+facts, derived capability/loss status, stable refs, structural ranges, and
+deterministic bounded predicates over record type, role, tool, relationship,
+native range, or literal text. Arbitrary field selection,
 SQL/JSONPath, regex programs, joins, grouping, scoring, and natural-language
 prompts are outside the contract. `read` is forward-only native reading from
 the beginning or an exact native ref, with bounded preceding records and
 scope-bound cursors for continuation. It returns captured native bytes/values,
 exact ranges and fragments, digests, provenance, capture gaps, and
-continuation. Cursors are unsigned local continuation state, not authenticated
-capabilities. Exact UTF-8 fragments are directly readable as text, with base64
-reserved as the lossless fallback for arbitrary bytes. Read never filters,
-reorders, summarizes, or silently returns normalized content.
+continuation. Frame and fragment digests are calculated from the returned
+native authority rather than trusted from framing metadata. Cursors carry a
+typed request scope and remain unsigned local continuation state, not
+authenticated capabilities. Exact UTF-8 fragments are directly readable as
+text, with base64 reserved as the lossless fallback for arbitrary bytes. Read
+never filters, reorders, summarizes, or silently returns normalized content.
 
 Responses use `complete`, `partial`, or `unavailable`; pagination alone never
 changes evidence status. Acquisition loss leaves a final incomplete native
-frame readable but unavailable for normalized records, while projection loss
-can make query coverage partial without deleting native evidence. Query/read
-responses include a compact packaged method reference. The canonical reasoning
-method is discoverable with:
+frame readable but unavailable for projection. A missing or invalid cache is
+rebuilt from the native core; failed rebuild makes structural query unavailable
+without invalidating native read. Query/read responses include a compact
+packaged method reference. The canonical reasoning method is discoverable with:
 
 ```text
 svc lookup --name 'sections/working-protocol\.md' --all --json

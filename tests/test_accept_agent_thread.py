@@ -76,33 +76,41 @@ def test_independent_consumer_reconstructs_native_frames(tmp_path: Path) -> None
             "native_record_id": "n000000",
             "byte_start": 0,
             "byte_end": 6,
-            "sha256": hashlib.sha256(native[:6]).hexdigest(),
+            "frame_status": "complete",
+            "source_coordinate": {
+                "event_index": 0,
+                "line": 0,
+                "byte_offset": 0,
+            },
         },
         {
             "native_record_id": "n000001",
             "byte_start": 6,
             "byte_end": len(native),
-            "sha256": hashlib.sha256(native[6:]).hexdigest(),
+            "frame_status": "complete",
+            "source_coordinate": {
+                "event_index": 1,
+                "line": 1,
+                "byte_offset": 6,
+            },
         },
     ]
     index = b"".join(harness._canonical(row, newline=True) for row in rows)
     manifest = {
         "format": "svc-agent-thread-evidence",
         "schema_version": 3,
-        "evidence_id": "a" * 64,
+        "evidence_id": harness._evidence_id(native, index),
+        "source": {
+            "provider_id": "codex",
+            "adapter_id": "codex-rollout-v1",
+            "source_format": "rollout-v1",
+            "thread_id": "accept-thread",
+            "source_status": "stable",
+        },
         "capture": {
             "status": "complete",
             "unknown_remainder": False,
-            "representation": "provider-bytes",
-        },
-        "native": {
-            "sha256": hashlib.sha256(native).hexdigest(),
-            "bytes": len(native),
-        },
-        "native_index": {
-            "sha256": hashlib.sha256(index).hexdigest(),
-            "bytes": len(index),
-            "records": len(rows),
+            "read_interrupted": False,
         },
     }
     target = tmp_path / "evidence.zip"
@@ -113,18 +121,15 @@ def test_independent_consumer_reconstructs_native_frames(tmp_path: Path) -> None
         )
         archive.writestr("native.bin", native)
         archive.writestr("native-index.jsonl", index)
-        archive.writestr("trajectory.jsonl", b"projection\n")
 
-    checked_manifest, entries, checked_native = harness._validate_evidence_zip(
-        target
-    )
+    checked_manifest, entries, checked_native = harness._validate_evidence_zip(target)
 
     assert checked_manifest["evidence_id"] == manifest["evidence_id"]
     assert checked_native == native
-    assert b"".join(
-        native[item["byte_start"] : item["byte_end"]]
-        for item in entries
-    ) == native
+    assert (
+        b"".join(native[item["byte_start"] : item["byte_end"]] for item in entries)
+        == native
+    )
 
 
 def test_all_runs_installed_slices_in_order(

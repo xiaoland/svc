@@ -17,19 +17,19 @@ be collected.
 
 ## Update schema-v3 consumers
 
-The manifest normalization policy no longer carries `sensitivity` or
-`redaction`, and source capture no longer reports the path-displacement state
-or loss reason. Native evidence may contain every selected provider byte;
-projection allowlists and omissions are structural navigation and resource
-bounds, not privacy controls. Keep validating the exact schema and do not infer
-confidentiality from absent projection fields.
+The manifest no longer carries normalization, `sensitivity`, or `redaction`
+policy, and source capture no longer reports the path-displacement state or
+loss reason. Native evidence may contain every selected provider byte. The
+optional trajectory member is a rebuildable navigation cache; its structural
+omissions are not privacy controls. Keep validating the evidence core and do
+not infer confidentiality from absent projection fields.
 
 ## Treat cursors as local continuation state
 
-Query/read cursors are unsigned base64-encoded state. Their evidence, request,
-and position fields are still validated for scope and bounds, but the cursor is
-not an authenticated capability and does not prove who produced it. Do not use
-cursor possession as an authorization decision.
+Query/read cursors are unsigned base64-encoded state. Their evidence ID, typed
+query or read scope, and position are still validated for bounds, but the
+cursor is not an authenticated capability and does not prove who produced it.
+Do not use cursor possession as an authorization decision.
 
 ## Handle interrupted export explicitly
 

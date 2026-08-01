@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import copy
 from io import BytesIO
-import hashlib
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from svc_cli.telemetry.trajectory import (
-    MAX_NATIVE_JSON_DEPTH,
+    MessageRecord,
+    MetaRecord,
     TrajectoryCollector,
     TrajectoryError,
-    build_manifest,
+    attach_projection_summary,
     canonical_json_bytes,
-    validate_manifest,
+    projection_summary,
     validate_trajectory_bytes,
-    zero_lossiness,
 )
 
 
@@ -23,12 +22,24 @@ def _ref(kind: str) -> str:
     return f"{kind}_{'a' * 64}"
 
 
-def _bounded(value: str) -> dict[str, object]:
+def _capabilities() -> dict[str, str]:
     return {
-        "truncated": False,
-        "observed_code_points": len(value),
-        "retained_code_points": len(value),
-        "strategy": "none",
+        "reasoning": "absent",
+        "tool_linkage": "absent",
+        "context": "absent",
+        "task_references": "available",
+        "explicit_concurrency": "unavailable",
+        "timestamps": "full",
+        "terminal_events": "unavailable",
+    }
+
+
+def _lossiness() -> dict[str, int]:
+    return {
+        "dropped_records": 0,
+        "unavailable_records": 0,
+        "synthesized_records": 0,
+        "partial_frames": 0,
     }
 
 
@@ -39,6 +50,7 @@ def _meta() -> dict[str, object]:
         "record_index": 0,
         "timestamp": None,
         "source_ref": {"event_index": None, "component": "meta"},
+        "relationships": {},
         "trajectory_schema": "svc.trajectory/v1",
         "provider_id": "codex",
         "adapter_id": "codex-rollout-v1",
@@ -49,185 +61,146 @@ def _meta() -> dict[str, object]:
             "flavor": None,
             "label": None,
             "ref": None,
-            "label_truncated": False,
-            "observed_code_points": 0,
-            "retained_code_points": 0,
         },
-        "content_profile": "bounded-normalized-v1",
     }
 
 
-def _message(index: int = 1, content: str = "hello") -> dict[str, object]:
+def _message(index: int = 1) -> dict[str, object]:
     return {
         "type": "message",
         "record_id": f"r{index:06d}",
         "record_index": index,
         "timestamp": "2026-01-01T00:00:01Z",
-        "source_ref": {"event_index": index, "line": index + 1},
+        "source_ref": {
+            "event_index": index,
+            "line": index,
+            "native_record_id": f"n{index:06d}",
+        },
+        "relationships": {"turn_ref": _ref("turn")},
         "role": "user",
-        "content": content,
-        "content_meta": _bounded(content),
-        "task_refs": [],
+        "task_refs": ["tasks/example/packet.md"],
     }
 
 
+def _pending_trajectory() -> bytes:
+    collector = TrajectoryCollector()
+    assert collector.emit(_meta())
+    assert collector.emit(_message())
+    value = collector.finish()
+    assert isinstance(value, bytes)
+    return value
+
+
 def _trajectory() -> bytes:
-    return canonical_json_bytes(_meta(), newline=True) + canonical_json_bytes(
-        _message(),
-        newline=True,
+    return attach_projection_summary(
+        _pending_trajectory(),
+        result_status="ready",
+        capabilities=_capabilities(),
+        lossiness=_lossiness(),
     )
 
 
-def _manifest(trajectory: bytes) -> dict[str, object]:
-    return dict(
-        build_manifest(
-            trajectory_source=trajectory,
-            source={
-                "provider_id": "codex",
-                "adapter_id": "codex-rollout-v1",
-                "source_format": "rollout-v1",
-                "thread_ref": _ref("thread"),
-                "source_status": "stable",
-            },
-            result_status="ready",
-            capabilities={
-                "reasoning": "absent",
-                "tool_linkage": "absent",
-                "context": "absent",
-                "task_references": "available",
-                "explicit_concurrency": "unavailable",
-                "timestamps": "full",
-                "terminal_events": "unavailable",
-            },
-            lossiness=zero_lossiness(),
-            diagnostics=[],
-            counts={
-                "source_bytes_read": 10,
-                "source_events_seen": 1,
-                "records_emitted": 2,
-                "trajectory_bytes": len(trajectory),
-                "records_by_type": {
-                    "meta": 1,
-                    "message": 1,
-                    "reasoning": 0,
-                    "tool_call": 0,
-                    "tool_result": 0,
-                    "context": 0,
-                    "event": 0,
-                },
-                "messages_by_role": {"user": 1, "assistant": 0},
-                "tool_calls": 0,
-                "tool_results": 0,
-                "task_references": 0,
-                "diagnostics_emitted": 0,
-                "diagnostics_suppressed": 0,
-            },
-        )
-    )
-
-
-def test_collector_emits_one_canonical_stream() -> None:
+def test_collector_writes_only_typed_sequence_invariants() -> None:
     output = BytesIO()
     collector = TrajectoryCollector(output)
     assert collector.emit(_meta())
     assert collector.emit(_message())
+    assert collector.finish() is None
 
-    encoded = collector.finish()
-    expected = _trajectory()
-
-    assert encoded.trajectory_bytes is None
-    assert output.getvalue() == expected
-    assert encoded.trajectory_size == len(expected)
-    assert encoded.trajectory_sha256 == hashlib.sha256(expected).hexdigest()
-    assert encoded.records_by_type["message"] == 1
+    assert output.getvalue() == _pending_trajectory()
+    with pytest.raises(TrajectoryError, match="already finished"):
+        collector.emit(_message(2))
 
 
-def test_trajectory_rejects_invalid_json_and_record_sequence() -> None:
-    canonical = canonical_json_bytes(_meta(), newline=True)
-    assert validate_trajectory_bytes(canonical).trajectory_sha256 == hashlib.sha256(
-        canonical
-    ).hexdigest()
+def test_summary_is_attached_to_meta_and_projects_json_ready_source() -> None:
+    pending = _pending_trajectory()
+    with pytest.raises(TrajectoryError, match="missing its projection summary"):
+        validate_trajectory_bytes(pending)
 
-    deep: object = {}
-    for _ in range(MAX_NATIVE_JSON_DEPTH + 1):
-        deep = {"nested": deep}
-    invalid_streams = (
-        b'{"type":"meta","type":"meta"}\n',
-        json.dumps(_meta(), ensure_ascii=False).encode() + b"\n",
-        canonical_json_bytes(deep, newline=True),
-        canonical_json_bytes(_message(0), newline=True),
-        canonical + canonical_json_bytes(_message(2), newline=True),
+    final = attach_projection_summary(
+        pending,
+        result_status="ready",
+        capabilities=_capabilities(),
+        lossiness=_lossiness(),
     )
-    for data in invalid_streams:
+    validated = validate_trajectory_bytes(final)
+
+    assert isinstance(validated.records[0], MetaRecord)
+    assert isinstance(validated.records[1], MessageRecord)
+    assert validated.records[1].task_refs == ("tasks/example/packet.md",)
+    assert projection_summary(validated) == {
+        "source": {
+            "provider_id": "codex",
+            "adapter_id": "codex-rollout-v1",
+            "source_format": "rollout-v1",
+            "thread_ref": _ref("thread"),
+            "workspace": {
+                "status": "missing",
+                "flavor": None,
+                "label": None,
+                "ref": None,
+            },
+        },
+        "result_status": "ready",
+        "capabilities": _capabilities(),
+        "lossiness": _lossiness(),
+    }
+
+
+def test_validator_accepts_equivalent_noncanonical_json() -> None:
+    canonical = _trajectory()
+    values = [json.loads(line) for line in canonical.splitlines()]
+    noncanonical = b"".join(
+        (
+            json.dumps(
+                dict(reversed(list(value.items()))),
+                ensure_ascii=False,
+            ).encode("utf-8")
+            + b"\n"
+        )
+        for value in values
+    )
+
+    validated = validate_trajectory_bytes(noncanonical)
+
+    assert validated.trajectory_bytes == noncanonical
+    assert [record.type for record in validated.records] == ["meta", "message"]
+    assert noncanonical != canonical
+
+
+def test_record_models_are_strict_frozen_and_forbid_extra_fields() -> None:
+    valid = validate_trajectory_bytes(_trajectory())
+    message = valid.records[1]
+    assert isinstance(message, MessageRecord)
+    with pytest.raises(ValidationError, match="frozen"):
+        message.role = "assistant"
+
+    for changed in (
+        {**_message(), "content": "removed payload"},
+        {**_message(), "record_index": "1"},
+        {**_message(), "task_refs": ["tasks/../escape/packet.md"]},
+    ):
+        data = canonical_json_bytes(
+            {
+                **_meta(),
+                "result_status": "ready",
+                "capabilities": _capabilities(),
+                "lossiness": _lossiness(),
+            },
+            newline=True,
+        ) + canonical_json_bytes(changed, newline=True)
         with pytest.raises(TrajectoryError):
             validate_trajectory_bytes(data)
 
 
-def test_manifest_rejects_invalid_time_and_removed_contracts() -> None:
-    trajectory = _trajectory()
-    valid = _manifest(trajectory)
-    valid["generated_at"] = "2026-12-31T23:59:59.123456789Z"
-    validate_manifest(valid)
+def test_sequence_rejects_nonleading_meta_and_noncontiguous_ids() -> None:
+    with pytest.raises(TrajectoryError):
+        TrajectoryCollector().emit(_message(0))
 
-    for timestamp in (
-        "2026-02-29T00:00:00Z",
-        "2026-01-01T00:00:60Z",
-        "2026-01-01T00:00:00+00:00",
-        "2026-01-01T00:00Z",
-    ):
-        invalid = dict(valid)
-        invalid["generated_at"] = timestamp
-        with pytest.raises(TrajectoryError):
-            validate_manifest(invalid)
+    collector = TrajectoryCollector()
+    assert collector.emit(_meta())
+    with pytest.raises(TrajectoryError):
+        collector.emit(_message(2))
 
-    for section, key, value in (
-        ("policy", "redaction", "none"),
-        ("source", "source_status", "displaced"),
-    ):
-        invalid = copy.deepcopy(valid)
-        invalid[section][key] = value
-        with pytest.raises(TrajectoryError):
-            validate_manifest(invalid)
-
-
-def test_manifest_diagnostics_are_ordered_and_resolvable() -> None:
-    trajectory = _trajectory()
-    base = _manifest(trajectory)
-    first = {
-        "code": "noise-record-dropped",
-        "severity": "info",
-        "action": "drop",
-        "count": 1,
-        "record_ref": None,
-        "source_ref": {"event_index": 2},
-        "details": {"record_type": "ui"},
-    }
-    second = {
-        **first,
-        "source_ref": {"event_index": 1},
-        "details": {"record_type": "world_state"},
-    }
-    invalid_diagnostics = (
-        [first, second],
-        [second, dict(second)],
-        [
-            {
-                "code": "orphan-tool-result",
-                "severity": "warning",
-                "action": "unavailable",
-                "count": 1,
-                "record_ref": "r999999",
-                "source_ref": {"event_index": 1},
-                "details": {},
-            }
-        ],
-    )
-    for diagnostics in invalid_diagnostics:
-        invalid = copy.deepcopy(base)
-        invalid["diagnostics"] = diagnostics
-        invalid["counts"]["diagnostics_emitted"] = len(diagnostics)
-        with pytest.raises(TrajectoryError):
-            validate_manifest(
-                invalid,
-                trajectory=validate_trajectory_bytes(trajectory),
-            )
+    with pytest.raises(TrajectoryError):
+        TrajectoryCollector().emit({**_meta(), "record_id": "r000001"})

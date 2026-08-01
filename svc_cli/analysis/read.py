@@ -3,21 +3,29 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
 import hashlib
-from typing import Mapping
+from typing import Annotated, Any, Literal, Mapping, TypeAlias
+
+from pydantic import (
+    Discriminator,
+    Field,
+    Tag,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 from ..telemetry.evidence import NativeIndexEntry, ValidatedEvidence
 from .protocol import (
     ANALYSIS_CONTRACT_VERSION,
+    AnalysisModel,
     AnalysisProtocolError,
     EvidenceRef,
+    adapt_validation_error,
     decode_cursor,
     encode_cursor,
     evidence_ref,
     method_reference,
-    parse_ref,
-    request_fingerprint,
 )
 
 
@@ -30,214 +38,139 @@ MIN_BYTES = 256
 MAX_PRECEDING = 20
 
 
-@dataclass(frozen=True, slots=True)
-class ReadRequest:
+class InitialReadRequest(AnalysisModel):
+    start: EvidenceRef | None = None
+    preceding: int = Field(default=0, ge=0, le=MAX_PRECEDING)
+    max_items: int = Field(default=DEFAULT_MAX_ITEMS, ge=1, le=MAX_ITEMS)
+    max_bytes: int = Field(default=DEFAULT_MAX_BYTES, ge=MIN_BYTES, le=MAX_BYTES)
+
+    @model_validator(mode="after")
+    def require_start_for_preceding(self) -> "InitialReadRequest":
+        if self.start is None and self.preceding:
+            raise ValueError("preceding requires start")
+        return self
+
+
+class ContinueReadRequest(AnalysisModel):
+    cursor: str = Field(min_length=1, max_length=8192)
+    max_items: int = Field(default=DEFAULT_MAX_ITEMS, ge=1, le=MAX_ITEMS)
+    max_bytes: int = Field(default=DEFAULT_MAX_BYTES, ge=MIN_BYTES, le=MAX_BYTES)
+
+
+def _request_kind(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return "continuation" if "cursor" in value else "initial"
+    if isinstance(value, ContinueReadRequest):
+        return "continuation"
+    if isinstance(value, InitialReadRequest):
+        return "initial"
+    return "invalid"
+
+
+ReadRequest: TypeAlias = Annotated[
+    Annotated[InitialReadRequest, Tag("initial")]
+    | Annotated[ContinueReadRequest, Tag("continuation")],
+    Discriminator(_request_kind),
+]
+_READ_REQUEST_ADAPTER: TypeAdapter[ReadRequest] = TypeAdapter(ReadRequest)
+
+
+class ReadScope(AnalysisModel):
     anchor: EvidenceRef | None
-    preceding: int
-    max_items: int
-    max_bytes: int
-    cursor: str | None = None
+    preceding: int = Field(ge=0, le=MAX_PRECEDING)
+    ordering: Literal["native-forward"]
+
+    @model_validator(mode="after")
+    def require_anchor_for_preceding(self) -> "ReadScope":
+        if self.anchor is None and self.preceding:
+            raise ValueError("preceding requires anchor")
+        return self
 
 
-def _integer(
-    value: object,
-    *,
-    name: str,
-    default: int,
-    minimum: int,
-    maximum: int,
-) -> int:
-    if value is None:
-        return default
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise AnalysisProtocolError(
-            "invalid-read-request",
-            f"{name} must be an integer.",
-        )
-    if not minimum <= value <= maximum:
-        raise AnalysisProtocolError(
-            "invalid-read-request",
-            f"{name} must be between {minimum} and {maximum}.",
-        )
-    return value
+class ReadCursor(AnalysisModel):
+    version: Literal[1]
+    tool: Literal["read"]
+    evidence_id: str
+    scope: ReadScope
+    next_ordinal: int = Field(ge=0)
+    next_offset: int = Field(ge=0)
 
 
 def parse_read_request(
     value: object,
     evidence: ValidatedEvidence,
 ) -> ReadRequest:
-    if not isinstance(value, Mapping):
-        raise AnalysisProtocolError(
-            "invalid-read-request",
-            "Read request must be a JSON object.",
+    try:
+        request = _READ_REQUEST_ADAPTER.validate_python(value)
+    except ValidationError as error:
+        adapt_validation_error(
+            error,
+            code="invalid-read-request",
+            message="Read request does not match a supported strict request shape.",
         )
-    keys = set(value)
-    if "cursor" in value:
-        if not keys <= {"cursor", "max_items", "max_bytes"}:
-            raise AnalysisProtocolError(
-                "invalid-read-request",
-                "Cursor continuation accepts only cursor and page budgets.",
-            )
-        if not isinstance(value["cursor"], str):
-            raise AnalysisProtocolError(
-                "invalid-read-request",
-                "cursor must be text.",
-            )
-        return ReadRequest(
-            anchor=None,
-            preceding=0,
-            max_items=_integer(
-                value.get("max_items"),
-                name="max_items",
-                default=DEFAULT_MAX_ITEMS,
-                minimum=1,
-                maximum=MAX_ITEMS,
-            ),
-            max_bytes=_integer(
-                value.get("max_bytes"),
-                name="max_bytes",
-                default=DEFAULT_MAX_BYTES,
-                minimum=MIN_BYTES,
-                maximum=MAX_BYTES,
-            ),
-            cursor=value["cursor"],
-        )
-    if not keys <= {"start", "preceding", "max_items", "max_bytes"}:
-        raise AnalysisProtocolError(
-            "invalid-read-request",
-            "Read request contains unsupported fields.",
-        )
-    anchor = (
-        parse_ref(value["start"], evidence, expected_kind="native")
-        if "start" in value
-        else None
-    )
-    preceding = _integer(
-        value.get("preceding"),
-        name="preceding",
-        default=0,
-        minimum=0,
-        maximum=MAX_PRECEDING,
-    )
-    if anchor is None and preceding:
-        raise AnalysisProtocolError(
-            "invalid-read-request",
-            "preceding requires an exact start reference.",
-        )
-    return ReadRequest(
-        anchor=anchor,
-        preceding=preceding,
-        max_items=_integer(
-            value.get("max_items"),
-            name="max_items",
-            default=DEFAULT_MAX_ITEMS,
-            minimum=1,
-            maximum=MAX_ITEMS,
-        ),
-        max_bytes=_integer(
-            value.get("max_bytes"),
-            name="max_bytes",
-            default=DEFAULT_MAX_BYTES,
-            minimum=MIN_BYTES,
-            maximum=MAX_BYTES,
-        ),
-    )
+    if isinstance(request, InitialReadRequest) and request.start is not None:
+        request.start.require_scope(evidence.evidence_id, expected_kind="native")
+    return request
 
 
-def _scope(anchor: Mapping[str, object] | None, preceding: int) -> str:
-    return request_fingerprint(
-        {
-            "tool": "read",
-            "ordering": "native-forward",
-            "anchor": dict(anchor) if anchor is not None else None,
-            "preceding": preceding,
-        }
-    )
+def _decode_read_cursor(value: str, evidence: ValidatedEvidence) -> ReadCursor:
+    payload = decode_cursor(value)
+    if (
+        payload.get("version") != ANALYSIS_CONTRACT_VERSION
+        or payload.get("tool") != "read"
+    ):
+        raise AnalysisProtocolError(
+            "cursor-scope-mismatch",
+            "Cursor belongs to a different analysis contract or tool.",
+        )
+    try:
+        cursor = ReadCursor.model_validate(payload)
+    except ValidationError as error:
+        adapt_validation_error(
+            error,
+            code="invalid-cursor",
+            message="Read cursor payload has an invalid shape.",
+        )
+    if cursor.evidence_id != evidence.evidence_id:
+        raise AnalysisProtocolError(
+            "cursor-scope-mismatch",
+            "Read cursor belongs to different evidence.",
+        )
+    if cursor.scope.anchor is not None:
+        cursor.scope.anchor.require_scope(evidence.evidence_id, expected_kind="native")
+    return cursor
 
 
 def _initial_position(
     evidence: ValidatedEvidence,
     request: ReadRequest,
-) -> tuple[int, int, Mapping[str, object] | None, int, str]:
-    if request.cursor is not None:
-        payload = decode_cursor(request.cursor, tool="read")
-        required = {
-            "version",
-            "tool",
-            "evidence_id",
-            "scope",
-            "anchor",
-            "preceding",
-            "next_ordinal",
-            "next_offset",
-        }
-        if set(payload) != required:
-            raise AnalysisProtocolError(
-                "invalid-cursor",
-                "Read cursor payload has an invalid shape.",
-            )
-        if payload["evidence_id"] != evidence.evidence_id:
-            raise AnalysisProtocolError(
-                "cursor-scope-mismatch",
-                "Read cursor belongs to different evidence.",
-            )
-        anchor = payload["anchor"]
-        preceding = payload["preceding"]
-        if anchor is not None and not isinstance(anchor, Mapping):
-            raise AnalysisProtocolError(
-                "invalid-cursor",
-                "Read cursor anchor has an invalid shape.",
-            )
-        if (
-            isinstance(preceding, bool)
-            or not isinstance(preceding, int)
-            or not 0 <= preceding <= MAX_PRECEDING
-            or payload["scope"] != _scope(anchor, preceding)
-        ):
-            raise AnalysisProtocolError(
-                "cursor-scope-mismatch",
-                "Read cursor request binding is invalid.",
-            )
-        ordinal = payload["next_ordinal"]
-        offset = payload["next_offset"]
-        if (
-            isinstance(ordinal, bool)
-            or not isinstance(ordinal, int)
-            or isinstance(offset, bool)
-            or not isinstance(offset, int)
-            or ordinal < 0
-            or offset < 0
-        ):
-            raise AnalysisProtocolError(
-                "invalid-cursor",
-                "Read cursor position is invalid.",
-            )
-        return ordinal, offset, anchor, preceding, str(payload["scope"])
+) -> tuple[int, int, ReadScope]:
+    if isinstance(request, ContinueReadRequest):
+        cursor = _decode_read_cursor(request.cursor, evidence)
+        return cursor.next_ordinal, cursor.next_offset, cursor.scope
 
-    anchor_value = request.anchor.as_dict() if request.anchor else None
-    if request.anchor is None:
+    scope = ReadScope(
+        anchor=request.start,
+        preceding=request.preceding,
+        ordering="native-forward",
+    )
+    if request.start is None:
         ordinal = 0
     else:
         by_id = {
             entry.native_record_id: entry.native_index
             for entry in evidence.native_index
         }
-        if request.anchor.record_id not in by_id:
+        if request.start.record_id not in by_id:
             raise AnalysisProtocolError(
                 "reference-not-found",
                 "Native start reference does not resolve in this evidence.",
             )
         ordinal = max(
             0,
-            by_id[request.anchor.record_id] - request.preceding,
+            by_id[request.start.record_id] - request.preceding,
         )
-    return (
-        ordinal,
-        0,
-        anchor_value,
-        request.preceding,
-        _scope(anchor_value, request.preceding),
-    )
+    return ordinal, 0, scope
 
 
 def _fragment_item(
@@ -247,9 +180,8 @@ def _fragment_item(
     end: int,
 ) -> dict[str, object]:
     frame_size = entry.byte_end - entry.byte_start
-    fragment = evidence.native[
-        entry.byte_start + start : entry.byte_start + end
-    ]
+    frame = evidence.native[entry.byte_start : entry.byte_end]
+    fragment = frame[start:end]
     payload: dict[str, object] = {
         "fragment_start": start,
         "fragment_end": end,
@@ -274,17 +206,16 @@ def _fragment_item(
         )
     return {
         "ref": evidence_ref(
-            evidence,
+            evidence.evidence_id,
             "native",
             entry.native_record_id,
         ),
         "native_index": entry.native_index,
         "byte_start": entry.byte_start,
         "byte_end": entry.byte_end,
-        "representation": entry.representation,
         "frame_status": entry.frame_status,
-        "source_coordinate": dict(entry.source_coordinate),
-        "frame_sha256": entry.sha256,
+        "source_coordinate": entry.source_coordinate.model_dump(mode="json"),
+        "frame_sha256": hashlib.sha256(frame).hexdigest(),
         "payload": payload,
     }
 
@@ -296,10 +227,7 @@ def read_evidence(
     """Read one bounded page in canonical native order."""
 
     request = parse_read_request(request_value, evidence)
-    ordinal, offset, anchor, preceding, scope = _initial_position(
-        evidence,
-        request,
-    )
+    ordinal, offset, scope = _initial_position(evidence, request)
     if ordinal > len(evidence.native_index):
         raise AnalysisProtocolError(
             "invalid-cursor",
@@ -355,23 +283,20 @@ def read_evidence(
     next_cursor = None
     if more:
         next_cursor = encode_cursor(
-            {
-                "version": ANALYSIS_CONTRACT_VERSION,
-                "tool": "read",
-                "evidence_id": evidence.evidence_id,
-                "scope": scope,
-                "anchor": dict(anchor) if anchor is not None else None,
-                "preceding": preceding,
-                "next_ordinal": current_ordinal,
-                "next_offset": current_offset,
-            }
+            ReadCursor(
+                version=1,
+                tool="read",
+                evidence_id=evidence.evidence_id,
+                scope=scope,
+                next_ordinal=current_ordinal,
+                next_offset=current_offset,
+            )
         )
-    capture = evidence.manifest["capture"]
-    assert isinstance(capture, Mapping)
+    capture = evidence.manifest.capture
     if not evidence.native_index:
         status = "unavailable"
     else:
-        status = "partial" if capture["status"] == "partial" else "complete"
+        status = "partial" if capture.status == "partial" else "complete"
     return {
         "format": READ_FORMAT,
         "schema_version": ANALYSIS_CONTRACT_VERSION,
@@ -382,8 +307,8 @@ def read_evidence(
         "items": items,
         "next_cursor": next_cursor,
         "coverage": {
-            "capture_status": capture["status"],
-            "unknown_remainder": capture["unknown_remainder"],
+            "capture_status": capture.status,
+            "unknown_remainder": capture.unknown_remainder,
             "page_start_ordinal": ordinal,
             "page_start_offset": offset,
             "returned_items": len(items),
@@ -398,7 +323,7 @@ def read_schema() -> dict[str, object]:
     native_ref_shape = {
         "required": ["evidence_id", "record_kind", "record_id"],
         "record_kind": "native",
-        "record_id_pattern": "n[0-9]{6}",
+        "record_id_pattern": "n[0-9]{6,}",
         "additional_properties": False,
     }
     return {
@@ -426,7 +351,7 @@ def read_schema() -> dict[str, object]:
             "continuation": {
                 "required": ["cursor"],
                 "optional": ["max_items", "max_bytes"],
-                "note": "Reuse next_cursor; the anchor and preceding count are already bound and must be omitted.",
+                "note": "Reuse next_cursor; the anchor, preceding count, and ordering are already bound and must be omitted.",
                 "additional_properties": False,
             },
             "bounds": {
@@ -461,7 +386,11 @@ def read_schema() -> dict[str, object]:
 
 __all__ = [
     "READ_FORMAT",
+    "ContinueReadRequest",
+    "InitialReadRequest",
+    "ReadCursor",
     "ReadRequest",
+    "ReadScope",
     "parse_read_request",
     "read_evidence",
     "read_schema",

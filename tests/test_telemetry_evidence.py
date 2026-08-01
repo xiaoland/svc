@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 import zipfile
@@ -9,6 +8,7 @@ import pytest
 
 from svc_cli.telemetry.evidence import (
     EVIDENCE_MEMBERS,
+    EVIDENCE_OPTIONAL_MEMBERS,
     EvidenceError,
     build_evidence_id,
     build_evidence_manifest,
@@ -17,210 +17,209 @@ from svc_cli.telemetry.evidence import (
     validate_evidence_members,
     write_evidence_stream,
 )
-from svc_cli.telemetry.trajectory import build_manifest, canonical_json_bytes, zero_lossiness
+from svc_cli.telemetry.trajectory import canonical_json_bytes
 
 
-def _meta() -> dict[str, object]:
+def _source(thread_id: str = "thread-native") -> dict[str, object]:
     return {
-        "type": "meta",
-        "record_id": "r000000",
-        "record_index": 0,
-        "timestamp": None,
-        "source_ref": {"event_index": None, "component": "meta"},
-        "trajectory_schema": "svc.trajectory/v1",
         "provider_id": "codex",
         "adapter_id": "codex-rollout-v1",
         "source_format": "rollout-v1",
-        "thread_ref": "thread_" + "a" * 64,
-        "workspace": {
-            "status": "missing",
-            "flavor": None,
-            "label": None,
-            "ref": None,
-            "label_truncated": False,
-            "observed_code_points": 0,
-            "retained_code_points": 0,
-        },
-        "content_profile": "bounded-normalized-v1",
+        "thread_id": thread_id,
+        "source_status": "stable",
     }
 
 
-def _message() -> dict[str, object]:
+def _capture() -> dict[str, object]:
     return {
-        "type": "message",
-        "record_id": "r000001",
-        "record_index": 1,
-        "timestamp": "2026-01-01T00:00:01Z",
-        "source_ref": {
-            "event_index": 1,
-            "line": 1,
-            "byte_offset": 5,
-            "native_record_id": "n000001",
-        },
-        "role": "user",
-        "content": "hello",
-        "content_meta": {
-            "truncated": False,
-            "observed_code_points": 5,
-            "retained_code_points": 5,
-            "strategy": "none",
-        },
-        "task_refs": [],
+        "status": "complete",
+        "unknown_remainder": False,
+        "read_interrupted": False,
     }
 
 
-def _projection(trajectory: bytes) -> dict[str, object]:
-    return dict(build_manifest(
-        trajectory_source=trajectory,
-        source={
+def _trajectory() -> bytes:
+    records = (
+        {
+            "type": "meta",
+            "record_id": "r000000",
+            "record_index": 0,
+            "timestamp": None,
+            "source_ref": {"event_index": None, "component": "meta"},
+            "relationships": {},
+            "trajectory_schema": "svc.trajectory/v1",
             "provider_id": "codex",
             "adapter_id": "codex-rollout-v1",
             "source_format": "rollout-v1",
             "thread_ref": "thread_" + "a" * 64,
-            "source_status": "stable",
+            "workspace": {
+                "status": "missing",
+                "flavor": None,
+                "label": None,
+                "ref": None,
+            },
+            "result_status": "ready",
+            "capabilities": {
+                "reasoning": "absent",
+                "tool_linkage": "absent",
+                "context": "absent",
+                "task_references": "available",
+                "explicit_concurrency": "unavailable",
+                "timestamps": "full",
+                "terminal_events": "unavailable",
+            },
+            "lossiness": {},
         },
-        result_status="ready",
-        capabilities={
-            "reasoning": "absent",
-            "tool_linkage": "absent",
-            "context": "absent",
-            "task_references": "available",
-            "explicit_concurrency": "unavailable",
-            "timestamps": "full",
-            "terminal_events": "unavailable",
+        {
+            "type": "message",
+            "record_id": "r000001",
+            "record_index": 1,
+            "timestamp": "2026-01-01T00:00:01Z",
+            "source_ref": {
+                "event_index": 1,
+                "line": 1,
+                "byte_offset": 5,
+                "native_record_id": "n000001",
+            },
+            "relationships": {},
+            "role": "user",
+            "task_refs": [],
         },
-        lossiness=zero_lossiness(),
-        diagnostics=[],
-        counts={
-            "source_bytes_read": 10,
-            "source_events_seen": 2,
-            "records_emitted": 2,
-            "trajectory_bytes": len(trajectory),
-            "records_by_type": {"meta": 1, "message": 1, "reasoning": 0, "tool_call": 0, "tool_result": 0, "context": 0, "event": 0},
-            "messages_by_role": {"user": 1, "assistant": 0},
-            "tool_calls": 0,
-            "tool_results": 0,
-            "task_references": 0,
-            "diagnostics_emitted": 0,
-            "diagnostics_suppressed": 0,
-        },
-    ))
+    )
+    return b"".join(canonical_json_bytes(record, newline=True) for record in records)
 
 
-def _fixture() -> tuple[dict[str, object], bytes, bytes, bytes]:
-    trajectory = canonical_json_bytes(_meta(), newline=True) + canonical_json_bytes(_message(), newline=True)
-    projection = _projection(trajectory)
+def _fixture():
     native = b"meta\nmessage\n"
-    native_index = build_native_index(
+    index = build_native_index(
         native,
         [
             (0, 5, {"event_index": 0, "line": 0, "byte_offset": 0}, "complete"),
-            (5, len(native), {"event_index": 1, "line": 1, "byte_offset": 5}, "complete"),
+            (
+                5,
+                len(native),
+                {"event_index": 1, "line": 1, "byte_offset": 5},
+                "complete",
+            ),
         ],
     )
-    manifest = dict(
+    manifest = build_evidence_manifest(
+        native=native,
+        native_index=index,
+        source=_source(),
+        capture=_capture(),
+    )
+    return manifest, native, index, _trajectory()
+
+
+def test_three_member_core_round_trips_with_one_raw_identity(tmp_path: Path) -> None:
+    manifest, native, index, _ = _fixture()
+    target = tmp_path / "core.zip"
+    with target.open("x+b") as stream:
+        written = write_evidence_stream(stream, manifest, native, index)
+    loaded = validate_evidence(target)
+
+    assert written.evidence_id == loaded.evidence_id == build_evidence_id(native, index)
+    assert loaded.native == native
+    assert loaded.native_index_bytes == index
+    assert [entry.native_index for entry in loaded.native_index] == [0, 1]
+    assert set(manifest.model_dump()) == {
+        "format",
+        "schema_version",
+        "evidence_id",
+        "source",
+        "capture",
+    }
+    assert (
         build_evidence_manifest(
             native=native,
-            native_index=native_index,
-            projection=projection,
-            trajectory=trajectory,
-        )
+            native_index=index,
+            source=_source("other-thread"),
+            capture=_capture(),
+        ).evidence_id
+        == manifest.evidence_id
     )
-    return manifest, native, native_index, trajectory
-
-
-def test_schema_v3_round_trip_has_exact_members_and_native_coverage(tmp_path: Path) -> None:
-    manifest, native, native_index, trajectory = _fixture()
-    target = tmp_path / "evidence.zip"
-    with target.open("x+b") as stream:
-        result = write_evidence_stream(stream, manifest, native, native_index, trajectory)
-    assert result.evidence_id == manifest["evidence_id"]
+    assert build_evidence_id(native + b"x", index) != manifest.evidence_id
     with zipfile.ZipFile(target) as archive:
-        assert archive.namelist() == ["manifest.json", "native.bin", "native-index.jsonl", "trajectory.jsonl"]
-        assert archive.read("native.bin") == native
-        assert archive.read("native-index.jsonl") == native_index
-    validated = validate_evidence(target)
-    assert validated.native == native
-    assert [entry.native_record_id for entry in validated.native_index] == ["n000000", "n000001"]
-    assert validated.trajectory.records[1]["source_ref"]["native_record_id"] == "n000001"
+        assert tuple(archive.namelist()) == EVIDENCE_MEMBERS
+
+
+def test_cache_is_optional_and_bundle_json_is_semantic(tmp_path: Path) -> None:
+    manifest, native, index, trajectory = _fixture()
+    valid = validate_evidence_members(manifest, native, index, trajectory)
+    invalid = validate_evidence_members(manifest, native, index, b"bad\n")
+    assert valid.trajectory is not None
+    assert invalid.trajectory is None
+    assert valid.evidence_id == invalid.evidence_id
+
+    entries = [json.loads(line) for line in index.splitlines()]
+    ordinary_index = b"\r\n".join(
+        json.dumps(entry, ensure_ascii=False).encode() for entry in entries
+    )
+    ordinary_manifest = build_evidence_manifest(
+        native=native,
+        native_index=ordinary_index,
+        source=_source(),
+        capture=_capture(),
+    )
+    manifest_json = json.dumps(ordinary_manifest.model_dump(mode="json"), indent=2)
+    duplicate_json = ('{"schema_version":NaN,' + manifest_json[1:]).encode()
+    target = tmp_path / "semantic.zip"
+    with zipfile.ZipFile(target, "w") as archive:
+        archive.writestr("native-index.jsonl", ordinary_index)
+        archive.writestr("manifest.json", duplicate_json)
+        archive.writestr("native.bin", native)
+        archive.writestr("trajectory.jsonl", b"invalid cache\n")
+
+    loaded = validate_evidence(target)
+    assert loaded.evidence_id == build_evidence_id(native, ordinary_index)
+    assert loaded.trajectory is None
+    with zipfile.ZipFile(target) as archive:
+        assert set(archive.namelist()) == set(
+            EVIDENCE_MEMBERS + EVIDENCE_OPTIONAL_MEMBERS
+        )
+
+
+def test_index_rejects_gaps_and_nonfinal_incomplete_frames() -> None:
+    native = b"one\ntwo\n"
+    cases = (
+        (
+            (0, 4, {"event_index": 0, "line": 0, "byte_offset": 0}, "complete"),
+            (5, 8, {"event_index": 1, "line": 1, "byte_offset": 5}, "complete"),
+        ),
+        (
+            (0, 4, {"event_index": 0, "line": 0, "byte_offset": 0}, "incomplete"),
+            (4, 8, {"event_index": 1, "line": 1, "byte_offset": 4}, "complete"),
+        ),
+    )
+    for frames in cases:
+        with pytest.raises(EvidenceError) as raised:
+            build_native_index(native, frames)
+        assert raised.value.code == "invalid-native-index"
 
 
 @pytest.mark.filterwarnings("ignore:Duplicate name:UserWarning")
-def test_bundle_requires_exact_unique_members(tmp_path: Path) -> None:
-    manifest, _, _, _ = _fixture()
-    for case, names in (
-        ("missing", EVIDENCE_MEMBERS[:-1]),
-        ("duplicate", (*EVIDENCE_MEMBERS, "native.bin")),
-    ):
-        target = tmp_path / f"{case}.zip"
-        with zipfile.ZipFile(target, "w") as archive:
-            for name in names:
-                data = (
-                    canonical_json_bytes(manifest, newline=True)
-                    if name == "manifest.json"
-                    else b""
-                )
-                archive.writestr(name, data)
-
-        with pytest.raises(EvidenceError) as raised:
-            validate_evidence(target)
-        assert raised.value.code == "bundle-invalid"
-
-
-def test_native_index_requires_exact_cover_and_digest() -> None:
-    manifest, native, native_index, trajectory = _fixture()
-    lines = [json.loads(line) for line in native_index.splitlines()]
-    lines[1]["byte_start"] = lines[1]["byte_start"] + 1
-    broken_index = b"".join(canonical_json_bytes(line, newline=True) for line in lines)
-    broken_manifest = dict(manifest)
-    broken_manifest["native_index"] = {
-        **manifest["native_index"],
-        "sha256": hashlib.sha256(broken_index).hexdigest(),
-        "bytes": len(broken_index),
+def test_bundle_rejects_wrong_members_and_historical_schemas(tmp_path: Path) -> None:
+    manifest, native, index, _ = _fixture()
+    values = {
+        "manifest.json": canonical_json_bytes(manifest.model_dump(mode="json")),
+        "native.bin": native,
+        "native-index.jsonl": index,
+        "notes.txt": b"extra",
     }
-    with pytest.raises(EvidenceError) as raised:
-        validate_evidence_members(broken_manifest, native, broken_index, trajectory)
-    assert raised.value.code == "invalid-native-index"
-
-
-def test_trajectory_refs_must_resolve_native_frames() -> None:
-    manifest, native, native_index, trajectory = _fixture()
-    record = json.loads(trajectory.splitlines()[1])
-    del record["source_ref"]["native_record_id"]
-    broken_trajectory = canonical_json_bytes(
-        _meta(), newline=True
-    ) + canonical_json_bytes(record, newline=True)
-    broken_manifest = dict(manifest)
-    broken_manifest["projection"] = _projection(broken_trajectory)
-    broken_manifest["evidence_id"] = build_evidence_id(
-        broken_manifest,
-        native,
-        native_index,
-        broken_trajectory,
-    )
-    with pytest.raises(EvidenceError) as raised:
-        validate_evidence_members(
-            broken_manifest,
-            native,
-            native_index,
-            broken_trajectory,
-        )
-    assert raised.value.code == "native-reference-missing"
-
-
-def test_schema_v1_and_v2_are_rejected(tmp_path: Path) -> None:
-    for schema_version in (1, 2):
-        target = tmp_path / f"schema-{schema_version}.zip"
-        old_manifest = {
-            "format": "svc-agent-thread-bundle",
-            "schema_version": schema_version,
-        }
+    for name, members, code in (
+        ("missing", ("manifest.json", "native.bin"), "bundle-invalid"),
+        ("duplicate", (*EVIDENCE_MEMBERS, "native.bin"), "bundle-invalid"),
+        ("extra", (*EVIDENCE_MEMBERS, "notes.txt"), "bundle-invalid"),
+        ("v2", ("manifest.json",), "unsupported-agent-thread-bundle-schema"),
+    ):
+        target = tmp_path / f"{name}.zip"
         with zipfile.ZipFile(target, "w") as archive:
-            archive.writestr(
-                "manifest.json",
-                canonical_json_bytes(old_manifest, newline=True),
-            )
-
+            for member in members:
+                value = values[member]
+                if name == "v2":
+                    value = b'{"schema_version":2}'
+                archive.writestr(member, value)
         with pytest.raises(EvidenceError) as raised:
             validate_evidence(target)
-        assert raised.value.code == "unsupported-agent-thread-bundle-schema"
+        assert raised.value.code == code

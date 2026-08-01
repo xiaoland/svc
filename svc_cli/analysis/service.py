@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..telemetry.archive import rebuild_evidence_trajectory
 from ..telemetry.evidence import EvidenceError, validate_evidence
+from ..telemetry.providers import provider as local_provider
 from .protocol import AnalysisProtocolError
 from .query import query_evidence
 from .read import read_evidence
@@ -15,6 +17,7 @@ def execute_query(input_path: Path, request: object) -> dict[str, object]:
         evidence = validate_evidence(input_path)
     except EvidenceError as error:
         raise AnalysisProtocolError(error.code, error.message, error.details) from error
+    evidence = rebuild_evidence_trajectory(evidence, local_provider())
     return query_evidence(evidence, request)
 
 
