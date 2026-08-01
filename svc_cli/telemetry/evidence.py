@@ -12,10 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
-import stat
 from types import MappingProxyType
 from typing import Any, BinaryIO, Iterable, Mapping, Never
 import zipfile
@@ -617,184 +615,114 @@ def write_evidence_stream(
     return validated
 
 
-def write_evidence(
-    path: Any,
-    manifest: Mapping[str, Any],
-    native: bytes,
-    native_index: bytes,
-    trajectory: bytes,
-) -> ValidatedEvidence:
-    """Atomically publish a schema-v3 bundle without replacing a target."""
-
-    output = Path(path)
-    if output.exists() or os.path.lexists(output):
-        _fail("output-exists", "Evidence output already exists and was not replaced.")
-    if not output.parent.exists() or not output.parent.is_dir():
-        _fail("output-parent-invalid", "Evidence output parent must be an existing directory.")
-    descriptor = -1
-    temporary_path: Path | None = None
-    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
-    for nonce in range(32):
-        candidate = output.parent / f".{output.name}.{os.getpid()}.{nonce}.tmp"
-        try:
-            descriptor = os.open(candidate, flags, 0o666)
-            temporary_path = candidate
-            break
-        except FileExistsError:
-            continue
-    if descriptor < 0 or temporary_path is None:
-        _fail("evidence-write-failed", "Evidence staging file could not be created.")
-    try:
-        with os.fdopen(descriptor, "w+b") as stream:
-            descriptor = -1
-            result = write_evidence_stream(stream, manifest, native, native_index, trajectory)
-            stream.flush()
-            os.fsync(stream.fileno())
-        if os.name == "nt":
-            os.rename(temporary_path, output)
-        else:
-            os.link(temporary_path, output)
-            temporary_path.unlink()
-        return ValidatedEvidence(result.manifest, result.native, result.native_index, result.trajectory, result.evidence_id, output)
-    except FileExistsError as error:
-        raise EvidenceError("output-exists", "Evidence output already exists and was not replaced.") from error
-    except OSError as error:
-        raise EvidenceError("evidence-write-failed", "Evidence output could not be published.") from error
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-        try:
-            temporary_path.unlink()
-        except OSError:
-            pass
-
-
-def _safe_member(info: zipfile.ZipInfo) -> None:
-    name = info.filename
-    if not name or "\\" in name or name.startswith("/") or any(part in {"", ".", ".."} for part in name.split("/")):
-        _fail("bundle-invalid", "Evidence ZIP contains an unsafe member name.")
-    if info.flag_bits & 0x1 or info.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
-        _fail("bundle-invalid", "Evidence ZIP contains an unsafe member.")
-    mode = (info.external_attr >> 16) & 0o777
-    file_type = (info.external_attr >> 16) & 0o170000
-    if info.is_dir() or file_type not in {0, stat.S_IFREG} or mode not in {0, 0o644}:
-        _fail("bundle-invalid", "Evidence ZIP member must be an ordinary regular file.")
-
-
-def _safe_manifest_member(info: zipfile.ZipInfo) -> None:
-    """Check only what is needed to read the bounded manifest discriminator.
-
-    Historical v1/v2 bundles use private member modes, so mode validation must
-    wait until after the schema version has been identified and rejected.
-    """
-
-    if info.filename != "manifest.json" or info.flag_bits & 0x1 or info.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
-        _fail("bundle-invalid", "Evidence manifest member is unsafe.")
-    file_type = (info.external_attr >> 16) & 0o170000
-    if info.is_dir() or file_type not in {0, stat.S_IFREG}:
-        _fail("bundle-invalid", "Evidence manifest member must be an ordinary file.")
-
-
-def _read_member(archive: zipfile.ZipFile, info: zipfile.ZipInfo, callback: Any, limit: int) -> bytes:
+def _read_member(
+    archive: zipfile.ZipFile,
+    info: zipfile.ZipInfo,
+    limit: int,
+) -> bytes:
     if info.file_size > limit:
         _fail("member-limit-reached", "Evidence member byte bound exceeded.")
-    stream = callback(archive, info) if callback is not None else archive.open(info, mode="r")
-    if not hasattr(stream, "read"):
-        _fail("bundle-invalid", "Evidence member opener returned a non-readable stream.")
-    try:
+    with archive.open(info, mode="r") as stream:
         data = stream.read(limit + 1)
-    finally:
-        stream.close()
     if not isinstance(data, bytes) or len(data) > limit:
         _fail("member-limit-reached", "Evidence member byte bound exceeded.")
     return data
 
 
-def _open_snapshot(path: Path) -> tuple[int, tuple[int, int, int, int, int]]:
-    try:
-        before = path.lstat()
-    except OSError as error:
-        raise EvidenceError("bundle-input-unreadable", "Evidence input cannot be inspected.") from error
-    if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
-        _fail("bundle-input-unsafe", "Evidence input must be a regular non-link file.")
-    if before.st_size > MAX_EVIDENCE_ZIP_BYTES:
-        _fail("zip-limit-reached", "Evidence ZIP byte bound exceeded.")
-    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(path, flags)
-        opened = os.fstat(descriptor)
-    except OSError as error:
-        raise EvidenceError("bundle-input-unreadable", "Evidence input cannot be opened.") from error
-    identity = (before.st_dev, before.st_ino, stat.S_IFMT(before.st_mode), before.st_size, before.st_mtime_ns)
-    opened_identity = (opened.st_dev, opened.st_ino, stat.S_IFMT(opened.st_mode), opened.st_size, opened.st_mtime_ns)
-    if not stat.S_ISREG(opened.st_mode) or identity != opened_identity:
-        os.close(descriptor)
-        _fail("bundle-input-mutated", "Evidence input changed while being opened.")
-    return descriptor, identity
-
-
-def validate_evidence(path: Any, *, member_open: Any = None) -> ValidatedEvidence:
-    """Validate a schema-v3 ZIP without extracting or opening extra members."""
+def validate_evidence(path: Any) -> ValidatedEvidence:
+    """Validate one bounded, canonical schema-v3 ZIP."""
 
     input_path = Path(path)
-    descriptor, identity = _open_snapshot(input_path)
     try:
-        with os.fdopen(descriptor, "rb", closefd=True) as raw:
-            descriptor = -1
+        if input_path.stat().st_size > MAX_EVIDENCE_ZIP_BYTES:
+            _fail("zip-limit-reached", "Evidence ZIP byte bound exceeded.")
+        with zipfile.ZipFile(input_path, mode="r") as archive:
+            infos = archive.infolist()
+            names = [info.filename for info in infos]
+            if len(names) != len(set(names)):
+                _fail("bundle-invalid", "Evidence ZIP contains duplicate members.")
             try:
-                with zipfile.ZipFile(raw, mode="r") as archive:
-                    infos = archive.infolist()
-                    names = [info.filename for info in infos]
-                    if len(names) != len(set(names)):
-                        _fail("bundle-invalid", "Evidence ZIP contains duplicate members.")
-                    try:
-                        manifest_info = next(info for info in infos if info.filename == "manifest.json")
-                    except StopIteration:
-                        _fail("bundle-invalid", "Evidence ZIP is missing manifest.json.")
-                    _safe_manifest_member(manifest_info)
-                    manifest_bytes = _read_member(archive, manifest_info, member_open, MAX_MANIFEST_BYTES)
-                    if not manifest_bytes.endswith(b"\n"):
-                        _fail("bundle-invalid", "Evidence manifest must end with a newline.")
-                    manifest = _strict_loads(manifest_bytes[:-1])
-                    if not isinstance(manifest, Mapping):
-                        _fail("invalid-evidence-manifest", "Evidence manifest must be an object.")
-                    schema_version = manifest.get("schema_version")
-                    if type(schema_version) is int and schema_version in {1, 2}:
-                        _fail("unsupported-agent-thread-bundle-schema", "Schema-v1/v2 bundles require recollection into schema v3.")
-                    if canonical_json_bytes(manifest, newline=True) != manifest_bytes:
-                        _fail("bundle-invalid", "Evidence manifest must use canonical JSON.")
-                    for info in infos:
-                        _safe_member(info)
-                    if set(names) != set(EVIDENCE_MEMBERS):
-                        _fail("bundle-invalid", "Evidence ZIP must contain exactly the four schema-v3 members.")
-                    native_info = next(info for info in infos if info.filename == "native.bin")
-                    index_info = next(info for info in infos if info.filename == "native-index.jsonl")
-                    trajectory_info = next(info for info in infos if info.filename == "trajectory.jsonl")
-                    native = _read_member(archive, native_info, member_open, MAX_NATIVE_BYTES)
-                    native_index = _read_member(archive, index_info, member_open, MAX_NATIVE_INDEX_BYTES)
-                    trajectory = _read_member(archive, trajectory_info, member_open, MAX_TRAJECTORY_BYTES)
-                    validated = validate_evidence_members(manifest, native, native_index, trajectory)
-                    final_opened = os.fstat(raw.fileno())
-                    after = input_path.lstat()
-                    final_identity = (final_opened.st_dev, final_opened.st_ino, stat.S_IFMT(final_opened.st_mode), final_opened.st_size, final_opened.st_mtime_ns)
-                    after_identity = (after.st_dev, after.st_ino, stat.S_IFMT(after.st_mode), after.st_size, after.st_mtime_ns)
-                    if stat.S_ISLNK(after.st_mode) or not stat.S_ISREG(after.st_mode) or identity != final_identity or identity != after_identity:
-                        _fail("bundle-input-mutated", "Evidence input changed during validation.")
-                    return ValidatedEvidence(validated.manifest, validated.native, validated.native_index, validated.trajectory, validated.evidence_id, input_path)
-            except EvidenceError:
-                raise
-            except (OSError, zipfile.BadZipFile, KeyError, ValueError) as error:
-                raise EvidenceError("bundle-invalid", "Evidence ZIP is not a valid schema-v3 artifact.") from error
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-
-
-validate_evidence_bundle = validate_evidence
-write_evidence_bundle = write_evidence
-write_evidence_bundle_stream = write_evidence_stream
+                manifest_info = next(
+                    info for info in infos if info.filename == "manifest.json"
+                )
+            except StopIteration:
+                _fail("bundle-invalid", "Evidence ZIP is missing manifest.json.")
+            manifest_bytes = _read_member(
+                archive,
+                manifest_info,
+                MAX_MANIFEST_BYTES,
+            )
+            if not manifest_bytes.endswith(b"\n"):
+                _fail("bundle-invalid", "Evidence manifest must end with a newline.")
+            manifest = _strict_loads(manifest_bytes[:-1])
+            if not isinstance(manifest, Mapping):
+                _fail(
+                    "invalid-evidence-manifest",
+                    "Evidence manifest must be an object.",
+                )
+            schema_version = manifest.get("schema_version")
+            if type(schema_version) is int and schema_version in {1, 2}:
+                _fail(
+                    "unsupported-agent-thread-bundle-schema",
+                    "Schema-v1/v2 bundles require recollection into schema v3.",
+                )
+            if canonical_json_bytes(manifest, newline=True) != manifest_bytes:
+                _fail(
+                    "bundle-invalid",
+                    "Evidence manifest must use canonical JSON.",
+                )
+            if len(infos) != len(EVIDENCE_MEMBERS) or set(names) != set(
+                EVIDENCE_MEMBERS
+            ):
+                _fail(
+                    "bundle-invalid",
+                    "Evidence ZIP must contain exactly the four schema-v3 members.",
+                )
+            by_name = {info.filename: info for info in infos}
+            native = _read_member(
+                archive,
+                by_name["native.bin"],
+                MAX_NATIVE_BYTES,
+            )
+            native_index = _read_member(
+                archive,
+                by_name["native-index.jsonl"],
+                MAX_NATIVE_INDEX_BYTES,
+            )
+            trajectory = _read_member(
+                archive,
+                by_name["trajectory.jsonl"],
+                MAX_TRAJECTORY_BYTES,
+            )
+            validated = validate_evidence_members(
+                manifest,
+                native,
+                native_index,
+                trajectory,
+            )
+            return ValidatedEvidence(
+                validated.manifest,
+                validated.native,
+                validated.native_index,
+                validated.trajectory,
+                validated.evidence_id,
+                input_path,
+            )
+    except EvidenceError:
+        raise
+    except (
+        EOFError,
+        KeyError,
+        NotImplementedError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        zipfile.BadZipFile,
+    ) as error:
+        raise EvidenceError(
+            "bundle-invalid",
+            "Evidence ZIP is not a valid schema-v3 artifact.",
+        ) from error
 
 
 __all__ = [
@@ -812,11 +740,7 @@ __all__ = [
     "build_native_index",
     "encode_native_index",
     "validate_evidence",
-    "validate_evidence_bundle",
     "validate_evidence_manifest",
     "validate_evidence_members",
-    "write_evidence",
-    "write_evidence_bundle",
-    "write_evidence_bundle_stream",
     "write_evidence_stream",
 ]

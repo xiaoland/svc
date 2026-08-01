@@ -1,53 +1,47 @@
 from __future__ import annotations
 
 import json
-import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 
-from svc_cli.telemetry.agent_threads import ProviderContext, ThreadSelection
-from svc_cli.telemetry.providers.codex_rollout import CodexRolloutProvider
+from svc_cli.telemetry.agent_threads import ResolvedThread
+from svc_cli.telemetry.providers.codex_trajectory import CodexTrajectoryNormalizer
 
 
 @dataclass(frozen=True)
 class TrajectoryCase:
-    root: Path
-    provider: CodexRolloutProvider
+    normalizer: CodexTrajectoryNormalizer
 
-    def write_source(self, *records: dict[str, object]) -> Path:
-        source = self.root / "rollout.jsonl"
-        source.write_text("\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n", encoding="utf-8")
-        return source
-
-    def normalize(
-        self,
-        *records: dict[str, object],
-    ) -> tuple[object, list[dict[str, object]]]:
-        source = self.write_source(*records)
-        resolved = self.provider.resolve(
-            ProviderContext(home=self.root),
-            ThreadSelection(source=source),
-        )
+    def normalize(self, *records: dict[str, object], bounds: Mapping[str, int] | None = None, sink: Callable[[dict[str, object]], bool] | None = None) -> tuple[object, list[dict[str, object]]]:
+        source = BytesIO(("\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n").encode("utf-8"))
         projected: list[dict[str, object]] = []
-        result = self.provider.stream_normalize(
-            resolved,
-            lambda record: projected.append(dict(record)) or True,
-            {},
+        consumer = sink or (lambda record: projected.append(dict(record)) or True)
+        first_payload = records[0].get("payload") if records else None
+        thread_id = (
+            first_payload.get("id") if isinstance(first_payload, Mapping) and isinstance(first_payload.get("id"), str)
+            else "test-thread"
+        )
+        result = self.normalizer.normalize(
+            source,
+            ResolvedThread(
+                provider_id="codex", adapter_id="codex-rollout-v1", source_format="rollout-v1",
+                thread_id=thread_id, source_path=Path("rollout.jsonl"),
+            ),
+            consumer, bounds,
         )
         return result, projected
 
 
 @pytest.fixture
-def trajectory_case() -> Iterator[TrajectoryCase]:
-    with tempfile.TemporaryDirectory() as tmp:
-        yield TrajectoryCase(root=Path(tmp), provider=CodexRolloutProvider())
+def trajectory_case() -> TrajectoryCase:
+    return TrajectoryCase(CodexTrajectoryNormalizer())
 
 
 class TestCodexTrajectory:
-
     @staticmethod
     def envelope(kind: str, payload: object, timestamp: str = "2026-01-01T00:00:00Z") -> dict[str, object]:
         return {"timestamp": timestamp, "type": kind, "payload": payload}
@@ -60,7 +54,7 @@ class TestCodexTrajectory:
             self.envelope("session_meta", {"id": "thread-1", "cwd": "/work/project"}),
             self.envelope("response_item", {"type": "message", "role": "user", "content": "user input"}),
             self.envelope("response_item", {"type": "function_call", "name": "svc", "call_id": "native-call", "arguments": {"cmd": "status"}}),
-            self.envelope("response_item", {"type": "function_call_output", "call_id": "native-call", "status": "success", "output": "private output"}),
+            self.envelope("response_item", {"type": "function_call_output", "call_id": "native-call", "status": "success", "output": "tool output"}),
         )
 
         assert (result.source_status.value) == ("stable")
@@ -71,32 +65,21 @@ class TestCodexTrajectory:
         assert (records[1]["source_ref"]["event_index"]) == (1)
         assert (records[1]["source_ref"]["line"]) == (1)
         assert (records[3]["source_ref"]["event_index"]) == (3)
-        assert (records[3]["content"]) == ("private output")
+        assert (records[3]["content"]) == ("tool output")
 
     def test_stream_preserves_orphan_result_order_and_deterministic_ids(
         self,
         trajectory_case: TrajectoryCase,
     ) -> None:
-        source = trajectory_case.write_source(
+        _, first = trajectory_case.normalize(
             self.envelope("session_meta", {"id": "thread-2"}),
             self.envelope("response_item", {"type": "function_call_output", "call_id": "late", "status": "error", "output": "x"}),
             self.envelope("response_item", {"type": "function_call", "name": "tool", "call_id": "late", "arguments": ""}),
         )
-        resolved = trajectory_case.provider.resolve(
-            ProviderContext(home=trajectory_case.root),
-            ThreadSelection(source=source),
-        )
-        first: list[dict[str, object]] = []
-        second: list[dict[str, object]] = []
-        trajectory_case.provider.stream_normalize(
-            resolved,
-            lambda record: first.append(dict(record)) or True,
-            {},
-        )
-        trajectory_case.provider.stream_normalize(
-            resolved,
-            lambda record: second.append(dict(record)) or True,
-            {},
+        _, second = trajectory_case.normalize(
+            self.envelope("session_meta", {"id": "thread-2"}),
+            self.envelope("response_item", {"type": "function_call_output", "call_id": "late", "status": "error", "output": "x"}),
+            self.envelope("response_item", {"type": "function_call", "name": "tool", "call_id": "late", "arguments": ""}),
         )
 
         assert (first) == (second)
@@ -203,19 +186,18 @@ class TestCodexTrajectory:
         assert all("turn_ref" in record and "actor_ref" in record and "lane_ref" in record for record in results[:1])
         assert result.lossiness["dropped"]["unsupported_record"] == 0
 
-    def test_current_settings_completion_and_tool_search_shapes_are_projected_safely(
+    def test_current_settings_completion_and_tool_search_shapes_project_recognized_fields(
         self,
         trajectory_case: TrajectoryCase,
     ) -> None:
-        private_sentinel = "PRIVATE-CONTEXT-SENTINEL"
         initial_context = {
             "type": "turn_context",
             "turn_id": "turn-current",
             "model": "model-current",
             "effort": "high",
             "approval_policy": "on-request",
-            "sandbox_policy": {"type": "workspace-write", "writable_roots": [private_sentinel]},
-            "collaboration_mode": {"mode": "multi-agent", "settings": {"private": private_sentinel}},
+            "sandbox_policy": {"type": "workspace-write"},
+            "collaboration_mode": {"mode": "multi-agent"},
         }
         applied_settings = {
             "type": "thread_settings_applied",
@@ -223,8 +205,8 @@ class TestCodexTrajectory:
                 "model": "model-next",
                 "reasoning_effort": "medium",
                 "approval_policy": "never",
-                "permission_profile": {"type": "read-only", "private": private_sentinel},
-                "collaboration_mode": {"mode": "single-agent", "settings": {"private": private_sentinel}},
+                "permission_profile": {"type": "read-only"},
+                "collaboration_mode": {"mode": "single-agent"},
             },
         }
         result, records = trajectory_case.normalize(
@@ -233,31 +215,24 @@ class TestCodexTrajectory:
             self.envelope("event_msg", applied_settings),
             self.envelope("response_item", {"type": "tool_search_call", "call_id": "search-current", "arguments": {"query": "safe"}}),
             self.envelope("event_msg", {"type": "web_search_end", "call_id": "search-current", "action": {"type": "search"}}),
-            self.envelope("response_item", {"type": "tool_search_output", "call_id": "search-current", "status": "completed", "execution": {"b": 2, "a": 1}, "tools": [{"private": private_sentinel}]}),
+            self.envelope("response_item", {"type": "tool_search_output", "call_id": "search-current", "status": "completed", "execution": {"b": 2, "a": 1}}),
             self.envelope("event_msg", {"type": "thread_rolled_back", "num_turns": 1}),
             self.envelope("event_msg", {"type": "collab_agent_spawn_end", "call_id": "spawn-current", "status": "completed"}),
             self.envelope("event_msg", {"type": "collab_waiting_end", "call_id": "wait-current", "statuses": {}}),
             self.envelope("event_msg", {"type": "collab_agent_interaction_end", "call_id": "interaction-current", "status": {"completed": "agent"}}),
         )
 
-        contexts = [
-            record for record in records if record["type"] == "context"
-        ]
+        contexts = [record for record in records if record["type"] == "context"]
         assert [record["attributes"] for record in contexts] == [
             {"model": "model-current", "reasoning_effort": "high", "approval_mode": "on-request", "sandbox_mode": "workspace-write", "collaboration_mode": "multi-agent"},
             {"model": "model-next", "reasoning_effort": "medium", "approval_mode": "never", "sandbox_mode": "read-only", "collaboration_mode": "single-agent"},
         ]
-        tool_result = next(
-            record
-            for record in records
-            if record["type"] == "tool_result"
-        )
+        tool_result = next(record for record in records if record["type"] == "tool_result")
         assert tool_result["content"] == '{"a":1,"b":2}'
         assert tool_result["status"] == "success"
         assert tool_result["link_status"] == "linked"
         assert result.lossiness["dropped"]["unsupported_record"] == 0
         assert result.result_status.value == "ready"
-        assert private_sentinel not in json.dumps(records, ensure_ascii=False)
 
     def test_plaintext_reasoning_summary_remains_authority_when_full_reasoning_is_opaque(
         self,
@@ -326,25 +301,23 @@ class TestCodexTrajectory:
         self,
         trajectory_case: TrajectoryCase,
     ) -> None:
-        source = trajectory_case.write_source(
-            self.envelope("session_meta", {"id": "thread-3"}),
-            self.envelope("response_item", {"type": "message", "role": "user", "content": "one"}),
-            self.envelope("response_item", {"type": "message", "role": "assistant", "content": "two"}),
-        )
-        resolved = trajectory_case.provider.resolve(
-            ProviderContext(home=trajectory_case.root),
-            ThreadSelection(source=source),
-        )
         records: list[dict[str, object]] = []
 
         def sink(record: dict[str, object]) -> bool:
             records.append(dict(record))
             return len(records) < 2
 
-        result = trajectory_case.provider.stream_normalize(
-            resolved,
-            sink,
-            {"records": 2},
+        result, _ = trajectory_case.normalize(
+            self.envelope("session_meta", {"id": "thread-3"}),
+            self.envelope(
+                "response_item", {"type": "message", "role": "user", "content": "one"}
+            ),
+            self.envelope(
+                "response_item",
+                {"type": "message", "role": "assistant", "content": "two"},
+            ),
+            bounds={"records": 2},
+            sink=sink,
         )
 
         assert (len(records)) == (2)
@@ -366,45 +339,6 @@ class TestCodexTrajectory:
                     },
                 }
             ])
-
-    def test_append_after_open_is_not_collected_and_is_reported_as_grew(
-        self,
-        trajectory_case: TrajectoryCase,
-    ) -> None:
-        source = trajectory_case.write_source(
-            self.envelope("session_meta", {"id": "thread-append"}),
-        )
-        resolved = trajectory_case.provider.resolve(
-            ProviderContext(home=trajectory_case.root),
-            ThreadSelection(source=source),
-        )
-        records: list[dict[str, object]] = []
-
-        def sink(record: dict[str, object]) -> bool:
-            records.append(dict(record))
-            if record["type"] == "meta":
-                with source.open("a", encoding="utf-8") as stream:
-                    stream.write(
-                        json.dumps(
-                            self.envelope(
-                                "response_item",
-                                {
-                                    "type": "message",
-                                    "role": "assistant",
-                                    "content": "appended",
-                                },
-                            )
-                        )
-                        + "\n"
-                    )
-            return True
-
-        result = trajectory_case.provider.stream_normalize(resolved, sink, {})
-
-        assert ([record["type"] for record in records]) == (["meta"])
-        assert (result.source_status.value) == ("grew")
-        assert (result.result_status.value) == ("partial")
-        assert (result.lossiness["partial_reasons"]["source_grew"]) == (1)
 
     def test_tool_linkage_modes_suppress_duplicates_and_preserve_parent_refs(
         self,
@@ -434,7 +368,7 @@ class TestCodexTrajectory:
         trajectory_case: TrajectoryCase,
     ) -> None:
         hidden_ref = "tasks/hidden/packet.md"
-        source = trajectory_case.write_source(
+        result, records = trajectory_case.normalize(
             self.envelope("session_meta", {"id": "thread-task-refs"}),
             self.envelope(
                 "response_item",
@@ -442,23 +376,11 @@ class TestCodexTrajectory:
                     "type": "message",
                     "role": "user",
                     "content": (
-                        ("x" * 17_000)
-                        + " "
-                        + hidden_ref
-                        + " tasks/omitted/packet.md"
+                        ("x" * 17_000) + " " + hidden_ref + " tasks/omitted/packet.md"
                     ),
                 },
             ),
-        )
-        resolved = trajectory_case.provider.resolve(
-            ProviderContext(home=trajectory_case.root),
-            ThreadSelection(source=source),
-        )
-        records: list[dict[str, object]] = []
-        result = trajectory_case.provider.stream_normalize(
-            resolved,
-            lambda record: records.append(dict(record)) or True,
-            {"task_reference_occurrences": 1},
+            bounds={"task_reference_occurrences": 1},
         )
 
         message = next(record for record in records if record["type"] == "message")

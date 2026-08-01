@@ -80,8 +80,9 @@ generated summary.
 Remove `--include-sensitive`, `--repo`, TTY-only analysis branches, and any
 assumption that exported members are private-mode files. The caller now owns
 content exposure and output location, while SVC retains source immutability,
-absent-target/no-overwrite behavior, source/output separation, atomic
-publication, symlink/reparse and TOCTOU defenses, bounds, canonical order, and
-integrity checks. Update automation from the old `analyze --json` response to
-the query/read request and response schemas; bind saved cursors and refs to the
-same evidence ID and request scope.
+absent-target/no-overwrite behavior, source/output separation, bounds,
+canonical order, and integrity checks. SVC does not promise atomic visibility,
+symlink/reparse exclusion, hostile same-user defense, or path-race protection;
+see the local-trust-boundary migration note. Update automation from the old
+`analyze --json` response to the query/read request and response schemas; bind
+saved cursors and refs to the same evidence ID and request scope.

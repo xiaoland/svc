@@ -100,14 +100,15 @@ svc analysis read --schema
 svc analysis read --input /path/to/evidence-v3.zip --request <file|->
 ```
 
-`list` is one bounded inventory surface. It may expose provider-truthful
-recognition and local provenance fields, with lifecycle and source availability
-kept distinct; it no longer splits safe and sensitive modes. `export` requires
-one exact thread ID or source path and an absent destination, while keeping the
-source read-only and refusing overwrite or source/output aliasing. The caller
-owns where exported evidence is stored and who may see it; there is no
-`--include-sensitive` acknowledgement, `--repo` boundary, TTY gate, or private
-member-mode promise.
+`list` is one bounded inventory surface. It exposes provider lifecycle,
+recognition, and local provenance without predicting whether a source will
+still be readable when export begins. `export` requires one exact thread ID or
+source path and an absent destination, while keeping the source read-only and
+refusing overwrite or source/output aliasing. A successful export is a
+validated bundle; an interrupted process may leave an invalid partial target
+that must be removed before retry. The caller owns where exported evidence is
+stored and who may see it; there is no `--include-sensitive`
+acknowledgement, `--repo` boundary, TTY gate, or private member-mode promise.
 
 The export is a schema-v3 ZIP with exactly `manifest.json`, `native.bin`,
 `native-index.jsonl`, and `trajectory.jsonl`. `native.bin` is the captured
@@ -121,6 +122,12 @@ capabilities, digests, and declared loss. A schema-v1 or schema-v2 bundle is a
 historical cutoff: query/read reject it after bounded manifest identification,
 without conversion or fallback; recollect from the provider-local source.
 
+This is a same-user local workflow, not a security sandbox. SVC does not
+protect against root, a hostile process under the same account, or adversarial
+path replacement. Native evidence may contain all selected provider content;
+structural projection and omission are not confidentiality or redaction. The
+caller owns storage, access, retention, and disclosure.
+
 `query` is a closed machine-first protocol with `overview` and deterministic
 `match` intents. It returns evidence identity, capture/capability/loss status,
 stable native and trajectory references, structural ranges, and bounded
@@ -130,10 +137,11 @@ regular-expression programs, joins, grouping, scoring, or natural-language
 prompts. `read` is forward-only native reading: start at the beginning or an
 exact native reference, optionally include bounded preceding records, and use a
 scope-bound cursor to continue. It returns captured native bytes/values with
-exact frame and fragment offsets, digests, provenance, and continuation. Exact
-UTF-8 fragments are directly readable as text; arbitrary bytes use a lossless
-base64 fallback. Read never filters, reorders, summarizes, or silently returns
-normalized text.
+exact frame and fragment offsets, digests, provenance, and continuation.
+Cursors are unsigned local state, not authenticated capabilities.
+Exact UTF-8 fragments are directly readable as text; arbitrary bytes use a
+lossless base64 fallback. Read never filters, reorders, summarizes, or silently
+returns normalized text.
 
 Responses distinguish `complete`, `partial`, and `unavailable`; pagination is
 not evidence loss. An incomplete acquisition frame remains readable but cannot

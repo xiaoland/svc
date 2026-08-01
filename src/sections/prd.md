@@ -45,6 +45,24 @@ SVC provides a local, Agent-driven evidence capability for understanding whether
 
 The observable promise is bounded and evidence-led: an Agent can inspect immutable collected evidence, distinguish a supported observation from an unavailable boundary, and connect task outcome, possible contributors, verification or handoff horizon, and residual unknowns. Provider health, latency, token or memory use, throughput, and generic tool failure rates are not independent task-performance outcomes. Product evaluation requires evidence-grounded, decision-relevant insight from real task trajectories without forcing a defect or treating chronology as causality.
 
+### Local trust and exposure boundary
+
+Agent-thread evidence is an explicit same-user local workflow. SVC trusts the
+calling user, the selected provider location, the local account, and the
+operating system; it does not promise protection from root, a hostile process
+running as the same user, or adversarial path replacement. Provider data may
+still be malformed, oversized, unreadable, or changing, and SVC must report
+those ordinary input and capture boundaries honestly.
+
+SVC protects the selected source from its own writes, the fidelity and
+provenance of successfully collected evidence, bounded resource use, an
+existing output from replacement, Consumer-owned project files, and release
+artifact integrity. The native evidence authority may contain every selected
+provider byte. Structural projection and omission are not redaction, and SVC
+does not provide confidentiality, a privacy mode, or a sandbox. The caller
+owns source selection, output storage, access control, retention, and
+disclosure.
+
 ## Expansion Rule
 
 Split the single file only when real content has distinct consumers or change cadence. Common pressure-driven splits are drivers, behavior, scope, glossary, and derived domain structure. Every new file needs an owner and content at creation time.

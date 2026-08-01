@@ -1,13 +1,8 @@
-"""Safe collection and publication of schema-v3 Agent-thread evidence."""
+"""Collection and publication of schema-v3 Agent-thread evidence."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-import errno
-import os
 from pathlib import Path
-import secrets
-import stat
 import tempfile
 from typing import Any, BinaryIO, Callable, Mapping, cast
 
@@ -24,10 +19,9 @@ from .agent_threads import (
 )
 from .evidence import (
     EvidenceError,
-    ValidatedEvidence,
     build_evidence_manifest,
     encode_native_index,
-    validate_evidence_members,
+    validate_evidence,
     write_evidence_stream,
 )
 from .trajectory import (
@@ -39,305 +33,38 @@ from .trajectory import (
 )
 
 
-_FILE_ATTRIBUTE_REPARSE_POINT = 0x0400
-
-
-@dataclass(frozen=True)
-class _OutputTarget:
-    output: Path
-    parent_identity: tuple[int, int, int]
-
-
-def _is_link_or_reparse_point(info: os.stat_result) -> bool:
-    return stat.S_ISLNK(info.st_mode) or bool(
-        (getattr(info, "st_file_attributes", 0) or 0)
-        & _FILE_ATTRIBUTE_REPARSE_POINT
-    )
-
-
-def _directory_identity(info: os.stat_result) -> tuple[int, int, int]:
-    return (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
-
-
-def _regular_file_identity(
-    info: os.stat_result,
-    *,
-    description: str,
-) -> tuple[int, int, int, int, int]:
-    if _is_link_or_reparse_point(info) or not stat.S_ISREG(info.st_mode):
-        raise OSError(f"{description} is not a regular file")
-    # Windows may update ctime during read-only access.
-    return (
-        info.st_dev,
-        info.st_ino,
-        stat.S_IFMT(info.st_mode),
-        info.st_size,
-        info.st_mtime_ns,
-    )
-
-
-def _verify_output_parent(
-    parent: Path,
-    identity: tuple[int, int, int],
-) -> None:
-    try:
-        info = parent.lstat()
-        resolved = parent.resolve(strict=True)
-    except (OSError, RuntimeError) as error:
-        raise ValueError("Bundle output parent cannot be re-verified safely") from error
-    if (
-        _is_link_or_reparse_point(info)
-        or not stat.S_ISDIR(info.st_mode)
-        or _directory_identity(info) != identity
-        or resolved != parent
-    ):
-        raise ValueError("Bundle output parent changed after validation")
-
-
-def _canonical_evidence_output(
+def _evidence_output(
     output: Path,
-    *,
-    source: Path | None = None,
-) -> _OutputTarget:
-    """Resolve an absent evidence target without imposing a privacy location."""
+) -> Path:
+    """Validate the stable request shape; exclusive creation owns absence."""
 
     requested = Path(output).expanduser()
     if requested.suffix != ".zip":
         raise ValueError("Evidence output must have an explicit .zip suffix")
-    try:
-        requested_parent = requested.parent.lstat()
-        physical_parent = requested.parent.resolve(strict=True)
-        physical_info = physical_parent.lstat()
-    except (OSError, RuntimeError) as error:
-        raise ValueError(
-            "Evidence output parent must be an existing directory"
-        ) from error
-    if (
-        _is_link_or_reparse_point(requested_parent)
-        or not stat.S_ISDIR(requested_parent.st_mode)
-        or _is_link_or_reparse_point(physical_info)
-        or not stat.S_ISDIR(physical_info.st_mode)
-    ):
-        raise ValueError(
-            "Evidence output parent must be an existing non-link directory"
-        )
-    physical_output = physical_parent / requested.name
-    if source is not None:
-        try:
-            physical_source = Path(source).expanduser().resolve(strict=True)
-        except (OSError, RuntimeError) as error:
-            raise ValueError("Evidence source cannot be resolved safely") from error
-        if physical_output == physical_source:
-            raise ValueError("Evidence output must differ from the selected source")
-    if os.path.lexists(requested) or os.path.lexists(physical_output):
-        raise FileExistsError(f"Evidence output already exists: {requested}")
-    return _OutputTarget(
-        output=physical_output,
-        parent_identity=_directory_identity(physical_info),
-    )
-
-
-def _supports_anchored_publication() -> bool:
-    return (
-        os.name != "nt"
-        and os.open in os.supports_dir_fd
-        and os.link in os.supports_dir_fd
-        and os.unlink in os.supports_dir_fd
-        and hasattr(os, "O_DIRECTORY")
-    )
-
-
-def _open_output_directory(
-    parent: Path,
-    identity: tuple[int, int, int],
-) -> int:
-    flags = os.O_RDONLY | os.O_DIRECTORY
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(parent, flags)
-    except OSError as error:
-        raise ValueError(
-            "Bundle output parent cannot be opened safely"
-        ) from error
-    try:
-        info = os.fstat(descriptor)
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or _directory_identity(info) != identity
-        ):
-            raise ValueError(
-                "Bundle output parent changed while being opened"
-            )
-        return descriptor
-    except Exception:
-        os.close(descriptor)
-        raise
-
-
-def _create_anchored_temp(
-    parent_fd: int,
-    output_name: str,
-) -> tuple[int, str]:
-    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
-    for _ in range(32):
-        name = f".{output_name}.{secrets.token_hex(16)}.tmp"
-        try:
-            return os.open(name, flags, 0o666, dir_fd=parent_fd), name
-        except FileExistsError:
-            continue
-    raise OSError("Could not allocate a unique bundle staging filename")
-
-
-def _publish_anchored_without_overwrite(
-    parent_fd: int,
-    temp_name: str,
-    output_name: str,
-) -> None:
-    try:
-        os.link(
-            temp_name,
-            output_name,
-            src_dir_fd=parent_fd,
-            dst_dir_fd=parent_fd,
-            follow_symlinks=False,
-        )
-    except FileExistsError:
-        raise FileExistsError(f"Bundle output already exists: {output_name}")
-    except OSError as error:
-        if error.errno == errno.EEXIST:
-            raise FileExistsError(
-                f"Bundle output already exists: {output_name}"
-            ) from error
-        raise
-    finally:
-        try:
-            os.unlink(temp_name, dir_fd=parent_fd)
-        except OSError:
-            pass
-
-
-def _publish_without_overwrite(temp_path: Path, output: Path) -> None:
-    try:
-        if os.name == "nt":
-            os.rename(temp_path, output)
-        else:
-            os.link(temp_path, output)
-    except FileExistsError:
-        raise FileExistsError(f"Bundle output already exists: {output}")
-    except OSError as error:
-        if error.errno == errno.EEXIST:
-            raise FileExistsError(
-                f"Bundle output already exists: {output}"
-            ) from error
-        raise
-    finally:
-        try:
-            temp_path.unlink()
-        except OSError:
-            pass
-
-
-def _create_fallback_temp(parent: Path, output_name: str) -> tuple[int, Path]:
-    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
-    for _ in range(32):
-        candidate = parent / f".{output_name}.{secrets.token_hex(16)}.tmp"
-        try:
-            return os.open(candidate, flags, 0o666), candidate
-        except FileExistsError:
-            continue
-    raise OSError("Could not allocate a unique archive staging filename")
+    if not requested.parent.is_dir():
+        raise ValueError("Evidence output parent must be an existing directory")
+    return requested
 
 
 def _publish_output(
-    target: _OutputTarget,
+    output: Path,
     writer: Callable[[BinaryIO], object],
 ) -> None:
-    """Write and atomically publish one absent-target archive."""
+    """Exclusively create one target and retain it only after validation."""
 
-    parent = target.output.parent
-    temp_path: Path | None = None
-    temp_name: str | None = None
-    parent_fd: int | None = None
-    staging_fd: int | None = None
-    staging_identity: tuple[int, int, int, int, int] | None = None
+    created = False
     try:
-        _verify_output_parent(
-            parent,
-            target.parent_identity,
-        )
-        if _supports_anchored_publication():
-            parent_fd = _open_output_directory(
-                parent,
-                target.parent_identity,
-            )
-            staging_fd, temp_name = _create_anchored_temp(
-                parent_fd,
-                target.output.name,
-            )
-        else:
-            staging_fd, temp_path = _create_fallback_temp(
-                parent,
-                target.output.name,
-            )
-        with os.fdopen(staging_fd, "w+b") as archive_stream:
-            staging_fd = None
+        with output.open("x+b") as archive_stream:
+            created = True
             writer(archive_stream)
-            archive_stream.flush()
-            os.fsync(archive_stream.fileno())
-            staging_identity = _regular_file_identity(
-                os.fstat(archive_stream.fileno()),
-                description="Archive staging file",
-            )
-
-        _verify_output_parent(
-            parent,
-            target.parent_identity,
-        )
-        if parent_fd is not None:
-            assert temp_name is not None
-            _publish_anchored_without_overwrite(
-                parent_fd,
-                temp_name,
-                target.output.name,
-            )
-            temp_name = None
-            published = os.stat(
-                target.output.name,
-                dir_fd=parent_fd,
-                follow_symlinks=False,
-            )
-        else:
-            assert temp_path is not None
-            _publish_without_overwrite(temp_path, target.output)
-            temp_path = None
-            published = target.output.lstat()
-        if _regular_file_identity(
-            published,
-            description="Published archive",
-        ) != staging_identity:
-            raise SvcError(
-                "bundle-output-mutated",
-                "Archive output changed during atomic publication.",
-            )
-    finally:
-        if staging_fd is not None:
+        validate_evidence(output)
+    except Exception:
+        if created:
             try:
-                os.close(staging_fd)
+                output.unlink()
             except OSError:
                 pass
-        if temp_path is not None:
-            try:
-                temp_path.unlink()
-            except OSError:
-                pass
-        if parent_fd is not None:
-            if temp_name is not None:
-                try:
-                    os.unlink(temp_name, dir_fd=parent_fd)
-                except OSError:
-                    pass
-            os.close(parent_fd)
+        raise
 
 
 def _diagnostic_sort_key(
@@ -607,51 +334,16 @@ def _normalize_captured_to_streams(
     return manifest, native_bytes, native_index, trajectory_bytes
 
 
-def normalize_agent_thread_evidence(
-    provider: EvidenceThreadProvider,
-    context: ProviderContext,
-    selection: ThreadSelection,
-) -> ValidatedEvidence:
-    """Collect schema-v3 evidence ephemerally without publication."""
-
-    native = tempfile.SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b")
-    trajectory = tempfile.SpooledTemporaryFile(
-        max_size=1024 * 1024,
-        mode="w+b",
-    )
-    try:
-        manifest, native_bytes, native_index, trajectory_bytes = (
-            _normalize_captured_to_streams(
-                provider,
-                context,
-                selection,
-                cast(BinaryIO, native),
-                cast(BinaryIO, trajectory),
-            )
-        )
-        return validate_evidence_members(
-            manifest,
-            native_bytes,
-            native_index,
-            trajectory_bytes,
-        )
-    except (TrajectoryError, EvidenceError) as error:
-        raise SvcError(error.code, error.message) from error
-    finally:
-        native.close()
-        trajectory.close()
-
-
 def write_agent_thread_evidence(
     provider: EvidenceThreadProvider,
     context: ProviderContext,
     selection: ThreadSelection,
     output: Path,
 ) -> dict[str, Any]:
-    """Capture and atomically publish one schema-v3 evidence archive."""
+    """Capture and exclusively create one validated schema-v3 archive."""
 
     resolved = provider.resolve(context, selection)
-    target = _canonical_evidence_output(output, source=resolved.source_path)
+    target = _evidence_output(output)
     native = tempfile.SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b")
     trajectory = tempfile.SpooledTemporaryFile(
         max_size=1024 * 1024,
@@ -688,6 +380,5 @@ def write_agent_thread_evidence(
 
 
 __all__ = [
-    "normalize_agent_thread_evidence",
     "write_agent_thread_evidence",
 ]

@@ -23,7 +23,6 @@ from ..agent_threads import (
     NormalizedRecordSink,
     NormalizationStatus,
     ResolvedThread,
-    SourceSnapshot,
     SourceStatus,
 )
 from ..trajectory import TRAJECTORY_SCHEMA
@@ -85,7 +84,7 @@ _LOSS_KEYS = {
     ),
     "synthesized": ("tool_call_id",),
     "partial_reasons": (
-        "source_grew", "source_changed", "source_displaced", "source_read_interrupted",
+        "source_grew", "source_changed", "source_read_interrupted",
         "input_limit", "record_limit", "trajectory_limit",
     ),
 }
@@ -481,7 +480,6 @@ class CodexTrajectoryNormalizer:
         resolved: ResolvedThread,
         sink: NormalizedRecordSink,
         bounds: Mapping[str, int] | None = None,
-        initial_snapshot: SourceSnapshot | None = None,
     ) -> NormalizationResult:
         effective = dict(DEFAULT_BOUNDS)
         if bounds:
@@ -522,11 +520,7 @@ class CodexTrajectoryNormalizer:
         saw_terminal = False
         saw_concurrency = False
         workspace = {"status": "missing", "flavor": None, "label": None, "ref": None, "label_truncated": False, "observed_code_points": 0, "retained_code_points": 0}
-        initial_size = (
-            initial_snapshot.size
-            if initial_snapshot is not None
-            else effective["source_bytes"]
-        )
+        initial_size = effective["source_bytes"]
         initial_extent = min(initial_size, effective["source_bytes"])
         remaining_extent = initial_extent
         input_limited = initial_size > effective["source_bytes"]
@@ -624,7 +618,7 @@ class CodexTrajectoryNormalizer:
             "content_profile": "bounded-normalized-v1",
         }
         if not emit(meta_payload):
-            return self._result(resolved, thread_ref, workspace, capabilities, counts, loss, diagnostics, initial_snapshot, None)
+            return self._result(resolved, thread_ref, workspace, capabilities, counts, loss, diagnostics)
 
         def common(kind: str, timestamp: str | None, source: dict[str, Any], payload: Mapping[str, Any], index: int) -> dict[str, Any]:
             record: dict[str, Any] = {
@@ -1174,15 +1168,14 @@ class CodexTrajectoryNormalizer:
             loss["truncated"]["diagnostics"] = counts["diagnostics_suppressed"]
             diagnostics.append({"code": "diagnostic-limit-reached", "severity": "warning", "action": "truncate", "count": 1, "record_ref": None, "source_ref": None, "details": {"observed_count": regular_count, "limit_count": effective["diagnostics"]}})
         counts["diagnostics_emitted"] = sum(int(item["count"]) for item in diagnostics)
-        return self._result(resolved, thread_ref, workspace, capabilities, counts, loss, diagnostics, initial_snapshot, None, result_status)
+        return self._result(resolved, thread_ref, workspace, capabilities, counts, loss, diagnostics, result_status)
 
-    def _result(self, resolved: ResolvedThread, thread_ref: str, workspace: Mapping[str, Any], capabilities: Mapping[str, str], counts: Mapping[str, Any], loss: Mapping[str, Any], diagnostics: Sequence[Mapping[str, Any]], source_snapshot: SourceSnapshot | None, final_snapshot: SourceSnapshot | None, result_status: NormalizationStatus = NormalizationStatus.READY) -> NormalizationResult:
+    def _result(self, resolved: ResolvedThread, thread_ref: str, workspace: Mapping[str, Any], capabilities: Mapping[str, str], counts: Mapping[str, Any], loss: Mapping[str, Any], diagnostics: Sequence[Mapping[str, Any]], result_status: NormalizationStatus = NormalizationStatus.READY) -> NormalizationResult:
         return NormalizationResult(
             provider_id=self.provider_id, adapter_id=self.adapter_id, source_format=self.source_format,
             thread_ref=thread_ref, workspace=workspace, source_status=SourceStatus.STABLE,
             result_status=result_status, capabilities=capabilities, counts=counts,
-            lossiness=loss, diagnostics=tuple(diagnostics), source_snapshot=source_snapshot,
-            final_snapshot=final_snapshot,
+            lossiness=loss, diagnostics=tuple(diagnostics),
         )
 
 

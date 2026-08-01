@@ -73,8 +73,6 @@ class NormalizationPolicy:
     """The frozen schema-v2 policy and resource bounds."""
 
     profile: str = CONTENT_PROFILE
-    sensitivity: str = "acknowledged"
-    redaction: str = "none"
     noise_policy: str = "structural-v1"
     task_reference_policy: str = "lexical-relative-packet-v1"
     timestamp_policy: str = "utc-rfc3339-nanosecond-v1"
@@ -136,8 +134,6 @@ def policy_dict(policy: NormalizationPolicy = DEFAULT_NORMALIZATION_POLICY) -> M
     }
     return {
         "profile": policy.profile,
-        "sensitivity": policy.sensitivity,
-        "redaction": policy.redaction,
         "noise_policy": policy.noise_policy,
         "task_reference_policy": policy.task_reference_policy,
         "timestamp_policy": policy.timestamp_policy,
@@ -697,7 +693,7 @@ _LOSS_KEYS = {
     "truncated": ("timestamp_precision", "workspace_label", "message", "context_content", "context_attribute", "reasoning", "tool_name", "tool_config_names", "tool_arguments", "tool_result", "task_references", "diagnostics"),
     "unavailable": ("reasoning", "tool_linkage", "context", "task_references", "explicit_concurrency", "timestamps", "terminal_events"),
     "synthesized": ("tool_call_id",),
-    "partial_reasons": ("source_grew", "source_changed", "source_displaced", "source_read_interrupted", "input_limit", "record_limit", "trajectory_limit"),
+    "partial_reasons": ("source_grew", "source_changed", "source_read_interrupted", "input_limit", "record_limit", "trajectory_limit"),
 }
 _COUNT_KEYS = ("source_bytes_read", "source_events_seen", "records_emitted", "trajectory_bytes", "records_by_type", "messages_by_role", "tool_calls", "tool_results", "task_references", "diagnostics_emitted", "diagnostics_suppressed")
 _DIAGNOSTIC_DETAIL_KEYS = {"record_type", "content_kind", "observed_bytes", "limit_bytes", "observed_code_points", "retained_code_points", "observed_digits", "retained_digits", "observed_depth", "limit_depth", "observed_count", "limit_count", "occurrence", "capability", "arguments_kind", "source_status"}
@@ -717,7 +713,7 @@ _DIAGNOSTIC_SPECS = {
     "duplicate-tool-result": ("drop", "warning", {"occurrence"}), "orphan-tool-result": ("unavailable", "warning", set()),
     "absolute-task-reference-dropped": ("drop", "info", set()), "invalid-task-reference-dropped": ("drop", "info", set()),
     "task-reference-oversize-dropped": ("drop", "warning", {"observed_code_points", "retained_code_points"}), "source-grew-during-collection": ("partial", "warning", {"source_status"}),
-    "source-changed-during-collection": ("partial", "warning", {"source_status"}), "source-displaced-during-collection": ("partial", "warning", {"source_status"}),
+    "source-changed-during-collection": ("partial", "warning", {"source_status"}),
     "source-read-interrupted": ("partial", "error", set()), "input-limit-reached": ("partial", "warning", {"observed_bytes", "limit_bytes"}),
     "record-limit-reached": ("partial", "warning", {"observed_count", "limit_count"}), "trajectory-limit-reached": ("partial", "warning", {"observed_bytes", "limit_bytes"}),
     "task-reference-limit-reached": ("truncate", "warning", {"observed_count", "limit_count"}), "diagnostic-limit-reached": ("truncate", "warning", {"observed_count", "limit_count"}),
@@ -1029,7 +1025,7 @@ def validate_manifest(manifest: Mapping[str, Any], *, trajectory: ValidatedTraje
         if not isinstance(source[key], str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", source[key]):
             _fail("Manifest source identity is invalid.")
     _check_ref(source["thread_ref"], prefix="thread")
-    if source["source_status"] not in {"stable", "grew", "changed", "displaced"}:
+    if source["source_status"] not in {"stable", "grew", "changed"}:
         _fail("Manifest source_status is invalid.")
     if manifest["policy"] != policy_dict():
         _fail("Manifest policy is not the exact bounded-normalized-v1 policy.")
@@ -1071,12 +1067,9 @@ def validate_manifest(manifest: Mapping[str, Any], *, trajectory: ValidatedTraje
         "stable": None,
         "grew": "source_grew",
         "changed": "source_changed",
-        "displaced": "source_displaced",
     }[source["source_status"]]
-    for reason in ("source_grew", "source_changed", "source_displaced"):
-        if bool(lossiness["partial_reasons"][reason]) != (
-            reason == expected_source_reason
-        ):
+    for reason in ("source_grew", "source_changed"):
+        if bool(lossiness["partial_reasons"][reason]) != (reason == expected_source_reason):
             _fail(
                 "Manifest source status and partial reason disagree.",
                 source_status=source["source_status"],

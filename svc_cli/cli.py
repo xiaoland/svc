@@ -69,7 +69,11 @@ def _parser() -> argparse.ArgumentParser:
     status.add_argument("--json", action="store_true", dest="json_output")
 
     adopt = subparsers.add_parser("adopt", help="Plan or record explicit project adoption of this corpus")
-    adopt.add_argument("version", nargs="?", help="Packaged SVC version to adopt (defaults to this corpus)")
+    adopt.add_argument(
+        "version",
+        nargs="?",
+        help="Packaged SVC version to adopt (defaults to this corpus)",
+    )
     adopt.add_argument("repo", nargs="?", default=".")
     adopt.add_argument("--apply", metavar="PLAN_DIGEST")
     adopt.add_argument("--json", action="store_true", dest="json_output")
@@ -84,7 +88,10 @@ def _parser() -> argparse.ArgumentParser:
     dev_status.add_argument("target", nargs="?")
     dev_status.add_argument("--repo", default=".")
     dev_status.add_argument("--json", action="store_true", dest="json_output")
-    dev_identity = dev_commands.add_parser("identity", help="Show the resolved workspace identity used for dev coordination")
+    dev_identity = dev_commands.add_parser(
+        "identity",
+        help="Show the resolved workspace identity used for dev coordination",
+    )
     dev_identity.add_argument("--repo", default=".")
     dev_identity.add_argument("--json", action="store_true", dest="json_output")
     dev_ensure = dev_commands.add_parser("ensure", help="Reuse or start exactly one declared dev target")
@@ -102,7 +109,9 @@ def _parser() -> argparse.ArgumentParser:
 
     telemetry = subparsers.add_parser("telemetry", help="Collect explicit local observability evidence")
     telemetry_resources = telemetry.add_subparsers(dest="telemetry_resource", required=True)
-    agent_thread = telemetry_resources.add_parser("agent-thread", help="List or capture provider-obtainable Agent-thread evidence")
+    agent_thread = telemetry_resources.add_parser(
+        "agent-thread", help="List or capture provider-obtainable Agent-thread evidence"
+    )
     agent_thread_commands = agent_thread.add_subparsers(dest="agent_thread_command", required=True)
     thread_list = agent_thread_commands.add_parser("list", help="List bounded Codex thread selection context")
     thread_list.add_argument("--codex-home", type=Path)
@@ -112,7 +121,12 @@ def _parser() -> argparse.ArgumentParser:
         default=ArchiveFilter.ALL.value,
         help="Filter by provider-reported lifecycle (default: all)",
     )
-    thread_list.add_argument("--limit", type=_telemetry_limit, default=20, help="Maximum threads to list (1-100)")
+    thread_list.add_argument(
+        "--limit",
+        type=_telemetry_limit,
+        default=20,
+        help="Maximum threads to list (1-100)",
+    )
     thread_list.add_argument("--json", action="store_true", dest="json_output")
     thread_export = agent_thread_commands.add_parser(
         "export",
@@ -121,7 +135,12 @@ def _parser() -> argparse.ArgumentParser:
     selector = thread_export.add_mutually_exclusive_group(required=True)
     selector.add_argument("--thread-id")
     selector.add_argument("--source", type=Path, help="Exact Codex rollout JSONL source")
-    thread_export.add_argument("--output", required=True, type=Path, help="Absent .zip destination distinct from the source")
+    thread_export.add_argument(
+        "--output",
+        required=True,
+        type=Path,
+        help="Absent .zip destination distinct from the source",
+    )
     thread_export.add_argument("--codex-home", type=Path)
     thread_export.add_argument("--json", action="store_true", dest="json_output")
 
@@ -135,7 +154,11 @@ def _parser() -> argparse.ArgumentParser:
         ("read", "Read ordered native evidence from start, exact ref, or cursor"),
     ):
         tool = analysis_tools.add_parser(name, help=help_text)
-        tool.add_argument("--schema", action="store_true", help="Return the tool contract and Agent method reference")
+        tool.add_argument(
+            "--schema",
+            action="store_true",
+            help="Return the tool contract and Agent method reference",
+        )
         tool.add_argument("--input", type=Path, help="Exact schema-v3 evidence ZIP")
         tool.add_argument("--request", help="JSON request file or - for stdin")
     return parser
@@ -190,7 +213,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.dev_command == "setup":
                 setup_plan = plan_setup(Path(args.repo), args.integration, args.target)
                 if args.apply:
-                    payload = {"schema_version": 1, "command": setup_plan.command, **apply_local_plan(cast(LocalPlan, setup_plan), args.apply)}
+                    payload = {
+                        "schema_version": 1,
+                        "command": setup_plan.command,
+                        **apply_local_plan(cast(LocalPlan, setup_plan), args.apply),
+                    }
                     _emit(payload, json_output)
                     return EXIT_OK
                 _emit_local_plan(setup_plan, json_output)
@@ -203,10 +230,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_analysis_tool(args)
 
         if args.command == "telemetry":
-            if (
-                args.telemetry_resource == "agent-thread"
-                and args.agent_thread_command == "list"
-            ):
+            if args.telemetry_resource == "agent-thread" and args.agent_thread_command == "list":
                 payload = list_agent_threads(args.codex_home, args.limit, args.archive_state)
                 _emit_telemetry_list(payload, json_output)
                 return EXIT_OK
@@ -222,7 +246,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "self-update":
             update_plan = plan_self_update()
             if args.apply:
-                payload = {"schema_version": 1, "command": "self-update", **apply_self_update(update_plan, args.apply)}
+                payload = {
+                    "schema_version": 1,
+                    "command": "self-update",
+                    **apply_self_update(update_plan, args.apply),
+                }
                 _emit(payload, json_output)
                 return EXIT_OK
             _emit_update_plan(update_plan, json_output)
@@ -233,7 +261,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             local_plan = plan_adopt(Path(args.repo), args.version)
         if args.apply:
-            payload = {"schema_version": 1, "command": local_plan.command, **apply_local_plan(local_plan, args.apply)}
+            payload = {
+                "schema_version": 1,
+                "command": local_plan.command,
+                **apply_local_plan(local_plan, args.apply),
+            }
             _emit(payload, json_output)
             return EXIT_OK
         _emit_local_plan(local_plan, json_output)
@@ -280,9 +312,7 @@ def _analysis_request(source: str) -> object:
         return json.loads(
             text,
             object_pairs_hook=pairs,
-            parse_constant=lambda token: (_ for _ in ()).throw(
-                ValueError(f"non-finite number: {token}")
-            ),
+            parse_constant=lambda token: (_ for _ in ()).throw(ValueError(f"non-finite number: {token}")),
         )
     except (json.JSONDecodeError, ValueError) as error:
         raise AnalysisProtocolError(
@@ -379,10 +409,7 @@ def _emit_status(payload: dict[str, Any], json_output: bool) -> None:
         return
     installed = payload["installed_cli_version"] or "source-tree"
     runtime = payload["runtime"]
-    print(
-        f"SVC status: CLI {installed}; packaged SVC {payload['packaged_svc_version']}; "
-        f"runtime {runtime['status']}"
-    )
+    print(f"SVC status: CLI {installed}; packaged SVC {payload['packaged_svc_version']}; runtime {runtime['status']}")
     project = payload["project"]
     print(f"  {project['status']:16} {project['path']}")
     configuration = payload["configuration"]
@@ -404,14 +431,7 @@ def _emit_telemetry_list(payload: dict[str, Any], json_output: bool) -> None:
         if not isinstance(descriptor, dict):
             continue
         updated = descriptor.get("updated_at") or "unknown-time"
-        print(
-            f"  {descriptor.get('thread_id')}  "
-            f"{descriptor.get('archive_state')}/"
-            f"{descriptor.get('source_availability')}  {updated}"
-        )
-    omitted_sources = payload.get("omitted_sources")
-    if isinstance(omitted_sources, int) and omitted_sources:
-        print(f"  Degraded: {omitted_sources} source row(s) omitted")
+        print(f"  {descriptor.get('thread_id')}  {descriptor.get('archive_state')}  {updated}")
 
 
 def _emit_telemetry_export(payload: dict[str, Any], json_output: bool) -> None:
@@ -425,10 +445,7 @@ def _emit_telemetry_export(payload: dict[str, Any], json_output: bool) -> None:
         print("SVC telemetry agent-thread export: exported")
     diagnostic_groups = payload.get("diagnostic_groups")
     if isinstance(diagnostic_groups, int) and diagnostic_groups:
-        print(
-            f"  {diagnostic_groups} normalized diagnostic group(s); "
-            "inspect manifest.json in the evidence archive"
-        )
+        print(f"  {diagnostic_groups} normalized diagnostic group(s); inspect manifest.json in the evidence archive")
 
 
 def _emit_lookup(response: Any, json_output: bool) -> None:
@@ -462,7 +479,10 @@ def _emit_error(error: SvcError, json_output: bool) -> None:
         return
     print(f"svc: {error.code}: {error.message}", file=sys.stderr)
     if error.details:
-        print(json.dumps(error.details, ensure_ascii=False, indent=2, sort_keys=True), file=sys.stderr)
+        print(
+            json.dumps(error.details, ensure_ascii=False, indent=2, sort_keys=True),
+            file=sys.stderr,
+        )
 
 
 def _emit_json(payload: dict[str, object], stream: Any | None = None) -> None:

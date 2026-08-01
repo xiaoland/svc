@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 import json
 from pathlib import Path
-import stat
 import zipfile
 
 import pytest
@@ -16,10 +15,7 @@ from svc_cli.telemetry.agent_threads import (
     ThreadSelection,
 )
 from svc_cli.telemetry.archive import (
-    _canonical_evidence_output,
     _finalize_normalization,
-    _verify_output_parent,
-    normalize_agent_thread_evidence,
     write_agent_thread_evidence,
 )
 from svc_cli.telemetry.evidence import validate_evidence
@@ -134,7 +130,7 @@ def _rollout_source(root: Path, *, name: str = "rollout.jsonl") -> Path:
     return source
 
 
-def _write_evidence(source: Path, output: Path) -> dict[str, object]:
+def _export_evidence(source: Path, output: Path) -> dict[str, object]:
     return write_agent_thread_evidence(
         CodexRolloutProvider(),
         ProviderContext(home=source.parent),
@@ -231,17 +227,12 @@ def test_core_limit_preserves_provider_diagnostic_cap_accounting() -> None:
     assert final_loss["truncated"]["diagnostics"] == 46
 
 
-def test_capture_projection_and_publication_share_one_v3_authority(
+def test_capture_and_publication_preserve_one_v3_authority(
     tmp_path: Path,
 ) -> None:
     source = _rollout_source(tmp_path)
     provider = CodexRolloutProvider()
     selection = ThreadSelection(source=source)
-    ephemeral = normalize_agent_thread_evidence(
-        provider,
-        ProviderContext(home=tmp_path),
-        selection,
-    )
     output = tmp_path / "evidence.zip"
     manifest = write_agent_thread_evidence(
         provider,
@@ -253,7 +244,6 @@ def test_capture_projection_and_publication_share_one_v3_authority(
 
     assert validated.native == source.read_bytes()
     assert validated.evidence_id == manifest["evidence_id"]
-    assert ephemeral.native == validated.native
     assert [
         record["source_ref"].get("native_record_id")
         for record in validated.trajectory.records
@@ -265,10 +255,6 @@ def test_capture_projection_and_publication_share_one_v3_authority(
             "native-index.jsonl",
             "trajectory.jsonl",
         ]
-        assert all(
-            stat.S_IMODE(info.external_attr >> 16) == 0o644
-            for info in archive.infolist()
-        )
 
 
 def test_output_may_be_inside_repository_but_is_never_overwritten(
@@ -276,48 +262,11 @@ def test_output_may_be_inside_repository_but_is_never_overwritten(
 ) -> None:
     source = _rollout_source(tmp_path)
     output = tmp_path / "evidence.zip"
-    _write_evidence(source, output)
+    _export_evidence(source, output)
 
     with pytest.raises(FileExistsError):
-        _write_evidence(source, output)
+        _export_evidence(source, output)
     assert validate_evidence(output).native == source.read_bytes()
-
-
-def test_output_must_differ_from_selected_source(tmp_path: Path) -> None:
-    source = _rollout_source(tmp_path, name="rollout.zip")
-
-    with pytest.raises(ValueError, match="differ from the selected source"):
-        _write_evidence(source, source)
-
-    assert source.read_bytes().startswith(b'{"timestamp"')
-
-
-def test_replaced_output_parent_is_rejected_before_publication(
-    tmp_path: Path,
-) -> None:
-    output_parent = tmp_path / "exports"
-    output_parent.mkdir()
-    target = _canonical_evidence_output(output_parent / "evidence.zip")
-
-    output_parent.rename(tmp_path / "exports-original")
-    output_parent.mkdir()
-
-    with pytest.raises(ValueError, match="changed after validation"):
-        _verify_output_parent(output_parent, target.parent_identity)
-    assert not (output_parent / "evidence.zip").exists()
-
-
-def test_link_output_parent_is_rejected(tmp_path: Path) -> None:
-    physical = tmp_path / "physical"
-    physical.mkdir()
-    linked = tmp_path / "linked"
-    try:
-        linked.symlink_to(physical, target_is_directory=True)
-    except OSError as error:
-        pytest.skip(f"symlinks unavailable: {error}")
-
-    with pytest.raises(ValueError, match="non-link directory"):
-        _canonical_evidence_output(linked / "evidence.zip")
 
 
 def test_provider_errors_publish_no_artifact(tmp_path: Path) -> None:
@@ -326,5 +275,5 @@ def test_provider_errors_publish_no_artifact(tmp_path: Path) -> None:
     output = tmp_path / "evidence.zip"
 
     with pytest.raises(SvcError):
-        _write_evidence(source, output)
+        _export_evidence(source, output)
     assert not output.exists()

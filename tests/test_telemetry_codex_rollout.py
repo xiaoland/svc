@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
-import shutil
 import sqlite3
 import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -34,16 +31,14 @@ class RolloutCase:
         return path
 
     def normalize(self, source: Path, bounds: dict[str, int] | None = None) -> tuple[object, list[dict[str, object]]]:
-        resolved = self.provider.resolve(ProviderContext(home=self.root), ThreadSelection(source=source))
-        records: list[dict[str, object]] = []
-        result = self.provider.stream_normalize(resolved, lambda record: records.append(dict(record)) or True, bounds or {})
+        _, result, _, records = self.capture(source, bounds)
         return result, records
 
     def capture(
         self,
         source: Path,
         bounds: dict[str, int] | None = None,
-    ) -> tuple[object, bytes, list[dict[str, object]]]:
+    ) -> tuple[object, object, bytes, list[dict[str, object]]]:
         resolved = self.provider.resolve(
             ProviderContext(home=self.root),
             ThreadSelection(source=source),
@@ -55,14 +50,14 @@ class RolloutCase:
             bounds or {},
         )
         records: list[dict[str, object]] = []
-        self.provider.stream_normalize_captured(
+        result = self.provider.stream_normalize_captured(
             resolved,
             native,
             capture,
             lambda record: records.append(dict(record)) or True,
             bounds or {},
         )
-        return capture, native.getvalue(), records
+        return capture, result, native.getvalue(), records
 
 
 @pytest.fixture
@@ -88,7 +83,7 @@ class TestCodexRolloutProvider:
             ),
             trailing_newline=False,
         )
-        capture, native, records = rollout_case.capture(source)
+        capture, _, native, records = rollout_case.capture(source)
 
         assert native == source.read_bytes()
         assert capture.unknown_remainder is False
@@ -115,7 +110,7 @@ class TestCodexRolloutProvider:
         )
         first_line = source.read_bytes().find(b"\n") + 1
         limit = first_line + 12
-        capture, native, records = rollout_case.capture(
+        capture, _, native, records = rollout_case.capture(
             source,
             {"source_bytes": limit},
         )
@@ -137,7 +132,7 @@ class TestCodexRolloutProvider:
                 {"type": "message", "role": "user", "content": "x" * 256},
             ),
         )
-        capture, native, records = rollout_case.capture(
+        capture, _, native, records = rollout_case.capture(
             source,
             {"native_line_bytes": 80},
         )
@@ -283,8 +278,11 @@ class TestCodexRolloutProvider:
         self,
         rollout_case: RolloutCase,
     ) -> None:
-        source = rollout_case.source(self.envelope("session_meta", {"id": "thread-one"}), self.envelope("session_meta", {"id": "thread-two"}))
-        with pytest.raises(SvcError, match="conflicting session metadata") as raised:
+        source = rollout_case.source(
+            self.envelope("session_meta", {"id": "thread-one"}),
+            self.envelope("session_meta", {"id": "thread-two"}),
+        )
+        with pytest.raises(SvcError) as raised:
             rollout_case.normalize(source)
         assert (raised.value.code) == ("thread-source-incompatible")
 
@@ -294,9 +292,27 @@ class TestCodexRolloutProvider:
     ) -> None:
         source = rollout_case.source(
             self.envelope("session_meta", {"id": "thread-boundary"}),
-            self.envelope("response_item", {"type": "message", "role": "user", "content": "include tasks/eligible/packet.md"}),
-            self.envelope("response_item", {"type": "reasoning", "summary": "ignore tasks/reasoning/packet.md"}),
-            self.envelope("response_item", {"type": "function_call", "name": "tool", "call_id": "c", "arguments": "ignore tasks/tool-call/packet.md"}),
+            self.envelope(
+                "response_item",
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": "include tasks/eligible/packet.md",
+                },
+            ),
+            self.envelope(
+                "response_item",
+                {"type": "reasoning", "summary": "ignore tasks/reasoning/packet.md"},
+            ),
+            self.envelope(
+                "response_item",
+                {
+                    "type": "function_call",
+                    "name": "tool",
+                    "call_id": "c",
+                    "arguments": "ignore tasks/tool-call/packet.md",
+                },
+            ),
         )
         _, records = rollout_case.normalize(source)
         assert (records[1]["task_refs"]) == (["tasks/eligible/packet.md"])
@@ -328,119 +344,136 @@ class TestCodexRolloutProvider:
 
         assert resolved.thread_id == "thread-db"
         assert resolved.source_path == source
-        assert not (rollout_case.root / "state_5.sqlite-wal").exists()
-        assert not (rollout_case.root / "state_5.sqlite-shm").exists()
 
-    def test_state_snapshot_includes_rollback_journal(
+    def test_state_connection_is_a_direct_read_only_transaction(
         self,
         rollout_case: RolloutCase,
     ) -> None:
-        db = rollout_case.root / "snapshot.sqlite"
+        db = rollout_case.root / "state_5.sqlite"
         connection = sqlite3.connect(db)
         connection.execute("CREATE TABLE threads (id TEXT)")
+        connection.execute("INSERT INTO threads VALUES ('thread-db')")
         connection.commit()
         connection.close()
-        journal = Path(f"{db}-journal")
-        journal.write_bytes(b"journal-fixture")
-        snapshot, directory = codex_rollout._state_snapshot(db)
+
+        readonly = codex_rollout._state_connection(db)
         try:
-            assert ((snapshot.parent / journal.name).read_bytes()) == (b"journal-fixture")
+            assert readonly.in_transaction
+            with pytest.raises(sqlite3.OperationalError, match="readonly"):
+                readonly.execute("INSERT INTO threads VALUES ('mutated')")
         finally:
-            shutil.rmtree(directory, ignore_errors=True)
+            readonly.close()
 
-    def test_state_snapshot_identity_ignores_windows_ctime_read_noise(self) -> None:
-        before = SimpleNamespace(st_dev=1, st_ino=2, st_size=3, st_mtime_ns=4, st_ctime_ns=5)
-        after = SimpleNamespace(st_dev=1, st_ino=2, st_size=3, st_mtime_ns=4, st_ctime_ns=999)
-        assert (codex_rollout._state_signature(before)) == (codex_rollout._state_signature(after))
-
-    def test_state_connection_closes_a_connection_rejected_by_sqlite(
+    def test_corrupt_state_database_has_a_structured_error(
         self,
-        monkeypatch: pytest.MonkeyPatch,
         rollout_case: RolloutCase,
     ) -> None:
-        database = rollout_case.root / "corrupt.sqlite"
+        database = rollout_case.root / "state_5.sqlite"
         database.write_bytes(b"not-a-sqlite-database")
 
-        class RejectedConnection:
-            def __init__(self) -> None:
-                self.close_calls = 0
-
-            def execute(self, *_args: object) -> None:
-                raise sqlite3.DatabaseError("not a database")
-
-            def close(self) -> None:
-                self.close_calls += 1
-
-        connection = RejectedConnection()
-        monkeypatch.setattr(
-            codex_rollout.sqlite3,
-            "connect",
-            lambda *_args, **_kwargs: connection,
-        )
-
         with pytest.raises(SvcError) as raised:
-            codex_rollout._state_connection(database)
+            rollout_case.provider.resolve(
+                ProviderContext(home=rollout_case.root),
+                ThreadSelection(thread_id="thread-db"),
+            )
 
         assert (raised.value.code) == ("thread-source-incompatible")
-        assert (connection.close_calls) == (1)
 
-    @pytest.mark.parametrize(
-        ("source_kind", "message_fragment"),
-        [
-            pytest.param("symlink", "symlink", id="symlink"),
-            pytest.param("directory", "regular file", id="directory"),
-        ],
-    )
-    def test_symlink_and_nonregular_sources_are_rejected(
+    def test_missing_source_has_a_structured_not_found_error(
         self,
-        source_kind: str,
-        message_fragment: str,
         rollout_case: RolloutCase,
     ) -> None:
-        target = rollout_case.source(self.envelope("session_meta", {"id": "thread-safe"}))
-        if source_kind == "symlink":
-            source = rollout_case.root / "link.jsonl"
-            try:
-                source.symlink_to(target)
-            except OSError:
-                pytest.skip("symlink creation is unavailable")
-        else:
-            source = rollout_case.root / "directory.jsonl"
-            source.mkdir()
+        source = rollout_case.root / "missing.jsonl"
 
-        with pytest.raises(SvcError, match=message_fragment) as raised:
+        with pytest.raises(SvcError) as raised:
             rollout_case.provider.resolve(
                 ProviderContext(home=rollout_case.root),
                 ThreadSelection(source=source),
             )
-        assert raised.value.code == "thread-source-unsafe"
 
-    def test_native_source_read_error_has_a_stable_provider_code(
+        assert raised.value.code == "thread-source-not-found"
+
+    def test_native_capture_declares_descriptor_content_change(
         self,
         rollout_case: RolloutCase,
     ) -> None:
-        class FailingStream:
-            def readline(self, _limit: int) -> bytes:
-                raise OSError("fixture read failure")
+        source = rollout_case.source(
+            self.envelope("session_meta", {"id": "thread-mutate"}),
+            self.envelope(
+                "message",
+                {"role": "assistant", "content": "x"},
+            ),
+        )
+        initial = source.read_bytes()
 
-        with pytest.raises(SvcError, match="cannot be read") as raised:
-            codex_rollout._readline(FailingStream(), 1024, rollout_case.root / "rollout.jsonl")  # type: ignore[arg-type]
-        assert (raised.value.code) == ("thread-source-unreadable")
+        class TruncatingOutput(BytesIO):
+            def write(inner_self, value: bytes) -> int:
+                source.write_bytes(initial[:1])
+                return super().write(value)
 
-    def test_source_replacement_during_capture_is_detected(
+        resolved = rollout_case.provider.resolve(
+            ProviderContext(home=rollout_case.root),
+            ThreadSelection(source=source),
+        )
+        output = TruncatingOutput()
+        capture = rollout_case.provider.capture_native(resolved, output, {})
+
+        assert output.getvalue() == initial
+        assert capture.source_status.value == "changed"
+        assert capture.is_partial is True
+
+    def test_native_capture_retains_prefix_when_source_read_is_interrupted(
         self,
+        monkeypatch: pytest.MonkeyPatch,
         rollout_case: RolloutCase,
     ) -> None:
-        source = rollout_case.source(self.envelope("session_meta", {"id": "thread-mutate"}), self.envelope("message", {"role": "assistant", "content": "x"}))
-        resolved = rollout_case.provider.resolve(ProviderContext(home=rollout_case.root), ThreadSelection(source=source))
+        source = rollout_case.source(
+            self.envelope("session_meta", {"id": "thread-interrupted"}),
+            self.envelope("message", {"role": "assistant", "content": "x"}),
+        )
+        resolved = rollout_case.provider.resolve(
+            ProviderContext(home=rollout_case.root),
+            ThreadSelection(source=source),
+        )
+        original_open = codex_rollout._open_source
 
-        def sink(record: dict[str, object]) -> bool:
-            replacement = rollout_case.root / "replacement.jsonl"
-            replacement.write_bytes(source.read_bytes())
-            os.replace(replacement, source)
-            return True
+        class InterruptedStream:
+            def __init__(inner_self, stream) -> None:
+                inner_self.stream = stream
+                inner_self.reads = 0
 
-        result = rollout_case.provider.stream_normalize(resolved, sink, {})
-        assert result.source_status.value == "displaced"
-        assert result.result_status.value == "partial"
-        assert result.lossiness["partial_reasons"]["source_displaced"] == 1
+            def read(inner_self, size: int) -> bytes:
+                inner_self.reads += 1
+                if inner_self.reads > 1:
+                    raise OSError("fixture interruption")
+                return inner_self.stream.read(min(size, 20))
+
+            def fileno(inner_self) -> int:
+                return inner_self.stream.fileno()
+
+            def close(inner_self) -> None:
+                inner_self.stream.close()
+
+        def interrupted_open(path: Path):
+            stream, info = original_open(path)
+            return InterruptedStream(stream), info
+
+        monkeypatch.setattr(codex_rollout, "_open_source", interrupted_open)
+        output = BytesIO()
+        capture = rollout_case.provider.capture_native(resolved, output, {})
+        result = rollout_case.provider.stream_normalize_captured(
+            resolved,
+            output,
+            capture,
+            lambda _record: True,
+            {},
+        )
+
+        assert output.getvalue() == source.read_bytes()[:20]
+        assert capture.read_interrupted is True
+        assert capture.unknown_remainder is True
+        assert capture.frames[-1]["frame_status"] == "incomplete"
+        assert result.lossiness["partial_reasons"]["input_limit"] == 0
+        diagnostic_codes = {item["code"] for item in result.diagnostics}
+        assert "source-read-interrupted" in diagnostic_codes
+        assert "input-limit-reached" not in diagnostic_codes

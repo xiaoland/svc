@@ -12,7 +12,6 @@ from svc_cli.telemetry.agent_threads import (
     ArchiveState,
     ThreadInventoryListing,
     ThreadInventoryRow,
-    SourceAvailability,
 )
 from svc_cli.telemetry.evidence import validate_evidence
 
@@ -43,8 +42,7 @@ def rollout(path: Path) -> None:
         },
     )
     path.write_text(
-        "\n".join(json.dumps(item, separators=(",", ":")) for item in records)
-        + "\n",
+        "\n".join(json.dumps(item, separators=(",", ":")) for item in records) + "\n",
         encoding="utf-8",
     )
 
@@ -106,18 +104,21 @@ def test_analysis_schema_and_execution_are_json_only(tmp_path: Path) -> None:
     source = tmp_path / "rollout.jsonl"
     bundle = tmp_path / "evidence.zip"
     rollout(source)
-    assert invoke(
-        [
-            "telemetry",
-            "agent-thread",
-            "export",
-            "--source",
-            str(source),
-            "--output",
-            str(bundle),
-            "--json",
-        ]
-    )[0] == 0
+    assert (
+        invoke(
+            [
+                "telemetry",
+                "agent-thread",
+                "export",
+                "--source",
+                str(source),
+                "--output",
+                str(bundle),
+                "--json",
+            ]
+        )[0]
+        == 0
+    )
 
     code, stdout, stderr = invoke(["analysis", "query", "--schema"])
     assert code == 0 and stderr == ""
@@ -208,7 +209,6 @@ def test_list_projects_provider_inventory_fields(monkeypatch) -> None:
                         provider_id="codex",
                         thread_id="thread-1",
                         archive_state=ArchiveState.ACTIVE,
-                        source_availability=SourceAvailability.AVAILABLE,
                         workspace="/work/svc",
                         title="Implement analysis",
                         first_user_message="Start",
@@ -217,14 +217,14 @@ def test_list_projects_provider_inventory_fields(monkeypatch) -> None:
             )
 
     monkeypatch.setattr("svc_cli.telemetry.service.local_provider", lambda: Provider())
-    code, stdout, stderr = invoke(
-        ["telemetry", "agent-thread", "list", "--json"]
-    )
+    code, stdout, stderr = invoke(["telemetry", "agent-thread", "list", "--json"])
     assert code == 0 and stderr == ""
     row = json.loads(stdout)["threads"][0]
     assert row["provider_id"] == "codex"
     assert row["thread_id"] == "thread-1"
     assert row["archive_state"] == "active"
-    assert row["source_availability"] == "available"
     assert row["title"] == "Implement analysis"
     assert row["workspace"] == "/work/svc"
+    assert "source_availability" not in row
+    assert "source_warning_code" not in row
+    assert "omitted_sources" not in json.loads(stdout)

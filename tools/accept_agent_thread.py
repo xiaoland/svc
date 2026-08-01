@@ -17,13 +17,12 @@ import platform
 import re
 import shutil
 import sqlite3
-import stat
 import subprocess
 import sys
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Never, Sequence
 
 try:
     import venv
@@ -104,7 +103,7 @@ class _CaseFailure(Exception):
 
 
 class _ArgumentParser(argparse.ArgumentParser):
-    def error(self, _message: str) -> None:  # pragma: no cover
+    def error(self, _message: str) -> Never:  # pragma: no cover
         raise HarnessError(2, "arguments")
 
 
@@ -120,56 +119,21 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _is_reparse_point(info: os.stat_result) -> bool:
-    attributes = getattr(info, "st_file_attributes", 0)
-    marker = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
-    return bool(marker and attributes & marker)
-
-
-def _regular(path: Path, *, directory: bool = False) -> os.stat_result:
-    try:
-        info = path.lstat()
-    except OSError as error:
-        raise HarnessError(4, "wheel-validation") from error
-    expected = stat.S_IFDIR if directory else stat.S_IFREG
-    if stat.S_IFMT(info.st_mode) != expected or stat.S_ISLNK(info.st_mode) or _is_reparse_point(info):
+def _require_path(path: Path, *, directory: bool = False) -> None:
+    valid = path.is_dir() if directory else path.is_file()
+    if not valid:
         raise HarnessError(4, "wheel-validation")
-    return info
 
 
-def _identity(info: os.stat_result) -> tuple[int, int, int]:
-    return (
-        getattr(info, "st_dev", -1),
-        getattr(info, "st_ino", -1),
-        stat.S_IFMT(info.st_mode),
-    )
-
-
-def _open_verified(path: Path, expected: os.stat_result) -> int:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
     try:
-        descriptor = os.open(path, flags)
-        opened = os.fstat(descriptor)
-    except OSError as error:
-        raise HarnessError(4, "wheel-validation") from error
-    if _identity(opened) != _identity(expected):
-        os.close(descriptor)
-        raise HarnessError(4, "wheel-validation")
-    return descriptor
-
-
-def _sha256_file(path: Path, expected: os.stat_result) -> str:
-    descriptor = _open_verified(path, expected)
-    try:
-        digest = hashlib.sha256()
-        with os.fdopen(descriptor, "rb", closefd=True) as stream:
-            descriptor = -1
+        with path.open("rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(chunk)
-        return digest.hexdigest()
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
+    except OSError as error:
+        raise HarnessError(4, "wheel-validation") from error
+    return digest.hexdigest()
 
 
 def _validate_wheel_contents(path: Path) -> None:
@@ -210,20 +174,20 @@ def _validate_wheel_contents(path: Path) -> None:
 def _validate_inputs(wheel: Path, expected: str, wheelhouse: Path) -> str:
     if _SHA256_RE.fullmatch(expected) is None:
         raise HarnessError(4, "wheel-validation")
-    info = _regular(wheel)
+    _require_path(wheel)
     if wheel.suffix.lower() != ".whl":
         raise HarnessError(4, "wheel-validation")
-    digest = _sha256_file(wheel, info)
+    digest = _sha256_file(wheel)
     if digest != expected.lower():
         raise HarnessError(4, "wheel-validation")
     _validate_wheel_contents(wheel)
-    _regular(wheelhouse, directory=True)
+    _require_path(wheelhouse, directory=True)
     try:
         entries = tuple(wheelhouse.iterdir())
     except OSError as error:
         raise HarnessError(4, "wheel-validation") from error
     for entry in entries:
-        _regular(entry)
+        _require_path(entry)
         if entry.suffix.lower() != ".whl":
             raise HarnessError(4, "wheel-validation")
         _validate_wheel_contents(entry)
@@ -231,27 +195,18 @@ def _validate_inputs(wheel: Path, expected: str, wheelhouse: Path) -> str:
 
 
 def _stage_wheel(source: Path, digest: str, root: Path) -> Path:
-    info = _regular(source)
+    _require_path(source)
     destination = root / source.name
-    descriptor = _open_verified(source, info)
-    output_descriptor = -1
     actual = hashlib.sha256()
     try:
-        output_descriptor = os.open(
-            destination,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
-            0o600,
-        )
-        with os.fdopen(descriptor, "rb", closefd=True) as source_stream:
-            descriptor = -1
-            with os.fdopen(output_descriptor, "wb", closefd=True) as target:
-                output_descriptor = -1
+        with source.open("rb") as source_stream:
+            with destination.open("xb") as target:
                 for chunk in iter(lambda: source_stream.read(1024 * 1024), b""):
                     actual.update(chunk)
                     target.write(chunk)
-        if actual.hexdigest() != digest or _identity(source.lstat()) != _identity(info):
+        if actual.hexdigest() != digest:
             raise HarnessError(4, "wheel-validation")
-        if _sha256_file(destination, _regular(destination)) != digest:
+        if _sha256_file(destination) != digest:
             raise HarnessError(4, "wheel-validation")
         return destination
     except HarnessError:
@@ -260,11 +215,6 @@ def _stage_wheel(source: Path, digest: str, root: Path) -> Path:
     except OSError as error:
         destination.unlink(missing_ok=True)
         raise HarnessError(4, "wheel-validation") from error
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-        if output_descriptor >= 0:
-            os.close(output_descriptor)
 
 
 def _command(
@@ -320,7 +270,7 @@ def _create_venv(root: Path) -> Path:
     except (OSError, RuntimeError) as error:
         raise HarnessError(3, "venv") from error
     child = _child_python(directory)
-    _regular(child)
+    _require_path(child)
     return child
 
 
@@ -576,7 +526,6 @@ def _run_inventory_case(child: Path, root: Path, env: Mapping[str, str]) -> None
         "provider_id",
         "thread_id",
         "archive_state",
-        "source_availability",
         "workspace",
         "title",
         "first_user_message",
@@ -586,15 +535,12 @@ def _run_inventory_case(child: Path, root: Path, env: Mapping[str, str]) -> None
         "created_at",
         "updated_at",
         "recency_at_ms",
-        "source_warning_code",
     }
     if any(not isinstance(item, Mapping) or set(item) != expected_keys for item in threads):
         raise _CaseFailure("inventory-shape")
     active = next((item for item in threads if isinstance(item, Mapping) and item.get("thread_id") == "inv-active"), None)
-    if not isinstance(active, Mapping) or active.get("archive_state") != "active" or active.get("source_availability") != "available" or active.get("workspace") != "/workspace/acceptance" or active.get("title") != "Inspect parser" or active.get("first_user_message") != "Start parser work":
+    if not isinstance(active, Mapping) or active.get("archive_state") != "active" or active.get("workspace") != "/workspace/acceptance" or active.get("title") != "Inspect parser" or active.get("first_user_message") != "Start parser work":
         raise _CaseFailure("inventory-rich")
-    if payload.get("omitted_sources") != 1:
-        raise _CaseFailure("inventory-omitted")
     archived = _run_cli(child, ("telemetry", "agent-thread", "list", "--codex-home", home, "--archive-state", "archived", "--limit", "1", "--json"), root, env)
     if [item.get("thread_id") for item in archived.get("threads", []) if isinstance(item, Mapping)] != ["inv-missing"]:
         raise _CaseFailure("inventory-filter")

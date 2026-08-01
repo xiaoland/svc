@@ -227,6 +227,24 @@ class TestTrajectory:
             validate_manifest(invalid)
 
     @pytest.mark.parametrize(
+        ("section", "key", "value"),
+        (
+            ("policy", "redaction", "none"),
+            ("source", "source_status", "displaced"),
+        ),
+    )
+    def test_manifest_rejects_removed_wire_contracts(
+        self,
+        section: str,
+        key: str,
+        value: str,
+    ) -> None:
+        invalid = copy.deepcopy(self._manifest(self._trajectory()))
+        invalid[section][key] = value
+        with pytest.raises(TrajectoryError):
+            validate_manifest(invalid)
+
+    @pytest.mark.parametrize(
         "diagnostic_case",
         ("missing_source_ref", "unsorted", "duplicate", "unresolved_record_ref"),
     )

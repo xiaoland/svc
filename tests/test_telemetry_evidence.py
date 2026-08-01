@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from io import BytesIO
 import hashlib
 import json
 from pathlib import Path
@@ -9,15 +8,16 @@ import zipfile
 import pytest
 
 from svc_cli.telemetry.evidence import (
+    EVIDENCE_MEMBERS,
     EvidenceError,
     build_evidence_id,
     build_evidence_manifest,
     build_native_index,
     validate_evidence,
     validate_evidence_members,
-    write_evidence,
+    write_evidence_stream,
 )
-from svc_cli.telemetry.trajectory import build_manifest, canonical_json_bytes, zero_lossiness
+from svc_cli.telemetry.trajectory import MAX_MANIFEST_BYTES, build_manifest, canonical_json_bytes, zero_lossiness
 
 
 def _meta() -> dict[str, object]:
@@ -132,17 +132,44 @@ def _fixture() -> tuple[dict[str, object], bytes, bytes, bytes]:
 def test_schema_v3_round_trip_has_exact_members_and_native_coverage(tmp_path: Path) -> None:
     manifest, native, native_index, trajectory = _fixture()
     target = tmp_path / "evidence.zip"
-    result = write_evidence(target, manifest, native, native_index, trajectory)
+    with target.open("x+b") as stream:
+        result = write_evidence_stream(stream, manifest, native, native_index, trajectory)
     assert result.evidence_id == manifest["evidence_id"]
     with zipfile.ZipFile(target) as archive:
         assert archive.namelist() == ["manifest.json", "native.bin", "native-index.jsonl", "trajectory.jsonl"]
         assert archive.read("native.bin") == native
         assert archive.read("native-index.jsonl") == native_index
-        assert all(((info.external_attr >> 16) & 0o777) == 0o644 for info in archive.infolist())
     validated = validate_evidence(target)
     assert validated.native == native
     assert [entry.native_record_id for entry in validated.native_index] == ["n000000", "n000001"]
     assert validated.trajectory.records[1]["source_ref"]["native_record_id"] == "n000001"
+
+
+@pytest.mark.filterwarnings("ignore:Duplicate name:UserWarning")
+@pytest.mark.parametrize("member_case", ("missing", "duplicate"))
+def test_bundle_requires_exact_unique_members(tmp_path: Path, member_case: str) -> None:
+    manifest, _, _, _ = _fixture()
+    names = EVIDENCE_MEMBERS[:-1] if member_case == "missing" else (*EVIDENCE_MEMBERS, "native.bin")
+    target = tmp_path / f"{member_case}.zip"
+    with zipfile.ZipFile(target, "w") as archive:
+        for name in names:
+            data = canonical_json_bytes(manifest, newline=True) if name == "manifest.json" else b""
+            archive.writestr(name, data)
+
+    with pytest.raises(EvidenceError) as raised:
+        validate_evidence(target)
+    assert raised.value.code == "bundle-invalid"
+
+
+@pytest.mark.parametrize(("manifest_bytes", "error_code"), ((b" {}\n", "bundle-invalid"), (b" " * (MAX_MANIFEST_BYTES + 1), "member-limit-reached")))
+def test_bundle_requires_bounded_canonical_manifest(tmp_path: Path, manifest_bytes: bytes, error_code: str) -> None:
+    target = tmp_path / f"{error_code}.zip"
+    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name in EVIDENCE_MEMBERS:
+            archive.writestr(name, manifest_bytes if name == "manifest.json" else b"")
+    with pytest.raises(EvidenceError) as raised:
+        validate_evidence(target)
+    assert raised.value.code == error_code
 
 
 def test_native_index_requires_exact_cover_and_digest() -> None:
@@ -227,7 +254,7 @@ def test_incomplete_final_native_frame_derives_partial_capture_metadata() -> Non
 
 
 @pytest.mark.parametrize("schema_version", (1, 2))
-def test_schema_v1_and_v2_are_rejected_before_reading_other_members(
+def test_schema_v1_and_v2_are_rejected(
     tmp_path: Path,
     schema_version: int,
 ) -> None:
@@ -235,17 +262,7 @@ def test_schema_v1_and_v2_are_rejected_before_reading_other_members(
     old_manifest = {"format": "svc-agent-thread-bundle", "schema_version": schema_version}
     with zipfile.ZipFile(target, "w") as archive:
         archive.writestr("manifest.json", canonical_json_bytes(old_manifest, newline=True))
-        archive.writestr("native.bin", b"not-read")
-        archive.writestr("native-index.jsonl", b"not-read")
-        archive.writestr("trajectory.jsonl", b"not-read")
-
-    opened: list[str] = []
-
-    def member_open(archive: zipfile.ZipFile, info: zipfile.ZipInfo):
-        opened.append(info.filename)
-        return archive.open(info, "r")
 
     with pytest.raises(EvidenceError) as raised:
-        validate_evidence(target, member_open=member_open)
+        validate_evidence(target)
     assert raised.value.code == "unsupported-agent-thread-bundle-schema"
-    assert opened == ["manifest.json"]

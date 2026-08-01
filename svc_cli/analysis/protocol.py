@@ -18,7 +18,6 @@ ANALYSIS_CONTRACT_VERSION = 1
 METHOD_ID = "svc.agent-task-analysis"
 METHOD_PATH = "sections/working-protocol.md"
 METHOD_SECTION = "Agent Task Analysis"
-_CURSOR_DOMAIN = b"svc-analysis-cursor-v1\0"
 
 
 class AnalysisProtocolError(ValueError):
@@ -110,11 +109,7 @@ def parse_ref(
     evidence_id = value["evidence_id"]
     record_kind = value["record_kind"]
     record_id = value["record_id"]
-    if not (
-        isinstance(evidence_id, str)
-        and isinstance(record_kind, str)
-        and isinstance(record_id, str)
-    ):
+    if not (isinstance(evidence_id, str) and isinstance(record_kind, str) and isinstance(record_id, str)):
         raise AnalysisProtocolError(
             "invalid-reference",
             "Evidence reference fields must be strings.",
@@ -138,18 +133,11 @@ def parse_ref(
 
 
 def request_fingerprint(value: Mapping[str, object]) -> str:
-    return hashlib.sha256(
-        b"svc-analysis-request-v1\0" + canonical_json_bytes(value)
-    ).hexdigest()
+    return hashlib.sha256(b"svc-analysis-request-v1\0" + canonical_json_bytes(value)).hexdigest()
 
 
 def encode_cursor(payload: Mapping[str, object]) -> str:
-    body = canonical_json_bytes(payload)
-    envelope = {
-        "payload": dict(payload),
-        "sha256": hashlib.sha256(_CURSOR_DOMAIN + body).hexdigest(),
-    }
-    encoded = base64.urlsafe_b64encode(canonical_json_bytes(envelope))
+    encoded = base64.urlsafe_b64encode(canonical_json_bytes(payload))
     return encoded.rstrip(b"=").decode("ascii")
 
 
@@ -166,34 +154,19 @@ def decode_cursor(value: object, *, tool: str) -> Mapping[str, object]:
             altchars=b"-_",
             validate=True,
         )
-        envelope = json.loads(raw.decode("utf-8"))
+        payload = json.loads(raw.decode("utf-8"))
     except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise AnalysisProtocolError(
             "invalid-cursor",
             "Cursor is not a valid analysis continuation.",
         ) from error
-    if (
-        not isinstance(envelope, Mapping)
-        or set(envelope) != {"payload", "sha256"}
-        or not isinstance(envelope["payload"], Mapping)
-        or not isinstance(envelope["sha256"], str)
-    ):
+    if not isinstance(payload, Mapping):
         raise AnalysisProtocolError(
             "invalid-cursor",
-            "Cursor envelope has an invalid shape.",
+            "Cursor payload has an invalid shape.",
         )
-    body = canonical_json_bytes(envelope["payload"])
-    expected = hashlib.sha256(_CURSOR_DOMAIN + body).hexdigest()
-    if envelope["sha256"] != expected:
-        raise AnalysisProtocolError(
-            "invalid-cursor",
-            "Cursor integrity check failed.",
-        )
-    payload = dict(envelope["payload"])
-    if (
-        payload.get("version") != ANALYSIS_CONTRACT_VERSION
-        or payload.get("tool") != tool
-    ):
+    payload = dict(payload)
+    if payload.get("version") != ANALYSIS_CONTRACT_VERSION or payload.get("tool") != tool:
         raise AnalysisProtocolError(
             "cursor-scope-mismatch",
             "Cursor belongs to a different analysis contract or tool.",

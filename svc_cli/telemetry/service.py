@@ -10,7 +10,6 @@ from .agent_threads import (
     ArchiveState,
     ProviderContext,
     ThreadInventoryQuery,
-    SourceAvailability,
     ThreadSelection,
 )
 from .archive import write_agent_thread_evidence
@@ -21,13 +20,7 @@ TELEMETRY_SCHEMA_VERSION = 3
 
 
 def _context(codex_home: Path | None) -> ProviderContext:
-    return ProviderContext(
-        home=(
-            Path(codex_home).expanduser()
-            if codex_home is not None
-            else None
-        )
-    )
+    return ProviderContext(home=(Path(codex_home).expanduser() if codex_home is not None else None))
 
 
 def list_agent_threads(
@@ -51,7 +44,6 @@ def list_agent_threads(
             "provider_id": row.provider_id,
             "thread_id": row.thread_id,
             "archive_state": ArchiveState(row.archive_state).value,
-            "source_availability": SourceAvailability(row.source_availability).value,
             "workspace": row.workspace,
             "title": row.title,
             "first_user_message": row.first_user_message,
@@ -61,7 +53,6 @@ def list_agent_threads(
             "created_at": row.created_at,
             "updated_at": row.updated_at,
             "recency_at_ms": row.recency_at_ms,
-            "source_warning_code": row.source_warning_code,
         }
         for row in listing.items
     ]
@@ -72,7 +63,6 @@ def list_agent_threads(
         "provider": provider.provider_id,
         "threads": threads,
         "inventory_truncated": listing.inventory_truncated,
-        "omitted_sources": listing.omitted_sources,
     }
 
 

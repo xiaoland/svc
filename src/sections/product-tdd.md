@@ -25,12 +25,22 @@ An explicitly selected provider source is captured read-only into an immutable s
 
 Acquisition remains under telemetry. Query and read accept one immutable schema-v3 bundle and never read a live thread, guess a latest thread, or substitute a normalized projection for unavailable native evidence. Query is set-oriented with one closed typed intent (`overview` or `match`) and deterministic descriptors/references. Read is sequence-oriented: it returns captured native content in source order from the beginning, an exact reference, or an opaque continuation; it does not filter, reorder, summarize, score, or interpret records.
 
+The acquisition boundary trusts the calling user, selected local provider
+location, local account, and operating system. Inventory reports provider
+lifecycle and recognition metadata but does not claim live source
+availability; export resolves the exact source when it runs. The native member
+may contain all selected content, so projection allowlists and omissions are
+structural/resource rules rather than privacy enforcement. SVC does not expose
+a confidentiality, redaction, sandbox, hostile same-user, or adversarial path-
+race contract.
+
 ### Wire invariants
 
 - Query predicates are closed and typed. The contract does not grow an SQL, JSONPath, GraphQL, regex-program, join, aggregation, scoring, or natural-language DSL.
 - `complete`, `partial`, and `unavailable` describe answerability and capture/projection coverage. Pagination is separate: an empty `complete` result is a trustworthy negative for that exact request, while `unavailable` is not a negative finding.
-- Opaque cursors bind contract version, evidence digest, canonical request, ordering, and the next record or fragment position. Continuation may change only the page budget; selector, snapshot, intent, or anchor changes fail with a scope error.
+- Opaque cursors carry contract version, evidence digest, canonical request, ordering, and the next record or fragment position. They are unsigned local continuation state, not authenticated capabilities. Continuation may change only the page budget; selector, snapshot, intent, or anchor changes fail with a scope error.
 - A response may carry provenance, stable evidence references, position, coverage, and continuation metadata without rewriting the native payload. Oversized native records remain exactly reassemblable; response pagination does not turn complete evidence into partial evidence.
+- Successful export leaves one strictly validated absent-target bundle without overwriting an existing path. Interrupted publication may leave an invalid partial target; every consumer validates before use, and the caller removes that target before retry.
 - Every schema and query/read response carries the exact packaged Agent Task Analysis method reference (identifier, canonical path, section, and document digest). Machine success is emitted on stdout and structured errors on stderr; human text is not part of this contract.
 
 Verification is owned jointly by the executable schemas/tests and the affected runtime units: contract fixtures must prove strict intent unions, deterministic order, evidence/reference and cursor scope binding, native fidelity, structured status/error semantics, and the distinction between empty-complete, partial, unavailable, and ordinary pagination. The installed-wheel surface must resolve the method reference through `svc lookup`.

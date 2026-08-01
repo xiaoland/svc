@@ -100,13 +100,15 @@ svc analysis read --schema
 svc analysis read --input <evidence-v3.zip> --request <file|->
 ```
 
-The inventory is one bounded list, not a safe/sensitive split; provider-
-truthful lifecycle, availability, recognition, and local provenance remain
-distinct. Export requires one exact selection and an absent destination, keeps
-the source read-only, refuses overwrite and source/output aliasing, and leaves
-output-location and exposure responsibility with the caller. The former
-`--include-sensitive` acknowledgement, `--repo` boundary, TTY gate, private
-mode policy, and Textual navigator are removed.
+The inventory is one bounded list of provider lifecycle, recognition, and
+local provenance; it does not predict whether a source will still be readable
+when export begins. Export requires one exact selection and an absent
+destination, keeps the selected source read-only, refuses overwrite and
+source/output aliasing, and leaves output location and exposure with the
+caller. A successful export is a validated bundle; if the process is
+interrupted, an invalid partial target may remain and must be removed before
+retry. The former `--include-sensitive` acknowledgement, `--repo` boundary,
+TTY gate, private mode policy, and Textual navigator are removed.
 
 Export publishes schema-v3 evidence with exactly four members:
 `manifest.json`, `native.bin`, `native-index.jsonl`, and `trajectory.jsonl`.
@@ -123,6 +125,13 @@ identification SVC returns `unsupported-agent-thread-bundle-schema` and never
 converts or falls back; recollection requires the original provider-local
 source.
 
+This is a same-user local trust boundary, not a security sandbox. SVC does not
+defend against root, a hostile process under the same account, or adversarial
+path replacement. Native evidence may contain all selected provider content;
+projection allowlists and bounds are structural navigation rules, not
+confidentiality or redaction. The caller owns storage, access, retention, and
+disclosure.
+
 `query` accepts only the closed `overview` and `match` intents. It returns
 evidence identity, capture/capability/loss status, stable refs, structural
 ranges, and deterministic bounded predicates over record type, role, tool,
@@ -132,7 +141,8 @@ prompts are outside the contract. `read` is forward-only native reading from
 the beginning or an exact native ref, with bounded preceding records and
 scope-bound cursors for continuation. It returns captured native bytes/values,
 exact ranges and fragments, digests, provenance, capture gaps, and
-continuation. Exact UTF-8 fragments are directly readable as text, with base64
+continuation. Cursors are unsigned local continuation state, not authenticated
+capabilities. Exact UTF-8 fragments are directly readable as text, with base64
 reserved as the lossless fallback for arbitrary bytes. Read never filters,
 reorders, summarizes, or silently returns normalized content.
 

@@ -1,0 +1,1 @@
+SVC 12.0.0 narrows local Agent-thread evidence to an explicit same-user trust boundary, removes inventory availability and manifest privacy-policy claims, and replaces atomic and adversarial filesystem promises with validated successful export and ordinary local platform authorities.

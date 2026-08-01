@@ -137,12 +137,8 @@ def test_query_schema_is_directly_actionable_for_an_agent() -> None:
         "terms": [1, 8],
         "term_code_points": [1, 256],
     }
-    assert match_contract["predicates"]["native_range"]["reference"][
-        "record_kind"
-    ] == "native"
-    assert match_contract["predicates"]["native_range"]["reference"][
-        "additional_properties"
-    ] is False
+    assert match_contract["predicates"]["native_range"]["reference"]["record_kind"] == "native"
+    assert match_contract["predicates"]["native_range"]["reference"]["additional_properties"] is False
     assert schema["response_format"] == "svc.analysis.query/v1"
     assert schema["method_lookup"]["read_section"] == "Agent Task Analysis"
 
@@ -236,7 +232,7 @@ def test_unavailable_capability_is_not_a_negative_finding() -> None:
     assert result["items"] == []
 
 
-def test_match_cursor_is_deterministic_and_scope_bound() -> None:
+def test_match_cursor_continues_deterministically() -> None:
     source = evidence()
     first = query_evidence(
         source,
@@ -258,17 +254,15 @@ def test_match_cursor_is_deterministic_and_scope_bound() -> None:
     assert [item["ref"]["record_id"] for item in second["items"]] == ["n000002"]
     assert second["next_cursor"] is None
 
-    cursor = str(first["next_cursor"])
-    replacement = "A" if cursor[-1] != "A" else "B"
-    with pytest.raises(AnalysisProtocolError) as tampered:
+    with pytest.raises(AnalysisProtocolError) as malformed:
         query_evidence(
             source,
             {
                 "intent": "match",
-                "cursor": cursor[:-1] + replacement,
+                "cursor": "not-a-cursor",
             },
         )
-    assert tampered.value.code == "invalid-cursor"
+    assert malformed.value.code == "invalid-cursor"
 
 
 @pytest.mark.parametrize(

@@ -40,22 +40,12 @@ class ArchiveFilter(StrEnum):
     ALL = "all"
 
 
-class SourceAvailability(StrEnum):
-    """Whether the provider's local source can currently be collected."""
-
-    AVAILABLE = "available"
-    MISSING = "missing"
-    UNAVAILABLE = "unavailable"
-    UNKNOWN = "unknown"
-
-
 class SourceStatus(StrEnum):
     """Descriptor-bound source status reported by a normalizer."""
 
     STABLE = "stable"
     GREW = "grew"
     CHANGED = "changed"
-    DISPLACED = "displaced"
 
 
 class NormalizationStatus(StrEnum):
@@ -94,19 +84,14 @@ class ThreadSelection:
 
 
 def _has_forbidden_control(value: str) -> bool:
-    return any(
-        unicodedata.category(character) in _CONTROL_CATEGORIES
-        for character in value
-    )
+    return any(unicodedata.category(character) in _CONTROL_CATEGORIES for character in value)
 
 
 def _validate_utf8(value: str, *, field_name: str) -> None:
     try:
         value.encode("utf-8")
     except UnicodeEncodeError as error:
-        raise ValueError(
-            f"{field_name} must be representable UTF-8 text"
-        ) from error
+        raise ValueError(f"{field_name} must be representable UTF-8 text") from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,19 +107,13 @@ class ThreadRef:
             or not self.provider_id.strip()
             or _has_forbidden_control(self.provider_id)
         ):
-            raise ValueError(
-                "provider_id must be non-blank, control-free text"
-            )
+            raise ValueError("provider_id must be non-blank, control-free text")
         _validate_utf8(self.provider_id, field_name="provider_id")
         if (
             not isinstance(self.thread_id, str)
             or not 1 <= len(self.thread_id) <= MAX_THREAD_ID_CHARS
-            or self.thread_id != self.thread_id.strip()
-            or _has_forbidden_control(self.thread_id)
         ):
-            raise ValueError(
-                "thread_id must be bounded, trimmed, and control-free"
-            )
+            raise ValueError("thread_id must be bounded non-empty text")
         _validate_utf8(self.thread_id, field_name="thread_id")
 
 
@@ -145,7 +124,6 @@ class ThreadInventoryRow:
     provider_id: str
     thread_id: str
     archive_state: ArchiveState | str
-    source_availability: SourceAvailability | str
     workspace: str | None = field(default=None, repr=False)
     title: str | None = field(default=None, repr=False)
     first_user_message: str | None = field(default=None, repr=False)
@@ -155,7 +133,6 @@ class ThreadInventoryRow:
     created_at: str | None = field(default=None, repr=False)
     updated_at: str | None = field(default=None, repr=False)
     recency_at_ms: int | None = field(default=None, repr=False)
-    source_warning_code: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         reference = ThreadRef(self.provider_id, self.thread_id)
@@ -164,17 +141,8 @@ class ThreadInventoryRow:
         try:
             archive_state = ArchiveState(self.archive_state)
         except (TypeError, ValueError) as error:
-            raise ValueError(
-                "archive_state must be active, archived, or unknown"
-            ) from error
-        try:
-            availability = SourceAvailability(self.source_availability)
-        except (TypeError, ValueError) as error:
-            raise ValueError(
-                "source_availability must be a known enum value"
-            ) from error
+            raise ValueError("archive_state must be active, archived, or unknown") from error
         object.__setattr__(self, "archive_state", archive_state)
-        object.__setattr__(self, "source_availability", availability)
 
         workspace = self.workspace
         if workspace is not None:
@@ -182,16 +150,12 @@ class ThreadInventoryRow:
                 raise ValueError("workspace must be text or null")
             _validate_utf8(workspace, field_name="workspace")
             if len(workspace) > MAX_WORKSPACE_CHARS:
-                raise ValueError(
-                    "workspace exceeds its provider-enforced bound"
-                )
+                raise ValueError("workspace exceeds its provider-enforced bound")
             if _has_forbidden_control(workspace):
                 workspace = None
         if self.workspace_truncated:
             if workspace is not None:
-                raise ValueError(
-                    "workspace_truncated requires a null workspace value"
-                )
+                raise ValueError("workspace_truncated requires a null workspace value")
         object.__setattr__(self, "workspace", workspace or None)
 
         for field_name, maximum in (
@@ -205,9 +169,7 @@ class ThreadInventoryRow:
                 raise ValueError(f"{field_name} must be text or null")
             _validate_utf8(value, field_name=field_name)
             if len(value) > maximum:
-                raise ValueError(
-                    f"{field_name} exceeds its provider-enforced bound"
-                )
+                raise ValueError(f"{field_name} exceeds its provider-enforced bound")
 
         if self.recency_at_ms is not None and (
             isinstance(self.recency_at_ms, bool)
@@ -221,17 +183,12 @@ class ThreadInventoryRow:
     def selection(self) -> ThreadRef:
         return ThreadRef(self.provider_id, self.thread_id)
 
-    @property
-    def analyzable(self) -> bool:
-        return self.source_availability is SourceAvailability.AVAILABLE
-
     def __repr__(self) -> str:
         return (
             "ThreadInventoryRow("
             f"provider_id={self.provider_id!r}, "
             f"thread_id={self.thread_id!r}, "
             f"archive_state={str(self.archive_state)!r}, "
-            f"source_availability={str(self.source_availability)!r}, "
             f"workspace_truncated={self.workspace_truncated}, "
             f"title_truncated={self.title_truncated}, "
             "first_user_message_truncated="
@@ -250,19 +207,10 @@ class ThreadInventoryQuery:
         try:
             archive_state = ArchiveFilter(self.archive_state)
         except (TypeError, ValueError) as error:
-            raise ValueError(
-                "archive_state must be active, archived, or all"
-            ) from error
+            raise ValueError("archive_state must be active, archived, or all") from error
         object.__setattr__(self, "archive_state", archive_state)
-        if (
-            isinstance(self.limit, bool)
-            or not isinstance(self.limit, int)
-            or not 1 <= self.limit <= MAX_INVENTORY_ROWS
-        ):
-            raise ValueError(
-                f"limit must be an integer between 1 and "
-                f"{MAX_INVENTORY_ROWS}"
-            )
+        if isinstance(self.limit, bool) or not isinstance(self.limit, int) or not 1 <= self.limit <= MAX_INVENTORY_ROWS:
+            raise ValueError(f"limit must be an integer between 1 and {MAX_INVENTORY_ROWS}")
 
     @property
     def archive_filter(self) -> ArchiveFilter:
@@ -289,22 +237,11 @@ class ThreadInventoryListing:
 
     items: tuple[ThreadInventoryRow, ...]
     inventory_truncated: bool = False
-    omitted_sources: int = 0
 
     def __post_init__(self) -> None:
         items = tuple(self.items)
         if len(items) > MAX_INVENTORY_ROWS:
-            raise ValueError(
-                f"listing cannot retain more than {MAX_INVENTORY_ROWS} rows"
-            )
-        if (
-            isinstance(self.omitted_sources, bool)
-            or not isinstance(self.omitted_sources, int)
-            or self.omitted_sources < 0
-        ):
-            raise ValueError(
-                "omitted_sources must be a non-negative integer"
-            )
+            raise ValueError(f"listing cannot retain more than {MAX_INVENTORY_ROWS} rows")
         object.__setattr__(self, "items", items)
 
     @classmethod
@@ -314,7 +251,6 @@ class ThreadInventoryListing:
         *,
         archive_state: ArchiveFilter | str = ArchiveFilter.ACTIVE,
         limit: int = MAX_INVENTORY_ROWS,
-        omitted_sources: int = 0,
     ) -> "ThreadInventoryListing":
         query = ThreadInventoryQuery(
             archive_state=archive_state,
@@ -324,13 +260,10 @@ class ThreadInventoryListing:
         truncated = False
         for row in rows:
             if not isinstance(row, ThreadInventoryRow):
-                raise TypeError(
-                    "rows must contain ThreadInventoryRow values"
-                )
+                raise TypeError("rows must contain ThreadInventoryRow values")
             if (
                 query.archive_filter is not ArchiveFilter.ALL
-                and ArchiveState(row.archive_state).value
-                != query.archive_filter.value
+                and ArchiveState(row.archive_state).value != query.archive_filter.value
             ):
                 continue
             if len(retained) >= query.limit:
@@ -341,7 +274,6 @@ class ThreadInventoryListing:
         return cls(
             tuple(retained),
             inventory_truncated=truncated,
-            omitted_sources=omitted_sources,
         )
 
 
@@ -352,7 +284,7 @@ class ResolvedThread:
     ``source_path`` is process-local authority only.  It is never copied into
     a bundle or exposed through a service payload.  ``thread_id`` remains the
     provider's native selection identity; the normalizer derives the opaque
-    schema-v2 ``thread_ref``.
+    trajectory ``thread_ref``.
     """
 
     provider_id: str
@@ -375,7 +307,7 @@ NormalizedRecordSink = Callable[[Mapping[str, Any]], bool]
 class NativeCaptureResult:
     """Descriptor-bound facts for one immutable native capture.
 
-    Providers own native record framing and source-race observation.  The
+    Providers own native record framing and source-change observation.  The
     evidence core owns canonical index encoding, validation, identity, and
     publication.  ``frames`` therefore contains JSON-ready framing facts but
     never the captured content itself.
@@ -389,8 +321,6 @@ class NativeCaptureResult:
     native_bytes: int
     unknown_remainder: bool = False
     read_interrupted: bool = False
-    source_snapshot: "SourceSnapshot | None" = None
-    final_snapshot: "SourceSnapshot | None" = None
 
     def __post_init__(self) -> None:
         try:
@@ -399,11 +329,7 @@ class NativeCaptureResult:
             raise ValueError("invalid native capture source status") from error
         frames = tuple(self.frames)
         object.__setattr__(self, "frames", frames)
-        if (
-            isinstance(self.native_bytes, bool)
-            or not isinstance(self.native_bytes, int)
-            or self.native_bytes < 0
-        ):
+        if isinstance(self.native_bytes, bool) or not isinstance(self.native_bytes, int) or self.native_bytes < 0:
             raise ValueError("native_bytes must be a non-negative integer")
 
     @property
@@ -412,10 +338,7 @@ class NativeCaptureResult:
             self.source_status is not SourceStatus.STABLE
             or self.unknown_remainder
             or self.read_interrupted
-            or any(
-                frame.get("frame_status") == NativeFrameStatus.INCOMPLETE.value
-                for frame in self.frames
-            )
+            or any(frame.get("frame_status") == NativeFrameStatus.INCOMPLETE.value for frame in self.frames)
         )
 
 
@@ -425,8 +348,7 @@ class NormalizationResult:
 
     ``counts``, ``lossiness``, and ``diagnostics`` are manifest-facing values;
     the bundle core validates and serializes them.  The provider does not
-    retain the emitted records.  Snapshots are local publication evidence and
-    are intentionally not portable manifest fields.
+    retain the emitted records.
     """
 
     provider_id: str
@@ -440,8 +362,6 @@ class NormalizationResult:
     counts: Mapping[str, Any]
     lossiness: Mapping[str, Any]
     diagnostics: tuple[Mapping[str, Any], ...] = ()
-    source_snapshot: "SourceSnapshot | None" = None
-    final_snapshot: "SourceSnapshot | None" = None
 
     def __post_init__(self) -> None:
         try:
@@ -453,41 +373,22 @@ class NormalizationResult:
             raise ValueError("thread_ref must be an opaque thread reference")
 
 
-@dataclass(frozen=True)
-class SourceSnapshot:
-    """Filesystem identity of a descriptor-bound source snapshot.
-
-    It is intentionally not serialized into the portable archive: device and
-    inode values are local implementation details.  The archive core uses it
-    only to reject a replaced source at the pre-publication atomic-commit gate.
-    Providers without a stable filesystem source may leave it absent.
-    """
-
-    device: int
-    inode: int
-    size: int
-    mtime_ns: int
-
-
-class ThreadProvider(Protocol):
-    """A static provider adapter for inventory and trajectory collection."""
+class EvidenceThreadProvider(Protocol):
+    """Provider capable of immutable native capture and captured projection."""
 
     provider_id: str
 
-    def list_inventory(self, context: ProviderContext, query: ThreadInventoryQuery) -> ThreadInventoryListing: ...
-
-    def resolve(self, context: ProviderContext, selection: ThreadSelection) -> ResolvedThread: ...
-
-    def stream_normalize(
+    def list_inventory(
         self,
-        resolved: ResolvedThread,
-        sink: NormalizedRecordSink,
-        bounds: Mapping[str, int],
-    ) -> NormalizationResult: ...
+        context: ProviderContext,
+        query: ThreadInventoryQuery,
+    ) -> ThreadInventoryListing: ...
 
-
-class EvidenceThreadProvider(ThreadProvider, Protocol):
-    """Provider capable of immutable native capture and captured projection."""
+    def resolve(
+        self,
+        context: ProviderContext,
+        selection: ThreadSelection,
+    ) -> ResolvedThread: ...
 
     def capture_native(
         self,
