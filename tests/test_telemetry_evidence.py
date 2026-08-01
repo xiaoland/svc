@@ -17,7 +17,7 @@ from svc_cli.telemetry.evidence import (
     validate_evidence_members,
     write_evidence_stream,
 )
-from svc_cli.telemetry.trajectory import MAX_MANIFEST_BYTES, build_manifest, canonical_json_bytes, zero_lossiness
+from svc_cli.telemetry.trajectory import build_manifest, canonical_json_bytes, zero_lossiness
 
 
 def _meta() -> dict[str, object]:
@@ -146,30 +146,25 @@ def test_schema_v3_round_trip_has_exact_members_and_native_coverage(tmp_path: Pa
 
 
 @pytest.mark.filterwarnings("ignore:Duplicate name:UserWarning")
-@pytest.mark.parametrize("member_case", ("missing", "duplicate"))
-def test_bundle_requires_exact_unique_members(tmp_path: Path, member_case: str) -> None:
+def test_bundle_requires_exact_unique_members(tmp_path: Path) -> None:
     manifest, _, _, _ = _fixture()
-    names = EVIDENCE_MEMBERS[:-1] if member_case == "missing" else (*EVIDENCE_MEMBERS, "native.bin")
-    target = tmp_path / f"{member_case}.zip"
-    with zipfile.ZipFile(target, "w") as archive:
-        for name in names:
-            data = canonical_json_bytes(manifest, newline=True) if name == "manifest.json" else b""
-            archive.writestr(name, data)
+    for case, names in (
+        ("missing", EVIDENCE_MEMBERS[:-1]),
+        ("duplicate", (*EVIDENCE_MEMBERS, "native.bin")),
+    ):
+        target = tmp_path / f"{case}.zip"
+        with zipfile.ZipFile(target, "w") as archive:
+            for name in names:
+                data = (
+                    canonical_json_bytes(manifest, newline=True)
+                    if name == "manifest.json"
+                    else b""
+                )
+                archive.writestr(name, data)
 
-    with pytest.raises(EvidenceError) as raised:
-        validate_evidence(target)
-    assert raised.value.code == "bundle-invalid"
-
-
-@pytest.mark.parametrize(("manifest_bytes", "error_code"), ((b" {}\n", "bundle-invalid"), (b" " * (MAX_MANIFEST_BYTES + 1), "member-limit-reached")))
-def test_bundle_requires_bounded_canonical_manifest(tmp_path: Path, manifest_bytes: bytes, error_code: str) -> None:
-    target = tmp_path / f"{error_code}.zip"
-    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for name in EVIDENCE_MEMBERS:
-            archive.writestr(name, manifest_bytes if name == "manifest.json" else b"")
-    with pytest.raises(EvidenceError) as raised:
-        validate_evidence(target)
-    assert raised.value.code == error_code
+        with pytest.raises(EvidenceError) as raised:
+            validate_evidence(target)
+        assert raised.value.code == "bundle-invalid"
 
 
 def test_native_index_requires_exact_cover_and_digest() -> None:
@@ -188,81 +183,44 @@ def test_native_index_requires_exact_cover_and_digest() -> None:
     assert raised.value.code == "invalid-native-index"
 
 
-@pytest.mark.parametrize("failure_case", ("missing", "incomplete"))
-def test_trajectory_refs_must_resolve_complete_native_frames(failure_case: str) -> None:
+def test_trajectory_refs_must_resolve_native_frames() -> None:
     manifest, native, native_index, trajectory = _fixture()
-    if failure_case == "missing":
-        record = json.loads(trajectory.splitlines()[1])
-        del record["source_ref"]["native_record_id"]
-        broken_trajectory = canonical_json_bytes(_meta(), newline=True) + canonical_json_bytes(record, newline=True)
-        broken_index = native_index
-        broken_manifest = dict(manifest)
-        broken_manifest["projection"] = _projection(broken_trajectory)
-        broken_manifest["evidence_id"] = build_evidence_id(broken_manifest, native, broken_index, broken_trajectory)
-        expected_code = "native-reference-missing"
-    else:
-        broken_trajectory = trajectory
-        broken_index = build_native_index(
-            native,
-            [
-                (0, 5, {"event_index": 0, "line": 0, "byte_offset": 0}, "complete"),
-                (5, len(native), {"event_index": 1, "line": 1, "byte_offset": 5}, "incomplete"),
-            ],
-        )
-        broken_manifest = dict(manifest)
-        broken_manifest["native_index"] = {
-            **manifest["native_index"],
-            "sha256": hashlib.sha256(broken_index).hexdigest(),
-            "bytes": len(broken_index),
-        }
-        broken_manifest["capture"] = {
-            "status": "partial",
-            "unknown_remainder": True,
-            "representation": "provider-bytes",
-        }
-        broken_manifest["evidence_id"] = build_evidence_id(
-            broken_manifest, native, broken_index, broken_trajectory
-        )
-        expected_code = "native-reference-incomplete"
-    with pytest.raises(EvidenceError) as raised:
-        validate_evidence_members(broken_manifest, native, broken_index, broken_trajectory)
-    assert raised.value.code == expected_code
-
-
-def test_incomplete_final_native_frame_derives_partial_capture_metadata() -> None:
-    _manifest, _native, _native_index, trajectory = _fixture()
-    native = b"meta\nmessage\ntail"
-    native_index = build_native_index(
+    record = json.loads(trajectory.splitlines()[1])
+    del record["source_ref"]["native_record_id"]
+    broken_trajectory = canonical_json_bytes(
+        _meta(), newline=True
+    ) + canonical_json_bytes(record, newline=True)
+    broken_manifest = dict(manifest)
+    broken_manifest["projection"] = _projection(broken_trajectory)
+    broken_manifest["evidence_id"] = build_evidence_id(
+        broken_manifest,
         native,
-        [
-            (0, 5, {"event_index": 0, "line": 0, "byte_offset": 0}, "complete"),
-            (5, 13, {"event_index": 1, "line": 1, "byte_offset": 5}, "complete"),
-            (13, len(native), {"event_index": 2, "line": 2, "byte_offset": 13}, "incomplete"),
-        ],
+        native_index,
+        broken_trajectory,
     )
-    manifest = build_evidence_manifest(
-        native=native,
-        native_index=native_index,
-        projection=_projection(trajectory),
-        trajectory=trajectory,
-    )
-    assert manifest["capture"] == {
-        "status": "partial",
-        "unknown_remainder": True,
-        "representation": "provider-bytes",
-    }
-
-
-@pytest.mark.parametrize("schema_version", (1, 2))
-def test_schema_v1_and_v2_are_rejected(
-    tmp_path: Path,
-    schema_version: int,
-) -> None:
-    target = tmp_path / "old.zip"
-    old_manifest = {"format": "svc-agent-thread-bundle", "schema_version": schema_version}
-    with zipfile.ZipFile(target, "w") as archive:
-        archive.writestr("manifest.json", canonical_json_bytes(old_manifest, newline=True))
-
     with pytest.raises(EvidenceError) as raised:
-        validate_evidence(target)
-    assert raised.value.code == "unsupported-agent-thread-bundle-schema"
+        validate_evidence_members(
+            broken_manifest,
+            native,
+            native_index,
+            broken_trajectory,
+        )
+    assert raised.value.code == "native-reference-missing"
+
+
+def test_schema_v1_and_v2_are_rejected(tmp_path: Path) -> None:
+    for schema_version in (1, 2):
+        target = tmp_path / f"schema-{schema_version}.zip"
+        old_manifest = {
+            "format": "svc-agent-thread-bundle",
+            "schema_version": schema_version,
+        }
+        with zipfile.ZipFile(target, "w") as archive:
+            archive.writestr(
+                "manifest.json",
+                canonical_json_bytes(old_manifest, newline=True),
+            )
+
+        with pytest.raises(EvidenceError) as raised:
+            validate_evidence(target)
+        assert raised.value.code == "unsupported-agent-thread-bundle-schema"

@@ -1,434 +1,404 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from typing import Any, Mapping
 
 import pytest
 
-from svc_cli.telemetry.agent_threads import ResolvedThread
-from svc_cli.telemetry.providers.codex_trajectory import CodexTrajectoryNormalizer
+from svc_cli.telemetry.agent_threads import ProviderContext, ThreadSelection
+from svc_cli.telemetry.archive import write_agent_thread_evidence
+from svc_cli.telemetry.evidence import ValidatedEvidence, validate_evidence
+from svc_cli.telemetry.providers import CodexRolloutProvider
 
 
 @dataclass(frozen=True)
 class TrajectoryCase:
-    normalizer: CodexTrajectoryNormalizer
+    root: Path
+    provider: CodexRolloutProvider
 
-    def normalize(self, *records: dict[str, object], bounds: Mapping[str, int] | None = None, sink: Callable[[dict[str, object]], bool] | None = None) -> tuple[object, list[dict[str, object]]]:
-        source = BytesIO(("\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n").encode("utf-8"))
-        projected: list[dict[str, object]] = []
-        consumer = sink or (lambda record: projected.append(dict(record)) or True)
-        first_payload = records[0].get("payload") if records else None
-        thread_id = (
-            first_payload.get("id") if isinstance(first_payload, Mapping) and isinstance(first_payload.get("id"), str)
-            else "test-thread"
+    @staticmethod
+    def envelope(
+        kind: str,
+        payload: object,
+        timestamp: str = "2026-01-01T00:00:00Z",
+    ) -> dict[str, object]:
+        return {"timestamp": timestamp, "type": kind, "payload": payload}
+
+    def source(
+        self,
+        *events: dict[str, object] | str,
+        name: str = "rollout.jsonl",
+    ) -> Path:
+        path = self.root / name
+        lines = [
+            event
+            if isinstance(event, str)
+            else json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+            for event in events
+        ]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return path
+
+    def export(self, source: Path) -> ValidatedEvidence:
+        output = self.root / f"{source.stem}.zip"
+        write_agent_thread_evidence(
+            self.provider,
+            ProviderContext(home=self.root),
+            ThreadSelection(source=source),
+            output,
         )
-        result = self.normalizer.normalize(
-            source,
-            ResolvedThread(
-                provider_id="codex", adapter_id="codex-rollout-v1", source_format="rollout-v1",
-                thread_id=thread_id, source_path=Path("rollout.jsonl"),
-            ),
-            consumer, bounds,
+        return validate_evidence(output)
+
+    def project(
+        self,
+        source: Path,
+        bounds: Mapping[str, int] | None = None,
+    ):
+        resolved = self.provider.resolve(
+            ProviderContext(home=self.root),
+            ThreadSelection(source=source),
         )
-        return result, projected
+        native = BytesIO()
+        capture = self.provider.capture_native(resolved, native, bounds or {})
+        records: list[dict[str, Any]] = []
+        result = self.provider.stream_normalize_captured(
+            resolved,
+            native,
+            capture,
+            lambda record: records.append(dict(record)) or True,
+            bounds or {},
+        )
+        return result, records
 
 
 @pytest.fixture
-def trajectory_case() -> TrajectoryCase:
-    return TrajectoryCase(CodexTrajectoryNormalizer())
+def trajectory_case(tmp_path: Path) -> TrajectoryCase:
+    return TrajectoryCase(tmp_path, CodexRolloutProvider())
 
 
-class TestCodexTrajectory:
-    @staticmethod
-    def envelope(kind: str, payload: object, timestamp: str = "2026-01-01T00:00:00Z") -> dict[str, object]:
-        return {"timestamp": timestamp, "type": kind, "payload": payload}
+def session(thread_id: str, **payload: object) -> dict[str, object]:
+    return TrajectoryCase.envelope("session_meta", {"id": thread_id, **payload})
 
-    def test_stream_emits_stable_source_refs_and_canonical_order(
+
+def response(kind: str, **payload: object) -> dict[str, object]:
+    return TrajectoryCase.envelope("response_item", {"type": kind, **payload})
+
+
+def event(kind: str, **payload: object) -> dict[str, object]:
+    return TrajectoryCase.envelope("event_msg", {"type": kind, **payload})
+
+
+class TestCodexTrajectoryProjection:
+    def test_manifest_observes_messages_tools_relations_events_and_known_loss(
         self,
         trajectory_case: TrajectoryCase,
     ) -> None:
-        result, records = trajectory_case.normalize(
-            self.envelope("session_meta", {"id": "thread-1", "cwd": "/work/project"}),
-            self.envelope("response_item", {"type": "message", "role": "user", "content": "user input"}),
-            self.envelope("response_item", {"type": "function_call", "name": "svc", "call_id": "native-call", "arguments": {"cmd": "status"}}),
-            self.envelope("response_item", {"type": "function_call_output", "call_id": "native-call", "status": "success", "output": "tool output"}),
-        )
-
-        assert (result.source_status.value) == ("stable")
-        assert (result.result_status.value) == ("ready")
-        assert ([record["type"] for record in records]) == (["meta", "message", "tool_call", "tool_result"])
-        assert ([record["record_index"] for record in records]) == ([0, 1, 2, 3])
-        assert ([record["record_id"] for record in records]) == (["r000000", "r000001", "r000002", "r000003"])
-        assert (records[1]["source_ref"]["event_index"]) == (1)
-        assert (records[1]["source_ref"]["line"]) == (1)
-        assert (records[3]["source_ref"]["event_index"]) == (3)
-        assert (records[3]["content"]) == ("tool output")
-
-    def test_stream_preserves_orphan_result_order_and_deterministic_ids(
-        self,
-        trajectory_case: TrajectoryCase,
-    ) -> None:
-        _, first = trajectory_case.normalize(
-            self.envelope("session_meta", {"id": "thread-2"}),
-            self.envelope("response_item", {"type": "function_call_output", "call_id": "late", "status": "error", "output": "x"}),
-            self.envelope("response_item", {"type": "function_call", "name": "tool", "call_id": "late", "arguments": ""}),
-        )
-        _, second = trajectory_case.normalize(
-            self.envelope("session_meta", {"id": "thread-2"}),
-            self.envelope("response_item", {"type": "function_call_output", "call_id": "late", "status": "error", "output": "x"}),
-            self.envelope("response_item", {"type": "function_call", "name": "tool", "call_id": "late", "arguments": ""}),
-        )
-
-        assert (first) == (second)
-        assert (first[1]["type"]) == ("tool_result")
-        assert (first[1]["link_status"]) == ("unresolved")
-        assert (first[2]["type"]) == ("tool_call")
-        assert (first[1]["tool_call_id"]) == (first[2]["tool_call_id"])
-
-    def test_codex_relations_context_roles_and_ui_loss_are_classified(
-        self,
-        trajectory_case: TrajectoryCase,
-    ) -> None:
-        passthrough = {"turn_id": "turn-native", "author": "author-native", "recipient": "recipient-native"}
-        context_payloads = [
-            {"type": "message", "role": "developer", "content": "developer context"},
-            {"type": "message", "role": "system", "content": "system context"},
-            {"type": "turn_context", "effort": "high", "approval_policy": "on-request", "sandbox_policy": "workspace"},
-        ]
-        context_events = [
-            self.envelope("response_item", {**payload, "internal_chat_message_metadata_passthrough": passthrough})
-            for payload in context_payloads
-        ]
-        ui_events = [
-            self.envelope("event_msg", {"type": kind, "text": "ui"})
-            for kind in ("user_message", "agent_message", "agent_reasoning")
-        ]
-        result, records = trajectory_case.normalize(
-            self.envelope("session_meta", {"id": "thread-shapes"}),
-            *context_events,
-            self.envelope("response_item", {"type": "message", "role": "user", "content": "user input", "internal_chat_message_metadata_passthrough": passthrough}),
-            *ui_events,
-            self.envelope("event_msg", {"type": "token_count", "count": 4}),
-            self.envelope("event_msg", {"type": "task_started"}),
-            self.envelope("event_msg", {"type": "task_complete", "status": "completed"}),
-            self.envelope("event_msg", {"type": "context_compacted"}),
-        )
-
-        assert result.lossiness["dropped"]["unsupported_record"] == 0
-        assert result.lossiness["dropped"]["ui_event"] == 3
-        assert result.lossiness["dropped"]["rate_limit_noise"] == 1
-        assert result.capabilities["context"] == "partial"
-        assert result.capabilities["terminal_events"] == "available"
-        assert result.counts["messages_by_role"] == {"user": 1, "assistant": 0}
-        contexts = [record for record in records if record["type"] == "context"]
-        assert [record["context_kind"] for record in contexts] == ["developer", "system", "turn"]
-        assert contexts[-1]["attributes"] == {"reasoning_effort": "high", "approval_mode": "on-request", "sandbox_mode": "workspace"}
-        user = next(record for record in records if record["type"] == "message")
-        assert user["turn_ref"].startswith("turn_")
-        assert user["actor_ref"].startswith("actor_")
-        assert user["lane_ref"].startswith("lane_")
-        events = [record for record in records if record["type"] == "event"]
-        assert [record["event_kind"] for record in events] == ["turn_start", "turn_complete", "compaction"]
-
-    def test_tool_call_shapes_pair_with_results_and_completion_status(
-        self,
-        trajectory_case: TrajectoryCase,
-    ) -> None:
-        relation = {"turn_id": "turn-tool", "author": "agent-tool", "recipient": "recipient-tool"}
-        call_shapes = [
-            self.envelope(
-                "response_item",
-                {
-                    "type": "custom_tool_call",
-                    "call_id": "custom-1",
-                    "name": "exec",
-                    "arguments": {"cmd": "true"},
-                    "internal_chat_message_metadata_passthrough": relation,
-                },
+        relation = {
+            "turn_id": "turn-native",
+            "author": "agent-native",
+            "recipient": "lane-native",
+        }
+        source = trajectory_case.source(
+            session("thread-flow", cwd="/work/project"),
+            response(
+                "message",
+                role="developer",
+                content="developer context",
+                internal_chat_message_metadata_passthrough=relation,
             ),
-            self.envelope(
-                "response_item",
-                {"type": "tool_search_call", "call_id": "search-1", "arguments": {"query": "svc"}},
+            response(
+                "message",
+                role="user",
+                content="inspect tasks/flow/packet.md",
+                internal_chat_message_metadata_passthrough=relation,
             ),
-            self.envelope(
-                "response_item",
-                {"type": "web_search_call", "id": "web-1", "status": "in_progress"},
+            response("message", role="assistant", content="working"),
+            response(
+                "function_call",
+                name="svc",
+                call_id="call-native",
+                arguments={"cmd": "status tasks/tool-is-not-eligible/packet.md"},
+                parent_actor_id="parent-native",
+                internal_chat_message_metadata_passthrough=relation,
             ),
-        ]
-        result_shapes = [
-            self.envelope("response_item", {"type": "custom_tool_call_output", "call_id": "custom-1", "output": "done"}),
-            self.envelope("response_item", {"type": "tool_search_call_output", "call_id": "search-1", "output": "found", "status": "success"}),
-            self.envelope("response_item", {"type": "web_search_call", "id": "web-1", "status": "completed", "output": "web"}),
-        ]
-        result, records = trajectory_case.normalize(
-            self.envelope("session_meta", {"id": "thread-tool-shapes"}),
-            call_shapes[0],
-            self.envelope("event_msg", {"type": "exec_command_end", "call_id": "custom-1", "status": "completed", "internal_chat_message_metadata_passthrough": relation}),
-            result_shapes[0],
-            call_shapes[1],
-            result_shapes[1],
-            call_shapes[2],
-            result_shapes[2],
-            self.envelope("event_msg", {"type": "patch_apply_end", "call_id": "patch-1", "status": "completed"}),
-            self.envelope("event_msg", {"type": "mcp_tool_call_end", "call_id": "mcp-1", "status": "success"}),
-            self.envelope("event_msg", {"type": "collab_completion", "call_id": "collab-1", "status": "completed"}),
+            event(
+                "exec_command_end",
+                call_id="call-native",
+                status="completed",
+                internal_chat_message_metadata_passthrough=relation,
+            ),
+            response(
+                "function_call_output",
+                call_id="call-native",
+                output="done",
+            ),
+            event("task_started"),
+            event("task_complete", status="completed"),
+            event("context_compacted"),
+            event("user_message", text="duplicate UI"),
+            event("token_count", count=4),
+            name="flow.jsonl",
         )
 
+        evidence = trajectory_case.export(source)
+        records = list(evidence.trajectory.records)
+        projection = evidence.manifest["projection"]
+
+        assert [record["type"] for record in records] == [
+            "meta",
+            "context",
+            "message",
+            "message",
+            "tool_call",
+            "tool_result",
+            "event",
+            "event",
+            "event",
+        ]
+        assert [record["record_index"] for record in records] == list(range(9))
+        assert [record["record_id"] for record in records] == [
+            f"r{index:06d}" for index in range(9)
+        ]
+        assert records[0]["workspace"]["label"] == "project"
+
+        user = records[2]
+        call = records[4]
+        result = records[5]
+        assert user["task_refs"] == ["tasks/flow/packet.md"]
+        assert (
+            user["turn_ref"],
+            user["actor_ref"],
+            user["lane_ref"],
+        ) == (
+            call["turn_ref"],
+            call["actor_ref"],
+            call["lane_ref"],
+        )
+        assert str(call["parent_actor_ref"]).startswith("actor_")
+        assert result["tool_call_id"] == call["tool_call_id"]
+        assert result["status"] == "success"
+        assert result["link_status"] == "linked"
+        assert (
+            result["turn_ref"],
+            result["actor_ref"],
+            result["lane_ref"],
+        ) == (
+            call["turn_ref"],
+            call["actor_ref"],
+            call["lane_ref"],
+        )
+        assert [record["source_ref"]["native_record_id"] for record in records[1:]] == [
+            "n000001",
+            "n000002",
+            "n000003",
+            "n000004",
+            "n000006",
+            "n000007",
+            "n000008",
+            "n000009",
+        ]
+        assert [
+            record["event_kind"] for record in records if record["type"] == "event"
+        ] == ["turn_start", "turn_complete", "compaction"]
+        assert projection["counts"]["messages_by_role"] == {
+            "user": 1,
+            "assistant": 1,
+        }
+        assert projection["counts"]["task_references"] == 1
+        assert projection["lossiness"]["dropped"]["ui_event"] == 2
+        assert projection["lossiness"]["dropped"]["rate_limit_noise"] == 1
+        assert projection["capabilities"]["context"] == "partial"
+        assert projection["capabilities"]["terminal_events"] == "available"
+
+    def test_manifest_observes_tool_shapes_linkage_and_duplicate_loss(
+        self,
+        trajectory_case: TrajectoryCase,
+    ) -> None:
+        relation = {
+            "turn_id": "turn-tool",
+            "author": "agent-tool",
+            "recipient": "lane-tool",
+        }
+        source = trajectory_case.source(
+            session("thread-tools"),
+            response(
+                "custom_tool_call",
+                call_id="custom-1",
+                name="exec",
+                arguments={"cmd": "true"},
+                internal_chat_message_metadata_passthrough=relation,
+            ),
+            event(
+                "exec_command_end",
+                call_id="custom-1",
+                status="completed",
+                internal_chat_message_metadata_passthrough=relation,
+            ),
+            response("custom_tool_call_output", call_id="custom-1", output="done"),
+            response(
+                "tool_search_call",
+                call_id="search-1",
+                arguments={"query": "svc"},
+            ),
+            response(
+                "tool_search_output",
+                call_id="search-1",
+                status="completed",
+                execution={"b": 2, "a": 1},
+            ),
+            response("web_search_call", id="web-1", status="in_progress"),
+            response(
+                "web_search_call",
+                id="web-1",
+                status="completed",
+                output="web",
+            ),
+            response("function_call", name="synthetic"),
+            response(
+                "function_call",
+                name="explicit",
+                call_id="explicit-1",
+                parent_actor_id="parent-1",
+            ),
+            response(
+                "function_call_output",
+                call_id="explicit-1",
+                status="success",
+                output="first",
+            ),
+            response(
+                "function_call_output",
+                call_id="explicit-1",
+                status="error",
+                output="duplicate",
+            ),
+            response(
+                "function_call_output",
+                call_id="late",
+                status="error",
+                output="orphan",
+            ),
+            response(
+                "function_call",
+                name="late-tool",
+                call_id="late",
+                arguments="",
+            ),
+            name="tools.jsonl",
+        )
+
+        evidence = trajectory_case.export(source)
+        records = list(evidence.trajectory.records)
+        projection = evidence.manifest["projection"]
         calls = [record for record in records if record["type"] == "tool_call"]
         results = [record for record in records if record["type"] == "tool_result"]
-        assert len(calls) == 3
-        assert len(results) == 3
-        assert [record["status"] for record in results] == ["success", "success", "success"]
-        assert all(record["link_status"] == "linked" for record in results)
-        assert all("turn_ref" in record and "actor_ref" in record and "lane_ref" in record for record in results[:1])
-        assert result.lossiness["dropped"]["unsupported_record"] == 0
 
-    def test_current_settings_completion_and_tool_search_shapes_project_recognized_fields(
+        assert [record["name"] for record in calls] == [
+            "exec",
+            "tool_search",
+            "web_search",
+            "synthetic",
+            "explicit",
+            "late-tool",
+        ]
+        assert len(results) == 5
+        assert results[0]["status"] == "success"
+        assert all(key in results[0] for key in ("turn_ref", "actor_ref", "lane_ref"))
+        assert results[1]["content"] == '{"a":1,"b":2}'
+        assert results[1]["status"] == "success"
+        assert results[-1]["link_status"] == "unresolved"
+        assert results[-1]["tool_call_id"] == calls[-1]["tool_call_id"]
+        explicit = next(record for record in calls if record["name"] == "explicit")
+        assert str(explicit["parent_actor_ref"]).startswith("actor_")
+        assert projection["capabilities"]["tool_linkage"] == "mixed"
+        assert projection["result_status"] == "partial"
+        assert projection["lossiness"]["dropped"]["duplicate_tool_result"] == 1
+
+    def test_manifest_observes_reasoning_authority_and_invalid_native_loss(
         self,
         trajectory_case: TrajectoryCase,
     ) -> None:
-        initial_context = {
-            "type": "turn_context",
-            "turn_id": "turn-current",
-            "model": "model-current",
-            "effort": "high",
-            "approval_policy": "on-request",
-            "sandbox_policy": {"type": "workspace-write"},
-            "collaboration_mode": {"mode": "multi-agent"},
-        }
-        applied_settings = {
-            "type": "thread_settings_applied",
-            "thread_settings": {
-                "model": "model-next",
-                "reasoning_effort": "medium",
-                "approval_policy": "never",
-                "permission_profile": {"type": "read-only"},
-                "collaboration_mode": {"mode": "single-agent"},
-            },
-        }
-        result, records = trajectory_case.normalize(
-            self.envelope("session_meta", {"id": "thread-current-shapes"}),
-            self.envelope("turn_context", initial_context),
-            self.envelope("event_msg", applied_settings),
-            self.envelope("response_item", {"type": "tool_search_call", "call_id": "search-current", "arguments": {"query": "safe"}}),
-            self.envelope("event_msg", {"type": "web_search_end", "call_id": "search-current", "action": {"type": "search"}}),
-            self.envelope("response_item", {"type": "tool_search_output", "call_id": "search-current", "status": "completed", "execution": {"b": 2, "a": 1}}),
-            self.envelope("event_msg", {"type": "thread_rolled_back", "num_turns": 1}),
-            self.envelope("event_msg", {"type": "collab_agent_spawn_end", "call_id": "spawn-current", "status": "completed"}),
-            self.envelope("event_msg", {"type": "collab_waiting_end", "call_id": "wait-current", "statuses": {}}),
-            self.envelope("event_msg", {"type": "collab_agent_interaction_end", "call_id": "interaction-current", "status": {"completed": "agent"}}),
+        source = trajectory_case.source(
+            session("thread-reasoning"),
+            response(
+                "reasoning",
+                summary="bounded summary",
+                encrypted_content="opaque",
+            ),
+            response("reasoning", encrypted_content="opaque"),
+            "{not-json}",
+            name="reasoning.jsonl",
         )
 
-        contexts = [record for record in records if record["type"] == "context"]
-        assert [record["attributes"] for record in contexts] == [
-            {"model": "model-current", "reasoning_effort": "high", "approval_mode": "on-request", "sandbox_mode": "workspace-write", "collaboration_mode": "multi-agent"},
-            {"model": "model-next", "reasoning_effort": "medium", "approval_mode": "never", "sandbox_mode": "read-only", "collaboration_mode": "single-agent"},
-        ]
-        tool_result = next(record for record in records if record["type"] == "tool_result")
-        assert tool_result["content"] == '{"a":1,"b":2}'
-        assert tool_result["status"] == "success"
-        assert tool_result["link_status"] == "linked"
-        assert result.lossiness["dropped"]["unsupported_record"] == 0
-        assert result.result_status.value == "ready"
+        evidence = trajectory_case.export(source)
+        records = list(evidence.trajectory.records)
+        projection = evidence.manifest["projection"]
+        reasoning = [record for record in records if record["type"] == "reasoning"]
 
-    def test_plaintext_reasoning_summary_remains_authority_when_full_reasoning_is_opaque(
-        self,
-        trajectory_case: TrajectoryCase,
-    ) -> None:
-        result, records = trajectory_case.normalize(
-            self.envelope(
-                "session_meta",
-                {"id": "thread-reasoning-summary"},
-            ),
-            self.envelope(
-                "response_item",
-                {
-                    "type": "reasoning",
-                    "summary": "bounded summary",
-                    "encrypted_content": "opaque",
-                },
-            ),
-            self.envelope(
-                "response_item",
-                {
-                    "type": "reasoning",
-                    "encrypted_content": "opaque",
-                },
-            ),
-        )
-
-        reasoning = [
-            record
-            for record in records
-            if record["type"] == "reasoning"
-        ]
-        assert (len(reasoning)) == (1)
-        assert (reasoning[0]["content"]) == ("bounded summary")
-        assert (result.capabilities["reasoning"]) == ("summary")
-        assert (result.lossiness["unavailable"]["reasoning"]) == (2)
-        assert (sum(
+        assert len(reasoning) == 1
+        assert reasoning[0]["reasoning_kind"] == "summary"
+        assert reasoning[0]["content"] == "bounded summary"
+        assert projection["capabilities"]["reasoning"] == "summary"
+        assert projection["lossiness"]["unavailable"]["reasoning"] == 2
+        assert projection["lossiness"]["dropped"]["invalid_json"] == 1
+        assert projection["result_status"] == "partial"
+        assert (
+            sum(
                 diagnostic["count"]
-                for diagnostic in result.diagnostics
+                for diagnostic in projection["diagnostics"]
                 if diagnostic["code"] == "reasoning-unavailable"
-            )) == (2)
+            )
+            == 2
+        )
 
-    def test_opaque_reasoning_emits_no_fabricated_record(
+    def test_task_reference_scan_uses_full_message_and_reports_all_bounds(
         self,
         trajectory_case: TrajectoryCase,
     ) -> None:
-        result, records = trajectory_case.normalize(
-            self.envelope(
-                "session_meta",
-                {"id": "thread-reasoning-opaque"},
-            ),
-            self.envelope(
-                "response_item",
-                {
-                    "type": "reasoning",
-                    "encrypted_content": "opaque",
-                },
-            ),
+        retained = "tasks/hidden/packet.md"
+        omitted = "tasks/omitted/packet.md"
+        oversize = "tasks/" + ("x" * 1_010) + "/packet.md"
+        content = " ".join(
+            [
+                "x" * 17_000,
+                retained,
+                omitted,
+                "/private/tasks/absolute/packet.md",
+                r"C:\private\tasks\drive\packet.md",
+                r"\\server\share\tasks\unc\packet.md",
+                "https://example.invalid/tasks/uri/packet.md",
+                r"tasks\backslash\packet.md",
+                "tasks/../invalid/packet.md",
+                oversize,
+            ]
+        )
+        source = trajectory_case.source(
+            session("thread-task-refs"),
+            response("message", role="user", content=content),
+            name="task-refs.jsonl",
         )
 
-        assert ("reasoning") not in ([record["type"] for record in records])
-        assert (result.capabilities["reasoning"]) == ("opaque")
-        assert (result.lossiness["unavailable"]["reasoning"]) == (1)
-
-    def test_stream_sink_rejection_emits_record_limit_diagnostic(
-        self,
-        trajectory_case: TrajectoryCase,
-    ) -> None:
-        records: list[dict[str, object]] = []
-
-        def sink(record: dict[str, object]) -> bool:
-            records.append(dict(record))
-            return len(records) < 2
-
-        result, _ = trajectory_case.normalize(
-            self.envelope("session_meta", {"id": "thread-3"}),
-            self.envelope(
-                "response_item", {"type": "message", "role": "user", "content": "one"}
-            ),
-            self.envelope(
-                "response_item",
-                {"type": "message", "role": "assistant", "content": "two"},
-            ),
-            bounds={"records": 2},
-            sink=sink,
+        result, records = trajectory_case.project(
+            source,
+            {"task_reference_occurrences": 1},
         )
-
-        assert (len(records)) == (2)
-        assert (result.result_status.value) == ("partial")
-        assert (result.lossiness["partial_reasons"]["record_limit"]) > (0)
-        assert ([
-                {
-                    "code": diagnostic["code"],
-                    "details": diagnostic["details"],
-                }
-                for diagnostic in result.diagnostics
-                if diagnostic["code"] == "record-limit-reached"
-            ]) == ([
-                {
-                    "code": "record-limit-reached",
-                    "details": {
-                        "observed_count": 2,
-                        "limit_count": 2,
-                    },
-                }
-            ])
-
-    def test_tool_linkage_modes_suppress_duplicates_and_preserve_parent_refs(
-        self,
-        trajectory_case: TrajectoryCase,
-    ) -> None:
-        result, records = trajectory_case.normalize(
-            self.envelope("session_meta", {"id": "thread-tools"}),
-            self.envelope("response_item", {"type": "function_call", "name": "synthetic"}),
-            self.envelope("response_item", {"type": "function_call", "name": "explicit", "call_id": "call-1", "parent_actor_id": "parent-1"}),
-            self.envelope("response_item", {"type": "function_call_output", "call_id": "call-1", "status": "success", "output": "first"}),
-            self.envelope("response_item", {"type": "function_call_output", "call_id": "call-1", "status": "error", "output": "duplicate"}),
-        )
-
-        assert result.capabilities["tool_linkage"] == "mixed"
-        assert [record["type"] for record in records].count("tool_result") == 1
-        assert result.lossiness["dropped"]["duplicate_tool_result"] == 1
-        assert result.result_status.value == "partial"
-        explicit_call = next(
-            record
-            for record in records
-            if record["type"] == "tool_call" and record["name"] == "explicit"
-        )
-        assert str(explicit_call["parent_actor_ref"]).startswith("actor_")
-
-    def test_task_references_scan_full_message_and_enforce_global_cap(
-        self,
-        trajectory_case: TrajectoryCase,
-    ) -> None:
-        hidden_ref = "tasks/hidden/packet.md"
-        result, records = trajectory_case.normalize(
-            self.envelope("session_meta", {"id": "thread-task-refs"}),
-            self.envelope(
-                "response_item",
-                {
-                    "type": "message",
-                    "role": "user",
-                    "content": (
-                        ("x" * 17_000) + " " + hidden_ref + " tasks/omitted/packet.md"
-                    ),
-                },
-            ),
-            bounds={"task_reference_occurrences": 1},
-        )
-
         message = next(record for record in records if record["type"] == "message")
-        assert (message["task_refs"]) == ([hidden_ref])
-        assert (message["content_meta"]["truncated"])
-        assert (result.lossiness["truncated"]["task_references"]) == (1)
 
-    @pytest.mark.parametrize(
-        ("candidate", "expected_refs", "loss_key"),
-        [
-            pytest.param("tasks/good/packet.md", ["tasks/good/packet.md"], None, id="relative"),
-            pytest.param("/private/tasks/absolute/packet.md", [], "absolute_task_reference", id="absolute-posix"),
-            pytest.param(r"C:\private\tasks\drive\packet.md", [], "absolute_task_reference", id="absolute-windows"),
-            pytest.param(r"\\server\share\tasks\unc\packet.md", [], "absolute_task_reference", id="absolute-unc"),
-            pytest.param("https://example.invalid/tasks/uri/packet.md", [], "invalid_task_reference", id="uri"),
-            pytest.param(r"tasks\backslash\packet.md", [], "invalid_task_reference", id="backslash"),
-            pytest.param("tasks/../invalid/packet.md", [], "invalid_task_reference", id="dot-segment"),
-            pytest.param("tasks/" + ("x" * 1_010) + "/packet.md", [], "oversize_task_reference", id="oversize"),
-        ],
-    )
-    def test_task_reference_roots_uri_invalid_and_oversize_are_classified(
-        self,
-        candidate: str,
-        expected_refs: list[str],
-        loss_key: str | None,
-        trajectory_case: TrajectoryCase,
-    ) -> None:
-        result, records = trajectory_case.normalize(
-            self.envelope(
-                "session_meta",
-                {"id": "thread-task-ref-class"},
-            ),
-            self.envelope(
-                "response_item",
-                {
-                    "type": "message",
-                    "role": "user",
-                    "content": candidate,
-                },
-            ),
-        )
-
-        message = next(record for record in records if record["type"] == "message")
-        assert message["task_refs"] == expected_refs
-        task_loss_keys = (
-            "absolute_task_reference",
-            "invalid_task_reference",
-            "oversize_task_reference",
-        )
-        for key in task_loss_keys:
-            assert result.lossiness["dropped"][key] == (1 if key == loss_key else 0)
+        assert message["task_refs"] == [retained]
+        assert message["content_meta"]["truncated"]
+        assert result.counts["task_references"] == 1
+        assert result.lossiness["truncated"]["message"] == 1
+        assert result.lossiness["truncated"]["task_references"] == 1
+        assert result.lossiness["dropped"]["absolute_task_reference"] == 3
+        assert result.lossiness["dropped"]["invalid_task_reference"] == 3
+        assert result.lossiness["dropped"]["oversize_task_reference"] == 1
+        assert {item["code"] for item in result.diagnostics} >= {
+            "task-reference-limit-reached",
+            "absolute-task-reference-dropped",
+            "invalid-task-reference-dropped",
+            "task-reference-oversize-dropped",
+            "message-truncated",
+        }

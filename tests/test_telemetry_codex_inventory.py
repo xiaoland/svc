@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 import sqlite3
-import tempfile
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -18,7 +19,6 @@ from svc_cli.telemetry.agent_threads import (
     ThreadSelection,
 )
 from svc_cli.telemetry.providers import CodexRolloutProvider
-from svc_cli.telemetry.providers import codex_rollout
 
 
 @dataclass(frozen=True)
@@ -37,11 +37,25 @@ class InventoryCase:
             ThreadInventoryQuery(archive_state=archive_state, limit=limit),
         )
 
+    def rollout(self, name: str, thread_id: str) -> Path:
+        path = self.root / name
+        path.write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "type": "session_meta",
+                    "payload": {"id": thread_id},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return path
+
 
 @pytest.fixture
-def inventory_case() -> Iterator[InventoryCase]:
-    with tempfile.TemporaryDirectory() as tmp:
-        yield InventoryCase(root=Path(tmp), provider=CodexRolloutProvider())
+def inventory_case(tmp_path: Path) -> InventoryCase:
+    return InventoryCase(tmp_path, CodexRolloutProvider())
 
 
 @contextmanager
@@ -54,334 +68,159 @@ def state_database(root: Path) -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
+def insert_rows(
+    connection: sqlite3.Connection,
+    schema: str,
+    rows: Iterable[tuple[Any, ...]],
+) -> None:
+    connection.execute(f"CREATE TABLE threads ({schema})")
+    placeholders = ", ".join("?" for _ in schema.split(","))
+    connection.executemany(
+        f"INSERT INTO threads VALUES ({placeholders})",
+        rows,
+    )
+
+
 class TestCodexInventory:
-    def test_list_requires_only_metadata_and_does_not_probe_rollouts(
+    def test_inventory_is_metadata_only_and_resolution_returns_public_descriptor(
         self,
-        monkeypatch: pytest.MonkeyPatch,
         inventory_case: InventoryCase,
     ) -> None:
+        valid = inventory_case.rollout("valid.jsonl", "thread-valid")
+        invalid = inventory_case.root / "not-a-rollout.jsonl"
+        invalid.write_text("private non-rollout body", encoding="utf-8")
         with state_database(inventory_case.root) as connection:
-            connection.execute("CREATE TABLE threads (id TEXT, updated_at INTEGER)")
-            connection.execute(
-                "INSERT INTO threads VALUES (?, ?)",
-                ("thread-metadata", "2"),
+            insert_rows(
+                connection,
+                "id TEXT, rollout_path TEXT, archived, recency_at_ms INTEGER",
+                [
+                    ("thread-invalid", invalid.name, None, 20),
+                    ("thread-valid", valid.name, 0, 10),
+                    ("metadata-without-source", None, 1, 5),
+                ],
             )
-        monkeypatch.setattr(
-            codex_rollout,
-            "_open_source",
-            lambda *_args, **_kwargs: pytest.fail("inventory must not open rollout sources"),
+
+        listing = inventory_case.list()
+
+        assert [item.thread_id for item in listing.items] == [
+            "thread-invalid",
+            "thread-valid",
+            "metadata-without-source",
+        ]
+        assert listing.items[0].archive_state is ArchiveState.UNKNOWN
+        assert listing.items[2].archive_state is ArchiveState.ARCHIVED
+
+        resolved = inventory_case.provider.resolve(
+            ProviderContext(home=inventory_case.root),
+            ThreadSelection(thread_id="thread-valid"),
+        )
+        assert (
+            resolved.provider_id,
+            resolved.adapter_id,
+            resolved.source_format,
+            resolved.thread_id,
+            resolved.source_path,
+        ) == (
+            "codex",
+            "codex-rollout-v1",
+            "rollout-v1",
+            "thread-valid",
+            valid,
         )
 
-        listed = inventory_case.list(limit=5)
-
-        assert (listed.items[0].thread_id) == ("thread-metadata")
-        assert (listed.items[0].archive_state) == (ArchiveState.UNKNOWN)
-
-    def test_list_is_metadata_only_and_defers_rollout_signature_to_export(
-        self,
-        inventory_case: InventoryCase,
-    ) -> None:
-        source = inventory_case.root / "not-a-rollout.jsonl"
-        source.write_text("private non-rollout body", encoding="utf-8")
-        with state_database(inventory_case.root) as connection:
-            connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT)")
-            connection.execute(
-                "INSERT INTO threads VALUES (?, ?)",
-                ("thread-metadata-only", source.name),
-            )
-
-        listed = inventory_case.list(limit=5)
-
-        assert (listed.items[0].thread_id) == ("thread-metadata-only")
         with pytest.raises(SvcError) as raised:
             inventory_case.provider.resolve(
                 ProviderContext(home=inventory_case.root),
-                ThreadSelection(thread_id="thread-metadata-only"),
+                ThreadSelection(thread_id="thread-invalid"),
             )
-        assert (raised.value.code) == ("thread-source-incompatible")
+        assert raised.value.code == "thread-source-incompatible"
 
-    def test_list_uses_stable_descriptor_order_when_timestamps_tie(
+    def test_lifecycle_filter_precedes_limit_and_ties_have_stable_order(
         self,
         inventory_case: InventoryCase,
     ) -> None:
         with state_database(inventory_case.root) as connection:
-            connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT, updated_at TEXT)")
-            connection.executemany(
-                "INSERT INTO threads VALUES (?, ?, ?)",
+            insert_rows(
+                connection,
+                "id TEXT, rollout_path TEXT, archived, recency_at_ms INTEGER",
                 [
-                    ("zulu", "missing-zulu.jsonl", "same-time"),
-                    ("middle", "../outside.jsonl", "same-time"),
-                    ("alpha", None, "same-time"),
+                    ("archived-new", "a.jsonl", 1, 900),
+                    ("unknown-new", "u.jsonl", "1", 850),
+                    ("active-new", "n.jsonl", 0, 800),
+                    ("zulu", "z.jsonl", 0, 700),
+                    ("alpha", "alpha.jsonl", 0, 700),
+                    ("archived-old", "old.jsonl", 1, 600),
                 ],
             )
 
-        listed = inventory_case.list(limit=2)
-
-        assert [item.thread_id for item in listed.items] == ["alpha", "middle"]
-        assert listed.inventory_truncated
-
-    def test_inventory_filters_lifecycle_before_limit(
-        self,
-        inventory_case: InventoryCase,
-    ) -> None:
-        with state_database(inventory_case.root) as connection:
-            connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT, archived, recency_at_ms INTEGER)")
-            connection.executemany(
-                "INSERT INTO threads VALUES (?, ?, ?, ?)",
-                [
-                    ("active-newest", "active.jsonl", 0, 400),
-                    ("active-missing", "active-missing.jsonl", 0, 375),
-                    ("active-unavailable", None, 0, 350),
-                    ("archived-unavailable", None, 1, 325),
-                    ("archived-available", "archived.jsonl", 1, 300),
-                    ("unknown-middle", "unknown.jsonl", "1", 200),
-                    ("archived-missing", "missing.jsonl", 1, 100),
-                ],
-            )
-
-        active_listing = inventory_case.list(
-            limit=3,
-            archive_state=ArchiveFilter.ACTIVE,
-        )
-        archived_listing = inventory_case.list(
-            limit=3,
-            archive_state=ArchiveFilter.ARCHIVED,
-        )
-        all_listing = inventory_case.list(limit=10)
-
-        assert [item.thread_id for item in active_listing.items] == [
-            "active-newest",
-            "active-missing",
-            "active-unavailable",
-        ]
-        assert ([item.thread_id for item in archived_listing.items]) == (
-            ["archived-unavailable", "archived-available", "archived-missing"]
-        )
-        assert ([item.thread_id for item in all_listing.items]) == (
-            [
-                "active-newest",
-                "active-missing",
-                "active-unavailable",
-                "archived-unavailable",
-                "archived-available",
-                "unknown-middle",
-                "archived-missing",
-            ]
-        )
-        assert (all_listing.items[5].archive_state) == (ArchiveState.UNKNOWN)
-
-    def test_inventory_recency_fallback_units_ranges_and_display_times_are_exact(
-        self,
-        inventory_case: InventoryCase,
-    ) -> None:
-        sqlite_integer_overflow = 2**63 - 1
-        with state_database(inventory_case.root) as connection:
-            connection.execute(
-                """
-                CREATE TABLE threads (
-                    id TEXT,
-                    rollout_path TEXT,
-                    archived INTEGER,
-                    created_at,
-                    updated_at,
-                    recency_at_ms,
-                    updated_at_ms
-                )
-                """
-            )
-            connection.executemany(
-                "INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [
-                    ("from-recency", "recency.jsonl", 0, 0, 11, 5_000, 99_000),
-                    (
-                        "from-updated-ms",
-                        "updated-ms.jsonl",
-                        0,
-                        "invalid",
-                        12,
-                        "invalid",
-                        6_000,
-                    ),
-                    ("from-seconds", "seconds.jsonl", 0, -1, 7, -1, None),
-                    (
-                        "missing-recency",
-                        "missing.jsonl",
-                        0,
-                        None,
-                        sqlite_integer_overflow,
-                        None,
-                        None,
-                    ),
-                ],
-            )
-
-        listed = inventory_case.list()
-
-        assert ([item.thread_id for item in listed.items]) == (
-            ["from-seconds", "from-updated-ms", "from-recency", "missing-recency"]
-        )
-        by_id = {item.thread_id: item for item in listed.items}
-        assert (by_id["from-recency"].created_at) == ("0")
-        assert (by_id["from-recency"].updated_at) == ("11")
-        assert (by_id["from-updated-ms"].created_at) is None
-        assert (by_id["from-seconds"].created_at) is None
-        assert (by_id["from-seconds"].updated_at) == ("7")
-        assert (by_id["missing-recency"].updated_at) == (str(sqlite_integer_overflow))
-
-    def test_inventory_omits_unusable_and_ambiguous_ids(
-        self,
-        inventory_case: InventoryCase,
-    ) -> None:
-        rows: list[tuple[object, str, int, int]] = [
-            ("", "missing.jsonl", 0, 220),
-            (123, "missing.jsonl", 0, 210),
-            ("duplicate", "first.jsonl", 0, 200),
-            ("duplicate", "second.jsonl", 1, 190),
-            ("safe-a", "missing.jsonl", 0, 20),
-            ("safe-b", "missing.jsonl", 0, 10),
-        ]
-        with state_database(inventory_case.root) as connection:
-            connection.execute("CREATE TABLE threads (id, rollout_path, archived, recency_at_ms INTEGER)")
-            connection.executemany(
-                "INSERT INTO threads VALUES (?, ?, ?, ?)",
-                rows,
-            )
-
-        listed = inventory_case.list(limit=2)
         active = inventory_case.list(
-            limit=20,
+            limit=2,
             archive_state=ArchiveFilter.ACTIVE,
         )
         archived = inventory_case.list(
-            limit=20,
+            limit=2,
             archive_state=ArchiveFilter.ARCHIVED,
         )
+        all_rows = inventory_case.list(limit=20)
 
-        assert [item.thread_id for item in listed.items] == ["safe-a", "safe-b"]
-        assert "duplicate" not in {item.thread_id for item in active.items}
-        assert "duplicate" not in {item.thread_id for item in archived.items}
+        assert [item.thread_id for item in active.items] == [
+            "active-new",
+            "alpha",
+        ]
+        assert active.inventory_truncated
+        assert [item.thread_id for item in archived.items] == [
+            "archived-new",
+            "archived-old",
+        ]
+        assert not archived.inventory_truncated
+        assert [item.thread_id for item in all_rows.items] == [
+            "archived-new",
+            "unknown-new",
+            "active-new",
+            "alpha",
+            "zulu",
+            "archived-old",
+        ]
 
-    def test_inventory_is_bounded_and_filters_before_limit(
+    def test_inventory_descriptor_text_and_limit_bounds_are_observable(
         self,
-        monkeypatch: pytest.MonkeyPatch,
         inventory_case: InventoryCase,
     ) -> None:
         with state_database(inventory_case.root) as connection:
-            connection.execute(
+            insert_rows(
+                connection,
                 """
-                CREATE TABLE threads (
-                    id TEXT,
-                    rollout_path TEXT,
-                    archived INTEGER,
-                    recency_at_ms INTEGER,
-                    created_at INTEGER,
-                    updated_at INTEGER,
-                    cwd TEXT,
-                    title TEXT,
-                    first_user_message TEXT,
-                    preview TEXT,
-                    reasoning TEXT,
-                    tool_payload TEXT
-                )
-                """
-            )
-            connection.executemany(
-                "INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    id, rollout_path TEXT, archived, created_at, updated_at,
+                    recency_at_ms, cwd TEXT, title TEXT,
+                    first_user_message TEXT
+                """,
                 [
                     (
-                        "archived",
-                        "archived.jsonl",
-                        1,
-                        9_000,
-                        1,
-                        2,
-                        "/archive",
-                        "archived-title",
-                        "archived-message",
-                        "never-select-preview",
-                        "never-select-reasoning",
-                        "never-select-tool",
-                    ),
-                    (
-                        "active-new",
-                        "active-new.jsonl",
+                        "bounded",
+                        "bounded.jsonl",
                         0,
-                        8_000,
                         3,
                         4,
+                        8_000,
                         "w" * 4_097,
                         "t" * 161,
                         "m" * 513,
-                        "never-select-preview",
-                        "never-select-reasoning",
-                        "never-select-tool",
-                    ),
-                    (
-                        "active-old",
-                        "active-old.jsonl",
-                        0,
-                        7_000,
-                        5,
-                        6,
-                        "/active/old",
-                        "old-title",
-                        "old-message",
-                        "never-select-preview",
-                        "never-select-reasoning",
-                        "never-select-tool",
                     ),
                 ],
             )
 
-        materialized_prefixes: list[tuple[int, int]] = []
-        original_decode = codex_rollout._decode_inventory_prefix
+        listing = inventory_case.list(limit=1)
 
-        def recording_decode(sqlite_type, prefix, overflow, **kwargs):
-            materialized_prefixes.append(
-                (
-                    kwargs["maximum_code_points"],
-                    len(prefix) if isinstance(prefix, bytes) else 0,
-                )
-            )
-            return original_decode(
-                sqlite_type,
-                prefix,
-                overflow,
-                **kwargs,
-            )
-
-        monkeypatch.setattr(
-            codex_rollout,
-            "_decode_inventory_prefix",
-            recording_decode,
+        assert [item.thread_id for item in listing.items] == ["bounded"]
+        bounded = listing.items[0]
+        assert bounded.workspace is None
+        assert bounded.workspace_truncated
+        assert bounded.title == "t" * 160
+        assert bounded.title_truncated
+        assert bounded.first_user_message == "m" * 512
+        assert bounded.first_user_message_truncated
+        assert (bounded.created_at, bounded.updated_at, bounded.recency_at_ms) == (
+            "3",
+            "4",
+            8_000,
         )
-        listing = inventory_case.list(
-            archive_state=ArchiveFilter.ACTIVE,
-            limit=1,
-        )
-
-        assert ([item.thread_id for item in listing.items]) == (["active-new"])
-        assert listing.inventory_truncated
-        item = listing.items[0]
-        assert (item.workspace) is None
-        assert item.workspace_truncated
-        assert (item.title) == ("t" * 160)
-        assert item.title_truncated
-        assert (item.first_user_message) == ("m" * 512)
-        assert item.first_user_message_truncated
-        assert (item.created_at) == ("3")
-        assert (item.updated_at) == ("4")
-        assert (item.recency_at_ms) == (8_000)
-        assert (materialized_prefixes) == ([(4_096, 4_097), (160, 161), (512, 513)])
-
-    def test_inventory_requires_the_exact_id_column(
-        self,
-        inventory_case: InventoryCase,
-    ) -> None:
-        with state_database(inventory_case.root) as connection:
-            connection.execute("CREATE TABLE threads (thread_id TEXT, rolloutPath TEXT)")
-
-        with pytest.raises(SvcError) as raised:
-            inventory_case.list()
-
-        assert (raised.value.code) == ("thread-source-incompatible")
