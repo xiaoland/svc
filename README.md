@@ -14,7 +14,7 @@ pdm run svc --help
 pdm build
 ```
 
-Edit canonical framework content under `src/`, never `build/monolith.md`. `src/` contains only SVC corpus content; Python runtime code is in `svc_cli/`, and repository-only builders/release tools are in `tools/`.
+Edit canonical framework content under `src/`, never `build/monolith.md`. `src/` contains only SVC corpus content; Python runtime code is in `svc_cli/`, and repository-only catalog and monolith builders are in `tools/`.
 
 ## Use a Released Corpus
 
@@ -181,18 +181,25 @@ SVC uses Behavioral SemVer:
 - **MINOR** adds an optional backward-compatible capability.
 - **PATCH** fixes or clarifies the existing protocol without changing those behaviors.
 
-Append-only change fragments and the tag-range release planner make impact
-reviewable. GitHub Releases are the canonical future human release record; the
-Python package is the installation projection. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for commit, fragment, migration-note, and
-tag-authoritative release rules.
+Changie 1.25.1 records each release-relevant change as a tool-native YAML
+fragment under `changes/unreleased/` with an explicit `major`, `minor`, or
+`patch` kind. Maintainers batch those fragments and merge the generated
+`CHANGELOG.md` through an ordinary release-preparation pull request. That merge
+starts the standard workflow, which derives the tag and PDM SCM package version
+from one Changie version, smoke-tests the installed distribution, publishes
+through Trusted Publishing, and creates the GitHub Release. Migration notes
+remain optional packaged consumer guidance. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for the contributor and maintainer workflow.
 
 ## Repository Layout
 
 ```text
 src/                         canonical SVC corpus
 svc_cli/                     installable Python runtime
-tools/                       catalog, monolith, and release tooling
+.changie.yaml                Changie 1.25.1 configuration
+changes/unreleased/          Changie YAML change fragments
+CHANGELOG.md                 Changie-generated release notes
+tools/                       catalog and monolith builders
 pdm_build.py                 wheel corpus projection hook
 tests/                       contract and fixture tests
 tasks/                       volatile work packets

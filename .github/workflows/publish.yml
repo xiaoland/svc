@@ -2,17 +2,8 @@ name: Publish
 
 on:
   push:
-    tags: ["v*"]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Exact existing release tag to verify or recover.
-        required: true
-        type: string
-      bundle_run_id:
-        description: Prior Publish run that owns the original bundle after external mutation.
-        required: false
-        type: string
+    branches: [main]
+    paths: [CHANGELOG.md]
 
 permissions:
   contents: read
@@ -22,419 +13,72 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  plan:
-    name: Qualify tag and external state
+  prepare:
+    name: Read prepared release
     runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      checks: read
-      contents: read
     outputs:
-      commit: ${{ steps.plan.outputs.commit }}
-      decision: ${{ steps.preflight.outputs.decision }}
-      prior-run-id: ${{ steps.target.outputs.prior-run-id }}
-      tag: ${{ steps.target.outputs.tag }}
-      version: ${{ steps.plan.outputs.version }}
+      publish: ${{ steps.release.outputs.publish }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
     steps:
-      - id: target
-        name: Bind the run to one existing tag
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_RUN_ID: ${{ inputs.bundle_run_id }}
-          INPUT_TAG: ${{ inputs.tag }}
-          PUSH_TAG: ${{ github.ref_name }}
-        run: |
-          if [[ "$EVENT_NAME" == "push" ]]; then
-            tag="$PUSH_TAG"
-            prior_run_id=
-          else
-            tag="$INPUT_TAG"
-            prior_run_id="$INPUT_RUN_ID"
-            test "$GITHUB_REF" = "refs/tags/$tag"
-          fi
-          test -n "$tag"
-          if [[ -n "$prior_run_id" && ! "$prior_run_id" =~ ^[1-9][0-9]*$ ]]; then
-            echo "bundle_run_id must be a positive Publish workflow run ID" >&2
-            exit 1
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "prior-run-id=$prior_run_id" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ steps.target.outputs.tag }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - id: latest
+        name: Read the prepared release version
+        uses: miniscruff/changie-action@11bcad388e7973948cbcecb10863baf024d5f607 # v3.0.0
         with:
-          python-version: "3.11"
-      - name: Capture raw exact-main qualification evidence
-        if: github.event_name == 'workflow_dispatch'
+          version: v1.25.1
+          args: latest
+      - id: release
+        name: Bind the prepared version
         env:
-          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.latest.outputs.output }}
         run: |
-          COMMIT=$(git rev-parse HEAD)
-          export COMMIT
-          python - <<'PY'
-          import json
-          import os
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          api_root = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
-          token = os.environ["GH_TOKEN"]
-          commit = os.environ["COMMIT"]
-
-          def observe(url: str) -> dict[str, object]:
-              headers = {
-                  "Accept": "application/vnd.github+json",
-                  "Authorization": f"Bearer {token}",
-                  "User-Agent": "svc-release-workflow",
-                  "X-GitHub-Api-Version": "2022-11-28",
-              }
-              try:
-                  with urllib.request.urlopen(
-                      urllib.request.Request(url, headers=headers), timeout=30
-                  ) as response:
-                      status, raw = response.status, response.read()
-              except urllib.error.HTTPError as error:
-                  status, raw = error.code, error.read()
-              except (TimeoutError, urllib.error.URLError) as error:
-                  status = 0
-                  raw = json.dumps({"transport_error": type(error).__name__}).encode()
-              try:
-                  body = json.loads(raw)
-              except (UnicodeDecodeError, json.JSONDecodeError):
-                  body = {"invalid_json": True}
-              return {"http_status": status, "body": body}
-
-          query = urllib.parse.urlencode(
-              {
-                  "event": "push",
-                  "branch": "main",
-                  "head_sha": commit,
-                  "status": "completed",
-                  "per_page": 100,
-              }
-          )
-          runs = observe(f"{api_root}/actions/workflows/ci.yml/runs?{query}")
-          body = runs.get("body")
-          raw_runs = body.get("workflow_runs", []) if isinstance(body, dict) else []
-          jobs_by_run = {}
-          for run in raw_runs:
-              run_id = run.get("id") if isinstance(run, dict) else None
-              if isinstance(run_id, int) and run_id > 0:
-                  jobs_by_run[str(run_id)] = observe(
-                      f"{api_root}/actions/runs/{run_id}/jobs?filter=latest&per_page=100"
-                  )
-          check_runs = observe(
-              f"{api_root}/commits/{commit}/check-runs?filter=latest&per_page=100"
-          )
-          with open("qualification-state.json", "w", encoding="utf-8") as stream:
-              json.dump(
-                  {
-                      "runs": runs,
-                      "jobs_by_run": jobs_by_run,
-                      "check_runs": check_runs,
-                  },
-                  stream,
-                  sort_keys=True,
-              )
-          PY
-      - id: plan
-        name: Verify the exact remote tag and qualified source
-        env:
-          TAG: ${{ steps.target.outputs.tag }}
-        run: |
-          commit=$(git rev-parse HEAD)
-          args=(--tag "$TAG" --commit "$commit" --remote origin)
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            args+=(--qualification-state qualification-state.json)
-          else
-            git fetch --force --tags origin main
-            args+=(--main-ref origin/main)
-          fi
-          python tools/release.py target-plan "${args[@]}" --json > release-plan.json
-          planned_commit=$(python -c 'import json; print(json.load(open("release-plan.json"))["commit"])')
-          version=$(python -c 'import json; print(json.load(open("release-plan.json"))["version"])')
-          test "$planned_commit" = "$commit"
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Capture raw candidate, predecessor, and artifact state
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PLAN_FILE: release-plan.json
-          PRIOR_RUN_ID: ${{ steps.target.outputs.prior-run-id }}
-        run: |
-          python - <<'PY'
-          from __future__ import annotations
-
-          import hashlib
-          import json
-          import os
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-          from datetime import UTC, datetime
-
-          api_root = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
-          token = os.environ["GH_TOKEN"]
-          plan = json.load(open(os.environ["PLAN_FILE"], encoding="utf-8"))
-
-          def request(url: str, *, github: bool = False, accept: str | None = None) -> tuple[int, bytes]:
-              headers = {"User-Agent": "svc-release-workflow"}
-              if github:
-                  headers.update(
-                      {
-                          "Accept": accept or "application/vnd.github+json",
-                          "Authorization": f"Bearer {token}",
-                          "X-GitHub-Api-Version": "2022-11-28",
-                      }
-                  )
-              try:
-                  with urllib.request.urlopen(
-                      urllib.request.Request(url, headers=headers), timeout=30
-                  ) as response:
-                      return response.status, response.read()
-              except urllib.error.HTTPError as error:
-                  return error.code, error.read()
-              except (TimeoutError, urllib.error.URLError) as error:
-                  return 0, json.dumps(
-                      {"transport_error": type(error).__name__}
-                  ).encode()
-
-          def json_observation(url: str, *, github: bool = False) -> dict[str, object]:
-              status, raw = request(url, github=github)
-              if status == 404:
-                  body = None
-              else:
-                  try:
-                      body = json.loads(raw)
-                  except (UnicodeDecodeError, json.JSONDecodeError):
-                      body = {"invalid_json": True}
-              return {"http_status": status, "body": body}
-
-          def resolved_tag_commit(tag: str) -> str | None:
-              ref = urllib.parse.quote(f"tags/{tag}", safe="/")
-              observed = json_observation(f"{api_root}/git/ref/{ref}", github=True)
-              body = observed["body"]
-              if observed["http_status"] != 200 or not isinstance(body, dict):
-                  return None
-              obj = body.get("object")
-              for _ in range(8):
-                  if not isinstance(obj, dict):
-                      return None
-                  kind = obj.get("type")
-                  sha = obj.get("sha")
-                  if kind == "commit" and isinstance(sha, str):
-                      return sha
-                  if kind != "tag" or not isinstance(sha, str):
-                      return None
-                  nested = json_observation(f"{api_root}/git/tags/{sha}", github=True)
-                  nested_body = nested["body"]
-                  if nested["http_status"] != 200 or not isinstance(nested_body, dict):
-                      return None
-                  obj = nested_body.get("object")
-              return None
-
-          def pypi(version: str) -> dict[str, object]:
-              quoted = urllib.parse.quote(version, safe="")
-              return json_observation(
-                  f"https://pypi.org/pypi/sustainable-vibe-coding/{quoted}/json"
-              )
-
-          def github_release(tag: str) -> dict[str, object]:
-              quoted = urllib.parse.quote(tag, safe="")
-              observed = json_observation(
-                  f"{api_root}/releases/tags/{quoted}", github=True
-              )
-              observed["resolved_tag_commit"] = resolved_tag_commit(tag)
-              observed["asset_sha256"] = {}
-              observed["asset_content"] = {}
-              body = observed["body"]
-              if observed["http_status"] != 200 or not isinstance(body, dict):
-                  return observed
-              assets = body.get("assets")
-              if not isinstance(assets, list):
-                  return observed
-              for asset in assets:
-                  if not isinstance(asset, dict):
-                      continue
-                  name = asset.get("name")
-                  url = asset.get("url")
-                  if not isinstance(name, str) or not isinstance(url, str):
-                      continue
-                  status, raw = request(
-                      url,
-                      github=True,
-                      accept="application/octet-stream",
-                  )
-                  if status != 200:
-                      observed["asset_sha256"][name] = f"http-status:{status}"
-                      continue
-                  observed["asset_sha256"][name] = hashlib.sha256(raw).hexdigest()
-                  if name in {
-                      "svc-release-manifest.json",
-                      "svc-release-metadata.json",
-                  }:
-                      observed["asset_content"][name] = raw.decode("utf-8")
-              return observed
-
-          prior = os.environ.get("PRIOR_RUN_ID", "")
-          if prior:
-              run = json_observation(f"{api_root}/actions/runs/{prior}", github=True)
-              artifacts = json_observation(
-                  f"{api_root}/actions/runs/{prior}/artifacts?per_page=100", github=True
-              )
-              prior_run_id: int | None = int(prior)
-          else:
-              run = {"http_status": 0, "body": None}
-              artifacts = {"http_status": 0, "body": None}
-              prior_run_id = None
-
-          state = {
-              "now": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-              "prior_run_id": prior_run_id,
-              "predecessor": {
-                  "pypi": pypi(plan["previous_version"]),
-                  "github": github_release(plan["previous_tag"]),
-              },
-              "candidate": {
-                  "pypi": pypi(plan["version"]),
-                  "github": github_release(plan["tag"]),
-              },
-              "artifact": {"run": run, "artifacts": artifacts},
-          }
-          with open("release-state.json", "w", encoding="utf-8") as stream:
-              json.dump(state, stream, sort_keys=True)
-          PY
-      - id: preflight
-        name: Decide before build or mutation
-        env:
-          PRIOR_RUN_ID: ${{ steps.target.outputs.prior-run-id }}
-          TAG: ${{ steps.target.outputs.tag }}
-        run: |
-          python tools/release.py target-preflight \
-            --plan-file release-plan.json \
-            --state-file release-state.json \
-            --json > release-preflight.json
-          decision=$(python -c 'import json; print(json.load(open("release-preflight.json"))["decision"])')
-          cat release-preflight.json
-          if [[ "$decision" == "fail" ]]; then
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Changie returned an invalid release tag: $TAG" >&2
             exit 1
           fi
-          if [[ -n "$PRIOR_RUN_ID" ]]; then
-            python - "$TAG" "$PRIOR_RUN_ID" >> "$GITHUB_STEP_SUMMARY" <<'PY'
-          import json
-          import sys
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          test -s "changes/$TAG.md"
 
-          tag, run_id = sys.argv[1:]
-          state = json.load(open("release-state.json", encoding="utf-8"))
-          body = state["artifact"]["artifacts"].get("body")
-          artifacts = body.get("artifacts", []) if isinstance(body, dict) else []
-          matches = [item for item in artifacts if item.get("name") == f"svc-release-{tag}"]
-          if len(matches) == 1:
-              artifact = matches[0]
-              print(
-                  f"Recovery bundle: run {run_id}, artifact {artifact.get('id')}, "
-                  f"expires {artifact.get('expires_at')}"
-              )
-          PY
+          if git show-ref --verify --quiet "refs/tags/$TAG"; then
+            if [[ "$(git rev-list -n 1 "$TAG")" == "$GITHUB_SHA" ]]; then
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
           fi
-          echo "decision=$decision" >> "$GITHUB_OUTPUT"
-      - name: Hand the qualified plan to the build producer
-        if: steps.preflight.outputs.decision == 'build' || steps.preflight.outputs.decision == 'requires-bundle'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: svc-release-control-${{ github.run_id }}
-          path: |
-            release-plan.json
-            tools/release.py
-          if-no-files-found: error
-          retention-days: 1
 
-  bundle:
-    name: Build or recover the exact bundle
-    if: needs.plan.outputs.decision == 'build' || needs.plan.outputs.decision == 'requires-bundle'
-    needs: plan
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build release distributions
+    if: needs.prepare.outputs.publish == 'true'
+    needs: prepare
     runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-    outputs:
-      source-run-id: ${{ steps.source.outputs.run-id }}
     steps:
-      - if: needs.plan.outputs.decision == 'build'
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ needs.plan.outputs.commit }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
-      - name: Download the current trusted verifier and plan
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: svc-release-control-${{ github.run_id }}
-          path: release-control
-      - name: Recover the original release bundle
-        if: needs.plan.outputs.decision == 'requires-bundle'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: svc-release-${{ needs.plan.outputs.tag }}
-          path: dist/release
-          github-token: ${{ github.token }}
-          run-id: ${{ needs.plan.outputs.prior-run-id }}
-      - name: Recheck the exact remote tag before build
-        if: needs.plan.outputs.decision == 'build'
+      - run: python -m pip install pdm==2.27.0
+      - run: pdm lock --check
+      - run: pdm install --frozen-lockfile -d -G test
+      - name: Build the tagged distributions
         env:
-          EXPECTED_COMMIT: ${{ needs.plan.outputs.commit }}
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan.outputs.tag }}
+          PDM_BUILD_SCM_VERSION: ${{ needs.prepare.outputs.version }}
+        run: pdm build --dest release/python
+      - name: Smoke-test the installed wheel
         run: |
-          object=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")
-          read -r kind sha < <(python -c 'import json,sys; value=json.load(sys.stdin)["object"]; print(value["type"], value["sha"])' <<<"$object")
-          for _ in {1..8}; do
-            if [[ "$kind" == "commit" ]]; then
-              break
-            fi
-            test "$kind" = "tag"
-            object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha")
-            read -r kind sha < <(python -c 'import json,sys; value=json.load(sys.stdin)["object"]; print(value["type"], value["sha"])' <<<"$object")
-          done
-          test "$kind" = "commit"
-          test "$sha" = "$EXPECTED_COMMIT"
-      - if: needs.plan.outputs.decision == 'build'
-        run: python -m pip install pdm==2.27.0
-      - if: needs.plan.outputs.decision == 'build'
-        run: pdm lock --check
-      - if: needs.plan.outputs.decision == 'build'
-        run: pdm install --frozen-lockfile -d -G quality -G test
-      - name: Select the current trusted plan
-        run: |
-          plan_file=release-control/release-plan.json
-          version=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["pdm_build_scm_version"])' "$plan_file")
-          echo "PLAN_FILE=$plan_file" >> "$GITHUB_ENV"
-          echo "PDM_BUILD_SCM_VERSION=$version" >> "$GITHUB_ENV"
-      - name: Qualify the tagged source
-        if: needs.plan.outputs.decision == 'build'
-        run: |
-          pdm run lint-tests
-          pdm run test
-          pdm run typecheck
-          pdm run lint-imports
-          pdm run lint-workflows
-          pdm run build-monolith
-      - name: Build the final distributions once
-        if: needs.plan.outputs.decision == 'build'
-        run: pdm build --dest dist/python
-      - name: Smoke-test the exact release wheel
-        if: needs.plan.outputs.decision == 'build'
-        run: |
-          wheel=(dist/python/*.whl)
+          wheel=(release/python/*.whl)
           test "${#wheel[@]}" -eq 1
           mkdir -p /tmp/svc-release-wheelhouse
           python -m pip download --dest /tmp/svc-release-wheelhouse "${wheel[0]}"
@@ -445,7 +89,7 @@ jobs:
             --expected-sha256 "$sha" \
             --wheelhouse /tmp/svc-release-wheelhouse
           python -m venv /tmp/svc-release
-          /tmp/svc-release/bin/pip install dist/python/*.whl
+          /tmp/svc-release/bin/pip install release/python/*.whl
           /tmp/svc-release/bin/svc --help
           /tmp/svc-release/bin/svc lookup --name 'sections/working-protocol\.md' --json
           repo=$(mktemp -d)
@@ -453,587 +97,85 @@ jobs:
           digest=$(python -c 'import json,sys; print(json.load(sys.stdin)["plan_digest"])' <<<"$plan")
           /tmp/svc-release/bin/svc init "$repo" --apply "$digest"
           /tmp/svc-release/bin/svc status "$repo"
-      - name: Seal the manifest-bound release bundle
-        if: needs.plan.outputs.decision == 'build'
-        run: |
-          python release-control/tools/release.py target-bundle \
-            --plan-file "$PLAN_FILE" \
-            --dist-dir dist/python \
-            --bundle-dir dist/release \
-            --json
-      - name: Attest the final distributions
-        if: needs.plan.outputs.decision == 'build'
-        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
-        with:
-          subject-path: dist/release/python/*
-      - name: Verify the selected release bundle
+      - name: Add the prepared release notes
         env:
-          EXPECTED_COMMIT: ${{ needs.plan.outputs.commit }}
-          EXPECTED_TAG: ${{ needs.plan.outputs.tag }}
-          EXPECTED_VERSION: ${{ needs.plan.outputs.version }}
-        run: |
-          verified=$(python release-control/tools/release.py target-verify-bundle \
-            --plan-file "$PLAN_FILE" \
-            --bundle-dir dist/release \
-            --json)
-          python -c 'import json,os,sys; value=json.load(sys.stdin); expected={"commit":os.environ["EXPECTED_COMMIT"],"tag":os.environ["EXPECTED_TAG"],"version":os.environ["EXPECTED_VERSION"]}; raise SystemExit(0 if all(value.get(key) == item for key,item in expected.items()) else "Selected bundle identity differs from the qualified tag")' <<<"$verified"
-      - id: upload
-        name: Preserve the original bundle for bounded recovery
-        if: needs.plan.outputs.decision == 'build'
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: cp "changes/$TAG.md" release/notes.md
+      - name: Upload the release artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: svc-release-${{ needs.plan.outputs.tag }}
-          path: dist/release
+          name: svc-release-${{ needs.prepare.outputs.tag }}
+          path: release
           if-no-files-found: error
-          retention-days: 90
-      - name: Record the artifact identity and effective retention
-        if: needs.plan.outputs.decision == 'build'
-        env:
-          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan.outputs.tag }}
-        run: |
-          for attempt in {1..6}; do
-            if gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" > artifact.json; then
-              break
-            fi
-            if [[ "$attempt" == 6 ]]; then
-              exit 1
-            fi
-            sleep 5
-          done
-          python - "$ARTIFACT_ID" "$TAG" >> "$GITHUB_STEP_SUMMARY" <<'PY'
-          import json
-          import sys
-          from datetime import UTC, datetime, timedelta
+          retention-days: 7
 
-          artifact_id, tag = sys.argv[1:]
-          artifact = json.load(open("artifact.json", encoding="utf-8"))
-          expires = datetime.fromisoformat(artifact["expires_at"].replace("Z", "+00:00"))
-          if (
-              artifact.get("id") != int(artifact_id)
-              or artifact.get("name") != f"svc-release-{tag}"
-              or artifact.get("expired") is True
-              or expires < datetime.now(UTC) + timedelta(days=89)
-          ):
-              raise SystemExit("Uploaded release artifact identity or retention differs")
-          print(
-              f"Release bundle: artifact {artifact_id}, "
-              f"expires {artifact['expires_at']}"
-          )
-          PY
-      - id: source
+  tag:
+    name: Create release tag
+    if: needs.prepare.outputs.publish == 'true'
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Create the annotated release tag
         env:
-          DECISION: ${{ needs.plan.outputs.decision }}
-          PRIOR_RUN_ID: ${{ needs.plan.outputs.prior-run-id }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          if [[ "$DECISION" == "build" ]]; then
-            run_id="$GITHUB_RUN_ID"
-          else
-            run_id="$PRIOR_RUN_ID"
+          if git show-ref --verify --quiet "refs/tags/$TAG"; then
+            test "$(git rev-list -n 1 "$TAG")" = "$GITHUB_SHA"
+            exit 0
           fi
-          echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag --annotate "$TAG" --message "Release $TAG"
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 --wrap=0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push origin "refs/tags/$TAG"
 
   publish-pypi:
-    name: Complete and verify PyPI
-    # `plan` has already read and verified both durable external surfaces for
-    # this branch.  No bundle exists (or is needed) when an explicitly
-    # dispatched recovery finds an exact immutable release, so this must be a
-    # successful read-only terminus rather than an empty run-id download.
-    if: needs.plan.outputs.decision != 'exact-complete'
-    needs: [plan, bundle]
+    name: Publish to PyPI
+    if: needs.prepare.outputs.publish == 'true'
+    needs: [prepare, build, tag]
     runs-on: ubuntu-latest
     environment: release
     permissions:
-      actions: read
-      contents: read
       id-token: write
     steps:
-      - name: Download the current trusted verifier and plan
+      - name: Download the release artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: svc-release-control-${{ github.run_id }}
-          path: release-control
-      - name: Download this run's original bundle
-        if: needs.bundle.outputs.source-run-id == github.run_id
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: svc-release-${{ needs.plan.outputs.tag }}
-          path: dist/release
-      - name: Download the prior run's original bundle
-        if: needs.bundle.outputs.source-run-id != github.run_id
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: svc-release-${{ needs.plan.outputs.tag }}
-          path: dist/release
-          github-token: ${{ github.token }}
-          run-id: ${{ needs.bundle.outputs.source-run-id }}
-      - name: Verify the downloaded release bundle
-        env:
-          EXPECTED_COMMIT: ${{ needs.plan.outputs.commit }}
-          EXPECTED_TAG: ${{ needs.plan.outputs.tag }}
-          EXPECTED_VERSION: ${{ needs.plan.outputs.version }}
-        run: |
-          verified=$(python release-control/tools/release.py target-verify-bundle \
-            --plan-file release-control/release-plan.json \
-            --bundle-dir dist/release \
-            --json)
-          python -c 'import json,os,sys; value=json.load(sys.stdin); expected={"commit":os.environ["EXPECTED_COMMIT"],"tag":os.environ["EXPECTED_TAG"],"version":os.environ["EXPECTED_VERSION"]}; raise SystemExit(0 if all(value.get(key) == item for key,item in expected.items()) else "Downloaded bundle identity differs from the qualified tag")' <<<"$verified"
-      - name: Recheck the exact remote tag before PyPI mutation
-        env:
-          EXPECTED_COMMIT: ${{ needs.plan.outputs.commit }}
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan.outputs.tag }}
-        run: |
-          object=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")
-          read -r kind sha < <(python -c 'import json,sys; value=json.load(sys.stdin)["object"]; print(value["type"], value["sha"])' <<<"$object")
-          for _ in {1..8}; do
-            if [[ "$kind" == "commit" ]]; then
-              break
-            fi
-            test "$kind" = "tag"
-            object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha")
-            read -r kind sha < <(python -c 'import json,sys; value=json.load(sys.stdin)["object"]; print(value["type"], value["sha"])' <<<"$object")
-          done
-          test "$kind" = "commit"
-          test "$sha" = "$EXPECTED_COMMIT"
-      - name: Capture raw PyPI state
-        env:
-          VERSION: ${{ needs.plan.outputs.version }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          version = urllib.parse.quote(os.environ["VERSION"], safe="")
-          url = f"https://pypi.org/pypi/sustainable-vibe-coding/{version}/json"
-          request = urllib.request.Request(
-              url, headers={"User-Agent": "svc-release-workflow"}
-          )
-          try:
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  status, raw = response.status, response.read()
-          except urllib.error.HTTPError as error:
-              status, raw = error.code, error.read()
-          except (TimeoutError, urllib.error.URLError) as error:
-              status = 0
-              raw = json.dumps({"transport_error": type(error).__name__}).encode()
-          if status == 404:
-              body = None
-          else:
-              try:
-                  body = json.loads(raw)
-              except (UnicodeDecodeError, json.JSONDecodeError):
-                  body = {"invalid_json": True}
-          json.dump(
-              {"http_status": status, "body": body},
-              open("pypi-state.json", "w", encoding="utf-8"),
-              sort_keys=True,
-          )
-          PY
-      - id: plan
-        name: Stage only missing exact distributions
-        run: |
-          python release-control/tools/release.py target-pypi-plan \
-            --bundle-dir dist/release \
-            --state-file pypi-state.json \
-            --json > pypi-plan.json
-          state=$(python -c 'import json; print(json.load(open("pypi-plan.json"))["state"])')
-          case "$state" in
-            none|exact-subset)
-              python release-control/tools/release.py target-stage-pypi \
-                --bundle-dir dist/release \
-                --pypi-plan-file pypi-plan.json \
-                --dist-dir dist/upload \
-                --json
-              echo "upload=true" >> "$GITHUB_OUTPUT"
-              ;;
-            all-exact)
-              echo "upload=false" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              cat pypi-plan.json
-              exit 1
-              ;;
-          esac
-      - name: Publish only the missing original files
-        if: steps.plan.outputs.upload == 'true'
+          name: svc-release-${{ needs.prepare.outputs.tag }}
+          path: release
+      - name: Publish the distributions
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
-          packages-dir: dist/upload/
-      - name: Read PyPI back until every filename and hash is exact
-        env:
-          VERSION: ${{ needs.plan.outputs.version }}
-        run: |
-          for attempt in {1..12}; do
-            python - <<'PY'
-          import json
-          import os
-          import urllib.error
-          import urllib.parse
-          import urllib.request
+          packages-dir: release/python/
+          skip-existing: true
 
-          version = urllib.parse.quote(os.environ["VERSION"], safe="")
-          url = f"https://pypi.org/pypi/sustainable-vibe-coding/{version}/json"
-          request = urllib.request.Request(
-              url, headers={"User-Agent": "svc-release-workflow"}
-          )
-          try:
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  status, raw = response.status, response.read()
-          except urllib.error.HTTPError as error:
-              status, raw = error.code, error.read()
-          except (TimeoutError, urllib.error.URLError) as error:
-              status = 0
-              raw = json.dumps({"transport_error": type(error).__name__}).encode()
-          if status == 404:
-              body = None
-          else:
-              try:
-                  body = json.loads(raw)
-              except (UnicodeDecodeError, json.JSONDecodeError):
-                  body = {"invalid_json": True}
-          json.dump(
-              {"http_status": status, "body": body},
-              open("pypi-state.json", "w", encoding="utf-8"),
-              sort_keys=True,
-          )
-          PY
-            python release-control/tools/release.py target-pypi-plan \
-              --bundle-dir dist/release \
-              --state-file pypi-state.json \
-              --json > pypi-readback.json
-            state=$(python -c 'import json; print(json.load(open("pypi-readback.json"))["state"])')
-            ready=$(python -c 'import json; print(str(json.load(open("pypi-readback.json"))["ready_for_github"]).lower())')
-            if [[ "$ready" == "true" ]]; then
-              break
-            fi
-            if [[ "$state" == "mismatch" || "$state" == "ambiguous" || "$attempt" == 12 ]]; then
-              cat pypi-readback.json
-              exit 1
-            fi
-            sleep 10
-          done
-
-  finalize-github-release:
-    name: Finalize and verify immutable GitHub Release
-    # See `publish-pypi`: `exact-complete` is fully verified by the plan job
-    # and deliberately has no build/recovery bundle to promote.
-    if: needs.plan.outputs.decision != 'exact-complete'
-    needs: [plan, bundle, publish-pypi]
+  github-release:
+    name: Publish GitHub Release
+    if: needs.prepare.outputs.publish == 'true'
+    needs: [prepare, build, tag, publish-pypi]
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       contents: write
     steps:
-      - name: Download the current trusted verifier and plan
+      - name: Download the release artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: svc-release-control-${{ github.run_id }}
-          path: release-control
-      - name: Download this run's original bundle
-        if: needs.bundle.outputs.source-run-id == github.run_id
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: svc-release-${{ needs.plan.outputs.tag }}
-          path: dist/release
-      - name: Download the prior run's original bundle
-        if: needs.bundle.outputs.source-run-id != github.run_id
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: svc-release-${{ needs.plan.outputs.tag }}
-          path: dist/release
-          github-token: ${{ github.token }}
-          run-id: ${{ needs.bundle.outputs.source-run-id }}
-      - name: Verify the downloaded release bundle
-        env:
-          EXPECTED_COMMIT: ${{ needs.plan.outputs.commit }}
-          EXPECTED_TAG: ${{ needs.plan.outputs.tag }}
-          EXPECTED_VERSION: ${{ needs.plan.outputs.version }}
-        run: |
-          verified=$(python release-control/tools/release.py target-verify-bundle \
-            --plan-file release-control/release-plan.json \
-            --bundle-dir dist/release \
-            --json)
-          python -c 'import json,os,sys; value=json.load(sys.stdin); expected={"commit":os.environ["EXPECTED_COMMIT"],"tag":os.environ["EXPECTED_TAG"],"version":os.environ["EXPECTED_VERSION"]}; raise SystemExit(0 if all(value.get(key) == item for key,item in expected.items()) else "Downloaded bundle identity differs from the qualified tag")' <<<"$verified"
-          printf '%s\n' "$verified" > bundle.json
-      - name: Capture raw GitHub Release state
+          name: svc-release-${{ needs.prepare.outputs.tag }}
+          path: release
+      - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan.outputs.tag }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          python - <<'PY'
-          import hashlib
-          import json
-          import os
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          api_root = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
-          tag = os.environ["TAG"]
-          token = os.environ["GH_TOKEN"]
-
-          def request(url: str, accept: str = "application/vnd.github+json") -> tuple[int, bytes]:
-              headers = {
-                  "Accept": accept,
-                  "Authorization": f"Bearer {token}",
-                  "User-Agent": "svc-release-workflow",
-                  "X-GitHub-Api-Version": "2022-11-28",
-              }
-              try:
-                  with urllib.request.urlopen(
-                      urllib.request.Request(url, headers=headers), timeout=30
-                  ) as response:
-                      return response.status, response.read()
-              except urllib.error.HTTPError as error:
-                  return error.code, error.read()
-              except (TimeoutError, urllib.error.URLError) as error:
-                  return 0, json.dumps(
-                      {"transport_error": type(error).__name__}
-                  ).encode()
-
-          def observe_json(url: str) -> dict[str, object]:
-              status, raw = request(url)
-              if status == 404:
-                  body = None
-              else:
-                  try:
-                      body = json.loads(raw)
-                  except (UnicodeDecodeError, json.JSONDecodeError):
-                      body = {"invalid_json": True}
-              return {"http_status": status, "body": body}
-
-          def resolve() -> str | None:
-              ref = urllib.parse.quote(f"tags/{tag}", safe="/")
-              observed = observe_json(f"{api_root}/git/ref/{ref}")
-              body = observed["body"]
-              if observed["http_status"] != 200 or not isinstance(body, dict):
-                  return None
-              obj = body.get("object")
-              for _ in range(8):
-                  if not isinstance(obj, dict):
-                      return None
-                  kind, sha = obj.get("type"), obj.get("sha")
-                  if kind == "commit" and isinstance(sha, str):
-                      return sha
-                  if kind != "tag" or not isinstance(sha, str):
-                      return None
-                  nested = observe_json(f"{api_root}/git/tags/{sha}")
-                  body = nested["body"]
-                  if nested["http_status"] != 200 or not isinstance(body, dict):
-                      return None
-                  obj = body.get("object")
-              return None
-
-          quoted = urllib.parse.quote(tag, safe="")
-          observed = observe_json(f"{api_root}/releases/tags/{quoted}")
-          observed["resolved_tag_commit"] = resolve()
-          observed["asset_sha256"] = {}
-          observed["asset_content"] = {}
-          body = observed["body"]
-          if observed["http_status"] == 200 and isinstance(body, dict):
-              assets = body.get("assets", [])
-              if isinstance(assets, list):
-                  for asset in assets:
-                      if not isinstance(asset, dict):
-                          continue
-                      name, url = asset.get("name"), asset.get("url")
-                      if not isinstance(name, str) or not isinstance(url, str):
-                          continue
-                      status, raw = request(url, "application/octet-stream")
-                      if status != 200:
-                          observed["asset_sha256"][name] = f"http-status:{status}"
-                          continue
-                      observed["asset_sha256"][name] = hashlib.sha256(raw).hexdigest()
-                      if name in {
-                          "svc-release-manifest.json",
-                          "svc-release-metadata.json",
-                      }:
-                          observed["asset_content"][name] = raw.decode("utf-8")
-          json.dump(
-              observed,
-              open("github-state.json", "w", encoding="utf-8"),
-              sort_keys=True,
-          )
-          PY
-      - id: plan
-        name: Permit only absent or exact draft mutation
-        run: |
-          python release-control/tools/release.py target-github-plan \
-            --bundle-dir dist/release \
-            --state-file github-state.json \
-            --json > github-plan.json
-          action=$(python -c 'import json; print(json.load(open("github-plan.json"))["action"])')
-          if [[ "$action" == "fail" ]]; then
-            cat github-plan.json
-            exit 1
-          fi
-          echo "action=$action" >> "$GITHUB_OUTPUT"
-      - name: Recheck the exact remote tag before GitHub mutation
-        if: steps.plan.outputs.action == 'create' || steps.plan.outputs.action == 'resume-draft'
-        env:
-          EXPECTED_COMMIT: ${{ needs.plan.outputs.commit }}
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan.outputs.tag }}
-        run: |
-          object=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")
-          read -r kind sha < <(python -c 'import json,sys; value=json.load(sys.stdin)["object"]; print(value["type"], value["sha"])' <<<"$object")
-          for _ in {1..8}; do
-            if [[ "$kind" == "commit" ]]; then
-              break
-            fi
-            test "$kind" = "tag"
-            object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha")
-            read -r kind sha < <(python -c 'import json,sys; value=json.load(sys.stdin)["object"]; print(value["type"], value["sha"])' <<<"$object")
-          done
-          test "$kind" = "commit"
-          test "$sha" = "$EXPECTED_COMMIT"
-      - name: Create the immutable Release with every manifest asset
-        if: steps.plan.outputs.action == 'create'
-        env:
-          GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan.outputs.tag }}
-        run: |
-          title=$(python -c 'import json; print(json.load(open("bundle.json"))["title"])')
-          notes=$(python -c 'import json; print(json.load(open("bundle.json"))["notes"])')
-          mapfile -t assets < <(python -c 'import json; print("\n".join("dist/release/" + path for path in json.load(open("bundle.json"))["assets"]))')
-          test "${#assets[@]}" -gt 0
-          gh release create "$TAG" "${assets[@]}" \
+          gh release create "$TAG" release/python/* \
             --verify-tag \
-            --title "$title" \
-            --notes-file "dist/release/$notes"
-      - name: Resume only an exact draft subset from the original bundle
-        if: steps.plan.outputs.action == 'resume-draft'
-        env:
-          GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan.outputs.tag }}
-        run: |
-          mapfile -t upload < <(python -c 'import json; print("\n".join("dist/release/" + path for path in json.load(open("github-plan.json"))["upload"]))')
-          if [[ "${#upload[@]}" -gt 0 ]]; then
-            gh release upload "$TAG" "${upload[@]}"
-          fi
-          publish=$(python -c 'import json; print(str(json.load(open("github-plan.json"))["publish"]).lower())')
-          if [[ "$publish" == "true" ]]; then
-            gh release edit "$TAG" --draft=false
-          fi
-      - name: Verify the exact immutable Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan.outputs.tag }}
-        run: |
-          for attempt in {1..6}; do
-            python - <<'PY'
-          import hashlib
-          import json
-          import os
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          api_root = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
-          tag = os.environ["TAG"]
-          token = os.environ["GH_TOKEN"]
-
-          def request(url: str, accept: str = "application/vnd.github+json") -> tuple[int, bytes]:
-              headers = {
-                  "Accept": accept,
-                  "Authorization": f"Bearer {token}",
-                  "User-Agent": "svc-release-workflow",
-                  "X-GitHub-Api-Version": "2022-11-28",
-              }
-              try:
-                  with urllib.request.urlopen(
-                      urllib.request.Request(url, headers=headers), timeout=30
-                  ) as response:
-                      return response.status, response.read()
-              except urllib.error.HTTPError as error:
-                  return error.code, error.read()
-              except (TimeoutError, urllib.error.URLError) as error:
-                  return 0, json.dumps(
-                      {"transport_error": type(error).__name__}
-                  ).encode()
-
-          def observe_json(url: str) -> dict[str, object]:
-              status, raw = request(url)
-              if status == 404:
-                  body = None
-              else:
-                  try:
-                      body = json.loads(raw)
-                  except (UnicodeDecodeError, json.JSONDecodeError):
-                      body = {"invalid_json": True}
-              return {"http_status": status, "body": body}
-
-          def resolve() -> str | None:
-              ref = urllib.parse.quote(f"tags/{tag}", safe="/")
-              observed = observe_json(f"{api_root}/git/ref/{ref}")
-              body = observed["body"]
-              if observed["http_status"] != 200 or not isinstance(body, dict):
-                  return None
-              obj = body.get("object")
-              for _ in range(8):
-                  if not isinstance(obj, dict):
-                      return None
-                  kind, sha = obj.get("type"), obj.get("sha")
-                  if kind == "commit" and isinstance(sha, str):
-                      return sha
-                  if kind != "tag" or not isinstance(sha, str):
-                      return None
-                  nested = observe_json(f"{api_root}/git/tags/{sha}")
-                  body = nested["body"]
-                  if nested["http_status"] != 200 or not isinstance(body, dict):
-                      return None
-                  obj = body.get("object")
-              return None
-
-          quoted = urllib.parse.quote(tag, safe="")
-          observed = observe_json(f"{api_root}/releases/tags/{quoted}")
-          observed["resolved_tag_commit"] = resolve()
-          observed["asset_sha256"] = {}
-          observed["asset_content"] = {}
-          body = observed["body"]
-          if observed["http_status"] == 200 and isinstance(body, dict):
-              assets = body.get("assets", [])
-              if isinstance(assets, list):
-                  for asset in assets:
-                      if not isinstance(asset, dict):
-                          continue
-                      name, url = asset.get("name"), asset.get("url")
-                      if not isinstance(name, str) or not isinstance(url, str):
-                          continue
-                      status, raw = request(url, "application/octet-stream")
-                      if status != 200:
-                          observed["asset_sha256"][name] = f"http-status:{status}"
-                          continue
-                      observed["asset_sha256"][name] = hashlib.sha256(raw).hexdigest()
-                      if name in {
-                          "svc-release-manifest.json",
-                          "svc-release-metadata.json",
-                      }:
-                          observed["asset_content"][name] = raw.decode("utf-8")
-          json.dump(
-              observed,
-              open("github-state.json", "w", encoding="utf-8"),
-              sort_keys=True,
-          )
-          PY
-            python release-control/tools/release.py target-github-plan \
-              --bundle-dir dist/release \
-              --state-file github-state.json \
-              --json > github-readback.json
-            action=$(python -c 'import json; print(json.load(open("github-readback.json"))["action"])')
-            if [[ "$action" == "verified" ]]; then
-              break
-            fi
-            if [[ "$action" == "fail" || "$attempt" == 6 ]]; then
-              cat github-readback.json
-              exit 1
-            fi
-            sleep 5
-          done
+            --title "$TAG" \
+            --notes-file release/notes.md

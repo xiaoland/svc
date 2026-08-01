@@ -13,14 +13,12 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - Runtime and operational truth: `src/sections/deployment.md`
 - Optional topology and coordination guidance: `src/sections/extensions/`
 - Consumer shapes: `src/assets/templates/`
-- Release version and Behavioral SemVer evidence: strict release tags,
-  append-only `changes/` fragments, same-slug `src/migrations/` notes, and
-  `tools/release.py`
-- Consumer runtime, project integration, and packaged-resource access: `svc_cli/`
-- Catalog/wheel projection and repository tooling: `tools/build_catalog.py`, `pdm_build.py`, and `tools/`
-- Monolith behavior: `tools/build_monolith.py` and `tests/`
-- Historical release record and future release guidance: frozen `CHANGELOG.md`,
+- Release configuration, version, Behavioral SemVer evidence, and notes:
+  `.changie.yaml`, Changie data under `changes/`, generated `CHANGELOG.md`,
   GitHub Releases, and `CONTRIBUTING.md`
+- Consumer runtime, project integration, and packaged-resource access: `svc_cli/`
+- Catalog/wheel projection: `tools/build_catalog.py` and `pdm_build.py`
+- Monolith behavior: `tools/build_monolith.py` and `tests/`
 - Volatile work: `tasks/`; delete packets when their task closes, with no archive or deletion-time promotion review.
 
 `build/monolith.md` is generated output, never an editing source.

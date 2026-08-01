@@ -1,0 +1,4 @@
+kind: major
+body: >-
+  Replace the repository-owned tag-range planner and recovery transaction with Changie release-preparation PRs and standard release tooling.
+time: 2026-08-01T12:45:11+08:00

@@ -42,13 +42,11 @@ fallback_version = "0.0.0"
 [tool.pdm.scripts]
 build-monolith = "python -m tools.build_monolith"
 check-documents = "python -m tools.build_monolith --check"
-check-repository-policy = "python -m tools.repository_policy"
 svc = "python -m svc_cli.cli"
 test = "pytest tests"
 lint-tests = "ruff check tests"
 lint-imports = "lint-imports"
 lint-workflows = "zizmor --offline .github/workflows"
-release = "python -m tools.release"
 typecheck = "mypy"
 
 [tool.pdm.build]

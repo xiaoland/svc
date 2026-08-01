@@ -14,42 +14,10 @@ from tools.build_catalog import (
     build_projection,
     canonical_documents,
 )
-from tools.repository_policy import PolicyViolation, check_pyproject_policy
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECTED_VERSION = "12.3.4"
-
-
-def test_scm_policy_checker_rejects_non_strict_fixture(tmp_path: Path) -> None:
-    path = tmp_path / "pyproject.toml"
-    path.write_text(
-        """
-        [project]
-        dynamic = ["version"]
-
-        [build-system]
-        requires = ["pdm-backend==2.4.9"]
-
-        [tool.pdm.version]
-        source = "scm"
-        tag_filter = "v[0-9]*.[0-9]*.[0-9]*"
-        tag_regex = '^v(?P<version>(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*))$'
-        version_format = "pdm_build:format_scm_version"
-        fallback_version = "0.0.0"
-        """.strip()
-        + "\n",
-        encoding="utf-8",
-    )
-    check_pyproject_policy(path)
-
-    path.write_text(
-        path.read_text(encoding="utf-8").replace('fallback_version = "0.0.0"', 'fallback_version = "1.0.0"'),
-        encoding="utf-8",
-    )
-    with pytest.raises(PolicyViolation, match="strict SCM projection"):
-        check_pyproject_policy(path)
-
 
 def test_catalog_is_deterministic_and_covers_every_canonical_markdown_document() -> (
     None

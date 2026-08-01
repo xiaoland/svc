@@ -1,11 +1,14 @@
 # Changelog
 
-This historical record is frozen through v11.0.0. Future release notes are
-derived from append-only tag-range fragments and published in GitHub Releases.
-Releases use SVC Behavioral SemVer: MAJOR changes required obligations,
-defaults, authority, task semantics, required layout, or stable machine
-contracts; MINOR adds backward-compatible optional capability; PATCH restores
-or clarifies the existing protocol without changing those contracts.
+This release record is assembled by Changie from versioned release files.
+SVC uses Behavioral SemVer: MAJOR changes required obligations, defaults,
+authority, task semantics, required layout, or stable machine contracts; MINOR
+adds backward-compatible optional capability; PATCH restores or clarifies the
+existing protocol without changing those contracts.
+
+## [11.0.1] - 2026-07-30
+
+_No consumer-facing Behavioral SemVer changes._
 
 ## [11.0.0] - 2026-07-29
 
@@ -13,13 +16,11 @@ or clarifies the existing protocol without changing those contracts.
 
 - Replace raw agent-thread export with a bounded normalized trajectory, directly cut off schema-v1 archives, and add deterministic Agent analysis plus an explicitly sensitive Textual workspace/thread navigator. (`v11-agent-observability`)
 
-
 ## [10.0.2] - 2026-07-20
 
 ### Protocol fixes
 
 - Restore safe Codex thread metadata listings when unrelated state rows have unsafe rollout paths. (`v10-windows-thread-list-isolation`)
-
 
 ## [10.0.1] - 2026-07-16
 
@@ -30,7 +31,6 @@ or clarifies the existing protocol without changing those contracts.
 ### Backward-compatible capabilities
 
 - Add explicit local `svc telemetry agent-thread list|export` evidence capture with a Codex rollout adapter, sensitive-export acknowledgement, and a provider-neutral extension seam. (`v10-agent-thread`)
-
 
 ## [10.0.0] - 2026-07-15
 
@@ -134,3 +134,4 @@ This is the first unreleased v10 release shape. No v10 package, tag, or GitHub R
 [10.0.1]: https://github.com/xiaoland/svc/releases/tag/v10.0.1
 [10.0.2]: https://github.com/xiaoland/svc/releases/tag/v10.0.2
 [11.0.0]: https://github.com/xiaoland/svc/releases/tag/v11.0.0
+[11.0.1]: https://github.com/xiaoland/svc/releases/tag/v11.0.1
