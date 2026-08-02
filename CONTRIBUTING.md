@@ -2,6 +2,11 @@
 
 SVC is a source-first protocol. A contribution is complete when its behavioral impact, release note, and verification evidence are reviewable—not merely when code passes locally.
 
+## Report Security Issues
+
+Follow the [security policy](SECURITY.md) for suspected vulnerabilities. Do not
+post exploitable details in a public issue or pull request.
+
 ## Set Up and Verify
 
 Use Python 3.11 or newer and PDM:
