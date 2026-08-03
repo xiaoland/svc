@@ -8,10 +8,19 @@ from pathlib import Path
 from typing import Callable
 
 from .catalog import require_semver
-from .config import CONFIG_SCHEMA_VERSION, ConfigError, LOCAL_CONFIG_FILE, ProjectConfig, load_config, parse_project_config
+from .config import (
+    CONFIG_SCHEMA_VERSION,
+    LOCAL_CONFIG_FILE,
+    ConfigError,
+    ProjectConfig,
+    ResolvedConfig,
+    load_config,
+    parse_project_config,
+)
 from .errors import SvcError
 from .integration import (
     DesiredIntegration,
+    IntegrationInspection,
     IntegrationProblem,
     desired_local_config_ignore,
     desired_navigation,
@@ -164,6 +173,8 @@ def plan_adopt(repo: Path, requested_version: str | None = None) -> LocalPlan:
 
 
 def inspect_status(repo: Path) -> dict[str, object]:
+    """Inspect one repository without probing or changing a dev capability."""
+
     root = _require_repo(repo)
     corpus = catalog()
     installed_cli_version = installed_distribution_version()
@@ -175,7 +186,8 @@ def inspect_status(repo: Path) -> dict[str, object]:
         else "mismatch"
     )
     project = _inspect_project(root, corpus.svc_version)
-    configuration = _inspect_configuration(root)
+    configuration, resolved = _inspect_configuration(root, project)
+    dev = _inspect_dev_declaration(resolved)
     guidance = [
         _inspect_guidance(root, CODEX_SKILL_FILE, "codex-skill", inspect_skill),
         _inspect_guidance(root, AGENTS_FILE, "agents-navigation", inspect_navigation),
@@ -189,14 +201,26 @@ def inspect_status(repo: Path) -> dict[str, object]:
         and managed_ignore["status"] == "current"
         and all(item["status"] == "current" for item in guidance)
     )
+    status, next_action = _status_decision(
+        root,
+        project,
+        configuration,
+        runtime_status,
+        guidance,
+        managed_ignore,
+        healthy,
+    )
     return {
         "schema_version": 1,
+        "status": status,
+        "next": next_action,
         "installed_cli_version": installed_cli_version,
         "packaged_svc_version": corpus.svc_version,
         "resource_mode": resource_mode(),
         "runtime": {"status": runtime_status},
         "project": project,
         "configuration": configuration,
+        "dev": dev,
         "managed_ignore": managed_ignore,
         "guidance": guidance,
         "healthy": healthy,
@@ -277,21 +301,139 @@ def _inspect_project(root: Path, available_version: str) -> dict[str, object]:
     }
 
 
-def _inspect_configuration(root: Path) -> dict[str, object]:
+def _inspect_configuration(
+    root: Path,
+    project: dict[str, object],
+) -> tuple[dict[str, object], ResolvedConfig | None]:
+    project_status = str(project["status"])
+    if project_status == "missing":
+        try:
+            local = _read_optional(root, LOCAL_CONFIG_FILE)
+        except SvcError as error:
+            return {"status": "invalid", "message": error.message}, None
+        if local is None:
+            return {"status": "not-configured"}, None
+        return {
+            "status": "invalid",
+            "message": f"{LOCAL_CONFIG_FILE} exists while {PROJECT_FILE} is absent.",
+        }, None
+    if project_status not in {"adopted", "adoption-pending"}:
+        return {"status": "not-inspected", "reason": "project-state-not-current-schema"}, None
     try:
         resolved = load_config(root)
     except ConfigError as error:
-        return {"status": "invalid", "message": str(error)}
-    return {
-        "status": "current",
-        "base": {"path": PROJECT_FILE, "status": "valid", "digest": resolved.base_digest},
-        "local": {
-            "path": LOCAL_CONFIG_FILE,
-            "status": "absent" if resolved.local is None else "valid",
-            "digest": resolved.local_digest,
+        return {"status": "invalid", "message": str(error)}, None
+    return (
+        {
+            "status": "current",
+            "base": {"path": PROJECT_FILE, "status": "valid", "digest": resolved.base_digest},
+            "local": {
+                "path": LOCAL_CONFIG_FILE,
+                "status": "absent" if resolved.local is None else "valid",
+                "digest": resolved.local_digest,
+            },
+            "effective": {"status": "valid", "digest": resolved.effective_digest},
         },
-        "effective": {"status": "valid", "digest": resolved.effective_digest},
+        resolved,
+    )
+
+
+def _inspect_dev_declaration(resolved: ResolvedConfig | None) -> dict[str, object]:
+    result: dict[str, object] = {
+        "observation": "declaration-only",
+        "profile": None,
+        "targets": [],
     }
+    if resolved is None:
+        return {"status": "unavailable", **result}
+    dev = resolved.effective.dev
+    if dev is None:
+        return {"status": "not-declared", **result}
+    return {
+        "status": "declared",
+        "observation": "declaration-only",
+        "profile": dev.profile,
+        "targets": sorted(dev.profiles[dev.profile].targets),
+    }
+
+
+def _status_decision(
+    root: Path,
+    project: dict[str, object],
+    configuration: dict[str, object],
+    runtime_status: str,
+    guidance: list[dict[str, str]],
+    managed_ignore: dict[str, str],
+    healthy: bool,
+) -> tuple[str, dict[str, object]]:
+    project_status = str(project["status"])
+    configuration_status = str(configuration["status"])
+    if project_status == "missing":
+        if configuration_status == "not-configured":
+            return "unadopted", _next_action(
+                "request-adoption-authorization",
+                "SVC is not adopted; obtain Human authorization before running svc init.",
+                requires_human_authorization=True,
+            )
+        return "malformed", _next_action(
+            "repair-project-configuration",
+            "SVC will not overwrite an orphaned or invalid local configuration.",
+            requires_human_authorization=True,
+        )
+    if project_status == "invalid" or configuration_status == "invalid":
+        return "malformed", _next_action(
+            "repair-project-configuration",
+            "Project configuration is invalid; repair the Consumer-owned file before continuing.",
+            requires_human_authorization=True,
+        )
+    if project_status in {"schema-v1-write-blocked", "schema-write-blocked"}:
+        return "actionable", _next_action(
+            "migrate-project-configuration",
+            "Project configuration requires a deliberate migration before SVC may write it.",
+            requires_human_authorization=True,
+        )
+    if runtime_status == "mismatch":
+        return "actionable", _next_action(
+            "plan-runtime-update",
+            "The installed CLI does not match its packaged corpus; inspect the update plan first.",
+            requires_human_authorization=False,
+            command=["svc", "self-update", "--json"],
+        )
+    if project_status == "adoption-pending":
+        return "actionable", _next_action(
+            "review-and-adopt",
+            "The project adopts a different SVC version; review required migration guidance before adoption.",
+            requires_human_authorization=True,
+        )
+    if not healthy:
+        return "actionable", _next_action(
+            "plan-integration-repair",
+            "Generated SVC integration needs review; inspect the non-mutating init plan before any apply.",
+            requires_human_authorization=False,
+            command=["svc", "init", str(root), "--json"],
+        )
+    return "healthy", _next_action(
+        "continue",
+        "SVC adoption and generated integration are current; dev targets are declaration-only here.",
+        requires_human_authorization=False,
+    )
+
+
+def _next_action(
+    action: str,
+    reason: str,
+    *,
+    requires_human_authorization: bool,
+    command: list[str] | None = None,
+) -> dict[str, object]:
+    result: dict[str, object] = {
+        "action": action,
+        "reason": reason,
+        "requires_human_authorization": requires_human_authorization,
+    }
+    if command is not None:
+        result["command"] = command
+    return result
 
 
 def _block_noncurrent_schema(state: ProjectState | ProjectConfig, blockers: list[Blocker]) -> None:
@@ -362,7 +504,7 @@ def _inspect_guidance(
     root: Path,
     relative: str,
     kind: str,
-    inspect: Callable[[bytes | None], object],
+    inspect: Callable[[bytes | None], IntegrationInspection],
 ) -> dict[str, str]:
     try:
         content = _read_optional(root, relative)

@@ -29,6 +29,12 @@ def invoke_text(arguments: list[str]) -> tuple[int, str, str]:
     return code, stdout.getvalue(), stderr.getvalue()
 
 
+def assert_compact_json(raw: str) -> dict[str, object]:
+    assert raw.endswith("\n")
+    assert raw.count("\n") == 1
+    return json.loads(raw)
+
+
 def test_lookup_machine_output_uses_source_relative_path_identity() -> None:
     code, payload, _ = invoke(
         [
@@ -43,6 +49,23 @@ def test_lookup_machine_output_uses_source_relative_path_identity() -> None:
     assert code == EXIT_OK
     assert payload["results"][0]["path"] == "assets/templates/AGENTS.local.template.md"
     assert "content" in payload["results"][0]
+
+
+def test_machine_json_is_compact_for_results_and_errors() -> None:
+    code, stdout, stderr = invoke_text(["lookup", "--list", "--json"])
+
+    assert (code, stderr) == (EXIT_OK, "")
+    assert assert_compact_json(stdout)["command"] == "lookup"
+
+    code, stdout, stderr = invoke_text(["status", "--unknown", "--json"])
+
+    assert (code, stdout) == (2, "")
+    assert assert_compact_json(stderr)["code"] == "invalid-cli-usage"
+
+    code, stdout, stderr = invoke_text(["lookup", "--path", "../invalid.md", "--json"])
+
+    assert (code, stdout) == (EXIT_CONFLICT, "")
+    assert assert_compact_json(stderr)["error"]["code"] == "invalid-document-path"
 
 
 def test_lookup_list_and_path_form_a_small_machine_navigation_contract() -> None:
@@ -157,6 +180,64 @@ def test_dev_identity_and_missing_configuration_status_are_machine_readable() ->
         code, status, _ = invoke(["dev", "status", "--repo", str(root), "--json"])
         assert code == EXIT_CONFLICT
         assert status["status"] == "invalid-configuration"
+
+
+def test_root_status_is_the_machine_first_check_and_human_text_exposes_its_gate() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        code, payload, stderr = invoke(["status", tmp, "--json"])
+
+        assert (code, stderr) == (EXIT_CONFLICT, "")
+        assert payload["status"] == "unadopted"
+        assert payload["next"]["action"] == "request-adoption-authorization"
+        assert payload["next"]["requires_human_authorization"]
+
+        code, stdout, stderr = invoke_text(["status", tmp])
+
+        assert (code, stderr) == (EXIT_CONFLICT, "")
+        assert "SVC status: unadopted" in stdout
+        assert "request-adoption-authorization" in stdout
+        assert "Human authorization required" in stdout
+
+
+def test_root_status_json_is_compact_across_preflight_states() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+
+        code, stdout, stderr = invoke_text(["status", tmp, "--json"])
+
+        assert (code, stderr) == (EXIT_CONFLICT, "")
+        unadopted = assert_compact_json(stdout)
+        assert (unadopted["status"], unadopted["next"]["requires_human_authorization"]) == (
+            "unadopted",
+            True,
+        )
+
+        code, plan, _ = invoke(["init", tmp, "--json"])
+        assert code == EXIT_OK
+        code, stdout, stderr = invoke_text(
+            ["init", tmp, "--apply", str(plan["plan_digest"]), "--json"]
+        )
+        assert (code, stderr) == (EXIT_OK, "")
+        assert assert_compact_json(stdout)["status"] == "applied"
+
+        code, stdout, stderr = invoke_text(["status", tmp, "--json"])
+
+        assert (code, stderr) == (EXIT_OK, "")
+        healthy = assert_compact_json(stdout)
+        assert (healthy["status"], healthy["next"]["requires_human_authorization"]) == (
+            "healthy",
+            False,
+        )
+
+        (root / "svc.json").write_text("{not-json", encoding="utf-8")
+        code, stdout, stderr = invoke_text(["status", tmp, "--json"])
+
+        assert (code, stderr) == (EXIT_CONFLICT, "")
+        malformed = assert_compact_json(stdout)
+        assert (malformed["status"], malformed["next"]["requires_human_authorization"]) == (
+            "malformed",
+            True,
+        )
 
 
 def test_dev_setup_cli_is_plan_then_exact_apply() -> None:

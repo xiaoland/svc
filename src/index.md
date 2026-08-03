@@ -29,7 +29,14 @@ svc lookup --name 'assets/templates/AGENTS\..*\.template\.md' --all
 
 `--list` returns path-sorted catalog metadata without returning document bodies. Use one returned normalized source-relative path with `--path` to read and integrity-check exactly that authoritative document. Keyword search is deterministic and local; its candidates identify paths and excerpts, which are also resolved through `--path`. `--name` remains the intentional full-path regular-expression surface: it returns one document by default and rejects ambiguity, while `--all` permits deliberately broad reads. Semantic lookup is intentionally not a public command.
 
-Every command supports stable JSON output through `--json`. Exit code `0` means a ready, healthy, applied, or no-op result; `2` is CLI syntax; `3` means required action, invalid project state, conflict, or blocked plan; and `4` means release integrity, local apply, or installer failure.
+Every command with `--json` returns one compact JSON value for its settled
+result, including recognized CLI errors; the trailing newline is framing, not
+pretty printing. No current command has distinct progress events that justify
+JSONL, so JSONL is reserved for a future bounded event stream rather than being
+used for list-shaped terminal results. Exit code `0` means a ready, healthy,
+applied, or no-op result; `2` is CLI syntax; `3` means required action, invalid
+project state, conflict, or blocked plan; and `4` means release integrity,
+local apply, or installer failure.
 
 ## Project Adoption
 
@@ -61,10 +68,19 @@ The Codex skill at `.agents/skills/svc/SKILL.md` is a compact router to the inst
 ```text
 svc init <repo> --agent codex
 svc init <repo> --apply <plan-digest>
-svc status <repo>
+svc status <repo> --json
 ```
 
-`svc status` reports the installed CLI/corpus version separately from the adopted project version, and reports missing, outdated, or user-modified generated guidance without claiming ownership over consumer content.
+`svc status --json` is an Agent's read-only first SVC command in a repository.
+It reports `unadopted`, `malformed`, `actionable`, or `healthy` before its
+detailed checks, then provides a `next` action and whether it needs Human
+authorization. An unadopted repository asks for adoption authorization; it
+does not instruct or perform `init` as discovery. Status reports the installed
+CLI/corpus version separately from the adopted project version, and reports
+missing, outdated, or user-modified generated guidance without claiming
+ownership over consumer content. It also lists the selected `dev` profile and
+target names as a declaration-only summary: it never probes, starts, or takes
+over a target. Use `svc dev status` for runtime observation.
 
 ## Declared Development Capabilities
 
@@ -77,7 +93,16 @@ svc dev ensure <target> --repo <repo> --json
 svc dev setup vscode|npm [target] --repo <repo> --plan|--apply <digest> --json
 ```
 
-`dev identity` exposes the resolved workspace identity for diagnosis. `dev status` observes declared targets without starting or taking over anything. `dev ensure` handles exactly one named target: it reuses a healthy endpoint; refuses an endpoint that responds but is unhealthy; and requires the consumer's manual action when declared. For executable provisioning, it coordinates only the declared capability scope, waits for the declared readiness check, then relinquishes process authority after success. Worktree scope is the default and requires the probe endpoint to prove the resolved worktree instance; repository scope intentionally shares one capability, while host scope requires an explicit host key.
+`dev identity` exposes the resolved workspace identity for diagnosis. Root
+`status` summarizes declarations only; `dev status` observes declared targets
+without starting or taking over anything. `dev ensure` handles exactly one named
+target: it reuses a healthy endpoint; refuses an endpoint that responds but is
+unhealthy; and requires the consumer's manual action when declared. For
+executable provisioning, it coordinates only the declared capability scope,
+waits for the declared readiness check, then relinquishes process authority
+after success. Worktree scope is the default and requires the probe endpoint to
+prove the resolved worktree instance; repository scope intentionally shares one
+capability, while host scope requires an explicit host key.
 
 Interpolation is limited to `${dev.instance}`, `${dev.worktree.id}`, `${dev.profile}`, and `${dev.target}` in declared dev values. Commands are executed as argument arrays without a shell, and configured working directories must remain inside the workspace.
 

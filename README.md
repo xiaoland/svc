@@ -39,7 +39,7 @@ Initialization is dry-run by default. It creates no copied SVC documents and nev
 ```bash
 svc init /path/to/project --agent codex --json
 svc init /path/to/project --apply <plan-digest>
-svc status /path/to/project
+svc status /path/to/project --json
 ```
 
 The exact-plan apply may create:
@@ -63,6 +63,15 @@ docs/index.md              (created when absent, with a bounded generated naviga
 
 `svc.local.json` is an optional, ignored sparse overlay for only the `dev` configuration. It cannot change the schema or adopted version, and its merged result must remain valid. `init` maintains just its marked ignore block; it never writes a local configuration file. Schema-v1 projects are write-blocked until deliberately migrated to schema v2.
 
+Start with `svc status --json` in any repository. It is read-only and returns a
+compact JSON preflight state—`unadopted`, `malformed`, `actionable`, or
+`healthy`—with the next action and its Human-authorization requirement. An
+`unadopted` result means ask for authorization before running `svc init`; do
+not use `init` to discover state. Status summarizes declared dev profile and
+target names without probing them; use `svc dev status` when runtime observation
+is needed. Every current `--json` response is one compact JSON value; JSONL is
+reserved for a future command with meaningful progress events.
+
 Everything unmarked in `AGENTS.md` and `docs/index.md` remains Consumer-owned. The Codex skill is a compact router to the installed CLI and canonical corpus, not a duplicate of framework guidance. Modified generated blocks, skills, or local-config ignore section block refresh for human review.
 
 ## Declare and Ensure Development Capabilities
@@ -78,7 +87,13 @@ svc dev setup vscode frontend --repo /path/to/project --plan --json
 svc dev setup npm frontend --repo /path/to/project --apply <digest> --json
 ```
 
-`status` only observes; it never starts or takes over a process. `ensure` handles one declared target, reuses a healthy endpoint, refuses an occupied but unhealthy endpoint, and does not run a `manual` provisioner. Executable provisioning is coordinated at the declared scope and releases process authority once readiness succeeds. Worktree scope is the default and its probe endpoint must prove the resolved instance; host scope requires a declared `host_key`.
+Root `status` summarizes declarations only; `svc dev status` observes declared
+targets without starting or taking over a process. `ensure` handles one declared
+target, reuses a healthy endpoint, refuses an occupied but unhealthy endpoint,
+and does not run a `manual` provisioner. Executable provisioning is coordinated
+at the declared scope and releases process authority once readiness succeeds.
+Worktree scope is the default and its probe endpoint must prove the resolved
+instance; host scope requires a declared `host_key`.
 
 Dev values may interpolate only `${dev.instance}`, `${dev.worktree.id}`, `${dev.profile}`, and `${dev.target}`. Commands are argument arrays, not shell snippets, and their configured working directories must remain inside the workspace.
 

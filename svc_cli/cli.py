@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from pathlib import Path
 from typing import Any, Never, Sequence, cast
@@ -200,7 +201,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(raw_argv)
     except CliUsageError as error:
-        if raw_argv[:1] == ["analysis"]:
+        if raw_argv[:1] == ["analysis"] or "--json" in raw_argv:
             _emit_json(
                 {
                     "code": "invalid-cli-usage",
@@ -456,15 +457,28 @@ def _emit_status(payload: dict[str, Any], json_output: bool) -> None:
         return
     installed = payload["installed_cli_version"] or "source-tree"
     runtime = payload["runtime"]
-    print(f"SVC status: CLI {installed}; packaged SVC {payload['packaged_svc_version']}; runtime {runtime['status']}")
+    print(
+        f"SVC status: {payload['status']}; CLI {installed}; "
+        f"packaged SVC {payload['packaged_svc_version']}; runtime {runtime['status']}"
+    )
     project = payload["project"]
     print(f"  {project['status']:16} {project['path']}")
     configuration = payload["configuration"]
     print(f"  {configuration['status']:16} effective configuration")
+    dev = payload["dev"]
+    target_names = ", ".join(dev["targets"]) or "none"
+    print(f"  {dev['status']:16} dev declaration; profile {dev['profile'] or 'none'}; targets {target_names}")
     managed_ignore = payload["managed_ignore"]
     print(f"  {managed_ignore['status']:16} {managed_ignore['path']}  ({managed_ignore['kind']})")
     for item in payload["guidance"]:
         print(f"  {item['status']:16} {item['path']}  ({item['kind']})")
+    next_action = payload["next"]
+    authorization = "Human authorization required" if next_action["requires_human_authorization"] else "no authorization required"
+    print(f"Next: {next_action['action']} ({authorization})")
+    print(f"  {next_action['reason']}")
+    command = next_action.get("command")
+    if isinstance(command, list):
+        print("  Command: " + shlex.join([str(part) for part in command]))
     print("Healthy" if payload["healthy"] else "Action required")
 
 
@@ -540,7 +554,7 @@ def _emit_error(error: SvcError, json_output: bool) -> None:
 
 def _emit_json(payload: dict[str, object], stream: Any | None = None) -> None:
     output = stream or sys.stdout
-    json.dump(payload, output, ensure_ascii=False, indent=2, sort_keys=True)
+    json.dump(payload, output, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     output.write("\n")
 
 

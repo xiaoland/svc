@@ -1,0 +1,6 @@
+kind: patch
+body: >-
+  Make `svc status --json` a read-only Agent preflight with explicit adoption,
+  repair, authorization, and declaration-only dev-target facts; compact all
+  settled CLI JSON responses without introducing a false JSONL event stream.
+time: 2026-08-03T21:49:23+08:00

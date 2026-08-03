@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -61,6 +62,10 @@ def test_generated_guidance_is_a_thin_router_to_the_installed_corpus() -> None:
     assert "This Skill is a router, not a copy of SVC guidance." in skill
     assert "Consumer-owned instructions" in skill
     assert "returned plan is not approval" in skill
+    assert "first SVC command" in skill
+    assert "Human authorization" in skill
+    assert skill.index("svc status --json") < skill.index("svc lookup --list --json")
+    assert navigation.index("svc status --json") < navigation.index("svc lookup --list --json")
     assert "## Declare Development Capabilities" not in skill
     assert "svc dev setup" not in skill
     assert "svc self-update" not in skill
@@ -224,7 +229,10 @@ def test_status_distinguishes_adoption_and_adopt_updates_only_project_metadata()
         apply_local_plan(initial, initial.digest)
         (root / PROJECT_FILE).write_bytes(render_project_state("9.9.9"))
         status = inspect_status(root)
+        assert status["status"] == "actionable"
         assert status["project"]["status"] == "adoption-pending"
+        assert status["next"]["action"] == "review-and-adopt"
+        assert status["next"]["requires_human_authorization"]
         assert not status["healthy"]
 
         adopt = plan_adopt(root)
@@ -243,7 +251,121 @@ def test_status_reports_installed_runtime_version_mismatch(monkeypatch: pytest.M
             patch.setattr(project, "installed_distribution_version", lambda: mismatch_version)
             mismatch = inspect_status(root)
         assert mismatch["runtime"]["status"] == "mismatch"
+        assert mismatch["status"] == "actionable"
+        assert mismatch["next"]["command"] == ["svc", "self-update", "--json"]
         assert not mismatch["healthy"]
+
+
+def test_status_makes_unadopted_state_and_authorization_gate_explicit(tmp_path: Path) -> None:
+    before = tree_bytes(tmp_path)
+
+    status = inspect_status(tmp_path)
+
+    assert status["status"] == "unadopted"
+    assert status["project"]["status"] == "missing"
+    assert status["configuration"] == {"status": "not-configured"}
+    assert status["dev"] == {
+        "status": "unavailable",
+        "observation": "declaration-only",
+        "profile": None,
+        "targets": [],
+    }
+    assert status["next"] == {
+        "action": "request-adoption-authorization",
+        "reason": "SVC is not adopted; obtain Human authorization before running svc init.",
+        "requires_human_authorization": True,
+    }
+    assert not status["healthy"]
+    assert tree_bytes(tmp_path) == before
+
+
+@pytest.mark.parametrize(
+    ("filename", "content"),
+    (
+        (PROJECT_FILE, b"{not-json"),
+        ("svc.local.json", b"{}\n"),
+    ),
+)
+def test_status_reports_malformed_project_state_without_suggesting_init(
+    tmp_path: Path,
+    filename: str,
+    content: bytes,
+) -> None:
+    (tmp_path / filename).write_bytes(content)
+    before = tree_bytes(tmp_path)
+
+    status = inspect_status(tmp_path)
+
+    assert status["status"] == "malformed"
+    assert status["next"]["action"] == "repair-project-configuration"
+    assert status["next"]["requires_human_authorization"]
+    assert "command" not in status["next"]
+    assert tree_bytes(tmp_path) == before
+
+
+def test_status_reports_schema_v1_as_actionable_migration(tmp_path: Path) -> None:
+    (tmp_path / PROJECT_FILE).write_text(
+        '{"schema_version":1,"svc_version":"10.0.0"}\n',
+        encoding="utf-8",
+    )
+
+    status = inspect_status(tmp_path)
+
+    assert status["status"] == "actionable"
+    assert status["project"]["status"] == "schema-v1-write-blocked"
+    assert status["configuration"]["status"] == "not-inspected"
+    assert status["next"]["action"] == "migrate-project-configuration"
+    assert status["next"]["requires_human_authorization"]
+
+
+def test_status_summarizes_declared_dev_targets_without_observing_them(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initial = plan_init(tmp_path)
+    apply_local_plan(initial, initial.digest)
+    (tmp_path / PROJECT_FILE).write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "svc_version": initial.target_version,
+                "dev": {
+                    "profile": "local",
+                    "profiles": {
+                        "local": {
+                            "targets": {
+                                "web": {
+                                    "probe": {"kind": "exec", "argv": ["unreachable-probe"]},
+                                    "provision": {"kind": "manual"},
+                                },
+                                "api": {
+                                    "probe": {"kind": "exec", "argv": ["unreachable-probe"]},
+                                    "provision": {"kind": "manual"},
+                                },
+                            }
+                        }
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def unexpected_probe(*args: object, **kwargs: object) -> object:
+        raise AssertionError("root status must not probe declared dev targets")
+
+    monkeypatch.setattr("svc_cli.dev.runtime.probe_target", unexpected_probe)
+    status = inspect_status(tmp_path)
+
+    assert status["status"] == "healthy"
+    assert status["dev"] == {
+        "status": "declared",
+        "observation": "declaration-only",
+        "profile": "local",
+        "targets": ["api", "web"],
+    }
+    assert status["next"]["action"] == "continue"
+    assert status["configuration"]["effective"]["digest"]
 
 
 def test_init_manages_only_a_clean_local_config_ignore_section() -> None:
