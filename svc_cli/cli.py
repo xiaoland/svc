@@ -15,7 +15,12 @@ from .analysis.service import execute_query, execute_read
 from .errors import SvcError
 from .dev.runtime import ensure_target, inspect_dev_identity, inspect_dev_status
 from .dev.setup import plan_setup
-from .lookup import CorpusLookup, LookupQuery
+from .lookup import (
+    LOOKUP_DISCOVERY_HINT,
+    READ_GUIDANCE_COMMAND,
+    CorpusLookup,
+    LookupQuery,
+)
 from .project import inspect_status, plan_adopt, plan_init
 from .release import catalog, runtime_version
 from .telemetry.agent_threads import ArchiveFilter
@@ -46,16 +51,41 @@ def _parser() -> argparse.ArgumentParser:
     parser = SvcArgumentParser(
         prog="svc",
         description="Local Sustainable Vibe Coding corpus and project integration CLI.",
+        epilog=f"For local SVC guidance: {LOOKUP_DISCOVERY_HINT}",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {runtime_version()}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    lookup = subparsers.add_parser("lookup", help="Read packaged SVC guidance by path regex or keyword")
+    lookup = subparsers.add_parser(
+        "lookup",
+        help="Discover and read local packaged SVC guidance",
+        description=(
+            "Read local packaged SVC guidance. Use --list to discover paths "
+            "and --path to read one exact document."
+        ),
+        epilog=LOOKUP_DISCOVERY_HINT,
+    )
     lookup_group = lookup.add_mutually_exclusive_group(required=True)
-    lookup_group.add_argument("--name", help="Full-path regular expression over packaged SVC document paths")
-    lookup_group.add_argument("--keyword", help="Deterministic local keyword query")
+    lookup_group.add_argument(
+        "--list",
+        action="store_true",
+        dest="list_documents",
+        help="List packaged document paths and titles without returning bodies",
+    )
+    lookup_group.add_argument(
+        "--path",
+        help="Read one exact normalized source-relative Markdown path from --list",
+    )
+    lookup_group.add_argument(
+        "--name",
+        help="Full-path regular expression for intentional multi-document reads",
+    )
+    lookup_group.add_argument(
+        "--keyword",
+        help="Deterministic local candidate search; read a returned path with --path",
+    )
     lookup.add_argument("--all", action="store_true", dest="allow_many", help="Allow all --name matches")
-    lookup.add_argument("--limit", type=_lookup_limit, default=10, help="Maximum keyword results (1-50)")
+    lookup.add_argument("--limit", type=_lookup_limit, help="Maximum keyword results (1-50)")
     lookup.add_argument("--json", action="store_true", dest="json_output")
 
     init = subparsers.add_parser("init", help="Plan or apply bounded SVC project integration")
@@ -180,18 +210,35 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         else:
             print(f"svc: invalid-cli-usage: {error}", file=sys.stderr)
+            if not raw_argv or raw_argv[:1] == ["lookup"]:
+                print(f"Hint: {LOOKUP_DISCOVERY_HINT}", file=sys.stderr)
         return EXIT_USAGE
     json_output = bool(getattr(args, "json_output", False))
     try:
         if args.command == "lookup":
-            if args.keyword is not None and args.allow_many:
-                raise SvcError("invalid-lookup-options", "--all is valid only with --name.")
-            query = LookupQuery(
-                "name" if args.name is not None else "keyword",
-                args.name if args.name is not None else args.keyword,
-                args.allow_many,
-                args.limit,
-            )
+            if args.name is None and args.allow_many:
+                raise SvcError(
+                    "invalid-lookup-options",
+                    "--all is valid only with --name.",
+                    {"hint": LOOKUP_DISCOVERY_HINT},
+                )
+            if args.limit is not None and (
+                args.list_documents or args.path is not None
+            ):
+                raise SvcError(
+                    "invalid-lookup-options",
+                    "--limit does not apply to --list or --path.",
+                    {"hint": LOOKUP_DISCOVERY_HINT},
+                )
+            lookup_limit = args.limit if args.limit is not None else 10
+            if args.list_documents:
+                query = LookupQuery("list", limit=lookup_limit)
+            elif args.path is not None:
+                query = LookupQuery("path", args.path, limit=lookup_limit)
+            elif args.name is not None:
+                query = LookupQuery("name", args.name, args.allow_many, lookup_limit)
+            else:
+                query = LookupQuery("keyword", args.keyword, limit=lookup_limit)
             response = CorpusLookup(catalog()).lookup(query)
             _emit_lookup(response, json_output)
             return EXIT_OK
@@ -449,11 +496,16 @@ def _emit_lookup(response: Any, json_output: bool) -> None:
     if json_output:
         _emit_json(response.as_dict())
         return
-    if response.query.mode == "name":
+    if response.query.mode in {"name", "path"}:
         for index, result in enumerate(response.results):
             if index:
                 print("\n---\n")
             print(result.content, end="" if result.content.endswith("\n") else "\n")
+        return
+    if response.query.mode == "list":
+        for result in response.results:
+            print(f"{result.path}\t{result.title}")
+        print(f"\nRead one document with `{READ_GUIDANCE_COMMAND}`.")
         return
     for result in response.results:
         print(f"{result.path}\t{result.title}\t{result.score}")
@@ -475,11 +527,15 @@ def _emit_error(error: SvcError, json_output: bool) -> None:
         _emit_json(error.as_dict(), stream=sys.stderr)
         return
     print(f"svc: {error.code}: {error.message}", file=sys.stderr)
-    if error.details:
+    details = dict(error.details)
+    hint = details.pop("hint", None)
+    if details:
         print(
-            json.dumps(error.details, ensure_ascii=False, indent=2, sort_keys=True),
+            json.dumps(details, ensure_ascii=False, indent=2, sort_keys=True),
             file=sys.stderr,
         )
+    if isinstance(hint, str):
+        print(f"Hint: {hint}", file=sys.stderr)
 
 
 def _emit_json(payload: dict[str, object], stream: Any | None = None) -> None:

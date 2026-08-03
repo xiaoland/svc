@@ -23,12 +23,14 @@ Install the CLI, then query the guidance you need. The wheel contains the read-o
 ```bash
 python -m pip install sustainable-vibe-coding==11.0.0
 
+svc lookup --list --json
+svc lookup --path sections/working-protocol.md
+svc lookup --keyword "task packet mutation gate"
 svc lookup --name 'sections/working-protocol\.md'
 svc lookup --name 'assets/templates/AGENTS\..*\.template\.md' --all
-svc lookup --keyword "task packet mutation gate"
 ```
 
-`--name` is a full-path regular expression over source-relative SVC document paths—not a document ID. Keyword results are short, deterministic candidates; use a returned path with `--name` to read canonical content. Semantic search is intentionally deferred until a local artifact and quality contract are measured.
+`--list` returns path-sorted catalog metadata without returning document bodies. Use one returned normalized source-relative path with `--path` to read and integrity-check exactly that canonical document. Keyword results are short, deterministic candidates that are also resolved with `--path`. `--name` remains available as a full-path regular expression for intentional multi-document reads. Semantic search is intentionally deferred until a local artifact and quality contract are measured.
 
 ## Initialize a Consumer Project
 
@@ -61,7 +63,7 @@ docs/index.md              (created when absent, with a bounded generated naviga
 
 `svc.local.json` is an optional, ignored sparse overlay for only the `dev` configuration. It cannot change the schema or adopted version, and its merged result must remain valid. `init` maintains just its marked ignore block; it never writes a local configuration file. Schema-v1 projects are write-blocked until deliberately migrated to schema v2.
 
-Everything unmarked in `AGENTS.md` and `docs/index.md` remains Consumer-owned. The Codex skill is a substantial operational guide to `svc` commands, not a duplicate of the framework corpus. Modified generated blocks, skills, or local-config ignore section block refresh for human review.
+Everything unmarked in `AGENTS.md` and `docs/index.md` remains Consumer-owned. The Codex skill is a compact router to the installed CLI and canonical corpus, not a duplicate of framework guidance. Modified generated blocks, skills, or local-config ignore section block refresh for human review.
 
 ## Declare and Ensure Development Capabilities
 
@@ -152,7 +154,7 @@ native read. Query/read are JSON-first and expose their compact packaged method
 reference. To load the reasoning method and its owner boundary, use:
 
 ```bash
-svc lookup --name 'sections/working-protocol\.md' --all --json
+svc lookup --path sections/working-protocol.md --json
 ```
 
 The old `telemetry agent-thread analyze` command and Textual navigator are

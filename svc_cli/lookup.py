@@ -6,25 +6,38 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Protocol, Sequence
 
-from .catalog import Catalog, CatalogEntry, sha256_bytes
+from .catalog import Catalog, CatalogEntry, normalized_document_path, sha256_bytes
 from .errors import SvcError
 from .resources import read_document
 
 
 TOKEN_RE = re.compile(r"\w+", re.UNICODE)
+LIST_GUIDANCE_COMMAND = "svc lookup --list --json"
+READ_GUIDANCE_COMMAND = "svc lookup --path <path> --json"
+LOOKUP_DISCOVERY_HINT = (
+    f"Run `{LIST_GUIDANCE_COMMAND}`, choose a returned path, then run "
+    f"`{READ_GUIDANCE_COMMAND}`."
+)
 
 
 @dataclass(frozen=True)
 class LookupQuery:
     mode: str
-    value: str
+    value: str | None = None
     allow_many: bool = False
     limit: int = 10
 
     def __post_init__(self) -> None:
-        if self.mode not in {"name", "keyword"}:
+        value = self.value
+        if self.mode not in {"list", "path", "name", "keyword"}:
             raise ValueError(f"Unsupported lookup mode: {self.mode}")
-        if not self.value.strip():
+        if self.mode == "list" and value is not None:
+            raise ValueError("List lookup does not accept a value")
+        if self.mode != "list" and not isinstance(value, str):
+            raise ValueError("Lookup value must be a string")
+        if self.mode in {"name", "keyword"} and (
+            not isinstance(value, str) or not value.strip()
+        ):
             raise ValueError("Lookup value must not be empty")
         if not 1 <= self.limit <= 50:
             raise ValueError("Lookup limit must be between 1 and 50")
@@ -82,13 +95,15 @@ class LookupResponse:
     results: tuple[LookupResult, ...]
 
     def as_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "schema_version": 1,
             "command": "lookup",
             "mode": self.query.mode,
-            "query": self.query.value,
             "results": [result.as_dict() for result in self.results],
         }
+        if self.query.value is not None:
+            payload["query"] = self.query.value
+        return payload
 
 
 class DeterministicKeywordRanker:
@@ -134,28 +149,93 @@ class CorpusLookup:
         self.ranker = ranker or DeterministicKeywordRanker()
 
     def lookup(self, query: LookupQuery) -> LookupResponse:
+        if query.mode == "list":
+            return self._lookup_list(query)
+        if query.mode == "path":
+            return self._lookup_path(query)
         if query.mode == "name":
             return self._lookup_name(query)
         return self._lookup_keyword(query)
 
+    def _lookup_list(self, query: LookupQuery) -> LookupResponse:
+        results = tuple(
+            LookupResult(entry.path, entry.title, entry.sha256)
+            for entry in self.catalog.entries
+        )
+        return LookupResponse(query, results)
+
+    def _lookup_path(self, query: LookupQuery) -> LookupResponse:
+        assert query.value is not None
+        try:
+            if "\\" in query.value:
+                raise ValueError("--path must use normalized POSIX separators")
+            path = normalized_document_path(query.value, "--path")
+        except ValueError as error:
+            raise SvcError(
+                "invalid-document-path",
+                str(error),
+                {
+                    "path": query.value,
+                    "hint": LOOKUP_DISCOVERY_HINT,
+                },
+            ) from error
+        entry = next(
+            (item for item in self.catalog.entries if item.path == path),
+            None,
+        )
+        if entry is None:
+            raise SvcError(
+                "lookup-not-found",
+                "No packaged SVC document has that exact path.",
+                {
+                    "path": query.value,
+                    "hint": LOOKUP_DISCOVERY_HINT,
+                },
+            )
+        return LookupResponse(query, (self._full_result(entry),))
+
     def _lookup_name(self, query: LookupQuery) -> LookupResponse:
+        assert query.value is not None
         try:
             pattern = re.compile(query.value)
         except re.error as error:
-            raise SvcError("invalid-name-regex", f"Invalid --name regular expression: {error}") from error
+            raise SvcError(
+                "invalid-name-regex",
+                f"Invalid --name regular expression: {error}",
+                {
+                    "hint": (
+                        "--name is a regular expression. For one path returned by "
+                        f"--list, use `{READ_GUIDANCE_COMMAND}` instead."
+                    )
+                },
+            ) from error
         matches = [entry for entry in self.catalog.entries if pattern.fullmatch(entry.path)]
         if not matches:
-            raise SvcError("lookup-not-found", "No packaged SVC path matched --name.", {"pattern": query.value})
+            raise SvcError(
+                "lookup-not-found",
+                "No packaged SVC path matched --name.",
+                {
+                    "pattern": query.value,
+                    "hint": LOOKUP_DISCOVERY_HINT,
+                },
+            )
         if len(matches) > 1 and not query.allow_many:
             raise SvcError(
                 "lookup-ambiguous",
                 "--name matched more than one path; refine the regex or pass --all.",
-                {"paths": [entry.path for entry in matches]},
+                {
+                    "paths": [entry.path for entry in matches],
+                    "hint": (
+                        "Use --all for every match or read one returned path with "
+                        f"`{READ_GUIDANCE_COMMAND}`."
+                    ),
+                },
             )
         results = tuple(self._full_result(entry) for entry in matches)
         return LookupResponse(query, results)
 
     def _lookup_keyword(self, query: LookupQuery) -> LookupResponse:
+        assert query.value is not None
         documents = tuple(self._document(entry) for entry in self.catalog.entries)
         results = tuple(
             LookupResult(
@@ -168,7 +248,14 @@ class CorpusLookup:
             for ranked in self.ranker.rank(documents, query.value, query.limit)
         )
         if not results:
-            raise SvcError("lookup-not-found", "No packaged SVC content matched --keyword.", {"query": query.value})
+            raise SvcError(
+                "lookup-not-found",
+                "No packaged SVC content matched --keyword.",
+                {
+                    "query": query.value,
+                    "hint": LOOKUP_DISCOVERY_HINT,
+                },
+            )
         return LookupResponse(query, results)
 
     def _full_result(self, entry: CatalogEntry) -> LookupResult:

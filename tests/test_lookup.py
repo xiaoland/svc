@@ -35,6 +35,55 @@ def test_name_is_full_path_regex_and_ambiguity_requires_all() -> None:
     ]
 
 
+def test_list_is_catalog_only_path_sorted_and_has_no_query_or_body_fields() -> None:
+    fixture = fixture_lookup()
+
+    def fail_reader(path: str) -> bytes:
+        pytest.fail(f"list unexpectedly read {path}")
+
+    response = CorpusLookup(fixture.catalog, fail_reader).lookup(LookupQuery("list"))
+
+    assert response.as_dict() == {
+        "schema_version": 1,
+        "command": "lookup",
+        "mode": "list",
+        "results": [entry.as_dict() for entry in fixture.catalog.entries],
+    }
+
+
+def test_path_reads_one_exact_normalized_document() -> None:
+    lookup = fixture_lookup()
+    response = lookup.lookup(
+        LookupQuery("path", "sections/working-protocol.md")
+    )
+
+    assert response.as_dict()["query"] == "sections/working-protocol.md"
+    assert [item.path for item in response.results] == [
+        "sections/working-protocol.md"
+    ]
+    assert "mutation gate" in (response.results[0].content or "")
+
+
+@pytest.mark.parametrize(
+    "path",
+    (
+        "",
+        "   ",
+        "../working-protocol.md",
+        "/sections/working-protocol.md",
+        "sections/working-protocol",
+        ".hidden.md",
+        r"sections\working-protocol.md",
+    ),
+)
+def test_path_rejects_non_normalized_non_markdown_identity(path: str) -> None:
+    with pytest.raises(SvcError) as raised:
+        fixture_lookup().lookup(LookupQuery("path", path))
+
+    assert raised.value.code == "invalid-document-path"
+    assert "--list" in raised.value.details["hint"]
+
+
 def test_keyword_is_deterministic_and_returns_paths_not_copied_bodies() -> None:
     lookup = fixture_lookup()
     first = lookup.lookup(LookupQuery("keyword", "task packet mutation gate"))
@@ -48,8 +97,9 @@ def test_keyword_is_deterministic_and_returns_paths_not_copied_bodies() -> None:
 
 def test_invalid_name_regex_is_an_explicit_failure() -> None:
     lookup = fixture_lookup()
-    with pytest.raises(SvcError, match="Invalid --name"):
+    with pytest.raises(SvcError, match="Invalid --name") as raised:
         lookup.lookup(LookupQuery("name", "["))
+    assert "--path" in raised.value.details["hint"]
 
 
 def test_tampered_corpus_is_an_explicit_integrity_failure() -> None:

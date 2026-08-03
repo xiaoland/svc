@@ -9,7 +9,7 @@ import pytest
 import svc_cli.plans as plans
 import svc_cli.project as project
 from svc_cli.errors import SvcError
-from svc_cli.integration import local_config_ignore_body
+from svc_cli.integration import local_config_ignore_body, navigation_body, skill_body
 from svc_cli.plans import apply_local_plan
 from svc_cli.project import (
     AGENTS_FILE,
@@ -47,6 +47,23 @@ def test_init_plan_is_deterministic_and_side_effect_free() -> None:
             DOCS_INDEX_FILE,
             ".gitignore",
         }
+
+
+def test_generated_guidance_is_a_thin_router_to_the_installed_corpus() -> None:
+    skill = skill_body()
+    navigation = navigation_body()
+
+    for content in (skill, navigation):
+        assert "svc lookup --list --json" in content
+        assert "svc lookup --path <path> --json" in content
+        assert "svc lookup --keyword" in content
+
+    assert "This Skill is a router, not a copy of SVC guidance." in skill
+    assert "Consumer-owned instructions" in skill
+    assert "returned plan is not approval" in skill
+    assert "## Declare Development Capabilities" not in skill
+    assert "svc dev setup" not in skill
+    assert "svc self-update" not in skill
 
 
 def test_init_apply_produces_a_healthy_idempotent_project() -> None:

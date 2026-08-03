@@ -20,12 +20,14 @@ No SVC framework document is copied into a consumer repository. There is no cons
 Query a released corpus locally:
 
 ```text
+svc lookup --list --json
+svc lookup --path sections/working-protocol.md
+svc lookup --keyword "task packet mutation gate"
 svc lookup --name 'sections/working-protocol\.md'
 svc lookup --name 'assets/templates/AGENTS\..*\.template\.md' --all
-svc lookup --keyword "task packet mutation gate"
 ```
 
-`--name` is a full-path regular expression, not a document identifier. It returns one document by default and rejects ambiguity; `--all` permits intentionally broad matches. Keyword search is deterministic and local. Its results identify paths and excerpts; resolve a selected path through `--name` to read the authoritative body. Semantic lookup is intentionally not yet a public command.
+`--list` returns path-sorted catalog metadata without returning document bodies. Use one returned normalized source-relative path with `--path` to read and integrity-check exactly that authoritative document. Keyword search is deterministic and local; its candidates identify paths and excerpts, which are also resolved through `--path`. `--name` remains the intentional full-path regular-expression surface: it returns one document by default and rejects ambiguity, while `--all` permits deliberately broad reads. Semantic lookup is intentionally not a public command.
 
 Every command supports stable JSON output through `--json`. Exit code `0` means a ready, healthy, applied, or no-op result; `2` is CLI syntax; `3` means required action, invalid project state, conflict, or blocked plan; and `4` means release integrity, local apply, or installer failure.
 
@@ -54,7 +56,7 @@ Its version means the project says it has adopted that SVC baseline. It does not
 
 `svc.local.json` is an optional, ignored, sparse overlay for the `dev` declaration. It merges objects into the committed configuration and replaces scalar or array values; it cannot change the schema version, adopted SVC version, or any non-`dev` field. The effective configuration must still satisfy schema v2. `init` maintains only its marked `.gitignore` entry and never creates the local file.
 
-The Codex skill at `.agents/skills/svc/SKILL.md` is an operational guide: it explains when and how to use the CLI, but does not copy the canonical SVC corpus. Root `AGENTS.md` and `docs/index.md` remain Consumer-owned from creation. Only their marked SVC navigation blocks, and the installed skill, have generated provenance markers. A user-modified or malformed generated surface blocks refresh rather than being silently replaced.
+The Codex skill at `.agents/skills/svc/SKILL.md` is a compact router to the installed CLI and corpus, not a copy of canonical guidance. Root `AGENTS.md` and `docs/index.md` remain Consumer-owned from creation. Only their marked SVC navigation blocks, and the installed skill, have generated provenance markers. A user-modified or malformed generated surface blocks refresh rather than being silently replaced.
 
 ```text
 svc init <repo> --agent codex
@@ -154,7 +156,7 @@ without invalidating native read. Query/read responses include a compact
 packaged method reference. The canonical reasoning method is discoverable with:
 
 ```text
-svc lookup --name 'sections/working-protocol\.md' --all --json
+svc lookup --path sections/working-protocol.md --json
 ```
 
 The old `telemetry agent-thread analyze` command, normalized-only schema-v2
