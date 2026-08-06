@@ -37,6 +37,14 @@ def base_document() -> dict[str, object]:
                 },
             },
         },
+        "run": {
+            "check": {
+                "argv": ["python", "-m", "pytest"],
+                "cwd": ".",
+                "env_files": [".env.shared"],
+                "env": {"PYTHONUTF8": "1"},
+            }
+        },
     }
 
 
@@ -79,6 +87,14 @@ def test_sparse_overlay_merges_objects_and_replaces_scalars_and_arrays() -> None
             root,
             LOCAL_CONFIG_FILE,
             {
+                "run": {
+                    "check": {
+                        "argv": ["pdm", "run", "test"],
+                        "cwd": "tests",
+                        "env_files": [".env.local"],
+                        "env": {"PYTHONUTF8": "0", "LOCAL": "yes"},
+                    }
+                },
                 "dev": {
                     "profile": "shared",
                     "profiles": {
@@ -99,6 +115,11 @@ def test_sparse_overlay_merges_objects_and_replaces_scalars_and_arrays() -> None
         assert resolved.effective.dev.profile == "shared"
         assert target.access == ["http://127.0.0.1:3000/"]
         assert target.provision.env == {"PORT": "3000"}
+        run = resolved.effective.run["check"]
+        assert run.argv == ["pdm", "run", "test"]
+        assert run.cwd == "tests"
+        assert run.env_files == [".env.local"]
+        assert run.env == {"PYTHONUTF8": "0", "LOCAL": "yes"}
         assert resolved.local_digest is not None
         assert resolved.base_digest != resolved.effective_digest
 
@@ -126,6 +147,7 @@ def test_overlay_refuses_adoption_authority_unknown_paths_and_invalid_effective_
         {"profile": "worktree"},
         {"dev": {"profiles": {"worktree": {"bad": True}}}},
         {"dev": {"profiles": {"worktree": {"targets": {"frontend": {"probe": {"kind": "http", "made_up": True}}}}}}},
+        {"run": {"check": {"unknown": True}}},
     ):
         with pytest.raises(ConfigError):
             parse_local_overlay(json.dumps(overlay).encode())
@@ -135,6 +157,29 @@ def test_overlay_refuses_adoption_authority_unknown_paths_and_invalid_effective_
         write_config(root, PROJECT_CONFIG_FILE, base_document())
         write_config(root, LOCAL_CONFIG_FILE, {"dev": {"profile": "does-not-exist"}})
         with pytest.raises(ConfigError):
+            load_config(root)
+
+
+def test_run_entries_are_strict_and_local_overlay_cannot_create_names() -> None:
+    for entry in (
+        {"argv": []},
+        {"argv": [""]},
+        {"argv": ["tool\0bad"]},
+        {"argv": ["tool"], "cwd": ""},
+        {"argv": ["tool"], "env_files": [""]},
+        {"argv": ["tool"], "env": {"BAD=KEY": "value"}},
+        {"argv": ["tool"], "env": {"KEY": "bad\0value"}},
+    ):
+        document = base_document()
+        document["run"] = {"check": entry}
+        with pytest.raises(ConfigError):
+            parse_project_config(json.dumps(document).encode())
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_config(root, PROJECT_CONFIG_FILE, base_document())
+        write_config(root, LOCAL_CONFIG_FILE, {"run": {"local-only": {"argv": ["tool"]}}})
+        with pytest.raises(ConfigError, match="cannot create run entry"):
             load_config(root)
 
 

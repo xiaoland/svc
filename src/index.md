@@ -61,7 +61,12 @@ docs/index.md              (created when absent, with a bounded marked navigatio
 
 Its version means the project says it has adopted that SVC baseline. It does not assert that Consumer-owned documents match a framework snapshot. The installed package manager remains the authority for the executable version. Schema-v1 projects are never rewritten automatically; migrate their configuration deliberately before `init` or `adopt` can write.
 
-`svc.local.json` is an optional, ignored, sparse overlay for the `dev` declaration. It merges objects into the committed configuration and replaces scalar or array values; it cannot change the schema version, adopted SVC version, or any non-`dev` field. The effective configuration must still satisfy schema v2. `init` maintains only its marked `.gitignore` entry and never creates the local file.
+`svc.local.json` is an optional, ignored, sparse overlay for `dev` and existing
+`run` declarations. It merges objects into the committed configuration and
+replaces scalar or array values; it cannot change the schema version, adopted
+SVC version, or create a local-only run entry. The effective configuration must
+still satisfy schema v2. `init` maintains only its marked `.gitignore` entry
+and never creates the local file.
 
 The Codex skill at `.agents/skills/svc/SKILL.md` is a compact router to the installed CLI and corpus, not a copy of canonical guidance. Root `AGENTS.md` and `docs/index.md` remain Consumer-owned from creation. Only their marked SVC navigation blocks, and the installed skill, have generated provenance markers. A user-modified or malformed generated surface blocks refresh rather than being silently replaced.
 
@@ -80,7 +85,8 @@ CLI/corpus version separately from the adopted project version, and reports
 missing, outdated, or user-modified generated guidance without claiming
 ownership over consumer content. It also lists the selected `dev` profile and
 target names as a declaration-only summary: it never probes, starts, or takes
-over a target. Use `svc dev status` for runtime observation.
+over a target. Use `svc dev status` for runtime observation. Root status also
+lists committed run-entry names without selecting or executing them.
 
 ## Declared Development Capabilities
 
@@ -107,6 +113,49 @@ capability, while host scope requires an explicit host key.
 Interpolation is limited to `${dev.instance}`, `${dev.worktree.id}`, `${dev.profile}`, and `${dev.target}` in declared dev values. Commands are executed as argument arrays without a shell, and configured working directories must remain inside the workspace.
 
 `svc dev setup` is the optional plan-first bridge to Consumer-owned editor/package surfaces. It adds only marked VS Code Tasks or reserved exact root `package.json` scripts that call `svc dev ensure <target>`; apply requires the current exact digest. It never reads `launch.json`, infers a package manager, creates package metadata, removes orphans, or replaces a conflicting Consumer entry.
+
+## Shared Declared Runs
+
+Projects may declare bounded project-owned commands in a separate direct `run`
+map. One entry contains an exact non-shell `argv`, optional `cwd`, ordered
+`env_files`, and inline `env`. Relative paths resolve from the workspace root.
+The local overlay may replace argv, cwd, and env-file arrays and merge env keys
+for an existing committed name. Environment precedence is ambient process,
+then declared files in order, then inline values; malformed, missing, or
+valueless env-file input fails before execution publication. Environment values
+are never written to receipts or SVC output.
+
+```json
+{
+  "schema_version": 2,
+  "svc_version": "11.0.0",
+  "run": {
+    "check": {"argv": ["pdm", "run", "test"]}
+  }
+}
+```
+
+```text
+svc run <entry> [--repo <repo>] [--json]
+svc run --follow <execution-id> [--repo <repo>] [--json]
+svc run --inspect <execution-id> [--repo <repo>] [--json]
+```
+
+The first caller for an effective worktree-local entry owns one foreground
+execution; concurrent local callers follow it. Text mode keeps SVC lifecycle
+lines on stderr and native stdout/stderr on their corresponding streams.
+`--json` suppresses native display and emits one compact receipt on stdout.
+Follow replays captured output and waits; inspect returns current facts without
+replay or waiting. Owner `Ctrl+C` interrupts the command, follower `Ctrl+C`
+only detaches, and ordinary shell `Ctrl+Z`/`bg`/`fg` behavior is retained.
+
+An execution ID addresses local captured output and lifecycle facts only. A
+settled invocation is not reused as fresh work, SVC does not interpret project
+artifacts or results, and the surface has no dependency graph, arbitrary
+arguments, force-new, background, cancel, timeout, readiness, hook, or matcher.
+Exit code `2` remains usage, `3` covers configuration/selection/state/domain
+errors, and `4` covers start, capture, owner-loss, or authority-store failure;
+an exited command otherwise returns its own exit code.
 
 ## Local Agent-Thread Evidence and Analysis
 

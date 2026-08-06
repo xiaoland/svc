@@ -1,0 +1,221 @@
+from __future__ import annotations
+
+import json
+import os
+import sys
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+from svc_cli._execution import ExecutionStore
+from svc_cli.errors import SvcError
+from svc_cli.run.runtime import execute_entry, follow_run, inspect_run, receipt, resolve_run
+
+
+def write_config(root: Path, entry: dict[str, object], local: dict[str, object] | None = None) -> None:
+    (root / "svc.json").write_text(
+        json.dumps({"schema_version": 2, "svc_version": "11.0.0", "run": {"check": entry}}),
+        encoding="utf-8",
+    )
+    if local is not None:
+        (root / "svc.local.json").write_text(json.dumps({"run": {"check": local}}), encoding="utf-8")
+
+
+def test_run_resolution_applies_overlay_env_precedence_and_private_digest(tmp_path: Path) -> None:
+    (tmp_path / ".env.shared").write_text(
+        "FROM_FILE=first\nINLINE=file\nLITERAL=${HOME}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".env.local").write_text("FROM_FILE=second\nLOCAL=yes\n", encoding="utf-8")
+    (tmp_path / "work").mkdir()
+    write_config(
+        tmp_path,
+        {"argv": ["base"], "env_files": [".env.shared"], "env": {"INLINE": "base"}},
+        {
+            "argv": [sys.executable, "-c", "pass"],
+            "cwd": "work",
+            "env_files": [".env.shared", ".env.local"],
+            "env": {"INLINE": "inline"},
+        },
+    )
+    run = resolve_run(
+        tmp_path,
+        "check",
+        namespace="fixture",
+        ambient={"FROM_FILE": "ambient", "HOME": "/must-not-interpolate"},
+    )
+    assert run.argv[0] == sys.executable
+    assert run.cwd == (tmp_path / "work").resolve()
+    assert run.environment["FROM_FILE"] == "second"
+    assert run.environment["LOCAL"] == "yes"
+    assert run.environment["INLINE"] == "inline"
+    assert run.environment["LITERAL"] == "${HOME}"
+    assert "inline" not in json.dumps({"digest": run.effective_entry_digest})
+
+
+def test_execution_record_and_receipt_never_store_environment_values(tmp_path: Path) -> None:
+    secret = "not-for-records"
+    write_config(
+        tmp_path,
+        {"argv": [sys.executable, "-c", "pass"], "env": {"PRIVATE_VALUE": secret}},
+    )
+    store = ExecutionStore(tmp_path / "runtime")
+    outcome = execute_entry(
+        tmp_path,
+        "check",
+        stdout_sink=None,
+        stderr_sink=None,
+        namespace="fixture",
+        store=store,
+    )
+    assert outcome.record is not None
+    assert secret not in json.dumps(outcome.record.as_dict())
+    assert secret not in json.dumps(receipt(outcome, "run"))
+
+
+def test_interrupt_after_publication_returns_the_known_execution_receipt(tmp_path: Path) -> None:
+    write_config(tmp_path, {"argv": [sys.executable, "-c", "pass"]})
+    store = ExecutionStore(tmp_path / "runtime")
+
+    def interrupt_after_selection(_record: object, _role: object) -> None:
+        raise KeyboardInterrupt
+
+    outcome = execute_entry(
+        tmp_path,
+        "check",
+        stdout_sink=None,
+        stderr_sink=None,
+        on_selected=interrupt_after_selection,
+        namespace="fixture",
+        store=store,
+    )
+    assert outcome.record is not None
+    assert outcome.record.state == "interrupted"
+    assert outcome.record.process_id is None
+    assert receipt(outcome, "run")["execution_id"] == outcome.record.execution_id
+
+
+@pytest.mark.parametrize("content", ["INVALID LINE\n", "VALUE\n", "VALUE=${HOME}\nBAD='unterminated\n"])
+def test_run_resolution_rejects_malformed_or_valueless_env_without_publication(tmp_path: Path, content: str) -> None:
+    (tmp_path / ".env").write_text(content, encoding="utf-8")
+    write_config(tmp_path, {"argv": [sys.executable, "-c", "pass"], "env_files": [".env"]})
+    store = ExecutionStore(tmp_path / "runtime")
+    with pytest.raises(SvcError):
+        resolve_run(tmp_path, "check", namespace="fixture")
+    assert not [path for path in store.root.iterdir() if path.name != "slots"]
+
+
+def test_concurrent_entry_callers_share_one_execution_and_later_call_reruns(tmp_path: Path) -> None:
+    counter = tmp_path / "counter.txt"
+    script = (
+        "from pathlib import Path; import time; "
+        f"p=Path({str(counter)!r}); p.open('a').write('1\\n'); "
+        "print('started', flush=True); time.sleep(.25)"
+    )
+    write_config(tmp_path, {"argv": [sys.executable, "-c", script]})
+    store = ExecutionStore(tmp_path / "runtime")
+    outcomes = []
+
+    def invoke() -> None:
+        outcomes.append(
+            execute_entry(
+                tmp_path,
+                "check",
+                stdout_sink=None,
+                stderr_sink=None,
+                namespace="fixture",
+                store=store,
+            )
+        )
+
+    first = threading.Thread(target=invoke)
+    second = threading.Thread(target=invoke)
+    first.start()
+    time.sleep(0.05)
+    second.start()
+    first.join()
+    second.join()
+    assert counter.read_text(encoding="utf-8") == "1\n"
+    assert {outcome.caller_role for outcome in outcomes} == {"owner", "follower"}
+    assert len({outcome.record.execution_id for outcome in outcomes}) == 1
+
+    later = execute_entry(
+        tmp_path,
+        "check",
+        stdout_sink=None,
+        stderr_sink=None,
+        namespace="fixture",
+        store=store,
+    )
+    assert later.caller_role == "owner"
+    assert later.record.execution_id != outcomes[0].record.execution_id
+    assert counter.read_text(encoding="utf-8") == "1\n1\n"
+
+
+def test_follow_and_inspect_use_record_authority_after_config_changes(tmp_path: Path) -> None:
+    write_config(tmp_path, {"argv": [sys.executable, "-c", "print('evidence')"]})
+    store = ExecutionStore(tmp_path / "runtime")
+    owner = execute_entry(
+        tmp_path,
+        "check",
+        stdout_sink=None,
+        stderr_sink=None,
+        namespace="fixture",
+        store=store,
+    )
+    (tmp_path / "svc.json").write_text("{}", encoding="utf-8")
+    replay = bytearray()
+
+    class Sink:
+        def write(self, data: bytes) -> int:
+            replay.extend(data)
+            return len(data)
+
+        def flush(self) -> None:
+            pass
+
+    followed = follow_run(
+        tmp_path,
+        owner.record.execution_id,
+        stdout_sink=Sink(),  # type: ignore[arg-type]
+        stderr_sink=None,
+        namespace="fixture",
+        store=store,
+    )
+    inspected = inspect_run(
+        tmp_path,
+        owner.record.execution_id,
+        namespace="fixture",
+        store=store,
+    )
+    assert replay == b"evidence\n"
+    assert followed.record == inspected.record == owner.record
+    assert receipt(inspected, "run inspect")["state"] == "exited"
+
+
+def test_run_follow_rejects_dev_domain_and_other_workspace(tmp_path: Path) -> None:
+    store = ExecutionStore(tmp_path / "runtime")
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    write_config(first, {"argv": [sys.executable, "-c", "pass"]})
+    dev = store.publish(
+        domain="dev",
+        entry="server",
+        workspace_id="unrelated",
+        effective_entry_digest="digest",
+        slot_key="a" * 48,
+        argv=(sys.executable,),
+        cwd=first,
+        capture="merged",
+    )
+    dev.merged_stream.close()
+    with pytest.raises(SvcError, match="does not belong"):
+        follow_run(first, dev.record.execution_id, stdout_sink=None, stderr_sink=None, namespace="fixture", store=store)
+
+    owner = execute_entry(first, "check", stdout_sink=None, stderr_sink=None, namespace="fixture", store=store)
+    with pytest.raises(SvcError, match="different workspace"):
+        inspect_run(second, owner.record.execution_id, namespace="fixture", store=store)

@@ -10,13 +10,13 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
+from svc_cli._execution import ExecutionStore, LaunchSpec, start_isolated
 from svc_cli.config import ExecProbe, ExecProvision, HttpProbe, TcpProbe, TargetConfig
-from svc_cli.dev.identity import resolve_workspace_identity
-from svc_cli.dev.runtime import Launch, _cleanup_on_interrupt, _provision, ensure_target, probe_exec, probe_http, probe_target, probe_tcp
+from svc_cli.dev.identity import resolve_capability_identity, resolve_workspace_identity
+from svc_cli.dev.runtime import _cleanup_on_interrupt, _provision, ensure_target, probe_exec, probe_http, probe_target, probe_tcp
 from svc_cli.errors import SvcError
 
 
@@ -35,7 +35,7 @@ def test_http_probe_enforces_loopback_and_treats_redirect_as_an_observation() ->
         probe.url,
         timeout=1,
         resolver=lambda host, port: ("127.0.0.1",),
-        opener=lambda request, timeout, context: _Response(302),
+        opener=lambda method, path, headers, timeout: _Response(302),
     )
     assert not observed.healthy
     assert observed.responded
@@ -46,14 +46,18 @@ def test_http_probe_enforces_loopback_and_treats_redirect_as_an_observation() ->
             probe.url,
             timeout=1,
             resolver=lambda host, port: ("198.51.100.10",),
-            opener=lambda request, timeout, context: _Response(200),
+            opener=lambda method, path, headers, timeout: _Response(200),
         )
 
 
 def test_http_probe_pins_the_validated_address_instead_of_resolving_again() -> None:
+    requests: list[tuple[str, str]] = []
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib handler contract
-            self.send_response(204)
+            requests.append((self.path, self.headers["Host"]))
+            self.send_response(302)
+            self.send_header("Location", "/followed")
             self.end_headers()
 
         def log_message(self, format: str, *args: object) -> None:
@@ -65,8 +69,9 @@ def test_http_probe_pins_the_validated_address_instead_of_resolving_again() -> N
     try:
         probe = HttpProbe(kind="http", url=f"http://unresolvable.example:{server.server_port}/", success_status=[200, 299])
         observed = probe_http(probe, probe.url, timeout=1, resolver=lambda host, port: ("127.0.0.1",))
-        assert observed.healthy
-        assert observed.status_code == 204
+        assert not observed.healthy
+        assert observed.status_code == 302
+        assert requests == [("/", f"unresolvable.example:{server.server_port}")]
     finally:
         server.shutdown()
         server.server_close()
@@ -92,6 +97,7 @@ def test_exec_probe_enforces_its_declared_output_limit() -> None:
 def test_worktree_scope_refuses_static_probe_and_manual_never_provisions() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        store = ExecutionStore(root / "runtime")
         workspace = resolve_workspace_identity(root, namespace="fixture")
         static = TargetConfig(
             probe={"kind": "http", "url": "http://127.0.0.1:1/health"},
@@ -128,6 +134,7 @@ def test_worktree_scope_refuses_static_probe_and_manual_never_provisions() -> No
 def test_owned_early_exit_reports_only_attempt_cleanup() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        store = ExecutionStore(root / "runtime")
         write_config(
             root,
             {
@@ -152,7 +159,7 @@ def test_owned_early_exit_reports_only_attempt_cleanup() -> None:
             },
         )
         with pytest.raises(SvcError) as raised:
-            ensure_target(root, "fails", namespace="fixture")
+            ensure_target(root, "fails", namespace="fixture", store=store)
         assert raised.value.code == "provision-exited"
         assert raised.value.details["cleanup"] == "completed"
         assert "log_path" in raised.value.details
@@ -161,6 +168,7 @@ def test_owned_early_exit_reports_only_attempt_cleanup() -> None:
 def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        store = ExecutionStore(root / "runtime")
         port = free_port()
         counter = root / "starts.txt"
         server = (
@@ -196,7 +204,7 @@ def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None
 
         def ensure() -> None:
             try:
-                results.append(ensure_target(root, "server", namespace="fixture"))
+                results.append(ensure_target(root, "server", namespace="fixture", store=store))
             except BaseException as error:  # test records concurrent failures
                 failures.append(error)
 
@@ -210,6 +218,12 @@ def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None
             assert failures == []
             assert sorted(str(result["status"]) for result in results) == ["reused", "started"]
             assert counter.read_text(encoding="utf-8") == "1\n"
+            started_result = next(result for result in results if result["status"] == "started")
+            slot_key = str(started_result["capability"]["lock_key"])
+            execution_id = store.read_slot("dev", slot_key)
+            assert execution_id is not None
+            assert store.read(execution_id).state == "released"
+            assert started_result["log_path"].endswith("output.log")
         finally:
             started = next((result for result in results if result.get("status") == "started"), None)
             if started is not None:
@@ -218,34 +232,54 @@ def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None
 
 def test_keyboard_interrupt_cleans_up_only_the_current_launch() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        log = Path(tmp) / "launch.log"
-        stream = log.open("wb")
-        process = subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(30)"],
-            stdout=stream,
-            stderr=stream,
-            start_new_session=os.name != "nt",
+        root = Path(tmp)
+        store = ExecutionStore(root / "runtime")
+        published = store.publish(
+            domain="dev",
+            entry="app",
+            workspace_id="workspace",
+            effective_entry_digest="digest",
+            slot_key="a" * 48,
+            argv=(sys.executable,),
+            cwd=root,
+            capture="merged",
         )
-        stream.close()
+        owned = start_isolated(
+            store,
+            published,
+            LaunchSpec((sys.executable, "-c", "import time; time.sleep(30)"), root, os.environ.copy()),
+        )
+        assert not hasattr(owned, "state")
         with pytest.raises(SvcError) as raised:
-            with _cleanup_on_interrupt(Launch(process, log), {"command": "dev ensure"}):
+            with _cleanup_on_interrupt(store, owned, {"command": "dev ensure"}):
                 raise KeyboardInterrupt
         assert raised.value.code == "ensure-interrupted"
         assert raised.value.details["cleanup"] == "completed"
-        assert process.poll() is not None
+        assert owned.process.poll() is not None
 
 
 def test_activation_timeout_is_structured_and_cleans_its_owned_group() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        workspace = resolve_workspace_identity(Path(tmp), namespace="fixture")
+        root = Path(tmp)
+        workspace = resolve_workspace_identity(root, namespace="fixture")
+        identity = resolve_capability_identity(
+            workspace,
+            scope="repository",
+            profile="local",
+            target="activation",
+            endpoint_identity="exec:activation",
+        )
+        store = ExecutionStore(root / "runtime")
         provision = ExecProvision(kind="exec", mode="activate", argv=[sys.executable, "-c", "import time; time.sleep(30)"])
         with pytest.raises(SvcError) as raised:
             _provision(
+                store,
                 provision,
                 workspace,
                 "local",
                 "activation",
-                SimpleNamespace(runtime_key="fixture"),
+                identity,
+                "digest",
                 timeout=0.01,
             )
         assert raised.value.code == "activation-timeout"

@@ -15,6 +15,39 @@ A Constraint lens does not select Product TDD automatically. Environment, depend
 
 Start with one document. Split only when topology, authority, contracts, or realization have distinct consumers or cadence. Use [the Product TDD template](../assets/templates/product-tdd.template.md).
 
+## Shared Execution Contract
+
+`run` and `dev` are separate public/configuration domains that share only a
+private mechanical execution boundary. Domain controllers derive convergence
+identity and retain semantic authority: `run` owns a worktree-local active slot
+for one resolved bounded command; `dev` owns capability identity, probes,
+conflict, readiness, and later reuse. The shared mechanism owns one concrete
+execution ID, atomic lifecycle facts, process ownership, policy-selected
+capture, observation, settlement, and explicit release.
+
+One active-slot lock is the ownership authority. The winning run caller holds
+it from publication through durable settlement; contenders follow the active
+record and never infer freshness from an older settled receipt. The execution
+record is authoritative for its domain, workspace identity, resolved argv/cwd,
+non-secret env-file paths, private effective-entry digest, log addresses,
+owner PID, timestamps, and mechanical state. Native stdout/stderr remain
+project-owned byte streams addressed through the execution ID and are not
+embedded in the receipt.
+
+Run lifecycle is `starting -> running -> exited | interrupted | start-failed |
+capture-failed | owner-lost`. Dev may additionally request `released` only
+after its own readiness proof. An abandoned lifetime lock plus an active record
+proves owner loss; the first later caller records that fact without starting a
+replacement in the same invocation. PID observation alone never grants
+takeover or kill authority.
+
+Foreground run inherits stdin and the terminal process group, captures stdout
+and stderr separately, and stays owned until child exit plus both stream EOFs.
+An owner interrupt affects the execution; a follower interrupt only detaches
+that caller. Dev provisioners remain isolated with null stdin and merged logs.
+No shared public lifecycle API, daemon, process-tree guarantee, output-order
+invention, readiness state, or project-artifact model follows from this reuse.
+
 ## Agent Evidence Query Contract
 
 This contract is admitted because telemetry acquisition, bundle validation, query, read, provider adapters, and Agent callers must share one authority and compatibility boundary. Product TDD owns the cross-unit wire and authority rules; executable schemas, tests, and runtime code own field-level enforcement. Product rationale and the Agent's semantic method remain in Product Truth and the Working Protocol.

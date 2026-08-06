@@ -61,16 +61,22 @@ docs/index.md              (created when absent, with a bounded generated naviga
 }
 ```
 
-`svc.local.json` is an optional, ignored sparse overlay for only the `dev` configuration. It cannot change the schema or adopted version, and its merged result must remain valid. `init` maintains just its marked ignore block; it never writes a local configuration file. Schema-v1 projects are write-blocked until deliberately migrated to schema v2.
+`svc.local.json` is an optional, ignored sparse overlay for `dev` and existing
+`run` declarations. It cannot change the schema or adopted version, create a
+local-only run name, or produce an invalid effective configuration. `init`
+maintains just its marked ignore block; it never writes a local configuration
+file. Schema-v1 projects are write-blocked until deliberately migrated to
+schema v2.
 
 Start with `svc status --json` in any repository. It is read-only and returns a
 compact JSON preflight state—`unadopted`, `malformed`, `actionable`, or
 `healthy`—with the next action and its Human-authorization requirement. An
 `unadopted` result means ask for authorization before running `svc init`; do
-not use `init` to discover state. Status summarizes declared dev profile and
-target names without probing them; use `svc dev status` when runtime observation
-is needed. Every current `--json` response is one compact JSON value; JSONL is
-reserved for a future command with meaningful progress events.
+not use `init` to discover state. Status summarizes declared dev profile,
+target names, and committed run-entry names without executing them; use
+`svc dev status` when runtime observation is needed. Every current `--json`
+response is one compact JSON value; JSONL is reserved for a future command with
+meaningful progress events.
 
 Everything unmarked in `AGENTS.md` and `docs/index.md` remains Consumer-owned. The Codex skill is a compact router to the installed CLI and canonical corpus, not a duplicate of framework guidance. Modified generated blocks, skills, or local-config ignore section block refresh for human review.
 
@@ -98,6 +104,46 @@ instance; host scope requires a declared `host_key`.
 Dev values may interpolate only `${dev.instance}`, `${dev.worktree.id}`, `${dev.profile}`, and `${dev.target}`. Commands are argument arrays, not shell snippets, and their configured working directories must remain inside the workspace.
 
 `svc dev setup` is a deliberately narrow bridge for consumer-owned files: it can add marked VS Code Tasks or exact root `package.json` scripts that invoke `svc dev ensure <target>`. It is plan-first; `--apply` requires the current exact digest. It never reads `launch.json`, selects a package manager, creates package metadata, or overwrites a conflicting consumer entry.
+
+## Run One Shared Declared Command
+
+Use a separate `run` map for bounded project-owned commands that Humans,
+Agents, editor carriers, or CI should invoke through the same project name:
+
+```json
+{
+  "schema_version": 2,
+  "svc_version": "11.0.0",
+  "run": {
+    "check": {
+      "argv": ["pdm", "run", "test"],
+      "env_files": [".env.shared"],
+      "env": {"PYTHONUTF8": "1"}
+    }
+  }
+}
+```
+
+```bash
+svc run check --repo /path/to/project
+svc run --follow <execution-id> --repo /path/to/project
+svc run --inspect <execution-id> --repo /path/to/project --json
+```
+
+One caller owns the foreground process; concurrent local callers of the same
+effective worktree entry follow that execution instead of starting it again.
+The execution ID addresses captured stdout/stderr and a bounded receipt for
+handoff. A later explicit entry invocation runs again—settled receipts are not
+freshness or acceptance claims. Text mode preserves native stdout/stderr and
+puts SVC lifecycle facts on stderr; `--json` suppresses native display and
+returns one compact receipt.
+
+`svc.local.json` may replace argv, cwd, and env-file arrays and merge inline env
+for an existing committed entry. Relative paths resolve from the workspace
+root. Environment files are strict and load in order before inline env; raw
+environment values are never stored in the receipt. `run` has no shell string,
+dependency graph, arbitrary arguments, background mode, readiness, cache,
+artifact model, or project-result verdict.
 
 ## Analyze Agent Task Evidence
 

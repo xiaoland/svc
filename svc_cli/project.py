@@ -188,6 +188,7 @@ def inspect_status(repo: Path) -> dict[str, object]:
     project = _inspect_project(root, corpus.svc_version)
     configuration, resolved = _inspect_configuration(root, project)
     dev = _inspect_dev_declaration(resolved)
+    run = _inspect_run_declaration(resolved)
     guidance = [
         _inspect_guidance(root, CODEX_SKILL_FILE, "codex-skill", inspect_skill),
         _inspect_guidance(root, AGENTS_FILE, "agents-navigation", inspect_navigation),
@@ -221,6 +222,7 @@ def inspect_status(repo: Path) -> dict[str, object]:
         "project": project,
         "configuration": configuration,
         "dev": dev,
+        "run": run,
         "managed_ignore": managed_ignore,
         "guidance": guidance,
         "healthy": healthy,
@@ -354,6 +356,18 @@ def _inspect_dev_declaration(resolved: ResolvedConfig | None) -> dict[str, objec
         "observation": "declaration-only",
         "profile": dev.profile,
         "targets": sorted(dev.profiles[dev.profile].targets),
+    }
+
+
+def _inspect_run_declaration(resolved: ResolvedConfig | None) -> dict[str, object]:
+    result: dict[str, object] = {"observation": "declaration-only", "entries": []}
+    if resolved is None:
+        return {"status": "unavailable", **result}
+    entries = sorted(resolved.base.run)
+    return {
+        "status": "declared" if entries else "not-declared",
+        "observation": "declaration-only",
+        "entries": entries,
     }
 
 

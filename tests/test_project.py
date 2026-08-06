@@ -82,7 +82,13 @@ def test_init_apply_produces_a_healthy_idempotent_project() -> None:
         assert (root / DOCS_INDEX_FILE).is_file()
         assert b"svc:begin local-config" in (root / ".gitignore").read_bytes()
         assert not (root / "svc.local.json").exists()
-        assert inspect_status(root)["healthy"]
+        initial_status = inspect_status(root)
+        assert initial_status["healthy"]
+        assert initial_status["run"] == {
+            "status": "not-declared",
+            "observation": "declaration-only",
+            "entries": [],
+        }
 
         repeat = plan_init(root)
         assert repeat.status == "noop"
@@ -256,6 +262,24 @@ def test_status_reports_installed_runtime_version_mismatch(monkeypatch: pytest.M
         assert not mismatch["healthy"]
 
 
+def test_status_lists_run_entries_as_declarations_without_execution(tmp_path: Path) -> None:
+    initial = plan_init(tmp_path)
+    apply_local_plan(initial, initial.digest)
+    configuration = json.loads((tmp_path / PROJECT_FILE).read_text(encoding="utf-8"))
+    configuration["run"] = {
+        "z-last": {"argv": ["never-start-this"]},
+        "a-first": {"argv": ["never-start-this-either"]},
+    }
+    (tmp_path / PROJECT_FILE).write_text(json.dumps(configuration), encoding="utf-8")
+
+    status = inspect_status(tmp_path)
+    assert status["run"] == {
+        "status": "declared",
+        "observation": "declaration-only",
+        "entries": ["a-first", "z-last"],
+    }
+
+
 def test_status_makes_unadopted_state_and_authorization_gate_explicit(tmp_path: Path) -> None:
     before = tree_bytes(tmp_path)
 
@@ -269,6 +293,11 @@ def test_status_makes_unadopted_state_and_authorization_gate_explicit(tmp_path: 
         "observation": "declaration-only",
         "profile": None,
         "targets": [],
+    }
+    assert status["run"] == {
+        "status": "unavailable",
+        "observation": "declaration-only",
+        "entries": [],
     }
     assert status["next"] == {
         "action": "request-adoption-authorization",

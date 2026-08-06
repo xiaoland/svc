@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
+import sys
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -277,3 +279,85 @@ def test_dev_setup_cli_is_plan_then_exact_apply() -> None:
         assert code == EXIT_OK
         assert applied["status"] == "applied"
         assert '"svc:dev:app": "svc dev ensure app"' in (root / "package.json").read_text(encoding="utf-8")
+
+
+def test_run_json_is_one_receipt_and_suppresses_native_output() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "svc.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "svc_version": "11.0.0",
+                    "run": {
+                        "fails": {
+                            "argv": [sys.executable, "-c", "import sys; print('native'); print('diagnostic', file=sys.stderr); sys.exit(7)"],
+                            "env": {"PRIVATE_VALUE": "must-not-appear"},
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        code, stdout, stderr = invoke_text(["run", "fails", "--repo", str(root), "--json"])
+        assert (code, stderr) == (7, "")
+        payload = assert_compact_json(stdout)
+        assert payload["state"] == "exited"
+        assert payload["exit_code"] == 7
+        assert stdout.count("\n") == 1
+        assert "must-not-appear" not in stdout
+
+        execution_id = str(payload["execution_id"])
+        code, inspected_stdout, inspected_stderr = invoke_text(
+            ["run", "--inspect", execution_id, "--repo", str(root), "--json"]
+        )
+        assert (code, inspected_stderr) == (EXIT_OK, "")
+        inspected = assert_compact_json(inspected_stdout)
+        assert inspected["command"] == "run inspect"
+        assert inspected["execution_id"] == execution_id
+
+
+def test_run_text_keeps_native_channels_and_wrapper_facts_separate() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "svc.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "svc_version": "11.0.0",
+                    "run": {
+                        "channels": {
+                            "argv": [
+                                sys.executable,
+                                "-c",
+                                "import sys; print('native-out'); print('native-err', file=sys.stderr)",
+                            ]
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        completed = subprocess.run(
+            [sys.executable, "-m", "svc_cli.cli", "run", "channels", "--repo", str(root)],
+            cwd=Path(__file__).parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode == 0
+        assert completed.stdout == "native-out\n"
+        assert "native-err\n" in completed.stderr
+        assert "svc run channels: owner" in completed.stderr
+        assert "$ " in completed.stderr
+        assert "svc run channels: exited 0" in completed.stderr
+
+
+def test_run_grammar_requires_exactly_one_selector() -> None:
+    code, stdout, stderr = invoke_text(["run", "--json"])
+    assert (code, stdout) == (2, "")
+    assert assert_compact_json(stderr)["code"] == "invalid-cli-usage"
+
+    code, stdout, stderr = invoke_text(["run", "check", "--follow", "bad", "--json"])
+    assert (code, stdout) == (2, "")
+    assert assert_compact_json(stderr)["code"] == "invalid-cli-usage"

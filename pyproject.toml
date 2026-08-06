@@ -8,6 +8,8 @@ dependencies = [
     "pydantic<3,>=2.13",
     "platformdirs<5,>=4",
     "filelock<4,>=3.29",
+    "python-dotenv<2,>=1.2",
+    "urllib3<3,>=2.7",
 ]
 
 [dependency-groups]
@@ -59,6 +61,14 @@ files = [
     "svc_cli/cli.py",
     "svc_cli/config.py",
     "svc_cli/errors.py",
+    "svc_cli/_execution.py",
+    "svc_cli/project.py",
+    "svc_cli/workspace.py",
+    "svc_cli/dev/identity.py",
+    "svc_cli/dev/readiness.py",
+    "svc_cli/dev/runtime.py",
+    "svc_cli/run/__init__.py",
+    "svc_cli/run/runtime.py",
     "svc_cli/analysis/__init__.py",
     "svc_cli/analysis/protocol.py",
     "svc_cli/analysis/query.py",
@@ -104,6 +114,20 @@ forbidden_modules = [
     "requests",
     "httpx",
 ]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Shared workspace identity remains public-domain neutral"
+type = "forbidden"
+source_modules = ["svc_cli.workspace"]
+forbidden_modules = ["svc_cli.dev", "svc_cli.run"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Shared execution mechanics remain public-domain neutral"
+type = "forbidden"
+source_modules = ["svc_cli._execution"]
+forbidden_modules = ["svc_cli.dev", "svc_cli.run"]
 allow_indirect_imports = true
 
 [tool.pytest.ini_options]

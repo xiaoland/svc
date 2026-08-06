@@ -63,6 +63,26 @@ derived navigation, not redaction; SVC provides no confidentiality, privacy
 mode, or sandbox. The caller owns source selection, output storage, access
 control, retention, and disclosure.
 
+## Shared Declared Runs
+
+SVC provides a narrow bounded-run collaboration surface for project-owned
+development and acceptance commands. A project names one exact command; local
+Human and Agent callers expressing that same effective intent converge on one
+observable execution instead of rerunning it merely to share progress or a
+handoff. The starter remains the foreground owner, while other callers can
+follow captured native output or inspect the execution receipt.
+
+The observable outcome is one execution ID, recoverable command output, and
+honest terminal facts that survive caller handoff while local runtime storage
+survives. A settled receipt is evidence about that invocation, never a cached
+freshness claim or an acceptance verdict. Project tools continue to own test,
+build, lint, and artifact semantics; SVC does not add a workflow graph,
+dependency system, background runner, readiness model, or command interpreter.
+
+Declared bounded runs and long-lived dev capabilities remain separate public
+domains. Both may reuse private process-attempt mechanics, but `svc dev` alone
+owns capability readiness, scope, reuse, and release after readiness.
+
 ## Expansion Rule
 
 Split the single file only when real content has distinct consumers or change cadence. Common pressure-driven splits are drivers, behavior, scope, glossary, and derived domain structure. Every new file needs an owner and content at creation time.

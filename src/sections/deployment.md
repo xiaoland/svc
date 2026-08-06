@@ -6,6 +6,31 @@ Create it only when operators or developers need stable information that code, c
 
 Reality work may use logs, metrics, traces, and runbooks as evidence, but the diagnosed cause selects the final owner. Keep code-local recurrence tripwires in the nearest local `AGENTS.md` and product promises in product truth.
 
+## Local Execution Runtime
+
+Shared execution evidence lives under the platform user runtime directory in
+an `svc/execution` tree. Each UUIDv4 execution has one strict atomically
+replaced JSON record and policy-selected byte logs; run active-slot pointers
+and locks are derived from the workspace namespace and effective entry. Paths,
+records, and domain identifiers are validated before access. Files request
+user-only permissions where supported, but this is the established same-user
+trust boundary, not protection from a hostile process under the same account.
+
+The runtime is local operational evidence, not archival storage. It may be
+removed by reboot or platform cleanup, and the first slice adds neither an
+automatic retention policy nor a reset command. Settled records are not
+automatically deleted. Missing, malformed, mismatched, or partially published
+authority fails closed so SVC cannot start a duplicate or fabricate a receipt.
+Writes use same-directory temporary files and atomic replacement.
+
+The initiating run CLI retains the lifetime lock and child handle. If it is
+lost uncatchably, an orphan child may remain; the next caller may record
+`owner-lost` only after acquiring the abandoned lock and must not replace the
+execution in that invocation. Dev may deliberately persist `released` after
+readiness and then relinquish its handle. After release, later dev authority
+comes from capability probes rather than the historical PID, and complete
+process-lifetime log capture is not promised.
+
 ## Agent Evidence Runtime
 
 The telemetry runtime owns exact provider-source selection, bounded read-only capture, successful bundle validation, migration, and recovery. A schema-v3 authority core contains minimal `manifest.json`, captured `native.bin`, and validated `native-index.jsonl` framing. One evidence digest binds native and framing bytes. Optional `trajectory.jsonl` is rebuildable projection cache; its counts, capabilities, and loss summary are not authority. Export opens the selected source read-only, creates only an absent output, never overwrites, and keeps source and output distinct. An interrupted process may leave an invalid partial target; consumers validate before use, and the caller removes that target before retry.

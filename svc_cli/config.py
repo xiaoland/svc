@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, Mapping, TypeAlias, overload
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from .catalog import require_semver
 
@@ -127,14 +127,56 @@ class DevConfig(_StrictModel):
         return self
 
 
+class RunEntry(_StrictModel):
+    argv: list[str] = Field(min_length=1)
+    cwd: str = "."
+    env_files: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("argv")
+    @classmethod
+    def validate_argv(cls, value: list[str]) -> list[str]:
+        if not value[0]:
+            raise ValueError("argv[0] must be non-empty")
+        if any("\0" in item for item in value):
+            raise ValueError("argv must not contain NUL")
+        return value
+
+    @field_validator("cwd")
+    @classmethod
+    def validate_cwd(cls, value: str) -> str:
+        if not value or "\0" in value:
+            raise ValueError("cwd must be non-empty and NUL-free")
+        return value
+
+    @field_validator("env_files")
+    @classmethod
+    def validate_env_files(cls, value: list[str]) -> list[str]:
+        if any(not item or "\0" in item for item in value):
+            raise ValueError("env_files entries must be non-empty and NUL-free")
+        return value
+
+    @field_validator("env")
+    @classmethod
+    def validate_env(cls, value: dict[str, str]) -> dict[str, str]:
+        for key, item in value.items():
+            if not key or "=" in key or "\0" in key:
+                raise ValueError("environment keys must be non-empty and contain neither '=' nor NUL")
+            if "\0" in item:
+                raise ValueError("environment values must not contain NUL")
+        return value
+
+
 class ProjectConfig(_StrictModel):
     schema_version: Literal[2]
     svc_version: str = Field(min_length=1)
     dev: DevConfig | None = None
+    run: dict[str, RunEntry] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_svc_version(self) -> "ProjectConfig":
         require_semver(self.svc_version, "svc_version")
+        _validate_names(self.run, "run entry")
         return self
 
 
@@ -162,7 +204,7 @@ def load_config(repo: Path) -> ResolvedConfig:
         return ResolvedConfig(base, None, base, base_digest, None, base_digest)
 
     local = _load_required_json(local_path, LOCAL_CONFIG_FILE)
-    _validate_local_overlay(local)
+    _validate_local_overlay(local, committed_run_entries=set(base.run))
     effective_data = _merge(base_data, local)
     effective = _validate_project(effective_data, "effective configuration")
     return ResolvedConfig(
@@ -258,10 +300,28 @@ def _validate_project(value: dict[str, Any], source: str) -> ProjectConfig:
         raise ConfigError(f"{source} does not match schema v{CONFIG_SCHEMA_VERSION}: {error}") from error
 
 
-def _validate_local_overlay(value: dict[str, Any]) -> None:
-    _validate_overlay_object(value, {"dev"}, "$")
+def _validate_local_overlay(value: dict[str, Any], *, committed_run_entries: set[str] | None = None) -> None:
+    _validate_overlay_object(value, {"dev", "run"}, "$")
     if "dev" in value:
         _validate_overlay_dev(value["dev"], "$.dev")
+    if "run" in value:
+        _validate_overlay_run(value["run"], "$.run", committed_run_entries)
+
+
+def _validate_overlay_run(value: object, path: str, committed_entries: set[str] | None) -> None:
+    if not isinstance(value, dict):
+        return
+    try:
+        _validate_names(value, "run entry")
+    except ValueError as error:
+        raise ConfigError(str(error)) from error
+    if committed_entries is not None:
+        local_only = sorted(set(value) - committed_entries)
+        if local_only:
+            raise ConfigError(f"{LOCAL_CONFIG_FILE} cannot create run entry {local_only[0]!r}")
+    for name, entry in value.items():
+        if isinstance(entry, dict):
+            _validate_overlay_object(entry, {"argv", "cwd", "env_files", "env"}, f"{path}.{name}")
 
 
 def _validate_overlay_dev(value: object, path: str) -> None:

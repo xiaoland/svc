@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Never, Sequence, cast
@@ -23,6 +25,7 @@ from .lookup import (
     LookupQuery,
 )
 from .project import inspect_status, plan_adopt, plan_init
+from .run.runtime import execute_entry, follow_run, inspect_run, outcome_exit_code, receipt
 from .release import catalog, runtime_version
 from .telemetry.agent_threads import ArchiveFilter
 from .telemetry.service import (
@@ -138,6 +141,14 @@ def _parser() -> argparse.ArgumentParser:
     setup_mode.add_argument("--apply", metavar="PLAN_DIGEST")
     dev_setup.add_argument("--json", action="store_true", dest="json_output")
 
+    run = subparsers.add_parser("run", help="Execute, follow, or inspect one declared bounded run")
+    run.add_argument("entry", nargs="?")
+    run_selection = run.add_mutually_exclusive_group()
+    run_selection.add_argument("--follow", metavar="EXECUTION_ID")
+    run_selection.add_argument("--inspect", metavar="EXECUTION_ID")
+    run.add_argument("--repo", default=".")
+    run.add_argument("--json", action="store_true", dest="json_output")
+
     telemetry = subparsers.add_parser("telemetry", help="Collect explicit local observability evidence")
     telemetry_resources = telemetry.add_subparsers(dest="telemetry_resource", required=True)
     agent_thread = telemetry_resources.add_parser(
@@ -200,6 +211,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
     try:
         args = parser.parse_args(raw_argv)
+        if args.command == "run":
+            selected = sum(value is not None for value in (args.entry, args.follow, args.inspect))
+            if selected != 1:
+                raise CliUsageError("svc run requires exactly one entry, --follow ID, or --inspect ID")
     except CliUsageError as error:
         if raw_argv[:1] == ["analysis"] or "--json" in raw_argv:
             _emit_json(
@@ -273,6 +288,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             payload = ensure_target(Path(args.repo), args.target)
             _emit(payload, json_output)
             return EXIT_OK
+
+        if args.command == "run":
+            return _run_declared(args, json_output)
 
         if args.command == "analysis":
             return _run_analysis_tool(args)
@@ -368,6 +386,82 @@ def _analysis_request(source: str) -> object:
             "Analysis request is not strict JSON.",
             {"reason": str(error)},
         ) from error
+
+
+def _run_declared(args: argparse.Namespace, json_output: bool) -> int:
+    callback = None if json_output else _emit_run_selected
+    stdout_sink = None if json_output else _binary_output(sys.stdout)
+    stderr_sink = None if json_output else _binary_output(sys.stderr)
+    if args.follow is not None:
+        command = "run follow"
+        outcome = follow_run(
+            Path(args.repo),
+            args.follow,
+            stdout_sink=stdout_sink,
+            stderr_sink=stderr_sink,
+            on_selected=callback,
+        )
+    elif args.inspect is not None:
+        command = "run inspect"
+        outcome = inspect_run(Path(args.repo), args.inspect)
+    else:
+        command = "run"
+        outcome = execute_entry(
+            Path(args.repo),
+            args.entry,
+            stdout_sink=stdout_sink,
+            stderr_sink=stderr_sink,
+            on_selected=callback,
+        )
+    payload = receipt(outcome, command)
+    if json_output:
+        _emit_json(payload)
+    else:
+        _emit_run_terminal(outcome, inspect=args.inspect is not None)
+    return outcome_exit_code(outcome, inspect=args.inspect is not None)
+
+
+def _emit_run_selected(record: Any, role: str) -> None:
+    print(f"svc run {record.entry}: {role} {record.execution_id}", file=sys.stderr)
+    print(f"cwd: {record.cwd}", file=sys.stderr)
+    print(f"$ {_display_argv(record.argv)}", file=sys.stderr)
+
+
+def _emit_run_terminal(outcome: Any, *, inspect: bool) -> None:
+    if outcome.detached:
+        suffix = f" {outcome.record.execution_id}" if outcome.record is not None else ""
+        print(f"svc run {outcome.entry}: detached{suffix}", file=sys.stderr)
+        return
+    record = outcome.record
+    if record is None:
+        return
+    duration = f" in {record.duration_ms / 1000:.1f}s" if record.duration_ms is not None else ""
+    prefix = "svc run inspect" if inspect else f"svc run {record.entry}"
+    detail = f" {record.exit_code}" if record.state == "exited" else ""
+    print(f"{prefix}: {record.state}{detail}{duration} {record.execution_id}", file=sys.stderr)
+    if record.failure_reason:
+        print(f"reason: {record.failure_reason}", file=sys.stderr)
+
+
+def _display_argv(argv: Sequence[str]) -> str:
+    return subprocess.list2cmdline(list(argv)) if os.name == "nt" else shlex.join(list(argv))
+
+
+class _TextBinaryAdapter:
+    def __init__(self, stream: Any) -> None:
+        self.stream = stream
+
+    def write(self, data: bytes) -> int:
+        text = data.decode("utf-8", errors="replace")
+        self.stream.write(text)
+        return len(data)
+
+    def flush(self) -> None:
+        self.stream.flush()
+
+
+def _binary_output(stream: Any) -> Any:
+    return getattr(stream, "buffer", None) or _TextBinaryAdapter(stream)
 
 
 def _run_analysis_tool(args: argparse.Namespace) -> int:
@@ -468,6 +562,9 @@ def _emit_status(payload: dict[str, Any], json_output: bool) -> None:
     dev = payload["dev"]
     target_names = ", ".join(dev["targets"]) or "none"
     print(f"  {dev['status']:16} dev declaration; profile {dev['profile'] or 'none'}; targets {target_names}")
+    run = payload["run"]
+    run_entries = ", ".join(run["entries"]) or "none"
+    print(f"  {run['status']:16} run declaration; entries {run_entries}")
     managed_ignore = payload["managed_ignore"]
     print(f"  {managed_ignore['status']:16} {managed_ignore['path']}  ({managed_ignore['kind']})")
     for item in payload["guidance"]:
@@ -568,6 +665,7 @@ def _exit_code(error: SvcError) -> int:
         "self-update-verification-failed",
         "staging-failed",
         "output-write-failed",
+        "execution-storage-failed",
     }:
         return EXIT_FAILURE
     return EXIT_CONFLICT
