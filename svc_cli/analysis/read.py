@@ -334,8 +334,8 @@ def read_schema() -> dict[str, object]:
             "command": [
                 "svc",
                 "lookup",
-                "--name",
-                "^sections/working-protocol\\.md$",
+                "--path",
+                "sections/working-protocol.md",
                 "--json",
             ],
             "read_section": "Agent Task Analysis",

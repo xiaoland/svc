@@ -1,0 +1,105 @@
+kind: major
+component: corpus
+body: >-
+  Replace raw agent-thread export with a normalized trajectory and analysis surface.
+custom:
+  Migration: guide
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: |-
+    # Migrate Agent-Thread Observability to SVC 11.0.0
+
+    SVC 11.0.0 replaces the former raw agent-thread export with an
+    analysis-oriented normalized trajectory. This is an intentional Behavioral
+    SemVer MAJOR cut-off, not a compatible archive-format upgrade.
+
+    ## Schema-v1 archives are unsupported
+
+    An archive produced by the former export contains provider-native bytes, an
+    index, and possibly copied task material. SVC 11.0.0 does not read, convert,
+    re-export, or transition that format. When analysis identifies its bounded
+    root manifest as schema v1, it returns
+    `unsupported-agent-thread-bundle-schema` before opening a native, index, or
+    task member.
+
+    Delete an old archive only under its owner's normal retention policy. If its
+    provider-local source is still available, recollect explicitly:
+
+    ```text
+    svc telemetry agent-thread list --archive-state all --json
+    svc telemetry agent-thread export \
+      --thread-id <id> \
+      --output /outside/the/repository/thread.zip \
+      --repo /path/to/repository \
+      --include-sensitive
+    ```
+
+    An exact rollout file may be selected with `--source` instead. Recollection is
+    impossible when the provider-local source is no longer available; SVC does not
+    claim that a schema-v1 archive can substitute for it.
+
+    ## Update archive consumers
+
+    The schema-v2 ZIP has exactly two private members:
+
+    - `manifest.json`
+    - `trajectory.jsonl`
+
+    It deliberately omits provider envelopes, UI and other structural noise,
+    provider-native transcripts, the old index, task-packet copies, and derived
+    analysis. Retained messages, context, reasoning, tools, task references,
+    records, diagnostics, and artifact size are bounded. The manifest declares
+    capabilities, loss counters, source status, and `ready` or `partial` result
+    status.
+
+    Automation that expected any old member must stop doing so. To consume a
+    portable artifact, validate the exact schema-v2 bundle and treat its normalized
+    trajectory as evidence authority. To consume SVC's deterministic structural
+    interpretation, use:
+
+    ```text
+    svc telemetry agent-thread analyze --input /path/to/thread.zip --json
+    ```
+
+    Direct analysis is ephemeral and publishes no bundle:
+
+    ```text
+    svc telemetry agent-thread analyze --thread-id <id> --json
+    svc telemetry agent-thread analyze --source /path/to/rollout.jsonl --json
+    ```
+
+    The Agent JSON is deterministic and bounded. It reports findings, unknowns,
+    coverage, and loss across the ten documented dimensions; it is not a
+    transcript, model-generated summary, causal verdict, or quality score.
+
+    ## Use the interactive analysis surface
+
+    From a terminal, enter the sensitive local navigator with:
+
+    ```text
+    svc telemetry agent-thread analyze
+    svc telemetry agent-thread analyze --archive-state archived
+    ```
+
+    The navigator defaults to active threads, groups provider-reported workspace
+    provenance lexically, and uses bounded title plus first-user-message values for
+    recognition. These values are intentionally absent from the automation-safe
+    `list` command. An explicit bundle, thread, or source without `--json` opens
+    the same human analysis surface and requires a TTY.
+
+    `--archive-state` applies only to the no-selector navigator.
+    `--codex-home` does not apply to `--input`. Non-TTY callers must choose an
+    explicit selector and `--json`.
+
+    ## Recheck list automation
+
+    `list` retains its schema-v1 response envelope and descriptor keys, but
+    lifecycle and source availability are now independent. The command supports
+    `--archive-state active|archived|all`, defaults to `all`, and may honestly
+    project `unknown` or `unavailable` instead of guessing from a path. Automation
+    must not treat `source_state` as lifecycle authority.
+
+    After updating, verify the exact scripts and terminal workflows that consume
+    agent-thread data. No project configuration or provider source is rewritten by
+    these commands.
+time: 2026-07-29T00:00:00Z

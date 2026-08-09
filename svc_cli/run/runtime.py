@@ -44,7 +44,7 @@ class ResolvedRun:
     env_files: tuple[Path, ...]
     environment: Mapping[str, str]
     effective_entry_digest: str
-    slot_key: str
+    coordination_key: str
 
 
 @dataclass(frozen=True)
@@ -53,6 +53,7 @@ class RunOutcome:
     entry: str
     record: ExecutionRecord | None
     detached: bool = False
+    store: ExecutionStore | None = None
 
 
 def resolve_run(
@@ -71,7 +72,14 @@ def resolve_run(
             {"reason": str(error)},
         ) from error
     if entry_name not in resolved.base.run:
-        raise SvcError("unknown-run-entry", "The project has no committed run entry with this name.", {"entry": entry_name})
+        raise SvcError(
+            "unknown-run-entry",
+            "The project has no committed run entry with this name.",
+            {
+                "entry": entry_name,
+                "available_entries": sorted(resolved.base.run)[:50],
+            },
+        )
     entry = resolved.effective.run[entry_name]
     workspace = resolve_workspace_identity(repo, namespace=namespace)
     cwd = _resolve_directory(workspace.root, entry.cwd)
@@ -79,12 +87,11 @@ def resolve_run(
     environment = _resolve_environment(os.environ if ambient is None else ambient, file_layers, entry.env)
     _validate_launch(entry.argv, cwd, env_files, environment)
     effective_digest = _effective_digest(entry, cwd, env_files, file_layers)
-    slot_key = _digest(
-        "run-slot",
+    coordination_key = _digest(
+        "run-coordination",
         workspace.namespace_id,
         workspace.worktree_id,
         entry_name,
-        effective_digest,
     )
     return ResolvedRun(
         entry=entry_name,
@@ -94,7 +101,7 @@ def resolve_run(
         env_files=env_files,
         environment=environment,
         effective_entry_digest=effective_digest,
-        slot_key=slot_key,
+        coordination_key=coordination_key,
     )
 
 
@@ -110,10 +117,12 @@ def execute_entry(
 ) -> RunOutcome:
     selected = resolve_run(repo, entry_name, namespace=namespace)
     authority = store or ExecutionStore()
-    lock = authority.slot_lock("run", selected.slot_key)
-    pointer_before = authority.read_slot("run", selected.slot_key)
+    lock = authority.coordination_lock("run", selected.coordination_key)
+    pointer_before = authority.read_coordination("run", selected.coordination_key)
     pointer_before_active = (
-        pointer_before is not None and authority.read(pointer_before).state in ACTIVE_STATES
+        pointer_before is not None
+        and _same_intent(authority.read(pointer_before), selected)
+        and authority.read(pointer_before).state in ACTIVE_STATES
     )
     try:
         lock.acquire(timeout=0)
@@ -130,16 +139,19 @@ def execute_entry(
         )
 
     try:
-        current_id = authority.read_slot("run", selected.slot_key)
+        current_id = authority.read_coordination("run", selected.coordination_key)
         if current_id is not None:
             current = authority.read(current_id)
             if current.state in ACTIVE_STATES:
                 lost = mark_owner_lost(authority, current)
-                _notify(on_selected, lost, "follower")
-                return RunOutcome("follower", entry_name, lost)
+                if _same_intent(lost, selected):
+                    _notify(on_selected, lost, "follower")
+                    return RunOutcome(
+                        "follower", entry_name, lost, store=authority
+                    )
         return _own_run(authority, selected, stdout_sink, stderr_sink, on_selected)
     except KeyboardInterrupt:
-        return RunOutcome("owner", entry_name, None, detached=True)
+        return RunOutcome("owner", entry_name, None, detached=True, store=authority)
     finally:
         lock.release()
 
@@ -166,9 +178,15 @@ def follow_run(
             stdout_sink=stdout_sink,
             stderr_sink=stderr_sink,
         )
-        return RunOutcome("follower", record.entry, final)
+        return RunOutcome("follower", record.subject, final, store=authority)
     except KeyboardInterrupt:
-        return RunOutcome("follower", record.entry, authority.read(record.execution_id), detached=True)
+        return RunOutcome(
+            "follower",
+            record.subject,
+            authority.read(record.execution_id),
+            detached=True,
+            store=authority,
+        )
 
 
 def inspect_run(
@@ -181,33 +199,51 @@ def inspect_run(
     workspace = resolve_workspace_identity(repo, namespace=namespace)
     authority = store or ExecutionStore()
     record = _select_run_record(authority, execution_id, workspace)
-    return RunOutcome("inspector", record.entry, _reconcile(authority, record))
+    return RunOutcome(
+        "inspector", record.subject, _reconcile(authority, record), store=authority
+    )
 
 
 def receipt(outcome: RunOutcome, command: str) -> dict[str, object]:
     if outcome.detached:
         result: dict[str, object] = {
-            "schema_version": 1,
+            "schema_version": 2,
             "command": command,
             "caller_role": outcome.caller_role,
             "entry": outcome.entry,
             "caller_status": "detached",
         }
         if outcome.record is not None:
-            result["execution_id"] = outcome.record.execution_id
-            result["execution_state"] = outcome.record.state
+            record = outcome.record
+            result.update(
+                {
+                    "execution_id": record.execution_id,
+                    "workspace_instance": record.workspace_instance,
+                    "effective_entry_digest": record.intent_digest,
+                    "state": record.state,
+                    "argv": list(record.argv),
+                    "cwd": record.cwd,
+                    "env_files": list(record.env_files),
+                    "started_at": record.started_at,
+                }
+            )
+            if outcome.store is not None:
+                result["logs"] = {
+                    stream: outcome.store.log_reference(record, stream).as_dict()
+                    for stream in ("stdout", "stderr")
+                }
         return result
     if outcome.record is None:
         raise ValueError("settled run outcome has no execution record")
     record = outcome.record
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "command": command,
         "caller_role": outcome.caller_role,
         "execution_id": record.execution_id,
-        "entry": record.entry,
-        "workspace_id": record.workspace_id,
-        "effective_entry_digest": record.effective_entry_digest,
+        "entry": record.subject,
+        "workspace_instance": record.workspace_instance,
+        "effective_entry_digest": record.intent_digest,
         "state": record.state,
         "argv": list(record.argv),
         "cwd": record.cwd,
@@ -218,6 +254,11 @@ def receipt(outcome: RunOutcome, command: str) -> dict[str, object]:
         value = getattr(record, key)
         if value is not None:
             result[key] = value
+    if outcome.store is not None:
+        result["logs"] = {
+            stream: outcome.store.log_reference(record, stream).as_dict()
+            for stream in ("stdout", "stderr")
+        }
     return result
 
 
@@ -249,17 +290,20 @@ def _own_run(
 ) -> RunOutcome:
     published = store.publish(
         domain="run",
-        entry=selected.entry,
-        workspace_id=selected.workspace.instance,
-        effective_entry_digest=selected.effective_entry_digest,
-        slot_key=selected.slot_key,
+        operation="execute",
+        subject=selected.entry,
+        workspace_instance=selected.workspace.instance,
+        intent_digest=selected.effective_entry_digest,
+        coordination_key=selected.coordination_key,
         argv=selected.argv,
         cwd=selected.cwd,
         env_files=tuple(str(path) for path in selected.env_files),
         capture="split",
     )
     try:
-        store.write_slot("run", selected.slot_key, published.record.execution_id)
+        store.write_coordination(
+            "run", selected.coordination_key, published.record.execution_id
+        )
         _notify(on_selected, published.record, "owner")
         final = run_foreground(
             store,
@@ -271,7 +315,7 @@ def _own_run(
     except KeyboardInterrupt:
         current = store.read(published.record.execution_id)
         final = settle_unstarted_interruption(store, current)
-    return RunOutcome("owner", selected.entry, final)
+    return RunOutcome("owner", selected.entry, final, store=store)
 
 
 def _join_or_claim_after_publication(
@@ -285,45 +329,58 @@ def _join_or_claim_after_publication(
     on_selected: SelectedCallback | None,
 ) -> RunOutcome:
     while True:
-        current_id = store.read_slot("run", selected.slot_key)
+        current_id = store.read_coordination("run", selected.coordination_key)
         if current_id is not None:
             current = store.read(current_id)
             # If the pointer already named an active attempt before lock
             # contention, this caller belongs to it even if it settles before
             # the first follow read. A changed pointer is the winner's
             # publication even when that command also settles quickly.
-            if current.state in ACTIVE_STATES or current_id != pointer_before or pointer_before_active:
+            same_intent = _same_intent(current, selected)
+            if same_intent and (
+                current.state in ACTIVE_STATES
+                or current_id != pointer_before
+                or pointer_before_active
+            ):
                 _notify(on_selected, current, "follower")
                 try:
                     final = follow_execution(store, current_id, stdout_sink=stdout_sink, stderr_sink=stderr_sink)
-                    return RunOutcome("follower", selected.entry, final)
+                    return RunOutcome("follower", selected.entry, final, store=store)
                 except KeyboardInterrupt:
-                    return RunOutcome("follower", selected.entry, store.read(current_id), detached=True)
+                    return RunOutcome(
+                        "follower",
+                        selected.entry,
+                        store.read(current_id),
+                        detached=True,
+                        store=store,
+                    )
         try:
             lock.acquire(timeout=0)
         except Timeout:
             time.sleep(0.02)
             continue
         try:
-            after = store.read_slot("run", selected.slot_key)
+            after = store.read_coordination("run", selected.coordination_key)
             if after is not None and after != pointer_before:
                 record = store.read(after)
-                if record.state in ACTIVE_STATES:
+                if record.state in ACTIVE_STATES and _same_intent(record, selected):
                     record = mark_owner_lost(store, record)
-                _notify(on_selected, record, "follower")
-                return RunOutcome("follower", selected.entry, record)
+                    _notify(on_selected, record, "follower")
+                    return RunOutcome("follower", selected.entry, record, store=store)
             if pointer_before is not None:
                 previous = store.read(pointer_before)
-                if previous.state in ACTIVE_STATES:
+                if previous.state in ACTIVE_STATES and _same_intent(previous, selected):
                     lost = mark_owner_lost(store, previous)
                     _notify(on_selected, lost, "follower")
-                    return RunOutcome("follower", selected.entry, lost)
-                if pointer_before_active:
+                    return RunOutcome("follower", selected.entry, lost, store=store)
+                if pointer_before_active and _same_intent(previous, selected):
                     _notify(on_selected, previous, "follower")
-                    return RunOutcome("follower", selected.entry, previous)
+                    return RunOutcome("follower", selected.entry, previous, store=store)
             return _own_run(store, selected, stdout_sink, stderr_sink, on_selected)
         except KeyboardInterrupt:
-            return RunOutcome("owner", selected.entry, None, detached=True)
+            return RunOutcome(
+                "owner", selected.entry, None, detached=True, store=store
+            )
         finally:
             lock.release()
 
@@ -332,9 +389,23 @@ def _select_run_record(store: ExecutionStore, execution_id: str, workspace: Work
     record = store.read(require_execution_id(execution_id))
     if record.domain != "run":
         raise SvcError("execution-domain-mismatch", "The execution ID does not belong to svc run.")
-    if record.workspace_id != workspace.instance:
+    if record.workspace_instance != workspace.instance:
         raise SvcError("execution-workspace-mismatch", "The execution ID belongs to a different workspace.")
+    if record.operation != "execute":
+        raise SvcError(
+            "execution-operation-mismatch",
+            "The execution ID does not belong to a run execution operation.",
+        )
     return record
+
+
+def _same_intent(record: ExecutionRecord, selected: ResolvedRun) -> bool:
+    return (
+        record.domain == "run"
+        and record.operation == "execute"
+        and record.subject == selected.entry
+        and record.intent_digest == selected.effective_entry_digest
+    )
 
 
 def _reconcile(store: ExecutionStore, record: ExecutionRecord) -> ExecutionRecord:

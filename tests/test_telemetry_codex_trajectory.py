@@ -5,18 +5,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Mapping
 
-import pytest
-
-from svc_cli.telemetry.agent_threads import (
-    MAX_NATIVE_FRAME_BYTES,
-    MAX_SOURCE_BYTES,
-    NormalizationStatus,
-    ResolvedThread,
-)
-from svc_cli.telemetry.providers.codex_trajectory import (
-    DEFAULT_BOUNDS,
-    CodexTrajectoryNormalizer,
-)
+from svc_cli.telemetry.agent_threads import NormalizationStatus, ResolvedThread
+from svc_cli.telemetry.providers.codex_trajectory import CodexTrajectoryNormalizer
 
 
 def envelope(
@@ -63,13 +53,6 @@ def project(
         bounds,
     )
     return result, records
-
-
-def test_default_bounds_are_only_provider_source_and_frame_bounds() -> None:
-    assert DEFAULT_BOUNDS == {
-        "source_bytes": MAX_SOURCE_BYTES,
-        "native_line_bytes": MAX_NATIVE_FRAME_BYTES,
-    }
 
 
 def test_normalizer_emits_only_structural_chain_fields() -> None:

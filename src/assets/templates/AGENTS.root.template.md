@@ -38,6 +38,10 @@ Keep these entries executable and project-specific. Put durable behavior or arch
 
 ## Execution Rules
 
+- When SVC project state, migration, development capabilities, shared runs, or
+  framework guidance are relevant, use the installed `svc` CLI. Discover CLI
+  usage through `svc --help` and `svc <command> --help`; `svc lookup` searches
+  the packaged SVC Corpus rather than the CLI manual.
 - Read `docs/00-meta/working-protocol.md` for non-trivial work and follow its permission boundary.
 - Load `docs/00-meta/implementation-taste.md` only when its implementation trigger is present.
 - Read the nearest local `AGENTS.md` before editing a governed subtree.

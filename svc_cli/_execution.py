@@ -41,7 +41,7 @@ ACTIVE_STATES = frozenset({"starting", "running"})
 TERMINAL_STATES = frozenset(
     {"exited", "interrupted", "start-failed", "capture-failed", "owner-lost", "released"}
 )
-_SAFE_SLOT_KEY = re.compile(r"^[a-f0-9]{16,64}$")
+_SAFE_COORDINATION_KEY = re.compile(r"^[a-f0-9]{16,64}$")
 _SPLIT_STREAMS: tuple[Literal["stdout", "stderr"], ...] = ("stdout", "stderr")
 
 
@@ -56,10 +56,11 @@ class LaunchSpec:
 class ExecutionRecord:
     execution_id: str
     domain: ExecutionDomain
-    entry: str
-    workspace_id: str
-    effective_entry_digest: str
-    slot_key: str
+    operation: str
+    subject: str
+    workspace_instance: str
+    intent_digest: str
+    coordination_key: str
     state: ExecutionState
     argv: tuple[str, ...]
     cwd: str
@@ -78,13 +79,14 @@ class ExecutionRecord:
 
     def as_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
-            "schema_version": 1,
+            "schema_version": 2,
             "execution_id": self.execution_id,
             "domain": self.domain,
-            "entry": self.entry,
-            "workspace_id": self.workspace_id,
-            "effective_entry_digest": self.effective_entry_digest,
-            "slot_key": self.slot_key,
+            "operation": self.operation,
+            "subject": self.subject,
+            "workspace_instance": self.workspace_instance,
+            "intent_digest": self.intent_digest,
+            "coordination_key": self.coordination_key,
             "state": self.state,
             "argv": list(self.argv),
             "cwd": self.cwd,
@@ -122,53 +124,79 @@ class OwnedExecution:
     isolated_group: bool
 
 
+@dataclass(frozen=True)
+class ExecutionLogReference:
+    stream: str
+    path: str
+    bytes: int
+
+    def as_dict(self) -> dict[str, object]:
+        return {"path": self.path, "bytes": self.bytes}
+
+
 class ExecutionStore:
-    """Strict local record, log, slot-pointer, and lock storage."""
+    """Strict local record, log, coordination-pointer, and lock storage."""
 
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or Path(user_runtime_dir("svc", ensure_exists=True)) / "execution"
         _ensure_private_dir(self.root)
-        _ensure_private_dir(self.root / "slots")
+        _ensure_private_dir(self.root / "coordination")
 
-    def slot_lock(self, domain: ExecutionDomain, slot_key: str) -> FileLock:
-        _require_slot_key(slot_key)
-        path = self.root / "slots" / f"{domain}-{slot_key}.lock"
+    def coordination_lock(
+        self, domain: ExecutionDomain, coordination_key: str
+    ) -> FileLock:
+        _require_coordination_key(coordination_key)
+        path = self.root / "coordination" / f"{domain}-{coordination_key}.lock"
         return FileLock(str(path), mode=0o600)
 
-    def read_slot(self, domain: ExecutionDomain, slot_key: str) -> str | None:
-        _require_slot_key(slot_key)
-        path = self.root / "slots" / f"{domain}-{slot_key}.json"
+    def read_coordination(
+        self, domain: ExecutionDomain, coordination_key: str
+    ) -> str | None:
+        _require_coordination_key(coordination_key)
+        path = self.root / "coordination" / f"{domain}-{coordination_key}.json"
         if not path.exists():
             return None
         value = _read_json(path)
-        if set(value) != {"schema_version", "execution_id"} or value.get("schema_version") != 1:
-            raise _state_error("execution-slot-invalid", "Execution slot is malformed.", path)
+        if set(value) != {"schema_version", "execution_id"} or value.get("schema_version") != 2:
+            raise _state_error(
+                "execution-coordination-invalid",
+                "Execution coordination pointer is malformed.",
+                path,
+            )
         execution_id = require_execution_id(value.get("execution_id"))
         record = self.read(execution_id)
-        if record.domain != domain or record.slot_key != slot_key:
-            raise _state_error("execution-slot-mismatch", "Execution slot does not match its record.", path)
+        if record.domain != domain or record.coordination_key != coordination_key:
+            raise _state_error(
+                "execution-coordination-mismatch",
+                "Execution coordination pointer does not match its record.",
+                path,
+            )
         return execution_id
 
-    def write_slot(self, domain: ExecutionDomain, slot_key: str, execution_id: str) -> None:
-        _require_slot_key(slot_key)
+    def write_coordination(
+        self, domain: ExecutionDomain, coordination_key: str, execution_id: str
+    ) -> None:
+        _require_coordination_key(coordination_key)
         parsed = require_execution_id(execution_id)
-        path = self.root / "slots" / f"{domain}-{slot_key}.json"
-        _atomic_json(path, {"schema_version": 1, "execution_id": parsed})
+        path = self.root / "coordination" / f"{domain}-{coordination_key}.json"
+        _atomic_json(path, {"schema_version": 2, "execution_id": parsed})
 
     def publish(
         self,
         *,
         domain: ExecutionDomain,
-        entry: str,
-        workspace_id: str,
-        effective_entry_digest: str,
-        slot_key: str,
+        operation: str,
+        subject: str,
+        workspace_instance: str,
+        intent_digest: str,
+        coordination_key: str,
         argv: tuple[str, ...],
         cwd: Path,
         env_files: tuple[str, ...] = (),
         capture: CapturePolicy,
     ) -> PublishedExecution:
-        _require_slot_key(slot_key)
+        _require_coordination_key(coordination_key)
+        self._reject_active_legacy_execution()
         execution_id = str(uuid.uuid4())
         directory = self.execution_dir(execution_id)
         try:
@@ -182,10 +210,11 @@ class ExecutionStore:
             record = ExecutionRecord(
                 execution_id=execution_id,
                 domain=domain,
-                entry=entry,
-                workspace_id=workspace_id,
-                effective_entry_digest=effective_entry_digest,
-                slot_key=slot_key,
+                operation=operation,
+                subject=subject,
+                workspace_instance=workspace_instance,
+                intent_digest=intent_digest,
+                coordination_key=coordination_key,
                 state="starting",
                 argv=argv,
                 cwd=str(cwd),
@@ -209,6 +238,12 @@ class ExecutionStore:
         parsed = require_execution_id(execution_id)
         path = self.execution_dir(parsed) / "execution.json"
         value = _read_json(path)
+        if value.get("schema_version") == 1:
+            raise _state_error(
+                "execution-record-schema-unsupported",
+                "Execution record schema 1 is no longer supported.",
+                path,
+            )
         try:
             return _record_from_dict(value, expected_id=parsed)
         except (KeyError, TypeError, ValueError) as error:
@@ -231,6 +266,54 @@ class ExecutionStore:
                 raise ValueError("split execution has no merged log")
             name = f"{stream}.log"
         return self.execution_dir(record.execution_id) / name
+
+    def log_reference(
+        self,
+        record: ExecutionRecord,
+        stream: Literal["stdout", "stderr", "merged"],
+    ) -> ExecutionLogReference:
+        path = self.log_path(record, stream)
+        try:
+            size = path.stat().st_size
+        except OSError as error:
+            raise _state_error(
+                "execution-log-unreadable", "Execution output cannot be read.", path
+            ) from error
+        return ExecutionLogReference(stream, str(path), size)
+
+    def _reject_active_legacy_execution(self) -> None:
+        """Reject only a schema-v1 active attempt whose lifetime lock is held."""
+
+        for path in sorted(self.root.glob("*/execution.json")):
+            try:
+                value = _read_json(path)
+            except SvcError:
+                continue
+            if value.get("schema_version") != 1 or value.get("state") not in ACTIVE_STATES:
+                continue
+            domain = value.get("domain")
+            slot_key = value.get("slot_key")
+            if domain not in {"run", "dev"} or not isinstance(slot_key, str):
+                continue
+            try:
+                _require_coordination_key(slot_key)
+            except SvcError:
+                continue
+            legacy_lock = FileLock(
+                str(self.root / "slots" / f"{domain}-{slot_key}.lock"), mode=0o600
+            )
+            if not Path(legacy_lock.lock_file).parent.is_dir():
+                continue
+            try:
+                legacy_lock.acquire(timeout=0)
+            except Timeout as error:
+                raise SvcError(
+                    "legacy-execution-active",
+                    "A schema-v1 execution is still active; let it settle before starting a new operation.",
+                    {"path": str(path)},
+                ) from error
+            else:
+                legacy_lock.release()
 
 
 def require_execution_id(value: object) -> str:
@@ -255,6 +338,7 @@ def start_isolated(
     stream = published.merged_stream
     if stream is None or published.record.capture != "merged":
         raise ValueError("isolated execution requires a pre-opened merged log")
+    creationflags, start_new_session = _isolated_carrier()
     try:
         process = subprocess.Popen(
             spec.argv,
@@ -265,8 +349,8 @@ def start_isolated(
             stderr=subprocess.STDOUT,
             shell=False,
             close_fds=True,
-            creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0,
-            start_new_session=os.name != "nt",
+            creationflags=creationflags,
+            start_new_session=start_new_session,
         )
     except OSError as error:
         stream.close()
@@ -287,7 +371,7 @@ def start_isolated(
         try:
             process.wait(timeout=3)
         except subprocess.TimeoutExpired:
-            _signal_owned_group(owned, signal.SIGKILL)
+            _signal_owned_group(owned, signal.SIGTERM, force=True)
             process.wait()
         raise
     return OwnedExecution(record, process, True)
@@ -355,7 +439,7 @@ def run_foreground(
             try:
                 process.wait(timeout=3)
             except subprocess.TimeoutExpired:
-                _best_effort_signal(process, signal.SIGKILL)
+                _best_effort_kill(process)
                 process.wait()
             raise
         assert process.stdout is not None and process.stderr is not None
@@ -376,8 +460,9 @@ def run_foreground(
             "capture-failed",
             failure_reason="; ".join(capture_failure),
         )
-    termination = _signal_name(-return_code) if return_code < 0 else None
-    if requested or return_code < 0:
+    posix_signal = os.name != "nt" and return_code < 0
+    termination = _signal_name(-return_code) if posix_signal else None
+    if requested or posix_signal:
         requested_name = _signal_name(requested[-1]) if requested else None
         return _settle(
             store,
@@ -386,7 +471,7 @@ def run_foreground(
             requested_signal=requested_name,
             termination_signal=termination,
         )
-    return _settle(store, record, "exited", exit_code=return_code)
+    return _settle(store, record, "exited", exit_code=_normalize_exit_code(return_code))
 
 
 def wait_owned(
@@ -401,15 +486,21 @@ def wait_owned(
         return_code = owned.process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         return None
-    termination = _signal_name(-return_code) if return_code < 0 else None
-    if return_code < 0:
+    posix_signal = os.name != "nt" and return_code < 0
+    termination = _signal_name(-return_code) if posix_signal else None
+    if posix_signal:
         return _settle(
             store,
             owned.record,
             "interrupted",
             termination_signal=termination,
         )
-    return _settle(store, owned.record, "exited", exit_code=return_code)
+    return _settle(
+        store,
+        owned.record,
+        "exited",
+        exit_code=_normalize_exit_code(return_code),
+    )
 
 
 def terminate_owned(
@@ -425,7 +516,7 @@ def terminate_owned(
         try:
             owned.process.wait(timeout=3)
         except subprocess.TimeoutExpired:
-            _signal_owned_group(owned, signal.SIGKILL)
+            _signal_owned_group(owned, signal.SIGTERM, force=True)
             try:
                 owned.process.wait(timeout=3)
             except subprocess.TimeoutExpired:
@@ -489,7 +580,7 @@ def reconcile_owner_loss(store: ExecutionStore, record: ExecutionRecord) -> Exec
 
     if record.state not in ACTIVE_STATES:
         return record
-    lock = store.slot_lock(record.domain, record.slot_key)
+    lock = store.coordination_lock(record.domain, record.coordination_key)
     try:
         lock.acquire(timeout=0)
     except Timeout:
@@ -588,6 +679,14 @@ def _settle(
     return settled
 
 
+def _normalize_exit_code(return_code: int, *, platform_name: str = os.name) -> int:
+    """Expose a Windows DWORD exit status as its signed 32-bit value."""
+
+    if platform_name == "nt" and return_code >= 1 << 31:
+        return return_code - (1 << 32)
+    return return_code
+
+
 @contextmanager
 def _owned_signal_handlers(
     requested: list[int],
@@ -644,14 +743,56 @@ def _best_effort_signal(process: subprocess.Popen[bytes], number: int) -> None:
         pass
 
 
-def _signal_owned_group(owned: OwnedExecution, number: int) -> None:
+def _best_effort_kill(process: subprocess.Popen[bytes]) -> None:
     try:
-        if os.name != "nt" and owned.isolated_group:
-            os.killpg(owned.process.pid, number)
+        if process.poll() is None:
+            process.kill()
+    except OSError:
+        pass
+
+
+def _signal_owned_group(
+    owned: OwnedExecution, number: int, *, force: bool = False
+) -> None:
+    try:
+        if os.name == "nt" and owned.isolated_group:
+            subprocess.run(
+                (
+                    "taskkill",
+                    "/PID",
+                    str(owned.process.pid),
+                    "/T",
+                    "/F",
+                ),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        elif owned.isolated_group:
+            os.killpg(
+                owned.process.pid,
+                getattr(signal, "SIGKILL", signal.SIGTERM) if force else number,
+            )
+        elif force:
+            owned.process.kill()
         else:
             owned.process.send_signal(number)
     except OSError:
         pass
+
+
+def _isolated_carrier() -> tuple[int, bool]:
+    """Return the smallest platform launch boundary for a detached attempt."""
+
+    if os.name == "nt":
+        return (
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "DETACHED_PROCESS", 0)
+            | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0),
+            False,
+        )
+    return 0, True
 
 
 def _signal_name(number: int) -> str:
@@ -666,10 +807,11 @@ def _record_from_dict(value: dict[str, object], *, expected_id: str) -> Executio
         "schema_version",
         "execution_id",
         "domain",
-        "entry",
-        "workspace_id",
-        "effective_entry_digest",
-        "slot_key",
+        "operation",
+        "subject",
+        "workspace_instance",
+        "intent_digest",
+        "coordination_key",
         "state",
         "argv",
         "cwd",
@@ -692,7 +834,7 @@ def _record_from_dict(value: dict[str, object], *, expected_id: str) -> Executio
         set(value) - required - optional
         or required - set(value)
         or type(value["schema_version"]) is not int
-        or value["schema_version"] != 1
+        or value["schema_version"] != 2
     ):
         raise ValueError("record fields do not match schema")
     execution_id = require_execution_id(value["execution_id"])
@@ -703,10 +845,18 @@ def _record_from_dict(value: dict[str, object], *, expected_id: str) -> Executio
     capture = value["capture"]
     if domain not in {"run", "dev"} or state not in ACTIVE_STATES | TERMINAL_STATES or capture not in {"split", "merged"}:
         raise ValueError("record enum is invalid")
-    strings = ("entry", "workspace_id", "effective_entry_digest", "slot_key", "cwd", "started_at")
+    strings = (
+        "operation",
+        "subject",
+        "workspace_instance",
+        "intent_digest",
+        "coordination_key",
+        "cwd",
+        "started_at",
+    )
     if any(not isinstance(value[key], str) or not value[key] for key in strings):
         raise TypeError("record string is invalid")
-    _require_slot_key(str(value["slot_key"]))
+    _require_coordination_key(str(value["coordination_key"]))
     argv = value["argv"]
     env_files = value["env_files"]
     if not isinstance(argv, list) or not argv or not all(isinstance(item, str) for item in argv):
@@ -732,10 +882,11 @@ def _record_from_dict(value: dict[str, object], *, expected_id: str) -> Executio
     return ExecutionRecord(
         execution_id=execution_id,
         domain=cast(ExecutionDomain, domain),
-        entry=str(value["entry"]),
-        workspace_id=str(value["workspace_id"]),
-        effective_entry_digest=str(value["effective_entry_digest"]),
-        slot_key=str(value["slot_key"]),
+        operation=str(value["operation"]),
+        subject=str(value["subject"]),
+        workspace_instance=str(value["workspace_instance"]),
+        intent_digest=str(value["intent_digest"]),
+        coordination_key=str(value["coordination_key"]),
         state=cast(ExecutionState, state),
         argv=tuple(argv),
         cwd=str(value["cwd"]),
@@ -747,7 +898,11 @@ def _record_from_dict(value: dict[str, object], *, expected_id: str) -> Executio
         process_id=cast(int | None, value.get("process_id")),
         finished_at=cast(str | None, value.get("finished_at")),
         duration_ms=cast(int | None, value.get("duration_ms")),
-        exit_code=cast(int | None, value.get("exit_code")),
+        exit_code=(
+            _normalize_exit_code(cast(int, value["exit_code"]), platform_name="nt")
+            if "exit_code" in value
+            else None
+        ),
         requested_signal=cast(str | None, value.get("requested_signal")),
         termination_signal=cast(str | None, value.get("termination_signal")),
         failure_reason=cast(str | None, value.get("failure_reason")),
@@ -785,8 +940,12 @@ def _validate_record_lifecycle(
         raise ValueError("unstarted interruption requires the requested signal")
     if state == "exited":
         exit_code = value.get("exit_code")
-        if type(exit_code) is not int or exit_code < 0:
-            raise ValueError("exited record requires a non-negative exit code")
+        if (
+            type(exit_code) is not int
+            or exit_code < -(1 << 31)
+            or exit_code >= 1 << 32
+        ):
+            raise ValueError("exited record requires a 32-bit exit code")
     elif "exit_code" in value:
         raise ValueError("non-exit record cannot have an exit code")
 
@@ -851,9 +1010,12 @@ def _ensure_private_dir(path: Path) -> None:
         raise _state_error("execution-storage-failed", "Execution runtime directory is unavailable.", path) from error
 
 
-def _require_slot_key(value: str) -> None:
-    if not _SAFE_SLOT_KEY.fullmatch(value):
-        raise SvcError("invalid-execution-slot", "Execution slot key is invalid.")
+def _require_coordination_key(value: str) -> None:
+    if not _SAFE_COORDINATION_KEY.fullmatch(value):
+        raise SvcError(
+            "invalid-execution-coordination",
+            "Execution coordination key is invalid.",
+        )
 
 
 def _state_error(code: str, message: str, path: Path) -> SvcError:

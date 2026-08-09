@@ -1,7 +1,9 @@
-"""Strict, two-layer project configuration for declared SVC capabilities.
+"""Strict current and legacy project configuration models.
 
-``svc.json`` is complete and committed.  ``svc.local.json`` is an optional,
-schema-governed sparse overlay; it is never materialized back to disk.
+``svc.json`` is complete and committed. ``svc.local.json`` is an optional,
+schema-governed sparse overlay; it is never materialized into the base model.
+Only schema v3 is runnable. Schema v2 has a separate read-only source model for
+the exact upgrade transform.
 """
 
 from __future__ import annotations
@@ -11,14 +13,22 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, Mapping, TypeAlias, overload
+from typing import Annotated, Any, Literal, Mapping, Self, TypeAlias, overload
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from .catalog import require_semver
 
 
-CONFIG_SCHEMA_VERSION = 2
+CONFIG_SCHEMA_VERSION = 3
+LEGACY_CONFIG_SCHEMA_VERSION = 2
 PROJECT_CONFIG_FILE = "svc.json"
 LOCAL_CONFIG_FILE = "svc.local.json"
 
@@ -37,16 +47,20 @@ class HttpProbe(_StrictModel):
     kind: Literal["http"]
     url: str
     method: Literal["GET", "HEAD"] = "GET"
-    success_status: list[int] = Field(default_factory=lambda: [200, 299], min_length=2, max_length=2)
+    success_status: list[int] = Field(
+        default_factory=lambda: [200, 299], min_length=2, max_length=2
+    )
     timeout: float = Field(default=5.0, gt=0, le=60)
     network_scope: Literal["loopback", "remote"] = "loopback"
     insecure_tls: bool = False
 
     @model_validator(mode="after")
-    def validate_status_and_tls(self) -> "HttpProbe":
+    def validate_status_and_tls(self) -> Self:
         lower, upper = self.success_status
         if not 100 <= lower <= upper <= 599:
-            raise ValueError("success_status must be an inclusive HTTP status interval")
+            raise ValueError(
+                "success_status must be an inclusive HTTP status interval"
+            )
         if self.insecure_tls and self.network_scope != "loopback":
             raise ValueError("insecure_tls is allowed only for loopback HTTP probes")
         return self
@@ -68,7 +82,9 @@ class ExecProbe(_StrictModel):
     output_limit: int = Field(default=16_384, ge=1, le=1_048_576)
 
 
-Probe: TypeAlias = Annotated[HttpProbe | TcpProbe | ExecProbe, Field(discriminator="kind")]
+Probe: TypeAlias = Annotated[
+    HttpProbe | TcpProbe | ExecProbe, Field(discriminator="kind")
+]
 
 
 class ExecProvision(_StrictModel):
@@ -78,15 +94,46 @@ class ExecProvision(_StrictModel):
     cwd: str | None = None
     env: dict[str, str] = Field(default_factory=dict)
 
+    @field_validator("env")
+    @classmethod
+    def validate_env(cls, value: dict[str, str]) -> dict[str, str]:
+        _validate_environment(value)
+        return value
+
 
 class ManualProvision(_StrictModel):
     kind: Literal["manual"]
 
 
-Provision: TypeAlias = Annotated[ExecProvision | ManualProvision, Field(discriminator="kind")]
+Provision: TypeAlias = Annotated[
+    ExecProvision | ManualProvision, Field(discriminator="kind")
+]
 
 
-class TargetConfig(_StrictModel):
+class ExecStop(_StrictModel):
+    kind: Literal["exec"]
+    argv: list[str] = Field(min_length=1)
+    cwd: str | None = None
+    env: dict[str, str] = Field(default_factory=dict)
+    timeout: float = Field(default=300.0, gt=0, le=3_600)
+
+    @field_validator("env")
+    @classmethod
+    def validate_env(cls, value: dict[str, str]) -> dict[str, str]:
+        _validate_environment(value)
+        return value
+
+
+class ManualStop(_StrictModel):
+    kind: Literal["manual"]
+
+
+StopAction: TypeAlias = Annotated[
+    ExecStop | ManualStop, Field(discriminator="kind")
+]
+
+
+class _TargetBase(_StrictModel):
     scope: Literal["worktree", "repository", "host"] = "worktree"
     host_key: str | None = None
     probe: Probe
@@ -96,7 +143,7 @@ class TargetConfig(_StrictModel):
     poll_interval: float = Field(default=0.5, gt=0, le=60)
 
     @model_validator(mode="after")
-    def validate_scope(self) -> "TargetConfig":
+    def validate_scope(self) -> Self:
         if self.scope == "host" and not self.host_key:
             raise ValueError("host scope requires a non-empty host_key")
         if self.scope != "host" and self.host_key is not None:
@@ -106,21 +153,38 @@ class TargetConfig(_StrictModel):
         return self
 
 
-class ProfileConfig(_StrictModel):
+class TargetConfig(_TargetBase):
+    stop: StopAction | None = None
+
+
+class LegacyTargetConfig(_TargetBase):
+    """Schema-v2 target; it deliberately cannot admit the v3 stop field."""
+
+
+class DevConfig(_StrictModel):
     targets: dict[str, TargetConfig] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_target_names(self) -> "ProfileConfig":
+    def validate_target_names(self) -> Self:
         _validate_names(self.targets, "target")
         return self
 
 
-class DevConfig(_StrictModel):
-    profile: str = Field(min_length=1)
-    profiles: dict[str, ProfileConfig] = Field(min_length=1)
+class LegacyProfileConfig(_StrictModel):
+    targets: dict[str, LegacyTargetConfig] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_selected_profile(self) -> "DevConfig":
+    def validate_target_names(self) -> Self:
+        _validate_names(self.targets, "target")
+        return self
+
+
+class LegacyDevConfig(_StrictModel):
+    profile: str = Field(min_length=1)
+    profiles: dict[str, LegacyProfileConfig] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_selected_profile(self) -> Self:
         _validate_names(self.profiles, "profile")
         if self.profile not in self.profiles:
             raise ValueError("dev.profile must name an entry in dev.profiles")
@@ -159,22 +223,31 @@ class RunEntry(_StrictModel):
     @field_validator("env")
     @classmethod
     def validate_env(cls, value: dict[str, str]) -> dict[str, str]:
-        for key, item in value.items():
-            if not key or "=" in key or "\0" in key:
-                raise ValueError("environment keys must be non-empty and contain neither '=' nor NUL")
-            if "\0" in item:
-                raise ValueError("environment values must not contain NUL")
+        _validate_environment(value)
         return value
 
 
 class ProjectConfig(_StrictModel):
-    schema_version: Literal[2]
-    svc_version: str = Field(min_length=1)
+    schema_version: Literal[3]
+    corpus_version: str = Field(min_length=1)
     dev: DevConfig | None = None
     run: dict[str, RunEntry] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_svc_version(self) -> "ProjectConfig":
+    def validate_corpus_version(self) -> Self:
+        require_semver(self.corpus_version, "corpus_version")
+        _validate_names(self.run, "run entry")
+        return self
+
+
+class LegacyProjectConfig(_StrictModel):
+    schema_version: Literal[2]
+    svc_version: str = Field(min_length=1)
+    dev: LegacyDevConfig | None = None
+    run: dict[str, RunEntry] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_svc_version(self) -> Self:
         require_semver(self.svc_version, "svc_version")
         _validate_names(self.run, "run entry")
         return self
@@ -182,7 +255,7 @@ class ProjectConfig(_StrictModel):
 
 @dataclass(frozen=True)
 class ResolvedConfig:
-    """Validated configuration views and canonical declaration digests."""
+    """Validated current configuration views and declaration digests."""
 
     base: ProjectConfig
     local: dict[str, Any] | None
@@ -193,7 +266,8 @@ class ResolvedConfig:
 
 
 def load_config(repo: Path) -> ResolvedConfig:
-    """Load and resolve the repository's complete base and optional overlay."""
+    """Load one runnable schema-v3 base and optional v3 overlay."""
+
     root = repo.resolve()
     base_data = _load_required_json(root / PROJECT_CONFIG_FILE, PROJECT_CONFIG_FILE)
     base = _validate_project(base_data, PROJECT_CONFIG_FILE)
@@ -217,16 +291,51 @@ def load_config(repo: Path) -> ResolvedConfig:
     )
 
 
-def parse_project_config(content: bytes, source: str = PROJECT_CONFIG_FILE) -> ProjectConfig:
-    """Parse one complete base document without reading from the filesystem."""
+def parse_project_config(
+    content: bytes, source: str = PROJECT_CONFIG_FILE
+) -> ProjectConfig:
     return _validate_project(_parse_json_bytes(content, source), source)
 
 
-def parse_local_overlay(content: bytes, source: str = LOCAL_CONFIG_FILE) -> dict[str, Any]:
-    """Parse and authority-check one sparse local overlay."""
+def parse_legacy_project_config(
+    content: bytes, source: str = PROJECT_CONFIG_FILE
+) -> LegacyProjectConfig:
+    value = _parse_json_bytes(content, source)
+    try:
+        return LegacyProjectConfig.model_validate(value)
+    except ValidationError as error:
+        raise ConfigError(
+            f"{source} does not match supported legacy schema v2: {error}"
+        ) from error
+
+
+def parse_local_overlay(
+    content: bytes, source: str = LOCAL_CONFIG_FILE
+) -> dict[str, Any]:
     value = _parse_json_bytes(content, source)
     _validate_local_overlay(value)
     return value
+
+
+def parse_legacy_local_overlay(
+    content: bytes, source: str = LOCAL_CONFIG_FILE
+) -> dict[str, Any]:
+    value = _parse_json_bytes(content, source)
+    _validate_legacy_local_overlay(value)
+    return value
+
+
+def parse_json_document(content: bytes, source: str) -> dict[str, Any]:
+    """Expose the one strict JSON-domain parser to the migration owner."""
+
+    return _parse_json_bytes(content, source)
+
+
+def render_config_value(value: object) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False)
+        + "\n"
+    ).encode("utf-8")
 
 
 def declaration_digest(config: ProjectConfig) -> str:
@@ -234,8 +343,24 @@ def declaration_digest(config: ProjectConfig) -> str:
 
 
 def declaration_digest_value(value: object) -> str:
-    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    canonical = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _validate_environment(value: Mapping[str, str]) -> None:
+    for key, item in value.items():
+        if not key or "=" in key or "\0" in key:
+            raise ValueError(
+                "environment keys must be non-empty and contain neither '=' nor NUL"
+            )
+        if "\0" in item:
+            raise ValueError("environment values must not contain NUL")
 
 
 def _validate_names(values: Mapping[str, object], kind: str) -> None:
@@ -247,7 +372,8 @@ def _validate_names(values: Mapping[str, object], kind: str) -> None:
 def _load_required_json(path: Path, label: str) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         kind = "symlink" if path.is_symlink() else "regular file"
-        raise ConfigError(f"{label} must be a {kind if kind == 'regular file' else 'non-symlink regular file'}")
+        expected = "regular file" if kind == "regular file" else "non-symlink regular file"
+        raise ConfigError(f"{label} must be a {expected}")
     try:
         return _parse_json_bytes(path.read_bytes(), label)
     except OSError as error:
@@ -256,7 +382,11 @@ def _load_required_json(path: Path, label: str) -> dict[str, Any]:
 
 def _parse_json_bytes(content: bytes, source: str) -> dict[str, Any]:
     try:
-        value = json.loads(content.decode("utf-8"), object_pairs_hook=_reject_duplicate_keys, parse_constant=_reject_non_finite)
+        value = json.loads(
+            content.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_non_finite,
+        )
     except UnicodeDecodeError as error:
         raise ConfigError(f"{source} must be UTF-8 JSON") from error
     except json.JSONDecodeError as error:
@@ -297,18 +427,36 @@ def _validate_project(value: dict[str, Any], source: str) -> ProjectConfig:
     try:
         return ProjectConfig.model_validate(value)
     except ValidationError as error:
-        raise ConfigError(f"{source} does not match schema v{CONFIG_SCHEMA_VERSION}: {error}") from error
+        raise ConfigError(
+            f"{source} does not match schema v{CONFIG_SCHEMA_VERSION}: {error}"
+        ) from error
 
 
-def _validate_local_overlay(value: dict[str, Any], *, committed_run_entries: set[str] | None = None) -> None:
-    _validate_overlay_object(value, {"dev", "run"}, "$")
+def _validate_local_overlay(
+    value: dict[str, Any], *, committed_run_entries: set[str] | None = None
+) -> None:
+    _validate_overlay_object(value, {"schema_version", "dev", "run"}, "$")
+    if value.get("schema_version") != CONFIG_SCHEMA_VERSION:
+        raise ConfigError(
+            f"{LOCAL_CONFIG_FILE} must declare schema_version {CONFIG_SCHEMA_VERSION}"
+        )
     if "dev" in value:
         _validate_overlay_dev(value["dev"], "$.dev")
     if "run" in value:
         _validate_overlay_run(value["run"], "$.run", committed_run_entries)
 
 
-def _validate_overlay_run(value: object, path: str, committed_entries: set[str] | None) -> None:
+def _validate_legacy_local_overlay(value: dict[str, Any]) -> None:
+    _validate_overlay_object(value, {"dev", "run"}, "$")
+    if "dev" in value:
+        _validate_legacy_overlay_dev(value["dev"], "$.dev")
+    if "run" in value:
+        _validate_overlay_run(value["run"], "$.run", None)
+
+
+def _validate_overlay_run(
+    value: object, path: str, committed_entries: set[str] | None
+) -> None:
     if not isinstance(value, dict):
         return
     try:
@@ -318,22 +466,17 @@ def _validate_overlay_run(value: object, path: str, committed_entries: set[str] 
     if committed_entries is not None:
         local_only = sorted(set(value) - committed_entries)
         if local_only:
-            raise ConfigError(f"{LOCAL_CONFIG_FILE} cannot create run entry {local_only[0]!r}")
+            raise ConfigError(
+                f"{LOCAL_CONFIG_FILE} cannot create run entry {local_only[0]!r}"
+            )
     for name, entry in value.items():
         if isinstance(entry, dict):
-            _validate_overlay_object(entry, {"argv", "cwd", "env_files", "env"}, f"{path}.{name}")
+            _validate_overlay_object(
+                entry, {"argv", "cwd", "env_files", "env"}, f"{path}.{name}"
+            )
 
 
 def _validate_overlay_dev(value: object, path: str) -> None:
-    if not isinstance(value, dict):
-        return
-    _validate_overlay_object(value, {"profile", "profiles"}, path)
-    if "profiles" in value and isinstance(value["profiles"], dict):
-        for name, profile in value["profiles"].items():
-            _validate_overlay_profile(profile, f"{path}.profiles.{name}")
-
-
-def _validate_overlay_profile(value: object, path: str) -> None:
     if not isinstance(value, dict):
         return
     _validate_overlay_object(value, {"targets"}, path)
@@ -342,18 +485,51 @@ def _validate_overlay_profile(value: object, path: str) -> None:
             _validate_overlay_target(target, f"{path}.targets.{name}")
 
 
+def _validate_legacy_overlay_dev(value: object, path: str) -> None:
+    if not isinstance(value, dict):
+        return
+    _validate_overlay_object(value, {"profile", "profiles"}, path)
+    if "profiles" in value and isinstance(value["profiles"], dict):
+        for name, profile in value["profiles"].items():
+            if not isinstance(profile, dict):
+                continue
+            _validate_overlay_object(profile, {"targets"}, f"{path}.profiles.{name}")
+            if "targets" in profile and isinstance(profile["targets"], dict):
+                for target_name, target in profile["targets"].items():
+                    _validate_overlay_target(
+                        target, f"{path}.profiles.{name}.targets.{target_name}"
+                    )
+
+
 def _validate_overlay_target(value: object, path: str) -> None:
     if not isinstance(value, dict):
         return
     _validate_overlay_object(
         value,
-        {"scope", "host_key", "probe", "provision", "access", "readiness_timeout", "poll_interval"},
+        {
+            "scope",
+            "host_key",
+            "probe",
+            "provision",
+            "stop",
+            "access",
+            "readiness_timeout",
+            "poll_interval",
+        },
         path,
     )
     if "probe" in value and isinstance(value["probe"], dict):
         kind = value["probe"].get("kind")
         allowed = {
-            "http": {"kind", "url", "method", "success_status", "timeout", "network_scope", "insecure_tls"},
+            "http": {
+                "kind",
+                "url",
+                "method",
+                "success_status",
+                "timeout",
+                "network_scope",
+                "insecure_tls",
+            },
             "tcp": {"kind", "host", "port", "timeout", "network_scope"},
             "exec": {"kind", "argv", "cwd", "timeout", "output_limit"},
         }
@@ -366,13 +542,28 @@ def _validate_overlay_target(value: object, path: str) -> None:
             "manual": {"kind"},
         }
         if kind in allowed:
-            _validate_overlay_object(value["provision"], allowed[kind], f"{path}.provision")
+            _validate_overlay_object(
+                value["provision"], allowed[kind], f"{path}.provision"
+            )
+    if "stop" in value and isinstance(value["stop"], dict):
+        kind = value["stop"].get("kind")
+        allowed = {
+            "exec": {"kind", "argv", "cwd", "env", "timeout"},
+            "manual": {"kind"},
+        }
+        if kind in allowed:
+            _validate_overlay_object(value["stop"], allowed[kind], f"{path}.stop")
 
 
-def _validate_overlay_object(value: dict[str, Any], allowed: set[str], path: str) -> None:
+def _validate_overlay_object(
+    value: dict[str, Any], allowed: set[str], path: str
+) -> None:
     unexpected = sorted(set(value) - allowed)
     if unexpected:
-        raise ConfigError(f"{LOCAL_CONFIG_FILE} contains a non-overrideable or unknown field at {path}: {unexpected[0]}")
+        raise ConfigError(
+            f"{LOCAL_CONFIG_FILE} contains a non-overrideable or unknown field "
+            f"at {path}: {unexpected[0]}"
+        )
 
 
 @overload

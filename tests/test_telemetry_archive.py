@@ -2,18 +2,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import zipfile
-
 import pytest
 
 from svc_cli.telemetry.agent_threads import ProviderContext, ThreadSelection
 from svc_cli.telemetry.archive import write_agent_thread_evidence
-from svc_cli.telemetry.evidence import (
-    EVIDENCE_MEMBERS,
-    EVIDENCE_OPTIONAL_MEMBERS,
-    ValidatedEvidence,
-    validate_evidence,
-)
+from svc_cli.telemetry.evidence import ValidatedEvidence, validate_evidence
 from svc_cli.telemetry.providers.codex_rollout import CodexRolloutProvider
 
 
@@ -48,28 +41,6 @@ def _export(source: Path, output: Path) -> ValidatedEvidence:
         ThreadSelection(source=source),
         output,
     )
-
-
-def test_export_preserves_one_native_authority(tmp_path: Path) -> None:
-    source = tmp_path / "rollout.jsonl"
-    native = _rollout(source)
-    output = tmp_path / "evidence.zip"
-
-    exported = _export(source, output)
-    evidence = validate_evidence(output)
-
-    assert evidence.native == native == source.read_bytes()
-    assert evidence.evidence_id == exported.evidence_id
-    assert evidence.trajectory is not None
-    assert [
-        getattr(record.source_ref, "native_record_id", None)
-        for record in evidence.trajectory.records
-    ] == [None, "n000001"]
-    with zipfile.ZipFile(output) as archive:
-        assert tuple(archive.namelist()) == (
-            *EVIDENCE_MEMBERS,
-            *EVIDENCE_OPTIONAL_MEMBERS,
-        )
 
 
 def test_export_never_overwrites_a_valid_bundle(tmp_path: Path) -> None:

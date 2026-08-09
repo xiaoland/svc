@@ -1,4 +1,12 @@
 kind: minor
+component: cli
 body: >-
-  Add lightweight `svc lookup --list` catalog discovery and exact `--path` reads, expose actionable lookup guidance in help and failures, and reduce the generated Codex Skill to a router for the installed canonical corpus.
+  Add progressive `svc lookup --list`, exact `--path`, bounded relevance
+  `--keyword`, and exact full-text/path `--regex`; make layered CLI help
+  self-sufficient and retire the generated SVC CLI Skill.
+custom:
+  Migration: not-applicable
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
 time: 2026-08-02T22:06:12+08:00

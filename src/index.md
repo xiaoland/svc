@@ -21,13 +21,18 @@ Query a released corpus locally:
 
 ```text
 svc lookup --list --json
+svc lookup --list sections
 svc lookup --path sections/working-protocol.md
 svc lookup --keyword "task packet mutation gate"
-svc lookup --name 'sections/working-protocol\.md'
-svc lookup --name 'assets/templates/AGENTS\..*\.template\.md' --all
+svc lookup --regex 'mutation gate' --scope both --limit 10
 ```
 
-`--list` returns path-sorted catalog metadata without returning document bodies. Use one returned normalized source-relative path with `--path` to read and integrity-check exactly that authoritative document. Keyword search is deterministic and local; its candidates identify paths and excerpts, which are also resolved through `--path`. `--name` remains the intentional full-path regular-expression surface: it returns one document by default and rejects ambiguity, while `--all` permits deliberately broad reads. Semantic lookup is intentionally not a public command.
+`--list [prefix]` expands one logical Corpus directory level. `--path` reads
+one exact normalized Markdown source. Keyword search returns a bounded
+relevance-ordered candidate set; regex search returns bounded exact path or
+content occurrences. A valid search miss is an empty successful collection.
+Lookup reads the Corpus, not CLI usage; the current command contract is
+self-contained in `svc lookup --help` and layered command help.
 
 Every command with `--json` returns one compact JSON value for its settled
 result, including recognized CLI errors; the trailing newline is framing, not
@@ -35,8 +40,8 @@ pretty printing. No current command has distinct progress events that justify
 JSONL, so JSONL is reserved for a future bounded event stream rather than being
 used for list-shaped terminal results. Exit code `0` means a ready, healthy,
 applied, or no-op result; `2` is CLI syntax; `3` means required action, invalid
-project state, conflict, or blocked plan; and `4` means release integrity,
-local apply, or installer failure.
+project state, conflict, or blocked plan; and `4` means release, execution, or
+local-apply integrity failure.
 
 ## Project Adoption
 
@@ -45,58 +50,71 @@ local apply, or installer failure.
 ```text
 svc.json
 .gitignore                 (a bounded generated ignore block for svc.local.json)
-.agents/skills/svc/SKILL.md
 AGENTS.md                  (a bounded marked navigation block)
 docs/index.md              (created when absent, with a bounded marked navigation block)
 ```
 
-`svc.json` is the project's complete, committed SVC configuration. Schema v2 keeps the adoption baseline and may declare development capabilities:
+`svc.json` is the project's complete, committed SVC configuration. Schema v3
+keeps the Corpus baseline independently from the installed CLI and may declare
+development capabilities and bounded runs:
 
 ```json
 {
-  "schema_version": 2,
-  "svc_version": "11.0.0"
+  "schema_version": 3,
+  "corpus_version": "12.0.0"
 }
 ```
 
-Its version means the project says it has adopted that SVC baseline. It does not assert that Consumer-owned documents match a framework snapshot. The installed package manager remains the authority for the executable version. Schema-v1 projects are never rewritten automatically; migrate their configuration deliberately before `init` or `adopt` can write.
+Its Corpus version means the project says it has completed the corresponding
+Corpus migration work. It does not assert that SVC verified Consumer-owned
+documents. The installed package manager remains the authority for the CLI
+version. Supported older configuration is migrated separately through
+`svc upgrade --target config` before current runtime commands consume it.
 
 `svc.local.json` is an optional, ignored, sparse overlay for `dev` and existing
 `run` declarations. It merges objects into the committed configuration and
-replaces scalar or array values; it cannot change the schema version, adopted
-SVC version, or create a local-only run entry. The effective configuration must
-still satisfy schema v2. `init` maintains only its marked `.gitignore` entry
+replaces scalar or array values; it must declare schema 3 and cannot change the
+Corpus baseline or create a local-only run entry. The effective configuration must
+still satisfy schema v3. `init` maintains only its marked `.gitignore` entry
 and never creates the local file.
 
-The Codex skill at `.agents/skills/svc/SKILL.md` is a compact router to the installed CLI and corpus, not a copy of canonical guidance. Root `AGENTS.md` and `docs/index.md` remain Consumer-owned from creation. Only their marked SVC navigation blocks, and the installed skill, have generated provenance markers. A user-modified or malformed generated surface blocks refresh rather than being silently replaced.
+There is no installed SVC CLI Skill: layered CLI help owns command discovery.
+Root `AGENTS.md` and `docs/index.md` remain Consumer-owned from creation; only
+their marked SVC navigation blocks have generated provenance. Init deletes a
+clean legacy generated Skill, blocks on a modified marked Skill, and ignores
+an unproven Consumer file.
 
 ```text
-svc init <repo> --agent codex
+svc init <repo>
 svc init <repo> --apply <plan-digest>
 svc status <repo> --json
 ```
 
-`svc status --json` is an Agent's read-only first SVC command in a repository.
-It reports `unadopted`, `malformed`, `actionable`, or `healthy` before its
-detailed checks, then provides a `next` action and whether it needs Human
-authorization. An unadopted repository asks for adoption authorization; it
-does not instruct or perform `init` as discovery. Status reports the installed
-CLI/corpus version separately from the adopted project version, and reports
+`svc status --json` is a read-only first SVC command in a repository. It
+reports independent CLI, configuration, Corpus-baseline, integration, and
+workspace facts plus one primary continuation. Status reports the installed
+CLI and available Corpus version separately from the project baseline, and reports
 missing, outdated, or user-modified generated guidance without claiming
-ownership over consumer content. It also lists the selected `dev` profile and
-target names as a declaration-only summary: it never probes, starts, or takes
+ownership over consumer content. It also lists `dev` target names as a
+declaration-only summary: it never probes, starts, or takes
 over a target. Use `svc dev status` for runtime observation. Root status also
 lists committed run-entry names without selecting or executing them.
 
 ## Declared Development Capabilities
 
-Projects may use the optional `dev` section of schema-v2 `svc.json` to name a selected profile and its targets. A target declares its coordination scope, one readiness probe (`http`, `tcp`, or `exec`), a provisioning action (`exec` or `manual`), and bounded timing; its `access` entries describe consumer-facing endpoints. Configuration is strict: unknown fields, invalid effective overlays, symlinks, duplicate JSON keys, non-finite values, and `null` are rejected.
+Projects may use the optional schema-v3 `dev.targets` map to name capabilities
+directly. A target declares its coordination scope, one readiness probe
+(`http`, `tcp`, or `exec`), a provisioning action (`exec` or `manual`), an
+optional target-local stop action, and bounded timing; its `access` entries
+describe Consumer-facing endpoints. Configuration is strict: unknown fields,
+invalid effective overlays, symlinks, duplicate JSON keys, non-finite values,
+and `null` are rejected.
 
 ```text
 svc dev identity --repo <repo> --json
 svc dev status [target] --repo <repo> --json
 svc dev ensure <target> --repo <repo> --json
-svc dev setup vscode|npm [target] --repo <repo> --plan|--apply <digest> --json
+svc dev stop <target> --repo <repo> --json
 ```
 
 `dev identity` exposes the resolved workspace identity for diagnosis. Root
@@ -106,13 +124,16 @@ target: it reuses a healthy endpoint; refuses an endpoint that responds but is
 unhealthy; and requires the consumer's manual action when declared. For
 executable provisioning, it coordinates only the declared capability scope,
 waits for the declared readiness check, then relinquishes process authority
-after success. Worktree scope is the default and requires the probe endpoint to
+after success. Stop executes only the Consumer-declared cleanup action, then
+qualifies it through readiness; it never converts a historical PID into cleanup
+authority. Worktree scope is the default and requires the probe endpoint to
 prove the resolved worktree instance; repository scope intentionally shares one
 capability, while host scope requires an explicit host key.
 
-Interpolation is limited to `${dev.instance}`, `${dev.worktree.id}`, `${dev.profile}`, and `${dev.target}` in declared dev values. Commands are executed as argument arrays without a shell, and configured working directories must remain inside the workspace.
-
-`svc dev setup` is the optional plan-first bridge to Consumer-owned editor/package surfaces. It adds only marked VS Code Tasks or reserved exact root `package.json` scripts that call `svc dev ensure <target>`; apply requires the current exact digest. It never reads `launch.json`, infers a package manager, creates package metadata, removes orphans, or replaces a conflicting Consumer entry.
+Interpolation is limited to `${dev.instance}`, `${dev.worktree.id}`, and
+`${dev.target}` in declared dev values. Commands are executed as argument
+arrays without a shell, and configured working directories must remain inside
+the workspace.
 
 ## Shared Declared Runs
 
@@ -127,8 +148,8 @@ are never written to receipts or SVC output.
 
 ```json
 {
-  "schema_version": 2,
-  "svc_version": "11.0.0",
+  "schema_version": 3,
+  "corpus_version": "12.0.0",
   "run": {
     "check": {"argv": ["pdm", "run", "test"]}
   }
@@ -237,26 +258,30 @@ The old `telemetry agent-thread analyze` command, normalized-only schema-v2
 authority, and TUI are removed. Use the packaged method and the two explicit
 tools together; SVC does not decide what the evidence means.
 
-## Update and Migration Guidance
+## Migration Guidance
 
-`svc self-update` and project adoption are separate:
+The installed package manager owns CLI installation and updates. SVC keeps
+configuration migration and project Corpus-baseline adoption explicit:
 
 ```text
-svc self-update
-svc self-update --apply <plan-digest>
-svc adopt <installed-version>
-svc adopt <installed-version> --apply <plan-digest>
+svc upgrade <repo>
+svc upgrade <repo> --target config --apply <plan-digest>
+svc upgrade <repo> --target corpus --apply <plan-digest>
 ```
 
-The initial self-update adapter supports only a non-editable `pip` installation in the current interpreter. It plans the exact installer command, performs no project write, and verifies the resulting package version in a fresh interpreter. Unsupported installers and editable development installations are reported without mutation.
-
-After a CLI update, first inspect `svc status`. When a release provides migration guidance, look it up, evaluate the consumer repository's actual facts under its mutation gate, make Consumer-owned changes, and only then apply `svc adopt`. `adopt` writes `svc.json` only; it cannot claim that a human or Coding Agent has completed the required judgment.
+Targetless upgrade selects config first when both targets are pending. Config
+apply owns only a supported exact configuration transformation. Corpus plans
+reference exact packaged guidance; an Agent/Human evaluates the Consumer
+repository and updates its SVC documents, then Corpus apply records only the
+reviewed `corpus_version` baseline. SVC never rewrites those documents or
+claims to have verified the judgment.
 
 SVC records release-relevant changes as Changie 1.25.1 tool-native YAML
 fragments under `changes/unreleased/`. Each fragment explicitly declares a
 Behavioral SemVer `major`, `minor`, or `patch` kind. Packaged Markdown migration
-notes under `migrations/` are optional consumer guidance; the CLI does not apply
-a generic consumer-file migration graph.
+notes under `migrations/` are structured, living Consumer guidance derived from
+Changie fragments; the CLI selects the exact release chain but does not apply a
+generic Consumer-file migration graph.
 
 ## SVC Behavioral SemVer
 

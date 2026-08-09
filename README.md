@@ -24,20 +24,26 @@ Install the CLI, then query the guidance you need. The wheel contains the read-o
 python -m pip install sustainable-vibe-coding==11.0.0
 
 svc lookup --list --json
+svc lookup --list sections
 svc lookup --path sections/working-protocol.md
 svc lookup --keyword "task packet mutation gate"
-svc lookup --name 'sections/working-protocol\.md'
-svc lookup --name 'assets/templates/AGENTS\..*\.template\.md' --all
+svc lookup --regex 'mutation gate' --scope both --limit 10
 ```
 
-`--list` returns path-sorted catalog metadata without returning document bodies. Use one returned normalized source-relative path with `--path` to read and integrity-check exactly that canonical document. Keyword results are short, deterministic candidates that are also resolved with `--path`. `--name` remains available as a full-path regular expression for intentional multi-document reads. Semantic search is intentionally deferred until a local artifact and quality contract are measured.
+`--list [prefix]` expands one Corpus directory level at a time. Use a returned
+normalized source-relative path with `--path` to read and integrity-check one
+canonical document. `--keyword` returns a bounded relevance-ordered candidate
+set; `--regex` returns bounded exact path/content occurrences. A valid search
+with no matches succeeds with an empty collection. Lookup reads the SVC Corpus,
+not the CLI manual; use `svc lookup --help` and `svc <command> --help` for the
+current grammar.
 
 ## Initialize a Consumer Project
 
 Initialization is dry-run by default. It creates no copied SVC documents and never silently overwrites consumer content.
 
 ```bash
-svc init /path/to/project --agent codex --json
+svc init /path/to/project --json
 svc init /path/to/project --apply <plan-digest>
 svc status /path/to/project --json
 ```
@@ -47,63 +53,70 @@ The exact-plan apply may create:
 ```text
 svc.json
 .gitignore                 (a bounded generated ignore block for svc.local.json)
-.agents/skills/svc/SKILL.md
 AGENTS.md                  (a bounded generated SVC navigation block)
 docs/index.md              (created when absent, with a bounded generated navigation block)
 ```
 
-`svc.json` is the complete, committed project configuration. Schema v2 records the adopted baseline and can optionally declare development capabilities:
+`svc.json` is the complete, committed project configuration. Schema v3 records
+the adopted Corpus baseline independently from the CLI version and can
+optionally declare development capabilities and bounded runs:
 
 ```json
 {
-  "schema_version": 2,
-  "svc_version": "11.0.0"
+  "schema_version": 3,
+  "corpus_version": "12.0.0"
 }
 ```
 
 `svc.local.json` is an optional, ignored sparse overlay for `dev` and existing
-`run` declarations. It cannot change the schema or adopted version, create a
+`run` declarations. It must declare schema 3, cannot change the Corpus baseline, create a
 local-only run name, or produce an invalid effective configuration. `init`
 maintains just its marked ignore block; it never writes a local configuration
-file. Schema-v1 projects are write-blocked until deliberately migrated to
-schema v2.
+file. Supported older configuration is migrated through a plan-first
+`svc upgrade --target config`; `init` does not hide configuration migration.
 
 Start with `svc status --json` in any repository. It is read-only and returns a
-compact JSON preflight state—`unadopted`, `malformed`, `actionable`, or
-`healthy`—with the next action and its Human-authorization requirement. An
-`unadopted` result means ask for authorization before running `svc init`; do
-not use `init` to discover state. Status summarizes declared dev profile,
-target names, and committed run-entry names without executing them; use
+compact JSON preflight with independent CLI, config, Corpus-baseline,
+integration, and workspace facts plus one primary continuation. Status
+summarizes declared dev target names and committed run-entry names without executing them; use
 `svc dev status` when runtime observation is needed. Every current `--json`
 response is one compact JSON value; JSONL is reserved for a future command with
 meaningful progress events.
 
-Everything unmarked in `AGENTS.md` and `docs/index.md` remains Consumer-owned. The Codex skill is a compact router to the installed CLI and canonical corpus, not a duplicate of framework guidance. Modified generated blocks, skills, or local-config ignore section block refresh for human review.
+Everything unmarked in `AGENTS.md` and `docs/index.md` remains Consumer-owned.
+CLI help is self-sufficient; there is no installed SVC CLI Skill. A clean
+legacy generated Skill is retired by an exact init plan, while a modified or
+unproven file is never silently deleted. Modified generated navigation or
+local-config-ignore blocks stop repair for review.
 
 ## Declare and Ensure Development Capabilities
 
-An optional `dev` section selects a profile and declares named targets. Each target has a scope (`worktree`, `repository`, or `host`), one readiness probe (`http`, `tcp`, or `exec`), and either an executable or manual provisioning action. Use JSON output for editor or automation integration:
+An optional `dev.targets` map declares named capabilities directly. Each target
+has a scope (`worktree`, `repository`, or `host`), one readiness probe (`http`,
+`tcp`, or `exec`), an executable or manual provisioner, and an optional
+target-local executable or manual `stop` action. Default text serves ordinary
+Agent/Human use; compact JSON is the deliberate scripts/CI projection:
 
 ```bash
 svc dev identity --repo /path/to/project --json
 svc dev status --repo /path/to/project --json
 svc dev status frontend --repo /path/to/project --json
 svc dev ensure frontend --repo /path/to/project --json
-svc dev setup vscode frontend --repo /path/to/project --plan --json
-svc dev setup npm frontend --repo /path/to/project --apply <digest> --json
+svc dev stop frontend --repo /path/to/project --json
 ```
 
 Root `status` summarizes declarations only; `svc dev status` observes declared
 targets without starting or taking over a process. `ensure` handles one declared
 target, reuses a healthy endpoint, refuses an occupied but unhealthy endpoint,
-and does not run a `manual` provisioner. Executable provisioning is coordinated
+and does not run a `manual` provisioner. `stop` runs only Consumer-declared
+cleanup and never infers authority from a recorded PID. Executable work is coordinated
 at the declared scope and releases process authority once readiness succeeds.
 Worktree scope is the default and its probe endpoint must prove the resolved
 instance; host scope requires a declared `host_key`.
 
-Dev values may interpolate only `${dev.instance}`, `${dev.worktree.id}`, `${dev.profile}`, and `${dev.target}`. Commands are argument arrays, not shell snippets, and their configured working directories must remain inside the workspace.
-
-`svc dev setup` is a deliberately narrow bridge for consumer-owned files: it can add marked VS Code Tasks or exact root `package.json` scripts that invoke `svc dev ensure <target>`. It is plan-first; `--apply` requires the current exact digest. It never reads `launch.json`, selects a package manager, creates package metadata, or overwrites a conflicting consumer entry.
+Dev values may interpolate only `${dev.instance}`, `${dev.worktree.id}`, and
+`${dev.target}`. Commands are argument arrays, not shell snippets, and their
+configured working directories must remain inside the workspace.
 
 ## Run One Shared Declared Command
 
@@ -112,8 +125,8 @@ Agents, editor carriers, or CI should invoke through the same project name:
 
 ```json
 {
-  "schema_version": 2,
-  "svc_version": "11.0.0",
+  "schema_version": 3,
+  "corpus_version": "12.0.0",
   "run": {
     "check": {
       "argv": ["pdm", "run", "test"],
@@ -224,18 +237,21 @@ removed; analysis is now the composition of explicit `query` and native
 
 ## Upgrade Deliberately
 
-The executable and project adoption are deliberately separate:
+The installed package manager owns CLI installation and updates. Project
+configuration and Corpus-baseline upgrades remain explicit SVC operations:
 
 ```bash
-svc self-update --json
-svc self-update --apply <plan-digest>
-
 svc status /path/to/project
-svc lookup --keyword "migration"
-svc adopt 10.0.0 /path/to/project --apply <plan-digest>
+svc upgrade /path/to/project
+svc upgrade /path/to/project --target config --apply <plan-digest>
+svc upgrade /path/to/project --target corpus --apply <plan-digest>
 ```
 
-`self-update` changes only a supported non-editable pip installation in the current interpreter. It never changes `svc.json`. After reviewing any packaged migration guidance and applying Consumer-owned changes under the project's mutation gate, `svc adopt` records the new baseline in `svc.json` through another exact plan.
+Config apply performs only a supported exact file transformation and reports
+remaining upgrade work. Corpus plans reference the exact packaged migration
+guidance; after an Agent/Human reviews and updates Consumer-owned SVC documents,
+Corpus apply records only the reviewed `corpus_version` baseline. SVC never
+programmatically rewrites those project documents.
 
 ## Behavioral SemVer and Releases
 

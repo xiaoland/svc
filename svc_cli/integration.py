@@ -1,4 +1,4 @@
-"""Generated, bounded integration surfaces that point Codex back to `svc`."""
+"""Generated, bounded project integration and legacy provenance inspection."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import re
 from dataclasses import dataclass
 
 from .catalog import sha256_bytes
-from .lookup import LIST_GUIDANCE_COMMAND, READ_GUIDANCE_COMMAND
 
 
 NAVIGATION_BEGIN_RE = re.compile(
@@ -50,62 +49,32 @@ class DesiredIntegration:
     content: bytes
 
 
-def navigation_body() -> str:
+def navigation_body(relative_path: str = "AGENTS.md") -> str:
+    if relative_path == "AGENTS.md":
+        return (
+            "## SVC\n\n"
+            "Use the installed `svc` CLI when SVC guidance or project integration is "
+            "relevant. Discover the current interface through `svc --help` and "
+            "`svc <command> --help`; `svc lookup` reads the SVC Corpus, not CLI help. "
+            "Treat unmarked project instructions and documentation as Consumer-owned."
+        )
     return (
-        "## SVC\n\n"
-        "This project uses the local Sustainable Vibe Coding CLI. Query framework guidance "
-        "when it is needed instead of copying framework documents into this repository.\n\n"
-        "- Run `svc status --json` as the first SVC command in a repository. If it reports "
-        "`unadopted`, request Human authorization before running `svc init`; do not use init "
-        "to discover state. If the installed corpus is newer than the adopted version in `svc.json`, "
-        "read its migration guidance before `svc adopt`.\n"
-        f"- Run `{LIST_GUIDANCE_COMMAND}` to list local canonical guidance, then "
-        f"`{READ_GUIDANCE_COMMAND}` to read one exact document. Use "
-        "`svc lookup --keyword \"<need>\" --json` only when the titles do not resolve the need.\n"
-        "- Treat all unmarked project instructions and documentation as consumer-owned."
+        "## SVC Corpus\n\n"
+        "Use `svc lookup` when packaged Sustainable Vibe Coding Corpus guidance is "
+        "relevant, and discover its browse/search/read grammar through "
+        "`svc lookup --help`. Project documentation outside this marked block remains "
+        "Consumer-owned."
     )
 
 
-def render_navigation_block() -> str:
-    body = navigation_body()
+def render_navigation_block(relative_path: str = "AGENTS.md") -> str:
+    body = navigation_body(relative_path)
     digest = sha256_bytes(body.encode("utf-8"))
     return (
         f"<!-- svc:begin navigation sha256={digest} -->\n"
         f"{body}\n"
         "<!-- svc:end navigation -->\n"
     )
-
-
-def skill_body() -> str:
-    return (
-        "---\n"
-        "name: svc\n"
-        "description: Use the local SVC CLI for SVC guidance, CLI troubleshooting, or project "
-        "integration. It routes to the installed canonical corpus and does not replace "
-        "consumer-owned project truth.\n"
-        "---\n\n"
-        "# Sustainable Vibe Coding\n\n"
-        "Run `svc status --json` as the first SVC command in a repository. "
-        "If it reports `unadopted`, request Human authorization before running `svc init`; do "
-        "not use init to discover state.\n\n"
-        "Use the installed local corpus before web search for SVC guidance or CLI troubleshooting. "
-        "If no exact source-relative path is known:\n\n"
-        f"1. `{LIST_GUIDANCE_COMMAND}`\n"
-        f"2. `{READ_GUIDANCE_COMMAND}`\n\n"
-        "Use `svc lookup --keyword \"<need>\" --json` only when the listed titles do not "
-        "resolve the need. Use `svc <command> --help` to discover the current command contract.\n\n"
-        "Read root and local `AGENTS.md` before changing governed files. Mutating commands require "
-        "repository-scoped authorization; a returned plan is not approval, and only its exact digest "
-        "may be applied. Consumer-owned instructions, product truth, technical decisions, task packets, "
-        "and unmarked documentation remain authoritative.\n\n"
-        "This Skill is a router, not a copy of SVC guidance.\n"
-    )
-
-
-def render_skill() -> str:
-    body = skill_body()
-    digest = sha256_bytes(body.encode("utf-8"))
-    return f"{body}<!-- svc:generated skill sha256={digest} -->\n"
 
 
 def local_config_ignore_body() -> str:
@@ -152,12 +121,24 @@ def desired_local_config_ignore(content: bytes | None) -> DesiredIntegration | N
             "managed-ignore-drift",
             "The SVC-managed svc.local.json ignore section is modified or malformed and will not be replaced.",
         )
-    line_ending = "\r\n" if inspection.content is not None and "\r\n" in inspection.content else "\n"
+    line_ending = (
+        "\r\n"
+        if inspection.content is not None and "\r\n" in inspection.content
+        else "\n"
+    )
     block = render_local_config_ignore_block(line_ending)
     if inspection.status == "missing":
-        return DesiredIntegration("create", "create SVC local-config ignore section", block)
+        return DesiredIntegration(
+            "create", "create SVC local-config ignore section", block
+        )
     assert inspection.content is not None
-    separator = b"" if not inspection.content else line_ending.encode("utf-8") if inspection.content.endswith(("\n", "\r")) else (line_ending * 2).encode("utf-8")
+    separator = (
+        b""
+        if not inspection.content
+        else line_ending.encode("utf-8")
+        if inspection.content.endswith(("\n", "\r"))
+        else (line_ending * 2).encode("utf-8")
+    )
     return DesiredIntegration(
         "append",
         "append SVC local-config ignore section",
@@ -165,7 +146,9 @@ def desired_local_config_ignore(content: bytes | None) -> DesiredIntegration | N
     )
 
 
-def inspect_navigation(content: bytes | None) -> IntegrationInspection:
+def inspect_navigation(
+    content: bytes | None, relative_path: str = "AGENTS.md"
+) -> IntegrationInspection:
     if content is None:
         return IntegrationInspection("missing", None)
     text = _decode(content)
@@ -181,18 +164,18 @@ def inspect_navigation(content: bytes | None) -> IntegrationInspection:
     body = match.group("body")
     if sha256_bytes(body.encode("utf-8")) != match.group("digest"):
         return IntegrationInspection("modified", text, match)
-    if body == navigation_body():
+    if body == navigation_body(relative_path):
         return IntegrationInspection("current", text, match)
     return IntegrationInspection("outdated", text, match)
 
 
-def inspect_skill(content: bytes | None) -> IntegrationInspection:
+def inspect_retired_skill(content: bytes | None) -> IntegrationInspection:
     if content is None:
         return IntegrationInspection("missing", None)
     text = _decode(content)
     markers = list(SKILL_MARKER_RE.finditer(text))
     if not markers:
-        return IntegrationInspection("modified", text)
+        return IntegrationInspection("unowned", text)
     if len(markers) != 1:
         return IntegrationInspection("modified", text)
     match = markers[0]
@@ -201,20 +184,32 @@ def inspect_skill(content: bytes | None) -> IntegrationInspection:
     body = text[: match.start()]
     if sha256_bytes(body.encode("utf-8")) != match.group("digest"):
         return IntegrationInspection("modified", text, match)
-    if body == skill_body():
-        return IntegrationInspection("current", text, match)
-    return IntegrationInspection("outdated", text, match)
+    return IntegrationInspection("clean-generated", text, match)
 
 
-def desired_navigation(relative_path: str, content: bytes | None) -> DesiredIntegration | None:
-    inspection = inspect_navigation(content)
-    block = render_navigation_block()
+def desired_navigation(
+    relative_path: str, content: bytes | None
+) -> DesiredIntegration | None:
+    inspection = inspect_navigation(content, relative_path)
+    block = render_navigation_block(relative_path)
     if inspection.status == "missing":
-        heading = "# Project Instructions\n\n" if relative_path == "AGENTS.md" else "# Documentation\n\n"
-        return DesiredIntegration("create", "create SVC navigation anchor", (heading + block).encode("utf-8"))
+        heading = (
+            "# Project Instructions\n\n"
+            if relative_path == "AGENTS.md"
+            else "# Documentation\n\n"
+        )
+        return DesiredIntegration(
+            "create", "create SVC navigation anchor", (heading + block).encode("utf-8")
+        )
     if inspection.status == "unanchored":
         assert inspection.content is not None
-        separator = "" if not inspection.content else "\n" if inspection.content.endswith("\n") else "\n\n"
+        separator = (
+            ""
+            if not inspection.content
+            else "\n"
+            if inspection.content.endswith("\n")
+            else "\n\n"
+        )
         return DesiredIntegration(
             "append",
             "add bounded SVC navigation anchor",
@@ -229,24 +224,14 @@ def desired_navigation(relative_path: str, content: bytes | None) -> DesiredInte
             + block
             + inspection.content[inspection.match.end() :]
         )
-        return DesiredIntegration("refresh", "refresh clean generated SVC navigation anchor", refreshed.encode("utf-8"))
+        return DesiredIntegration(
+            "refresh",
+            "refresh clean generated SVC navigation anchor",
+            refreshed.encode("utf-8"),
+        )
     raise IntegrationProblem(
         "generated-guidance-drift",
         "The existing SVC navigation block is modified or malformed and will not be replaced.",
-    )
-
-
-def desired_skill(content: bytes | None) -> DesiredIntegration | None:
-    inspection = inspect_skill(content)
-    if inspection.status == "missing":
-        return DesiredIntegration("create", "install Codex SVC skill", render_skill().encode("utf-8"))
-    if inspection.status == "current":
-        return None
-    if inspection.status == "outdated":
-        return DesiredIntegration("refresh", "refresh clean generated Codex SVC skill", render_skill().encode("utf-8"))
-    raise IntegrationProblem(
-        "generated-skill-drift",
-        "The existing Codex SVC skill is modified or malformed and will not be replaced.",
     )
 
 
@@ -254,4 +239,6 @@ def _decode(content: bytes) -> str:
     try:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
-        raise IntegrationProblem("non-text-guidance-file", "Generated guidance targets must be UTF-8 text.") from error
+        raise IntegrationProblem(
+            "non-text-guidance-file", "Generated guidance targets must be UTF-8 text."
+        ) from error

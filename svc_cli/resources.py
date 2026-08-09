@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version as distribution_version
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
-from . import DISTRIBUTION_NAME
 from .catalog import normalized_document_path
-
-
-SOURCE_VERSION_FALLBACK = "0.0.0"
 
 
 class Resource(Protocol):
@@ -37,13 +32,6 @@ def resource_mode() -> str:
     return "wheel" if _packaged_data_root() is not None else "source"
 
 
-def source_distribution_version() -> str:
-    try:
-        return distribution_version(DISTRIBUTION_NAME)
-    except PackageNotFoundError:
-        return SOURCE_VERSION_FALLBACK
-
-
 def read_catalog_bytes() -> bytes:
     packaged = _packaged_data_root()
     if packaged is not None:
@@ -54,7 +42,7 @@ def read_catalog_bytes() -> bytes:
         raise FileNotFoundError("SVC source fallback is unavailable")
     from tools.build_catalog import build_catalog_bytes
 
-    return build_catalog_bytes(root, source_distribution_version())
+    return build_catalog_bytes(root)
 
 
 def read_document(path: str) -> bytes:
@@ -71,4 +59,25 @@ def read_document(path: str) -> bytes:
     source = source_root() / PurePosixPath(normalized)
     if not source.is_file():
         raise FileNotFoundError(f"SVC source document does not exist: {normalized}")
+    return source.read_bytes()
+
+
+def read_config_migration_descriptor(from_schema: int, to_schema: int) -> bytes:
+    """Read one CLI-owned configuration migration descriptor."""
+
+    name = f"config-{from_schema}-{to_schema}.json"
+    packaged = _packaged_data_root()
+    if packaged is not None:
+        resource = packaged.joinpath("migrations", name)
+        if not resource.is_file():
+            raise FileNotFoundError(
+                f"Packaged config migration descriptor does not exist: {name}"
+            )
+        return resource.read_bytes()
+
+    source = Path(__file__).resolve().parent / "data" / "migrations" / name
+    if not source.is_file():
+        raise FileNotFoundError(
+            f"Source config migration descriptor does not exist: {name}"
+        )
     return source.read_bytes()

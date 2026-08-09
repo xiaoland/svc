@@ -22,7 +22,7 @@ pdm run lint-workflows
 pdm run test
 pdm run build-monolith
 pdm build
-pdm run svc lookup --name 'sections/working-protocol\\.md'
+pdm run svc lookup --path sections/working-protocol.md
 ```
 
 Canonical framework sources live under `src/`. Do not edit `build/monolith.md`; regenerate it with `pdm run build-monolith`.
@@ -95,7 +95,10 @@ The release flow is intentionally sequenced:
 2. A maintainer prepares a release with Changie 1.25.1:
 
    ```console
-   changie batch auto --allow-no-changes=false
+   version=$(changie next auto)
+   changie batch "$version" --allow-no-changes=false \
+     --move-dir "fragments/$version"
+   pdm run build-release-projections
    changie merge
    ```
 

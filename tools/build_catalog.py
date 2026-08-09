@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from svc_cli.catalog import catalog_bytes, normalized_document_path
+from svc_cli.catalog import (
+    CorpusVersionIndex,
+    catalog_bytes,
+    normalized_document_path,
+    parse_version_index,
+)
 
 
 def canonical_documents(source_root: Path) -> list[tuple[str, Path]]:
@@ -30,21 +35,28 @@ def canonical_documents(source_root: Path) -> list[tuple[str, Path]]:
     return documents
 
 
-def build_catalog_bytes(source_root: Path, svc_version: str) -> bytes:
+def read_version_index(source_root: Path) -> CorpusVersionIndex:
+    version_path = source_root / "version.json"
+    if not version_path.is_file():
+        raise FileNotFoundError(f"Corpus version index does not exist: {version_path}")
+    return parse_version_index(version_path.read_bytes())
+
+
+def build_catalog_bytes(source_root: Path) -> bytes:
     documents = canonical_documents(source_root)
     return catalog_bytes(
-        svc_version,
+        read_version_index(source_root),
         ((relative, path.read_bytes()) for relative, path in documents),
     )
 
 
-def build_projection(root: Path, output_dir: Path, svc_version: str) -> dict[str, Path]:
+def build_projection(root: Path, output_dir: Path) -> dict[str, Path]:
     """Write the derived catalog once and return the exact wheel payload mapping."""
 
     source_root = root / "src"
     documents = canonical_documents(source_root)
     catalog = catalog_bytes(
-        svc_version,
+        read_version_index(source_root),
         ((relative, path.read_bytes()) for relative, path in documents),
     )
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -54,4 +66,6 @@ def build_projection(root: Path, output_dir: Path, svc_version: str) -> dict[str
     files: dict[str, Path] = {"svc_cli/data/catalog.json": catalog_path}
     for relative, source in documents:
         files[f"svc_cli/data/corpus/{relative}"] = source
+    for descriptor in sorted((root / "svc_cli/data/migrations").glob("config-*.json")):
+        files[f"svc_cli/data/migrations/{descriptor.name}"] = descriptor
     return files

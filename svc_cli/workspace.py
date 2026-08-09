@@ -25,7 +25,7 @@ class WorkspaceIdentity:
     root: Path
     namespace_id: str
     repository_kind: str
-    repo_common_id: str
+    repository_id: str
     worktree_id: str
     instance: str
 
@@ -34,7 +34,7 @@ class WorkspaceIdentity:
             "root": str(self.root),
             "namespace_id": self.namespace_id,
             "repository_kind": self.repository_kind,
-            "repo_common_id": self.repo_common_id,
+            "repository_id": self.repository_id,
             "worktree_id": self.worktree_id,
             "instance": self.instance,
         }
@@ -52,7 +52,7 @@ def resolve_workspace_identity(root: Path, *, namespace: str | None = None) -> W
             root=workspace,
             namespace_id=namespace_id,
             repository_kind="non-git",
-            repo_common_id=workspace_id,
+            repository_id=workspace_id,
             worktree_id=workspace_id,
             instance=_digest("instance", namespace_id, workspace_id, length=16),
         )
@@ -65,7 +65,7 @@ def resolve_workspace_identity(root: Path, *, namespace: str | None = None) -> W
         root=workspace,
         namespace_id=namespace_id,
         repository_kind="git",
-        repo_common_id=common_id,
+        repository_id=common_id,
         worktree_id=worktree_id,
         instance=_digest("instance", namespace_id, worktree_id, length=16),
     )

@@ -35,6 +35,8 @@ class ProbeObservation:
     endpoint_identity: str
     responded: bool = False
     status_code: int | None = None
+    exit_code: int | None = None
+    output: str | None = None
     output_bytes: int | None = None
     output_truncated: bool = False
 
@@ -48,38 +50,72 @@ class ProbeObservation:
         }
         if self.status_code is not None:
             result["status_code"] = self.status_code
+        if self.exit_code is not None:
+            result["exit_code"] = self.exit_code
+        if self.output is not None:
+            result["output"] = self.output
         if self.output_bytes is not None:
             result["output_bytes"] = self.output_bytes
             result["output_truncated"] = self.output_truncated
         return result
 
 
+@dataclass(frozen=True)
+class ResolvedProbe:
+    kind: str
+    endpoint_identity: str
+    url: str | None = None
+    host: str | None = None
+    argv: tuple[str, ...] | None = None
+
+
+def resolve_probe(
+    target: TargetConfig,
+    workspace: WorkspaceIdentity,
+    *,
+    target_name: str,
+) -> ResolvedProbe:
+    """Resolve identity-bearing probe inputs without performing probe I/O."""
+
+    probe = target.probe
+    if isinstance(probe, HttpProbe):
+        url = interpolate_dev_value(probe.url, workspace, target=target_name)
+        require_worktree_provenance(target.scope, url, workspace)
+        return ResolvedProbe("http", url, url=url)
+    if isinstance(probe, TcpProbe):
+        host = interpolate_dev_value(probe.host, workspace, target=target_name)
+        endpoint = f"tcp://{host}:{probe.port}"
+        require_worktree_provenance(target.scope, endpoint, workspace)
+        return ResolvedProbe("tcp", endpoint, host=host)
+    argv = interpolate_dev_argv(probe.argv, workspace, target=target_name)
+    endpoint = "exec:" + "\0".join(argv)
+    require_worktree_provenance(target.scope, endpoint, workspace)
+    return ResolvedProbe("exec", endpoint, argv=argv)
+
+
 def probe_target(
     target: TargetConfig,
     workspace: WorkspaceIdentity,
     *,
-    profile: str,
     target_name: str,
     timeout: float | None = None,
 ) -> ProbeObservation:
     probe = target.probe
+    resolved = resolve_probe(target, workspace, target_name=target_name)
     effective_timeout = min(probe.timeout, timeout) if timeout is not None else probe.timeout
     if effective_timeout <= 0:
-        return ProbeObservation(probe.kind, False, "deadline-exhausted", "deadline")
+        return ProbeObservation(
+            probe.kind, False, "deadline-exhausted", resolved.endpoint_identity
+        )
     if isinstance(probe, HttpProbe):
-        url = interpolate_dev_value(probe.url, workspace, profile=profile, target=target_name)
-        require_worktree_provenance(target.scope, url, workspace)
-        return probe_http(probe, url, timeout=effective_timeout)
+        assert resolved.url is not None
+        return probe_http(probe, resolved.url, timeout=effective_timeout)
     if isinstance(probe, TcpProbe):
-        host = interpolate_dev_value(probe.host, workspace, profile=profile, target=target_name)
-        endpoint = f"tcp://{host}:{probe.port}"
-        require_worktree_provenance(target.scope, endpoint, workspace)
-        return probe_tcp(probe, host, timeout=effective_timeout)
-    argv = interpolate_dev_argv(probe.argv, workspace, profile=profile, target=target_name)
-    endpoint = "exec:" + "\0".join(argv)
-    require_worktree_provenance(target.scope, endpoint, workspace)
-    cwd = resolve_dev_cwd(workspace.root, probe.cwd, workspace, profile, target_name)
-    return probe_exec(probe, argv, cwd, timeout=effective_timeout)
+        assert resolved.host is not None
+        return probe_tcp(probe, resolved.host, timeout=effective_timeout)
+    assert resolved.argv is not None
+    cwd = resolve_dev_cwd(workspace.root, probe.cwd, workspace, target_name)
+    return probe_exec(probe, resolved.argv, cwd, timeout=effective_timeout)
 
 
 def probe_http(
@@ -187,6 +223,7 @@ def probe_exec(probe: ExecProbe, argv: tuple[str, ...], cwd: Path, *, timeout: f
             False,
             "timeout",
             "exec:" + "\0".join(argv),
+            output=_decode_probe_output(captured),
             output_bytes=len(captured),
             output_truncated=overflow,
         )
@@ -197,19 +234,26 @@ def probe_exec(probe: ExecProbe, argv: tuple[str, ...], cwd: Path, *, timeout: f
         code == 0 and not overflow,
         "zero-exit" if code == 0 and not overflow else "nonzero-exit" if code else "output-limit",
         "exec:" + "\0".join(argv),
+        exit_code=code,
+        output=_decode_probe_output(captured),
         output_bytes=len(captured),
         output_truncated=overflow,
     )
+
+
+def _decode_probe_output(captured: bytearray) -> str | None:
+    if not captured:
+        return None
+    return bytes(captured).decode("utf-8", errors="replace")
 
 
 def resolve_dev_cwd(
     root: Path,
     configured: str | None,
     workspace: WorkspaceIdentity,
-    profile: str,
     target: str,
 ) -> Path:
-    value = interpolate_dev_value(configured or ".", workspace, profile=profile, target=target)
+    value = interpolate_dev_value(configured or ".", workspace, target=target)
     candidate = (root / value).resolve() if not Path(value).is_absolute() else Path(value).resolve()
     try:
         candidate.relative_to(root)

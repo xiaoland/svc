@@ -1,0 +1,32 @@
+# Replace normalized Agent-thread analysis with Agent-owned query and native read
+
+Corpus release: 12.0.0.
+
+### Applies when
+A project calls `svc telemetry agent-thread analyze`, uses the removed
+Textual navigator, or parses the former normalized analysis response.
+
+### Required change
+Replace that surface with the two machine-first tools:
+
+```text
+svc analysis query --schema
+svc analysis query --input <evidence-v3.zip> --request <file|->
+svc analysis read --schema
+svc analysis read --input <evidence-v3.zip> --request <file|->
+```
+
+Use `query` only for the closed `overview` and `match` navigation intents.
+Use `read` for captured native content in source order and scope-bound
+continuation. Remove old `analyze --json` response parsing and removed
+`--include-sensitive`, `--repo`, and TTY branches. The calling Agent owns
+interpretation, hypotheses, and conclusions; SVC does not return a score or
+causal verdict.
+
+### Verify
+Run the project's actual caller against `query --schema` and `read --schema`,
+then query and read one schema-v3 bundle through its ordinary request path.
+
+### Reference
+`sections/working-protocol.md` owns the Agent Task Analysis method;
+`sections/product-tdd.md` owns the query/read wire contract.

@@ -52,11 +52,10 @@
     focused contract tests and passes the repository's normal gates and real
     acceptance.
 - **Current Truth**:
-  - This remains a design/review unit with no implementation authorization.
-    The semantic-form contract, smallest root-status candidate, SVC Skill
-    removal direction, self-sufficient-help requirement, and smallest
-    `dev status` candidate have been accepted as design inputs. The initial external
-    and current-surface evidence pass is complete.
+  - Sir authorized product implementation on 2026-08-08 after the integrated
+    plan and rehearsal were committed as `227ea00`. All ten slices are now
+    implemented in the working tree and are undergoing final qualification;
+    the product changes are intentionally not committed yet.
   - Existing SVC surfaces mix native text, lifecycle text on stderr, compact
     single-value JSON, JSONL evidence, exit codes, file references, and
     execution IDs. Their semantics must be inventoried before convergence is
@@ -204,8 +203,8 @@
     `svc identity`; public command placement follows the demonstrated dev
     resource-scoping intent rather than internal ownership symmetry. Status
     results may still carry workspace facts when those facts qualify the
-    observation. Both command decisions remain design inputs, not product
-    implementation authorization.
+    observation. Both command decisions are now implemented under the accepted
+    boundary.
   - Sir accepted the `dev identity` input/output contract. Keep
     `svc dev identity [--repo <repo>] [--json]` with no additional selector or
     mode. Replace the generic default receipt with a concise semantic chain of
@@ -443,8 +442,9 @@
     in [`implementation-plan.md`](implementation-plan.md). It treats the work
     as one release unit with internally verifiable slices and identifies
     Windows long-lived-process survival as a must-prove release boundary.
-  - Product implementation still requires Sir's separate explicit start after
-    review of that plan.
+  - Sir supplied that explicit start after review. Implementation and exact
+    real-project evidence are recorded in [`acceptance.md`](acceptance.md); no
+    fixture result is counted as product acceptance.
 
   `telemetry agent-thread list|export` and `analysis query|read` are specialist
   maintainer evidence surfaces, not this unit's core SVC business capability.
@@ -512,6 +512,8 @@
   [`core-interface-consistency-review.md`](core-interface-consistency-review.md)
 - Integrated implementation plan, failure rehearsal, and real acceptance:
   [`implementation-plan.md`](implementation-plan.md)
+- Executed mechanical and non-fixture real-project acceptance:
+  [`acceptance.md`](acceptance.md)
 - Dev configuration topology review: [`dev-config-review.md`](dev-config-review.md)
 - Workspace identity review: [`identity-review.md`](identity-review.md)
 - CLI interface topology review:

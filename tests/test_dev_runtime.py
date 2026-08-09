@@ -1,23 +1,30 @@
 from __future__ import annotations
 
-import json
 import os
 import signal
 import socket
-import subprocess
 import sys
 import tempfile
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
 
 from svc_cli._execution import ExecutionStore, LaunchSpec, start_isolated
-from svc_cli.config import ExecProbe, ExecProvision, HttpProbe, TcpProbe, TargetConfig
-from svc_cli.dev.identity import resolve_capability_identity, resolve_workspace_identity
-from svc_cli.dev.runtime import _cleanup_on_interrupt, _provision, ensure_target, probe_exec, probe_http, probe_target, probe_tcp
+from svc_cli.config import ExecProbe, HttpProbe, TargetConfig
+from svc_cli.dev.identity import resolve_workspace_identity
+from svc_cli.dev.runtime import (
+    _cleanup_on_interrupt,
+    ensure_target,
+    probe_exec,
+    probe_http,
+    probe_target,
+    stop_target,
+)
 from svc_cli.errors import SvcError
+from tests.project_contract import write_project_config
 
 
 class _Response:
@@ -29,7 +36,9 @@ class _Response:
 
 
 def test_http_probe_enforces_loopback_and_treats_redirect_as_an_observation() -> None:
-    probe = HttpProbe(kind="http", url="http://app.localhost/health", success_status=[200, 299])
+    probe = HttpProbe(
+        kind="http", url="http://app.localhost/health", success_status=[200, 299]
+    )
     observed = probe_http(
         probe,
         probe.url,
@@ -67,8 +76,14 @@ def test_http_probe_pins_the_validated_address_instead_of_resolving_again() -> N
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        probe = HttpProbe(kind="http", url=f"http://unresolvable.example:{server.server_port}/", success_status=[200, 299])
-        observed = probe_http(probe, probe.url, timeout=1, resolver=lambda host, port: ("127.0.0.1",))
+        probe = HttpProbe(
+            kind="http",
+            url=f"http://unresolvable.example:{server.server_port}/",
+            success_status=[200, 299],
+        )
+        observed = probe_http(
+            probe, probe.url, timeout=1, resolver=lambda host, port: ("127.0.0.1",)
+        )
         assert not observed.healthy
         assert observed.status_code == 302
         assert requests == [("/", f"unresolvable.example:{server.server_port}")]
@@ -78,15 +93,13 @@ def test_http_probe_pins_the_validated_address_instead_of_resolving_again() -> N
         thread.join()
 
 
-def test_tcp_probe_failure_is_a_bounded_observation() -> None:
-    tcp = TcpProbe(kind="tcp", host="127.0.0.1", port=9, timeout=1)
-    observation = probe_tcp(tcp, tcp.host, timeout=0.1, resolver=lambda host, port: ("127.0.0.1",))
-    assert not observation.healthy
-
-
 def test_exec_probe_enforces_its_declared_output_limit() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        probe = ExecProbe(kind="exec", argv=[sys.executable, "-c", "print('x' * 100)"], output_limit=10)
+        probe = ExecProbe(
+            kind="exec",
+            argv=[sys.executable, "-c", "print('x' * 100)"],
+            output_limit=10,
+        )
         result = probe_exec(probe, tuple(probe.argv), Path(tmp), timeout=1)
         assert not result.healthy
         assert result.reason == "output-limit"
@@ -97,34 +110,21 @@ def test_exec_probe_enforces_its_declared_output_limit() -> None:
 def test_worktree_scope_refuses_static_probe_and_manual_never_provisions() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        store = ExecutionStore(root / "runtime")
         workspace = resolve_workspace_identity(root, namespace="fixture")
         static = TargetConfig(
             probe={"kind": "http", "url": "http://127.0.0.1:1/health"},
             provision={"kind": "manual"},
         )
         with pytest.raises(SvcError, match="provenance"):
-            probe_target(static, workspace, profile="local", target_name="app")
+            probe_target(static, workspace, target_name="app")
 
-        write_config(
+        write_target(
             root,
+            "manual",
             {
-                "schema_version": 2,
-                "svc_version": "10.0.1",
-                "dev": {
-                    "profile": "local",
-                    "profiles": {
-                        "local": {
-                            "targets": {
-                                "manual": {
-                                    "scope": "repository",
-                                    "probe": {"kind": "tcp", "host": "127.0.0.1", "port": 1},
-                                    "provision": {"kind": "manual"},
-                                }
-                            }
-                        }
-                    },
-                },
+                "scope": "repository",
+                "probe": {"kind": "tcp", "host": "127.0.0.1", "port": 1},
+                "provision": {"kind": "manual"},
             },
         )
         with pytest.raises(SvcError, match="manual"):
@@ -135,26 +135,29 @@ def test_owned_early_exit_reports_only_attempt_cleanup() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         store = ExecutionStore(root / "runtime")
-        write_config(
+        write_target(
             root,
+            "fails",
             {
-                "schema_version": 2,
-                "svc_version": "10.0.1",
-                "dev": {
-                    "profile": "local",
-                    "profiles": {
-                        "local": {
-                            "targets": {
-                                "fails": {
-                                    "scope": "repository",
-                                    "readiness_timeout": 1,
-                                    "poll_interval": 0.01,
-                                    "probe": {"kind": "exec", "argv": [sys.executable, "-c", "import sys; sys.exit(1)"]},
-                                    "provision": {"kind": "exec", "mode": "run", "argv": [sys.executable, "-c", "import sys; sys.exit(0)"]},
-                                }
-                            }
-                        }
-                    },
+                "scope": "repository",
+                "readiness_timeout": 1,
+                "poll_interval": 0.01,
+                "probe": {
+                    "kind": "exec",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "import sys; sys.exit(1)",
+                    ],
+                },
+                "provision": {
+                    "kind": "exec",
+                    "mode": "run",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "import sys; sys.exit(0)",
+                    ],
                 },
             },
         )
@@ -162,7 +165,9 @@ def test_owned_early_exit_reports_only_attempt_cleanup() -> None:
             ensure_target(root, "fails", namespace="fixture", store=store)
         assert raised.value.code == "provision-exited"
         assert raised.value.details["cleanup"] == "completed"
-        assert "log_path" in raised.value.details
+        assert raised.value.details["attempt"]["logs"]["merged"]["path"].endswith(
+            "output.log"
+        )
 
 
 def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None:
@@ -176,26 +181,22 @@ def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None
             f"Path({str(counter)!r}).open('a').write('1\\n'); "
             f"http.server.HTTPServer(('127.0.0.1', {port}), http.server.SimpleHTTPRequestHandler).serve_forever()"
         )
-        write_config(
+        write_target(
             root,
+            "server",
             {
-                "schema_version": 2,
-                "svc_version": "10.0.1",
-                "dev": {
-                    "profile": "local",
-                    "profiles": {
-                        "local": {
-                            "targets": {
-                                "server": {
-                                    "scope": "repository",
-                                    "readiness_timeout": 5,
-                                    "poll_interval": 0.02,
-                                    "probe": {"kind": "http", "url": f"http://127.0.0.1:{port}/", "success_status": [200, 299]},
-                                    "provision": {"kind": "exec", "mode": "run", "argv": [sys.executable, "-c", server]},
-                                }
-                            }
-                        }
-                    },
+                "scope": "repository",
+                "readiness_timeout": 5,
+                "poll_interval": 0.02,
+                "probe": {
+                    "kind": "http",
+                    "url": f"http://127.0.0.1:{port}/",
+                    "success_status": [200, 299],
+                },
+                "provision": {
+                    "kind": "exec",
+                    "mode": "run",
+                    "argv": [sys.executable, "-c", server],
                 },
             },
         )
@@ -204,7 +205,9 @@ def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None
 
         def ensure() -> None:
             try:
-                results.append(ensure_target(root, "server", namespace="fixture", store=store))
+                results.append(
+                    ensure_target(root, "server", namespace="fixture", store=store)
+                )
             except BaseException as error:  # test records concurrent failures
                 failures.append(error)
 
@@ -216,18 +219,36 @@ def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None
         second.join()
         try:
             assert failures == []
-            assert sorted(str(result["status"]) for result in results) == ["reused", "started"]
+            assert sorted(str(result["status"]) for result in results) == [
+                "joined",
+                "started",
+            ]
             assert counter.read_text(encoding="utf-8") == "1\n"
-            started_result = next(result for result in results if result["status"] == "started")
-            slot_key = str(started_result["capability"]["lock_key"])
-            execution_id = store.read_slot("dev", slot_key)
+            started_result = next(
+                result for result in results if result["status"] == "started"
+            )
+            capability_id = str(started_result["capability"]["capability_id"])
+            execution_id = store.read_coordination("dev", capability_id)
             assert execution_id is not None
-            assert store.read(execution_id).state == "released"
-            assert started_result["log_path"].endswith("output.log")
+            record = store.read(execution_id)
+            assert record.state == "released"
+            assert started_result["attempt"]["logs"]["merged"]["path"].endswith(
+                "output.log"
+            )
+            assert started_result["ready"] is True
+            assert started_result["attempt"]["caller_role"] == "owner"
+            joined = next(result for result in results if result["status"] == "joined")
+            assert joined["attempt"]["caller_role"] == "follower"
         finally:
-            started = next((result for result in results if result.get("status") == "started"), None)
+            started = next(
+                (result for result in results if result.get("status") == "started"),
+                None,
+            )
             if started is not None:
-                stop_owned_process(int(started["process_id"]))
+                execution_id = started["attempt"]["execution_id"]
+                process_id = store.read(execution_id).process_id
+                assert process_id is not None
+                stop_owned_process(process_id)
 
 
 def test_keyboard_interrupt_cleans_up_only_the_current_launch() -> None:
@@ -236,10 +257,11 @@ def test_keyboard_interrupt_cleans_up_only_the_current_launch() -> None:
         store = ExecutionStore(root / "runtime")
         published = store.publish(
             domain="dev",
-            entry="app",
-            workspace_id="workspace",
-            effective_entry_digest="digest",
-            slot_key="a" * 48,
+            operation="ensure",
+            subject="app",
+            workspace_instance="workspace",
+            intent_digest="digest",
+            coordination_key="a" * 48,
             argv=(sys.executable,),
             cwd=root,
             capture="merged",
@@ -247,47 +269,301 @@ def test_keyboard_interrupt_cleans_up_only_the_current_launch() -> None:
         owned = start_isolated(
             store,
             published,
-            LaunchSpec((sys.executable, "-c", "import time; time.sleep(30)"), root, os.environ.copy()),
+            LaunchSpec(
+                (sys.executable, "-c", "import time; time.sleep(30)"),
+                root,
+                os.environ.copy(),
+            ),
         )
         assert not hasattr(owned, "state")
-        with pytest.raises(SvcError) as raised:
-            with _cleanup_on_interrupt(store, owned, {"command": "dev ensure"}):
-                raise KeyboardInterrupt
+        with (
+            pytest.raises(SvcError) as raised,
+            _cleanup_on_interrupt(store, owned, {"command": "dev ensure"}),
+        ):
+            raise KeyboardInterrupt
         assert raised.value.code == "ensure-interrupted"
         assert raised.value.details["cleanup"] == "completed"
         assert owned.process.poll() is not None
 
 
-def test_activation_timeout_is_structured_and_cleans_its_owned_group() -> None:
+def test_activation_timeout_is_structured_and_cleans_its_owned_group(
+    tmp_path: Path,
+) -> None:
+    write_project_config(
+        tmp_path,
+        dev_targets={
+            "activation": {
+                "scope": "repository",
+                "readiness_timeout": 0.01,
+                "poll_interval": 0.005,
+                "probe": {
+                    "kind": "exec",
+                    "argv": [sys.executable, "-c", "raise SystemExit(1)"],
+                },
+                "provision": {
+                    "kind": "exec",
+                    "mode": "activate",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "import time; time.sleep(30)",
+                    ],
+                },
+            }
+        },
+    )
+
+    with pytest.raises(SvcError) as raised:
+        ensure_target(
+            tmp_path,
+            "activation",
+            namespace="fixture",
+            store=ExecutionStore(tmp_path / "runtime"),
+        )
+
+    assert raised.value.code == "activation-timeout"
+    assert raised.value.details["cleanup"] == "completed"
+
+
+def test_declared_stop_runs_once_and_is_qualified_by_final_readiness() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        workspace = resolve_workspace_identity(root, namespace="fixture")
-        identity = resolve_capability_identity(
-            workspace,
-            scope="repository",
-            profile="local",
-            target="activation",
-            endpoint_identity="exec:activation",
+        marker = root / "ready"
+        counter = root / "stops"
+        marker.write_text("ready", encoding="utf-8")
+        write_target(
+            root,
+            "server",
+            {
+                "scope": "repository",
+                "probe": {
+                    "kind": "exec",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "from pathlib import Path; import sys; "
+                        f"sys.exit(0 if Path({str(marker)!r}).exists() else 1)",
+                    ],
+                },
+                "provision": {"kind": "manual"},
+                "stop": {
+                    "kind": "exec",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "from pathlib import Path; import time; "
+                        f"p=Path({str(counter)!r}); p.write_text((p.read_text() if p.exists() else '')+'1\\n'); "
+                        "time.sleep(.15); "
+                        f"Path({str(marker)!r}).unlink(missing_ok=True)",
+                    ],
+                    "timeout": 2,
+                },
+            },
         )
         store = ExecutionStore(root / "runtime")
-        provision = ExecProvision(kind="exec", mode="activate", argv=[sys.executable, "-c", "import time; time.sleep(30)"])
-        with pytest.raises(SvcError) as raised:
-            _provision(
-                store,
-                provision,
-                workspace,
-                "local",
-                "activation",
-                identity,
-                "digest",
-                timeout=0.01,
+        results: list[dict[str, object]] = []
+        failures: list[BaseException] = []
+
+        def stop() -> None:
+            try:
+                results.append(
+                    stop_target(root, "server", namespace="fixture", store=store)
+                )
+            except BaseException as error:
+                failures.append(error)
+
+        callers = (threading.Thread(target=stop), threading.Thread(target=stop))
+        for caller in callers:
+            caller.start()
+        for caller in callers:
+            caller.join()
+
+        assert failures == []
+        assert [result["status"] for result in results] == ["stopped", "stopped"]
+        attempts = [result["attempt"] for result in results]
+        assert {attempt["caller_role"] for attempt in attempts} == {
+            "owner",
+            "follower",
+        }
+        assert len({attempt["execution_id"] for attempt in attempts}) == 1
+        assert counter.read_text(encoding="utf-8") == "1\n"
+        assert all(result["ready"] is False for result in results)
+        assert all(
+            attempt["logs"]["merged"]["path"].endswith("output.log")
+            for attempt in attempts
+        )
+
+
+@pytest.mark.parametrize("stop", [None, {"kind": "manual"}])
+def test_absent_or_manual_stop_never_infers_a_pid_cleanup(stop: object) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        target: dict[str, object] = {
+            "scope": "repository",
+            "probe": {
+                "kind": "exec",
+                "argv": [sys.executable, "-c", "raise SystemExit(0)"],
+            },
+            "provision": {"kind": "manual"},
+        }
+        if stop is not None:
+            target["stop"] = stop
+        write_target(root, "server", target)
+
+        result = stop_target(root, "server", namespace="fixture")
+
+        assert result["status"] == "manual-action-required"
+        assert result["ready"] is True
+        assert "attempt" not in result
+        assert result["stop"] == {
+            "kind": "manual" if stop is not None else "absent"
+        }
+
+
+def test_stop_failure_preserves_action_and_final_probe_evidence() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_target(
+            root,
+            "server",
+            {
+                "scope": "repository",
+                "probe": {
+                    "kind": "exec",
+                    "argv": [sys.executable, "-c", "raise SystemExit(0)"],
+                },
+                "provision": {"kind": "manual"},
+                "stop": {
+                    "kind": "exec",
+                    "argv": [sys.executable, "-c", "raise SystemExit(7)"],
+                },
+            },
+        )
+
+        result = stop_target(root, "server", namespace="fixture")
+
+        assert result["status"] == "stop-failed"
+        assert result["ready"] is True
+        assert result["attempt"]["exit_code"] == 7
+
+
+def test_settled_ensure_attempt_does_not_prevent_a_later_explicit_restart() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        marker = root / "ready"
+        counter = root / "starts"
+        write_target(
+            root,
+            "server",
+            {
+                "scope": "repository",
+                "poll_interval": 0.01,
+                "probe": {
+                    "kind": "exec",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "from pathlib import Path; import sys; "
+                        f"sys.exit(0 if Path({str(marker)!r}).exists() else 1)",
+                    ],
+                },
+                "provision": {
+                    "kind": "exec",
+                    "mode": "activate",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "from pathlib import Path; "
+                        f"p=Path({str(counter)!r}); p.write_text((p.read_text() if p.exists() else '')+'1\\n'); "
+                        f"Path({str(marker)!r}).write_text('ready')",
+                    ],
+                },
+            },
+        )
+        store = ExecutionStore(root / "runtime")
+
+        first = ensure_target(root, "server", namespace="fixture", store=store)
+        marker.unlink()
+        second = ensure_target(root, "server", namespace="fixture", store=store)
+
+        assert (first["status"], second["status"]) == ("started", "started")
+        assert counter.read_text(encoding="utf-8") == "1\n1\n"
+        assert (
+            first["attempt"]["execution_id"]
+            != second["attempt"]["execution_id"]
+        )
+
+
+def test_stop_and_ensure_serialize_on_the_same_capability_boundary() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        marker = root / "ready"
+        stopping = root / "stopping"
+        starts = root / "starts"
+        marker.write_text("ready", encoding="utf-8")
+        write_target(
+            root,
+            "server",
+            {
+                "scope": "repository",
+                "poll_interval": 0.01,
+                "probe": {
+                    "kind": "exec",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "from pathlib import Path; import sys; "
+                        f"sys.exit(0 if Path({str(marker)!r}).exists() else 1)",
+                    ],
+                },
+                "provision": {
+                    "kind": "exec",
+                    "mode": "activate",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "from pathlib import Path; "
+                        f"Path({str(starts)!r}).write_text('1'); "
+                        f"Path({str(marker)!r}).write_text('ready')",
+                    ],
+                },
+                "stop": {
+                    "kind": "exec",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "from pathlib import Path; import time; "
+                        f"Path({str(stopping)!r}).write_text('1'); "
+                        "time.sleep(.2); "
+                        f"Path({str(marker)!r}).unlink()",
+                    ],
+                },
+            },
+        )
+        store = ExecutionStore(root / "runtime")
+        stopped: list[dict[str, object]] = []
+        stopper = threading.Thread(
+            target=lambda: stopped.append(
+                stop_target(root, "server", namespace="fixture", store=store)
             )
-        assert raised.value.code == "activation-timeout"
-        assert raised.value.details["cleanup"] == "completed"
+        )
+        stopper.start()
+        deadline = time.monotonic() + 2
+        while not stopping.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        ensured = ensure_target(root, "server", namespace="fixture", store=store)
+        stopper.join()
+
+        assert stopped[0]["status"] == "stopped"
+        assert stopped[0]["ready"] is False
+        assert ensured["status"] == "started"
+        assert ensured["ready"] is True
+        assert marker.exists() and starts.read_text(encoding="utf-8") == "1"
 
 
-def write_config(root: Path, value: object) -> None:
-    (root / "svc.json").write_text(json.dumps(value), encoding="utf-8")
+def write_target(root: Path, name: str, target: object) -> None:
+    write_project_config(root, dev_targets={name: target})
 
 
 def free_port() -> int:

@@ -8,7 +8,9 @@ dependencies = [
     "pydantic<3,>=2.13",
     "platformdirs<5,>=4",
     "filelock<4,>=3.29",
+    "jsonpatch<2,>=1.33",
     "python-dotenv<2,>=1.2",
+    "semantic-version<3,>=2.10",
     "urllib3<3,>=2.7",
 ]
 
@@ -16,6 +18,7 @@ dependencies = [
 quality = [
     "mypy>=2.3,<2.4",
     "import-linter>=2.13,<3",
+    "PyYAML<7,>=6.0",
     "zizmor>=1.28,<2",
 ]
 test = [
@@ -28,7 +31,7 @@ test = [
 svc = "svc_cli.cli:main"
 
 [build-system]
-requires = ["pdm-backend==2.4.9"]
+requires = ["pdm-backend==2.4.9", "semantic-version<3,>=2.10"]
 build-backend = "pdm.backend"
 
 [tool.pdm]
@@ -44,9 +47,11 @@ fallback_version = "0.0.0"
 [tool.pdm.scripts]
 build-monolith = "python -m tools.build_monolith"
 check-documents = "python -m tools.build_monolith --check"
+build-release-projections = "python -m tools.build_release_projections"
+check-release-projections = "python -m tools.build_release_projections --check"
 svc = "python -m svc_cli.cli"
 test = "pytest tests"
-lint-tests = "ruff check tests"
+lint-tests = "ruff check tests --select E4,E7,E9,F,B,SIM,PT,TID251 --ignore PT007,PT018"
 lint-imports = "lint-imports"
 lint-workflows = "zizmor --offline .github/workflows"
 typecheck = "mypy"
@@ -58,11 +63,19 @@ source-includes = ["src", "tools", "tests", "pdm_build.py"]
 [tool.mypy]
 python_version = "3.11"
 files = [
+    "svc_cli/catalog.py",
     "svc_cli/cli.py",
     "svc_cli/config.py",
+    "svc_cli/config_migration.py",
     "svc_cli/errors.py",
     "svc_cli/_execution.py",
+    "svc_cli/integration.py",
+    "svc_cli/lookup.py",
+    "svc_cli/plans.py",
     "svc_cli/project.py",
+    "svc_cli/release.py",
+    "svc_cli/resources.py",
+    "svc_cli/upgrade.py",
     "svc_cli/workspace.py",
     "svc_cli/dev/identity.py",
     "svc_cli/dev/readiness.py",
@@ -81,6 +94,8 @@ files = [
     "svc_cli/telemetry/trajectory.py",
     "svc_cli/telemetry/providers/codex_rollout.py",
     "svc_cli/telemetry/providers/codex_trajectory.py",
+    "tests/agent_thread_contract.py",
+    "tests/project_contract.py",
 ]
 plugins = ["pydantic.mypy"]
 check_untyped_defs = true
@@ -128,6 +143,26 @@ name = "Shared execution mechanics remain public-domain neutral"
 type = "forbidden"
 source_modules = ["svc_cli._execution"]
 forbidden_modules = ["svc_cli.dev", "svc_cli.run"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Shared file transactions remain controller neutral"
+type = "forbidden"
+source_modules = ["svc_cli.plans"]
+forbidden_modules = [
+    "svc_cli.dev",
+    "svc_cli.integration",
+    "svc_cli.project",
+    "svc_cli.run",
+    "svc_cli.upgrade",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Release authority remains project-domain neutral"
+type = "forbidden"
+source_modules = ["svc_cli.release"]
+forbidden_modules = ["svc_cli.dev", "svc_cli.project", "svc_cli.run", "svc_cli.upgrade"]
 allow_indirect_imports = true
 
 [tool.pytest.ini_options]

@@ -1,0 +1,24 @@
+kind: major
+component: config
+body: >-
+  Flatten project configuration into schema v3 and separate the Corpus baseline.
+custom:
+  Migration: guide
+  FromSchema: "2"
+  ToSchema: "3"
+  Guidance: |-
+    Update direct JSON readers from `dev.profiles.<name>.targets` to
+    `dev.targets`. Remove dependencies on `dev.profile`, `${dev.profile}`, and
+    `SVC_DEV_PROFILE`; schema v3 has no runtime profile dimension. During
+    transition, make project readers accept both v2 and v3 before applying the
+    SVC-owned file migration.
+
+    The automatic transform renames `svc_version` to `corpus_version`, flattens
+    exactly one selected profile, preserves `run`, and migrates a present local
+    overlay. It blocks multiple profiles rather than discarding data. The new
+    optional target-local `stop` declaration is never inferred.
+
+    After apply, run the project's real configuration readers and dev/runtime
+    checks. SVC proves only the exact config-file transformation; applying the
+    plan is the caller's assertion that project-owned consumers were updated.
+time: 2026-08-08T18:00:00+08:00

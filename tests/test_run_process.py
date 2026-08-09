@@ -7,9 +7,12 @@ import signal
 import subprocess
 import sys
 import time
+from contextlib import suppress
 from pathlib import Path
 
 import pytest
+
+from tests.project_contract import write_project_config
 
 
 EXECUTION_ID = re.compile(rb"owner ([0-9a-f-]{36})\n")
@@ -26,15 +29,9 @@ def svc_command(root: Path, *arguments: str) -> list[str]:
 
 
 def write_run(root: Path, script: str) -> None:
-    (root / "svc.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 2,
-                "svc_version": "11.0.0",
-                "run": {"check": {"argv": [sys.executable, "-c", script]}},
-            }
-        ),
-        encoding="utf-8",
+    write_project_config(
+        root,
+        run_entries={"check": {"argv": [sys.executable, "-c", script]}},
     )
 
 
@@ -53,7 +50,9 @@ def start_owner(root: Path) -> tuple[subprocess.Popen[bytes], str]:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX signal projection")
-def test_owner_sigint_settles_shared_execution_and_preserves_foreground_group(tmp_path: Path) -> None:
+def test_owner_sigint_settles_shared_execution_and_preserves_foreground_group(
+    tmp_path: Path,
+) -> None:
     child_pgrp = tmp_path / "child-pgrp"
     script = (
         "from pathlib import Path; import os,time; "
@@ -137,7 +136,9 @@ def test_follower_sigint_detaches_without_interrupting_owner(tmp_path: Path) -> 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX uncatchable owner loss")
-def test_owner_loss_is_reconciled_without_same_invocation_replacement(tmp_path: Path) -> None:
+def test_owner_loss_is_reconciled_without_same_invocation_replacement(
+    tmp_path: Path,
+) -> None:
     counter = tmp_path / "counter"
     orphan_pid = tmp_path / "orphan-pid"
     script = (
@@ -213,7 +214,5 @@ def test_owner_loss_is_reconciled_without_same_invocation_replacement(tmp_path: 
             follower.kill()
             follower.wait()
         if orphan is not None:
-            try:
+            with suppress(ProcessLookupError):
                 os.kill(orphan, signal.SIGTERM)
-            except ProcessLookupError:
-                pass

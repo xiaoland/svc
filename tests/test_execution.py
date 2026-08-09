@@ -6,21 +6,18 @@ import os
 import signal
 import subprocess
 import sys
-import time
+import uuid
 from pathlib import Path
 
 import pytest
-from filelock import Timeout
+from filelock import FileLock, Timeout
 
 from svc_cli._execution import (
-    ACTIVE_STATES,
     ExecutionStore,
     LaunchSpec,
     follow_execution,
-    mark_owner_lost,
     release_owned,
     run_foreground,
-    settle_unstarted_interruption,
     start_isolated,
     terminate_owned,
     wait_owned,
@@ -28,67 +25,42 @@ from svc_cli._execution import (
 from svc_cli.errors import SvcError
 
 
-SLOT = "a" * 48
+COORDINATION = "a" * 48
 
 
 def publish(store: ExecutionStore, *, domain: str = "run", capture: str = "split"):
     return store.publish(
         domain=domain,  # type: ignore[arg-type]
-        entry="check",
-        workspace_id="workspace",
-        effective_entry_digest="digest",
-        slot_key=SLOT,
+        operation="execute" if domain == "run" else "ensure",
+        subject="check",
+        workspace_instance="workspace",
+        intent_digest="digest",
+        coordination_key=COORDINATION,
         argv=(sys.executable, "-c", "pass"),
         cwd=store.root,
         capture=capture,  # type: ignore[arg-type]
     )
 
 
-def test_strict_record_slot_and_domain_round_trip(tmp_path: Path) -> None:
+def test_record_coordination_round_trip(tmp_path: Path) -> None:
     store = ExecutionStore(tmp_path / "runtime")
     published = publish(store)
-    store.write_slot("run", SLOT, published.record.execution_id)
-    assert store.read_slot("run", SLOT) == published.record.execution_id
+    store.write_coordination("run", COORDINATION, published.record.execution_id)
+    assert (
+        store.read_coordination("run", COORDINATION)
+        == published.record.execution_id
+    )
     assert store.read(published.record.execution_id) == published.record
-
-    record_path = store.execution_dir(published.record.execution_id) / "execution.json"
-    record_path.write_text('{"schema_version":1}', encoding="utf-8")
-    with pytest.raises(SvcError, match="malformed"):
-        store.read(published.record.execution_id)
-
-
-def test_record_reader_rejects_lifecycle_and_domain_inconsistency(tmp_path: Path) -> None:
-    store = ExecutionStore(tmp_path / "runtime")
-    published = publish(store)
-    path = store.execution_dir(published.record.execution_id) / "execution.json"
-    value = published.record.as_dict()
-    value["state"] = "exited"
-    value["exit_code"] = 0
-    path.write_text(json.dumps(value), encoding="utf-8")
-    with pytest.raises(SvcError, match="malformed"):
-        store.read(published.record.execution_id)
-
-    value = published.record.as_dict()
-    value["owner_pid"] = True
-    path.write_text(json.dumps(value), encoding="utf-8")
-    with pytest.raises(SvcError, match="malformed"):
-        store.read(published.record.execution_id)
-
-    value = published.record.as_dict()
-    value["capture"] = "merged"
-    path.write_text(json.dumps(value), encoding="utf-8")
-    with pytest.raises(SvcError, match="malformed"):
-        store.read(published.record.execution_id)
-
 
 def test_foreground_capture_preserves_binary_streams_and_sink_failure(tmp_path: Path) -> None:
     store = ExecutionStore(tmp_path / "runtime")
     published = store.publish(
         domain="run",
-        entry="binary",
-        workspace_id="workspace",
-        effective_entry_digest="digest",
-        slot_key=SLOT,
+        operation="execute",
+        subject="binary",
+        workspace_instance="workspace",
+        intent_digest="digest",
+        coordination_key=COORDINATION,
         argv=(sys.executable,),
         cwd=tmp_path,
         capture="split",
@@ -121,6 +93,24 @@ def test_foreground_capture_preserves_binary_streams_and_sink_failure(tmp_path: 
     assert followed == record
     assert replay_out.getvalue() == b"out\xff"
     assert replay_err.getvalue() == b"err\xfe"
+
+
+def test_reader_normalizes_a_persisted_windows_dword_exit_status(tmp_path: Path) -> None:
+    store = ExecutionStore(tmp_path / "runtime")
+    published = publish(store)
+    record = run_foreground(
+        store,
+        published,
+        LaunchSpec((sys.executable, "-c", "raise SystemExit(7)"), tmp_path, os.environ.copy()),
+        stdout_sink=None,
+        stderr_sink=None,
+    )
+    record_path = store.execution_dir(record.execution_id) / "execution.json"
+    value = json.loads(record_path.read_text(encoding="utf-8"))
+    value["exit_code"] = 4_294_963_238
+    record_path.write_text(json.dumps(value), encoding="utf-8")
+
+    assert store.read(record.execution_id).exit_code == -4_058
 
 
 def test_foreground_log_open_failure_is_a_capture_failure(tmp_path: Path) -> None:
@@ -192,28 +182,9 @@ def test_isolated_execution_can_settle_release_or_be_terminated(tmp_path: Path) 
     assert terminated.requested_signal == "SIGTERM"
 
 
-def test_abandoned_active_record_is_marked_owner_lost_without_pid_authority(tmp_path: Path) -> None:
+def test_lifetime_coordination_lock_is_cross_process_authority(tmp_path: Path) -> None:
     store = ExecutionStore(tmp_path / "runtime")
-    published = publish(store)
-    assert published.record.state in ACTIVE_STATES
-    lost = mark_owner_lost(store, published.record)
-    assert lost.state == "owner-lost"
-    assert lost.duration_ms is not None
-
-
-def test_published_attempt_can_be_interrupted_before_process_creation(tmp_path: Path) -> None:
-    store = ExecutionStore(tmp_path / "runtime")
-    published = publish(store)
-    interrupted = settle_unstarted_interruption(store, published.record)
-    assert interrupted.state == "interrupted"
-    assert interrupted.process_id is None
-    assert interrupted.requested_signal == "SIGINT"
-    assert store.read(interrupted.execution_id) == interrupted
-
-
-def test_lifetime_slot_lock_is_cross_process_authority(tmp_path: Path) -> None:
-    store = ExecutionStore(tmp_path / "runtime")
-    lock = store.slot_lock("run", SLOT)
+    lock = store.coordination_lock("run", COORDINATION)
     with lock.acquire(timeout=0):
         completed = subprocess.run(
             [
@@ -232,4 +203,42 @@ def test_lifetime_slot_lock_is_cross_process_authority(tmp_path: Path) -> None:
         with lock.acquire(timeout=0):
             pass
     except Timeout:
-        pytest.fail("slot lock remained held after owner release")
+        pytest.fail("coordination lock remained held after owner release")
+
+
+def test_active_schema_one_attempt_blocks_new_publication_without_translation(
+    tmp_path: Path,
+) -> None:
+    store = ExecutionStore(tmp_path / "runtime")
+    legacy_id = str(uuid.uuid4())
+    legacy_dir = store.root / legacy_id
+    legacy_dir.mkdir()
+    (legacy_dir / "execution.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "domain": "run",
+                "state": "running",
+                "slot_key": COORDINATION,
+            }
+        ),
+        encoding="utf-8",
+    )
+    slots = store.root / "slots"
+    slots.mkdir()
+    legacy_lock = slots / f"run-{COORDINATION}.lock"
+
+    with (
+        FileLock(str(legacy_lock)).acquire(timeout=0),
+        pytest.raises(SvcError) as raised,
+    ):
+        publish(store)
+
+    assert raised.value.code == "legacy-execution-active"
+    with pytest.raises(SvcError) as unsupported:
+        store.read(legacy_id)
+    assert unsupported.value.code == "execution-record-schema-unsupported"
+
+    published = publish(store)
+    assert published.record.operation == "execute"
+    assert published.record.coordination_key == COORDINATION

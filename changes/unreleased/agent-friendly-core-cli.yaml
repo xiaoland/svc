@@ -1,0 +1,11 @@
+kind: major
+component: cli
+body: >-
+  Reshape the core CLI around independent upgrade targets, Agent-readable
+  output, shared bounded runs, and declared dev lifecycle actions.
+custom:
+  Migration: not-applicable
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
+time: 2026-08-08T18:00:00+08:00

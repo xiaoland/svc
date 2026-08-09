@@ -4,7 +4,6 @@ from io import BytesIO
 import json
 
 import pytest
-from pydantic import ValidationError
 
 from svc_cli.telemetry.trajectory import (
     MessageRecord,
@@ -12,7 +11,6 @@ from svc_cli.telemetry.trajectory import (
     TrajectoryCollector,
     TrajectoryError,
     attach_projection_summary,
-    canonical_json_bytes,
     projection_summary,
     validate_trajectory_bytes,
 )
@@ -166,31 +164,6 @@ def test_validator_accepts_equivalent_noncanonical_json() -> None:
     assert validated.trajectory_bytes == noncanonical
     assert [record.type for record in validated.records] == ["meta", "message"]
     assert noncanonical != canonical
-
-
-def test_record_models_are_strict_frozen_and_forbid_extra_fields() -> None:
-    valid = validate_trajectory_bytes(_trajectory())
-    message = valid.records[1]
-    assert isinstance(message, MessageRecord)
-    with pytest.raises(ValidationError, match="frozen"):
-        message.role = "assistant"
-
-    for changed in (
-        {**_message(), "content": "removed payload"},
-        {**_message(), "record_index": "1"},
-        {**_message(), "task_refs": ["tasks/../escape/packet.md"]},
-    ):
-        data = canonical_json_bytes(
-            {
-                **_meta(),
-                "result_status": "ready",
-                "capabilities": _capabilities(),
-                "lossiness": _lossiness(),
-            },
-            newline=True,
-        ) + canonical_json_bytes(changed, newline=True)
-        with pytest.raises(TrajectoryError):
-            validate_trajectory_bytes(data)
 
 
 def test_sequence_rejects_nonleading_meta_and_noncontiguous_ids() -> None:

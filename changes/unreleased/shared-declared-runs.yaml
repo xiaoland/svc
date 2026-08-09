@@ -1,7 +1,13 @@
 kind: minor
+component: cli
 body: >-
   Add `svc run` for one project-declared bounded command, allowing local Human
   and Agent callers to converge on one foreground execution, follow captured
   native output, and inspect a compact execution receipt without transferring
   project-tool semantics into SVC.
+custom:
+  Migration: not-applicable
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
 time: 2026-08-06T19:26:43+08:00

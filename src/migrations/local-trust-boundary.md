@@ -1,40 +1,30 @@
-# Adopt the local Agent-evidence trust boundary
+# Adopt the explicit same-user trust boundary for local Agent evidence
 
-SVC 12.0.0 treats Agent-thread acquisition as an explicit same-user local
-workflow. It trusts the calling user, provider location, local account, and
-operating system. It no longer claims confidentiality, redaction, sandboxing,
-atomic output visibility, symlink/reparse exclusion, hostile same-user defense,
-or adversarial path-race protection.
+Corpus release: 12.0.0.
 
-## Update inventory consumers
+### Applies when
+A project treats SVC Agent-thread inventory, bundle metadata, cursors, or
+filesystem behavior as a confidentiality or authorization boundary.
 
-`telemetry agent-thread list` no longer probes every reported source before
-returning inventory. Remove dependencies on `source_availability`,
-`source_warning_code`, and `omitted_sources`. Lifecycle, recognition,
-provenance, bounds, and deterministic ordering remain. Treat export—not a
-stale inventory prediction—as the authority for whether one exact source can
-be collected.
+### Required change
+Stop using inventory fields `source_availability`, `source_warning_code`, or
+`omitted_sources`; export is the authority for collecting one exact source.
+Stop inferring confidentiality from projection omissions or removed manifest
+sensitivity/redaction fields. Native evidence may contain every selected
+provider byte. Treat query/read cursors as unsigned local continuation state,
+never as authenticated capabilities.
 
-## Update schema-v3 consumers
+Export still keeps its source read-only, requires an absent destination,
+refuses overwrite and source/output aliasing, and validates success. It does
+not promise atomic visibility or hostile same-user/path-race defense. After
+interruption, validate the target and remove an invalid partial artifact
+under the caller's normal ownership policy before retrying.
 
-The manifest no longer carries normalization, `sensitivity`, or `redaction`
-policy, and source capture no longer reports the path-displacement state or
-loss reason. Native evidence may contain every selected provider byte. The
-optional trajectory member is a rebuildable navigation cache; its structural
-omissions are not privacy controls. Keep validating the evidence core and do
-not infer confidentiality from absent projection fields.
+### Verify
+Exercise the project's inventory parser without the removed fields, validate
+one successful export before use, and confirm access/retention decisions come
+from the project and operating system rather than cursor or projection shape.
 
-## Treat cursors as local continuation state
-
-Query/read cursors are unsigned base64-encoded state. Their evidence ID, typed
-query or read scope, and position are still validated for bounds, but the
-cursor is not an authenticated capability and does not prove who produced it.
-Do not use cursor possession as an authorization decision.
-
-## Handle interrupted export explicitly
-
-Export still keeps the source read-only, requires an absent destination,
-refuses overwrite and source/output aliasing, and validates a successful
-bundle before returning. It no longer promises atomic visibility. If the
-process is interrupted, validate the target before use; remove an invalid
-partial target under the caller's normal ownership policy before retrying.
+### Reference
+`sections/prd.md` and `sections/deployment.md` own the complete local trust,
+exposure, and recovery boundary.

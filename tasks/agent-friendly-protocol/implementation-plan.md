@@ -11,6 +11,11 @@ The implementation is a single release unit. The slices below are internal
 review/verification boundaries; none is independently releasable. Product code
 mutation still requires Sir's explicit start after this plan is reviewed.
 
+Sir supplied that start on 2026-08-08 after committing the task design. The
+implementation has since completed all ten slices in the working tree. Exact
+mechanical and real-project results, including defects found during native
+Windows qualification, are maintained in [`acceptance.md`](acceptance.md).
+
 ## 1. Verified starting point
 
 ### Repository baseline

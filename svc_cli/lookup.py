@@ -1,10 +1,11 @@
-"""Read-only lookup over the packaged SVC corpus."""
+"""Browse, search, and read the packaged SVC Corpus."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Callable, Protocol, Sequence
+from pathlib import PurePosixPath
+from typing import Callable, Sequence
 
 from .catalog import Catalog, CatalogEntry, normalized_document_path, sha256_bytes
 from .errors import SvcError
@@ -12,11 +13,10 @@ from .resources import read_document
 
 
 TOKEN_RE = re.compile(r"\w+", re.UNICODE)
-LIST_GUIDANCE_COMMAND = "svc lookup --list --json"
-READ_GUIDANCE_COMMAND = "svc lookup --path <path> --json"
+LIST_GUIDANCE_COMMAND = "svc lookup --list"
+READ_GUIDANCE_COMMAND = "svc lookup --path <path>"
 LOOKUP_DISCOVERY_HINT = (
-    f"Run `{LIST_GUIDANCE_COMMAND}`, choose a returned path, then run "
-    f"`{READ_GUIDANCE_COMMAND}`."
+    "Use `svc lookup --help` to browse, search, or read the SVC Corpus."
 )
 
 
@@ -24,21 +24,20 @@ LOOKUP_DISCOVERY_HINT = (
 class LookupQuery:
     mode: str
     value: str | None = None
-    allow_many: bool = False
+    scope: str = "both"
     limit: int = 10
 
     def __post_init__(self) -> None:
-        value = self.value
-        if self.mode not in {"list", "path", "name", "keyword"}:
+        if self.mode not in {"list", "path", "keyword", "regex"}:
             raise ValueError(f"Unsupported lookup mode: {self.mode}")
-        if self.mode == "list" and value is not None:
-            raise ValueError("List lookup does not accept a value")
-        if self.mode != "list" and not isinstance(value, str):
-            raise ValueError("Lookup value must be a string")
-        if self.mode in {"name", "keyword"} and (
-            not isinstance(value, str) or not value.strip()
+        if self.mode == "path" and not isinstance(self.value, str):
+            raise ValueError("Path lookup needs one document path")
+        if self.mode in {"keyword", "regex"} and (
+            not isinstance(self.value, str) or not self.value.strip()
         ):
-            raise ValueError("Lookup value must not be empty")
+            raise ValueError("Search query must not be empty")
+        if self.scope not in {"path", "both"}:
+            raise ValueError("Lookup scope must be path or both")
         if not 1 <= self.limit <= 50:
             raise ValueError("Lookup limit must be between 1 and 50")
 
@@ -50,119 +49,171 @@ class CorpusDocument:
 
 
 @dataclass(frozen=True)
-class RankedDocument:
-    document: CorpusDocument
-    score: int
-    excerpt: str
+class ListEntry:
+    kind: str
+    path: str
+    title: str | None = None
+    sha256: str | None = None
+    document_count: int | None = None
 
-
-class KeywordRanker(Protocol):
-    def rank(
-        self,
-        documents: Sequence[CorpusDocument],
-        query: str,
-        limit: int,
-    ) -> list[RankedDocument]: ...
+    def as_dict(self) -> dict[str, object]:
+        result: dict[str, object] = {"kind": self.kind, "path": self.path}
+        if self.kind == "directory":
+            result["document_count"] = self.document_count
+        else:
+            result["title"] = self.title
+            result["sha256"] = self.sha256
+        return result
 
 
 @dataclass(frozen=True)
-class LookupResult:
-    path: str
-    title: str
-    sha256: str
-    content: str | None = None
-    score: int | None = None
-    excerpt: str | None = None
+class KeywordCandidate:
+    entry: CatalogEntry
+    matched_in: tuple[str, ...]
+    excerpt: str | None
+    score: int
 
     def as_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
-            "path": self.path,
-            "title": self.title,
-            "sha256": self.sha256,
+            "path": self.entry.path,
+            "title": self.entry.title,
+            "sha256": self.entry.sha256,
+            "matched_in": list(self.matched_in),
         }
-        if self.content is not None:
-            result["content"] = self.content
-        if self.score is not None:
-            result["score"] = self.score
         if self.excerpt is not None:
             result["excerpt"] = self.excerpt
         return result
 
 
 @dataclass(frozen=True)
+class RegexMatch:
+    entry: CatalogEntry
+    surface: str
+    line: int | None = None
+    column: int | None = None
+    excerpt: str | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        result: dict[str, object] = {
+            "path": self.entry.path,
+            "sha256": self.entry.sha256,
+            "surface": self.surface,
+        }
+        if self.surface == "content":
+            result.update(
+                {"line": self.line, "column": self.column, "excerpt": self.excerpt}
+            )
+        return result
+
+
+@dataclass(frozen=True)
 class LookupResponse:
+    corpus_version: str
     query: LookupQuery
-    results: tuple[LookupResult, ...]
+    entries: tuple[ListEntry, ...] = ()
+    document: CorpusDocument | None = None
+    candidates: tuple[KeywordCandidate, ...] = ()
+    matches: tuple[RegexMatch, ...] = ()
+    truncated: bool = False
+    prefix: str | None = None
 
     def as_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
-            "schema_version": 1,
+            "schema_version": 2,
             "command": "lookup",
+            "corpus_version": self.corpus_version,
             "mode": self.query.mode,
-            "results": [result.as_dict() for result in self.results],
         }
-        if self.query.value is not None:
-            payload["query"] = self.query.value
+        if self.query.mode == "list":
+            payload.update(
+                {
+                    "prefix": self.prefix,
+                    "entries": [entry.as_dict() for entry in self.entries],
+                }
+            )
+        elif self.query.mode == "path":
+            assert self.document is not None
+            payload["document"] = {
+                **self.document.entry.as_dict(),
+                "content": self.document.content,
+            }
+        elif self.query.mode == "keyword":
+            payload.update(
+                {
+                    "query": self.query.value,
+                    "scope": self.query.scope,
+                    "limit": self.query.limit,
+                    "truncated": self.truncated,
+                    "candidates": [item.as_dict() for item in self.candidates],
+                }
+            )
+        else:
+            payload.update(
+                {
+                    "query": self.query.value,
+                    "scope": self.query.scope,
+                    "limit": self.query.limit,
+                    "truncated": self.truncated,
+                    "matches": [item.as_dict() for item in self.matches],
+                }
+            )
         return payload
 
 
-class DeterministicKeywordRanker:
-    """Small-corpus, transparent ranking that keeps semantic retrieval optional."""
-
-    def rank(
-        self,
-        documents: Sequence[CorpusDocument],
-        query: str,
-        limit: int,
-    ) -> list[RankedDocument]:
-        phrase = query.casefold().strip()
-        terms = tuple(dict.fromkeys(TOKEN_RE.findall(phrase)))
-        ranked: list[RankedDocument] = []
-        for document in documents:
-            path = document.entry.path.casefold()
-            title = document.entry.title.casefold()
-            body = document.content.casefold()
-            combined = f"{path}\n{title}\n{body}"
-            phrase_hits = path.count(phrase) * 1000 + title.count(phrase) * 800 + body.count(phrase) * 100
-            term_hits = sum(
-                path.count(term) * 120 + title.count(term) * 80 + body.count(term) * 10
-                for term in terms
-            )
-            if phrase_hits == 0 and (not terms or not all(term in combined for term in terms)):
-                continue
-            score = phrase_hits + term_hits
-            ranked.append(RankedDocument(document, score, _excerpt(document.content, phrase, terms)))
-        return sorted(ranked, key=lambda result: (-result.score, result.document.entry.path))[:limit]
-
-
 class CorpusLookup:
-    """Query/result boundary shared by current deterministic and future semantic rankers."""
-
     def __init__(
         self,
         catalog: Catalog,
         reader: Callable[[str], bytes] = read_document,
-        ranker: KeywordRanker | None = None,
     ) -> None:
         self.catalog = catalog
         self.reader = reader
-        self.ranker = ranker or DeterministicKeywordRanker()
 
     def lookup(self, query: LookupQuery) -> LookupResponse:
         if query.mode == "list":
             return self._lookup_list(query)
         if query.mode == "path":
             return self._lookup_path(query)
-        if query.mode == "name":
-            return self._lookup_name(query)
-        return self._lookup_keyword(query)
+        if query.mode == "keyword":
+            return self._lookup_keyword(query)
+        return self._lookup_regex(query)
 
     def _lookup_list(self, query: LookupQuery) -> LookupResponse:
-        results = tuple(
-            LookupResult(entry.path, entry.title, entry.sha256)
+        prefix = _normalize_prefix(query.value)
+        matching = [
+            entry
             for entry in self.catalog.entries
+            if entry.path.startswith(prefix or "")
+        ]
+        if prefix is not None and not matching:
+            raise SvcError(
+                "lookup-directory-not-found",
+                "No packaged SVC Corpus directory has that prefix.",
+                {"prefix": prefix},
+            )
+        directories: dict[str, int] = {}
+        documents: list[ListEntry] = []
+        for entry in matching:
+            relative = entry.path[len(prefix or "") :]
+            head, separator, _ = relative.partition("/")
+            if separator:
+                directory = f"{prefix or ''}{head}/"
+                directories[directory] = directories.get(directory, 0) + 1
+            else:
+                documents.append(
+                    ListEntry("document", entry.path, entry.title, entry.sha256)
+                )
+        entries = [
+            ListEntry("directory", path, document_count=count)
+            for path, count in directories.items()
+        ] + documents
+        entries.sort(key=lambda item: item.path)
+        return LookupResponse(
+            self.catalog.corpus_version,
+            query,
+            entries=tuple(entries),
+            prefix=prefix,
         )
-        return LookupResponse(query, results)
 
     def _lookup_path(self, query: LookupQuery) -> LookupResponse:
         assert query.value is not None
@@ -172,95 +223,84 @@ class CorpusLookup:
             path = normalized_document_path(query.value, "--path")
         except ValueError as error:
             raise SvcError(
-                "invalid-document-path",
-                str(error),
-                {
-                    "path": query.value,
-                    "hint": LOOKUP_DISCOVERY_HINT,
-                },
+                "invalid-document-path", str(error), {"path": query.value}
             ) from error
-        entry = next(
-            (item for item in self.catalog.entries if item.path == path),
-            None,
-        )
+        entry = next((item for item in self.catalog.entries if item.path == path), None)
         if entry is None:
             raise SvcError(
                 "lookup-not-found",
                 "No packaged SVC document has that exact path.",
-                {
-                    "path": query.value,
-                    "hint": LOOKUP_DISCOVERY_HINT,
-                },
+                {"path": query.value},
             )
-        return LookupResponse(query, (self._full_result(entry),))
+        return LookupResponse(
+            self.catalog.corpus_version,
+            query,
+            document=self._document(entry),
+        )
 
-    def _lookup_name(self, query: LookupQuery) -> LookupResponse:
+    def _lookup_keyword(self, query: LookupQuery) -> LookupResponse:
+        assert query.value is not None
+        phrase = query.value.casefold().strip()
+        terms = tuple(dict.fromkeys(TOKEN_RE.findall(phrase)))
+        ranked: list[KeywordCandidate] = []
+        for entry in self.catalog.entries:
+            path = entry.path.casefold()
+            path_matches = _lexical_match(path, phrase, terms)
+            document = self._document(entry) if query.scope == "both" else None
+            body = document.content.casefold() if document is not None else ""
+            content_matches = _lexical_match(body, phrase, terms)
+            if not path_matches and not content_matches:
+                continue
+            matched_in = tuple(
+                surface
+                for surface, matched in (
+                    ("path", path_matches),
+                    ("content", content_matches),
+                )
+                if matched
+            )
+            score = _keyword_score(path, body, phrase, terms)
+            excerpt = (
+                _excerpt(document.content, phrase, terms)
+                if document is not None and content_matches
+                else None
+            )
+            ranked.append(KeywordCandidate(entry, matched_in, excerpt, score))
+        ranked.sort(key=lambda item: (-item.score, item.entry.path))
+        truncated = len(ranked) > query.limit
+        return LookupResponse(
+            self.catalog.corpus_version,
+            query,
+            candidates=tuple(ranked[: query.limit]),
+            truncated=truncated,
+        )
+
+    def _lookup_regex(self, query: LookupQuery) -> LookupResponse:
         assert query.value is not None
         try:
             pattern = re.compile(query.value)
         except re.error as error:
             raise SvcError(
-                "invalid-name-regex",
-                f"Invalid --name regular expression: {error}",
-                {
-                    "hint": (
-                        "--name is a regular expression. For one path returned by "
-                        f"--list, use `{READ_GUIDANCE_COMMAND}` instead."
-                    )
-                },
+                "invalid-lookup-regex",
+                f"Invalid --regex expression: {error}",
+                {"query": query.value},
             ) from error
-        matches = [entry for entry in self.catalog.entries if pattern.fullmatch(entry.path)]
-        if not matches:
-            raise SvcError(
-                "lookup-not-found",
-                "No packaged SVC path matched --name.",
-                {
-                    "pattern": query.value,
-                    "hint": LOOKUP_DISCOVERY_HINT,
-                },
-            )
-        if len(matches) > 1 and not query.allow_many:
-            raise SvcError(
-                "lookup-ambiguous",
-                "--name matched more than one path; refine the regex or pass --all.",
-                {
-                    "paths": [entry.path for entry in matches],
-                    "hint": (
-                        "Use --all for every match or read one returned path with "
-                        f"`{READ_GUIDANCE_COMMAND}`."
-                    ),
-                },
-            )
-        results = tuple(self._full_result(entry) for entry in matches)
-        return LookupResponse(query, results)
-
-    def _lookup_keyword(self, query: LookupQuery) -> LookupResponse:
-        assert query.value is not None
-        documents = tuple(self._document(entry) for entry in self.catalog.entries)
-        results = tuple(
-            LookupResult(
-                path=ranked.document.entry.path,
-                title=ranked.document.entry.title,
-                sha256=ranked.document.entry.sha256,
-                score=ranked.score,
-                excerpt=ranked.excerpt,
-            )
-            for ranked in self.ranker.rank(documents, query.value, query.limit)
+        matches: list[RegexMatch] = []
+        for entry in self.catalog.entries:
+            if pattern.search(entry.path):
+                matches.append(RegexMatch(entry, "path"))
+            if query.scope == "both":
+                document = self._document(entry)
+                for found in pattern.finditer(document.content):
+                    line, column, excerpt = _match_location(document.content, found)
+                    matches.append(RegexMatch(entry, "content", line, column, excerpt))
+        truncated = len(matches) > query.limit
+        return LookupResponse(
+            self.catalog.corpus_version,
+            query,
+            matches=tuple(matches[: query.limit]),
+            truncated=truncated,
         )
-        if not results:
-            raise SvcError(
-                "lookup-not-found",
-                "No packaged SVC content matched --keyword.",
-                {
-                    "query": query.value,
-                    "hint": LOOKUP_DISCOVERY_HINT,
-                },
-            )
-        return LookupResponse(query, results)
-
-    def _full_result(self, entry: CatalogEntry) -> LookupResult:
-        document = self._document(entry)
-        return LookupResult(entry.path, entry.title, entry.sha256, content=document.content)
 
     def _document(self, entry: CatalogEntry) -> CorpusDocument:
         content = self.reader(entry.path)
@@ -269,22 +309,94 @@ class CorpusLookup:
             raise SvcError(
                 "invalid-corpus",
                 "Packaged SVC document digest does not match its catalog entry.",
-                {"path": entry.path, "expected_sha256": entry.sha256, "actual_sha256": actual},
+                {
+                    "path": entry.path,
+                    "expected_sha256": entry.sha256,
+                    "actual_sha256": actual,
+                },
             )
         try:
             text = content.decode("utf-8")
         except UnicodeDecodeError as error:
-            raise SvcError("invalid-corpus", "Packaged SVC document is not UTF-8 Markdown.", {"path": entry.path}) from error
+            raise SvcError(
+                "invalid-corpus",
+                "Packaged SVC document is not UTF-8 Markdown.",
+                {"path": entry.path},
+            ) from error
         return CorpusDocument(entry, text)
+
+
+def _normalize_prefix(value: str | None) -> str | None:
+    if value in {None, ""}:
+        return None
+    assert value is not None
+    if "\\" in value or value.startswith("/"):
+        raise SvcError(
+            "invalid-directory-prefix",
+            "--list prefix must be a normalized relative Corpus directory.",
+            {"prefix": value},
+        )
+    stripped = value.removesuffix("/")
+    path = PurePosixPath(stripped)
+    if (
+        not stripped
+        or "." in path.parts
+        or ".." in path.parts
+        or any(part.startswith(".") for part in path.parts)
+        or path.as_posix() != stripped
+    ):
+        raise SvcError(
+            "invalid-directory-prefix",
+            "--list prefix must be a normalized relative Corpus directory.",
+            {"prefix": value},
+        )
+    return f"{stripped}/"
+
+
+def _lexical_match(text: str, phrase: str, terms: Sequence[str]) -> bool:
+    return phrase in text or bool(terms and all(term in text for term in terms))
+
+
+def _keyword_score(path: str, body: str, phrase: str, terms: Sequence[str]) -> int:
+    return (
+        path.count(phrase) * 1000
+        + body.count(phrase) * 100
+        + sum(path.count(term) * 120 + body.count(term) * 10 for term in terms)
+    )
 
 
 def _excerpt(content: str, phrase: str, terms: Sequence[str]) -> str:
     compact = re.sub(r"\s+", " ", content).strip()
     haystack = compact.casefold()
-    needle = phrase if phrase in haystack else next((term for term in terms if term in haystack), "")
+    needle = (
+        phrase
+        if phrase in haystack
+        else next((term for term in terms if term in haystack), "")
+    )
     start = max(haystack.find(needle), 0)
     left = max(start - 70, 0)
     right = min(start + max(len(needle), 1) + 120, len(compact))
-    prefix = "…" if left else ""
-    suffix = "…" if right < len(compact) else ""
-    return prefix + compact[left:right].strip() + suffix
+    return (
+        ("…" if left else "")
+        + compact[left:right].strip()
+        + ("…" if right < len(compact) else "")
+    )
+
+
+def _match_location(content: str, match: re.Match[str]) -> tuple[int, int, str]:
+    start = match.start()
+    line_start = content.rfind("\n", 0, start) + 1
+    line_end = content.find("\n", start)
+    if line_end == -1:
+        line_end = len(content)
+    line = content.count("\n", 0, start) + 1
+    column = start - line_start + 1
+    source_line = content[line_start:line_end]
+    clip_left = max(column - 1 - 70, 0)
+    clip_right = min(column - 1 + max(len(match.group()), 1) + 120, len(source_line))
+    excerpt = (
+        ("…" if clip_left else "")
+        + source_line[clip_left:clip_right]
+        + ("…" if clip_right < len(source_line) else "")
+    )
+    return line, column, excerpt

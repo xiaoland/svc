@@ -39,6 +39,45 @@ An Intent lens often points here, but only when the product promise changes. A d
 
 Use Product TDD for admitted cross-unit technical contracts, Unit TDD for admitted internal unit design, and Deployment for non-trivial runtime or recovery truth.
 
+## Corpus Delivery and Project Evolution
+
+The SVC CLI is the local delivery and distribution surface for the versioned
+SVC Corpus. Agents and Humans can progressively browse one logical level,
+search bounded path/content evidence, and read one exact canonical document
+without copying the framework into every project. CLI help owns the executable
+interface; Corpus lookup owns framework guidance and is not a substitute CLI
+manual.
+
+Three evolution axes remain visibly independent: the installed CLI version,
+the project configuration schema, and the project-declared Corpus baseline. A
+supported configuration transform may be automated through an exact plan. A
+Corpus migration cannot be reduced to a file rewrite: SVC presents the exact
+release guidance, an Agent/Human changes Consumer-owned SVC documents, and SVC
+records only the reviewed baseline. An unchanged Corpus must not manufacture
+empty migration work merely because CLI implementation changed.
+
+Ordinary command text is shaped for Agent/Human decisions from the command's
+actual semantics. Compact JSON is a deliberate scripts/CI projection, not the
+definition of agent-friendly output. Expected non-success domain results stay
+self-contained; grammar, invalid requests, and infrastructure failure remain
+errors. SVC does not add a universal result schema across unrelated commands.
+
+## Declared Development Capabilities
+
+SVC lets independent Agent, Human, editor, and CI callers observe and express
+one named long-lived development capability without starting the same intent
+twice. Readiness, coordination scope, provisioning, access, and optional stop
+cleanup remain Consumer declarations integrated by SVC rather than
+reimplementations of HTTP servers, package managers, Compose, or project
+scripts. Once readiness is proved, the capability survives the starter CLI and
+native output remains available through a stable shared log.
+
+Ensure and stop serialize at the same capability boundary, while equivalent
+callers converge on the same observable execution. Stop runs only declared
+Consumer cleanup and verifies the final readiness state; a historical PID is
+never cleanup authority. This preserves Consumer ownership rules such as an
+attached client refusing to tear down another repository's runtime.
+
 ## Agent Task-Performance Analysis
 
 SVC provides a local, Agent-driven evidence capability for understanding whether an Agent produced a good, complete, and sufficiently verified terminal task result under changing scope, dependencies, interruption, and context pressure. The calling Agent selects evidence and owns content use, semantic interpretation, competing explanations, and any SVC-mechanism hypothesis; SVC does not issue a quality score, causal verdict, or model-generated conclusion.

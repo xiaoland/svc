@@ -596,9 +596,18 @@ def _run_query_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
     items = match.get("items")
     if match.get("status") != "complete" or not isinstance(items, list) or len(items) != 1 or items[0].get("ref", {}).get("record_kind") != "native" or items[0].get("matched_terms") != ["parser"]:
         raise _CaseFailure("query-match")
-    lookup = _run_cli(child, ("lookup", "--name", r"sections/working-protocol\.md", "--all", "--json"), root, env)
-    results = lookup.get("results")
-    if not isinstance(results, list) or len(results) != 1 or not isinstance(results[0], Mapping) or results[0].get("path") != "sections/working-protocol.md" or results[0].get("sha256") != overview.get("method", {}).get("sha256"):
+    lookup = _run_cli(
+        child,
+        ("lookup", "--path", "sections/working-protocol.md", "--json"),
+        root,
+        env,
+    )
+    document = lookup.get("document")
+    if (
+        not isinstance(document, Mapping)
+        or document.get("path") != "sections/working-protocol.md"
+        or document.get("sha256") != overview.get("method", {}).get("sha256")
+    ):
         raise _CaseFailure("method-lookup")
     malformed = root / "malformed.json"
     malformed.write_bytes(b"{")

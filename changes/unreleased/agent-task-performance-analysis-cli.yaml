@@ -1,0 +1,11 @@
+kind: major
+component: cli
+body: >-
+  Replace normalized-only `analyze` and its TUI with schema-v3 native evidence
+  plus machine-first `analysis query|read`.
+custom:
+  Migration: not-applicable
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
+time: 2026-08-08T18:00:00+08:00

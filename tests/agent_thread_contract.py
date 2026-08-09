@@ -101,7 +101,9 @@ def write_evidence_bundle(
     trajectory_records = [_meta()]
     for source in records:
         record = copy.deepcopy(dict(source))
-        source_ref = dict(record["source_ref"])
+        raw_source_ref = record["source_ref"]
+        assert isinstance(raw_source_ref, Mapping)
+        source_ref = dict(raw_source_ref)
         event_index = source_ref["event_index"]
         assert isinstance(event_index, int)
         source_ref.update(

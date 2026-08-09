@@ -1,4 +1,4 @@
-"""The small, validated catalog that names the packaged SVC corpus."""
+"""Validated Corpus release facts and the packaged document catalog."""
 
 from __future__ import annotations
 
@@ -9,9 +9,11 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any, Iterable
 
+from semantic_version import Version  # type: ignore[import-untyped]
 
-CATALOG_SCHEMA_VERSION = 1
-SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+
+CATALOG_SCHEMA_VERSION = 2
+CORPUS_VERSION_SCHEMA_VERSION = 1
 TITLE_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
 
@@ -27,7 +29,17 @@ def canonical_json(value: Any) -> bytes:
 
 
 def require_semver(value: object, label: str) -> str:
-    if not isinstance(value, str) or not SEMVER_RE.fullmatch(value):
+    """Return one exact stable SemVer string without coercion."""
+
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be stable x.y.z SemVer: {value!r}")
+    try:
+        parsed = Version(value)
+    except ValueError as error:
+        raise ValueError(
+            f"{label} must be stable x.y.z SemVer: {value!r}"
+        ) from error
+    if parsed.prerelease or parsed.build or str(parsed) != value:
         raise ValueError(f"{label} must be stable x.y.z SemVer: {value!r}")
     return value
 
@@ -50,12 +62,156 @@ def normalized_document_path(value: object, label: str = "document path") -> str
     return normalized
 
 
+def normalized_migration_path(value: object) -> str:
+    path = normalized_document_path(value, "Corpus migration guide path")
+    if not path.startswith("migrations/"):
+        raise ValueError(
+            "Corpus migration guide path must be under migrations/: "
+            f"{value!r}"
+        )
+    return path
+
+
 def title_from_markdown(content: bytes, fallback_path: str) -> str:
     text = content.decode("utf-8")
     match = TITLE_RE.search(text)
     if match:
         return match.group(1).rstrip("#").strip()
     return PurePosixPath(fallback_path).stem.replace("-", " ")
+
+
+@dataclass(frozen=True)
+class CorpusMigration:
+    """Closed migration disposition for one Corpus release."""
+
+    status: str
+    paths: tuple[str, ...] = ()
+
+    @classmethod
+    def from_mapping(cls, raw: object) -> "CorpusMigration":
+        if not isinstance(raw, dict):
+            raise ValueError("Corpus release migration must be an object")
+        status = raw.get("status")
+        if status == "not-required":
+            if set(raw) != {"status"}:
+                raise ValueError(
+                    "not-required Corpus migration has unsupported fields"
+                )
+            return cls(status)
+        if status != "guide":
+            raise ValueError(
+                "Corpus migration status must be guide or not-required"
+            )
+        if set(raw) != {"status", "paths"}:
+            raise ValueError("guide Corpus migration has unsupported fields")
+        paths_raw = raw.get("paths")
+        if not isinstance(paths_raw, list) or not paths_raw:
+            raise ValueError("guide Corpus migration must name at least one path")
+        paths = tuple(normalized_migration_path(path) for path in paths_raw)
+        if len(paths) != len(set(paths)):
+            raise ValueError("Corpus migration guide paths must be unique")
+        return cls(status, paths)
+
+    def as_dict(self) -> dict[str, object]:
+        if self.status == "not-required":
+            return {"status": self.status}
+        return {"status": self.status, "paths": list(self.paths)}
+
+
+@dataclass(frozen=True)
+class CorpusRelease:
+    """One stable hop in the retained Corpus release chain."""
+
+    version: str
+    previous_version: str
+    migration: CorpusMigration
+
+    @classmethod
+    def from_mapping(cls, raw: object) -> "CorpusRelease":
+        if not isinstance(raw, dict):
+            raise ValueError("Every Corpus release must be an object")
+        if set(raw) != {"version", "previous_version", "migration"}:
+            raise ValueError("Corpus release has unsupported fields")
+        return cls(
+            require_semver(raw.get("version"), "Corpus release version"),
+            require_semver(
+                raw.get("previous_version"), "Corpus previous version"
+            ),
+            CorpusMigration.from_mapping(raw.get("migration")),
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "version": self.version,
+            "previous_version": self.previous_version,
+            "migration": self.migration.as_dict(),
+        }
+
+
+@dataclass(frozen=True)
+class CorpusVersionIndex:
+    """Canonical source-owned Corpus release chain."""
+
+    schema_version: int
+    releases: tuple[CorpusRelease, ...]
+
+    @property
+    def corpus_version(self) -> str:
+        return self.releases[-1].version
+
+    @property
+    def supported_anchor(self) -> str:
+        return self.releases[0].previous_version
+
+    @classmethod
+    def from_mapping(cls, raw: object) -> "CorpusVersionIndex":
+        if not isinstance(raw, dict):
+            raise ValueError("Corpus version index must be a JSON object")
+        if raw.get("schema_version") != CORPUS_VERSION_SCHEMA_VERSION:
+            raise ValueError(
+                "Unsupported Corpus version index schema: "
+                f"{raw.get('schema_version')!r}"
+            )
+        if set(raw) != {"schema_version", "releases"}:
+            raise ValueError("Corpus version index has unsupported fields")
+        releases_raw = raw.get("releases")
+        if not isinstance(releases_raw, list) or not releases_raw:
+            raise ValueError("Corpus version index must contain at least one release")
+        releases = tuple(CorpusRelease.from_mapping(item) for item in releases_raw)
+        seen = {releases[0].previous_version}
+        previous = releases[0].previous_version
+        for release in releases:
+            if release.previous_version != previous:
+                raise ValueError(
+                    "Corpus release chain is not contiguous at "
+                    f"{release.version}: expected previous_version {previous}"
+                )
+            if Version(release.version) <= Version(release.previous_version):
+                raise ValueError(
+                    f"Corpus release {release.version} must advance "
+                    f"{release.previous_version}"
+                )
+            if release.version in seen:
+                raise ValueError(
+                    f"Corpus release chain repeats version {release.version}"
+                )
+            seen.add(release.version)
+            previous = release.version
+        return cls(CORPUS_VERSION_SCHEMA_VERSION, releases)
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "releases": [release.as_dict() for release in self.releases],
+        }
+
+
+def parse_version_index(content: bytes) -> CorpusVersionIndex:
+    try:
+        raw = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("Corpus version index must be valid UTF-8 JSON") from error
+    return CorpusVersionIndex.from_mapping(raw)
 
 
 @dataclass(frozen=True)
@@ -87,11 +243,16 @@ class CatalogEntry:
 
 @dataclass(frozen=True)
 class Catalog:
-    """Release metadata sufficient to address and integrity-check the corpus."""
+    """Packaged Corpus release facts plus integrity-checked document addresses."""
 
     schema_version: int
-    svc_version: str
+    corpus_version: str
+    releases: tuple[CorpusRelease, ...]
     entries: tuple[CatalogEntry, ...]
+
+    @property
+    def version_index(self) -> CorpusVersionIndex:
+        return CorpusVersionIndex(CORPUS_VERSION_SCHEMA_VERSION, self.releases)
 
     @classmethod
     def from_mapping(cls, raw: object) -> "Catalog":
@@ -99,9 +260,24 @@ class Catalog:
             raise ValueError("Catalog must be a JSON object")
         if raw.get("schema_version") != CATALOG_SCHEMA_VERSION:
             raise ValueError(f"Unsupported catalog schema: {raw.get('schema_version')!r}")
-        if set(raw) != {"schema_version", "svc_version", "entries"}:
+        if set(raw) != {
+            "schema_version",
+            "corpus_version",
+            "releases",
+            "entries",
+        }:
             raise ValueError("Catalog has unsupported fields")
-        version = require_semver(raw.get("svc_version"), "catalog svc_version")
+        index = CorpusVersionIndex.from_mapping(
+            {
+                "schema_version": CORPUS_VERSION_SCHEMA_VERSION,
+                "releases": raw.get("releases"),
+            }
+        )
+        version = require_semver(raw.get("corpus_version"), "catalog corpus_version")
+        if version != index.corpus_version:
+            raise ValueError(
+                "Catalog corpus_version does not match its last release record"
+            )
         entries_raw = raw.get("entries")
         if not isinstance(entries_raw, list) or not entries_raw:
             raise ValueError("Catalog must contain at least one entry")
@@ -111,20 +287,33 @@ class Catalog:
             raise ValueError("Catalog document paths must be unique")
         if paths != tuple(sorted(paths)):
             raise ValueError("Catalog entries must be path-sorted")
-        return cls(CATALOG_SCHEMA_VERSION, version, entries)
+        _require_guide_entries(index, set(paths))
+        return cls(CATALOG_SCHEMA_VERSION, version, index.releases, entries)
 
     def as_dict(self) -> dict[str, object]:
         return {
             "schema_version": self.schema_version,
-            "svc_version": self.svc_version,
+            "corpus_version": self.corpus_version,
+            "releases": [release.as_dict() for release in self.releases],
             "entries": [entry.as_dict() for entry in self.entries],
         }
 
 
-def catalog_bytes(svc_version: str, documents: Iterable[tuple[str, bytes]]) -> bytes:
-    """Build canonical catalog bytes without copying Markdown bodies into the catalog."""
+def _require_guide_entries(index: CorpusVersionIndex, documents: set[str]) -> None:
+    for release in index.releases:
+        for path in release.migration.paths:
+            if path not in documents:
+                raise ValueError(
+                    f"Corpus release {release.version} references missing guide {path}"
+                )
 
-    require_semver(svc_version, "catalog svc_version")
+
+def catalog_bytes(
+    version_index: CorpusVersionIndex,
+    documents: Iterable[tuple[str, bytes]],
+) -> bytes:
+    """Build canonical catalog bytes without copying Markdown bodies into it."""
+
     entries = []
     for path, content in documents:
         normalized = normalized_document_path(path)
@@ -138,9 +327,19 @@ def catalog_bytes(svc_version: str, documents: Iterable[tuple[str, bytes]]) -> b
     paths = [entry.path for entry in entries]
     if len(paths) != len(set(paths)):
         raise ValueError("Catalog document paths must be unique")
-    catalog = Catalog(CATALOG_SCHEMA_VERSION, svc_version, tuple(sorted(entries, key=lambda item: item.path)))
+    _require_guide_entries(version_index, set(paths))
+    catalog = Catalog(
+        CATALOG_SCHEMA_VERSION,
+        version_index.corpus_version,
+        version_index.releases,
+        tuple(sorted(entries, key=lambda item: item.path)),
+    )
     return canonical_json(catalog.as_dict())
 
 
 def parse_catalog(content: bytes) -> Catalog:
-    return Catalog.from_mapping(json.loads(content))
+    try:
+        raw = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("Catalog must be valid UTF-8 JSON") from error
+    return Catalog.from_mapping(raw)

@@ -1,0 +1,11 @@
+kind: major
+component: cli
+body: >-
+  Remove obsolete local evidence privacy controls and enforce the narrower
+  same-user runtime boundary.
+custom:
+  Migration: not-applicable
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
+time: 2026-08-08T18:00:00+08:00

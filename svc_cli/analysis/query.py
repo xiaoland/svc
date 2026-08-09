@@ -705,8 +705,8 @@ def query_schema() -> dict[str, Any]:
             "command": [
                 "svc",
                 "lookup",
-                "--name",
-                "^sections/working-protocol\\.md$",
+                "--path",
+                "sections/working-protocol.md",
                 "--json",
             ],
             "read_section": "Agent Task Analysis",

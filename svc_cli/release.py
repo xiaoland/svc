@@ -21,6 +21,6 @@ def installed_distribution_version() -> str | None:
 
 
 def runtime_version() -> str:
-    """Use package metadata when available, otherwise the source catalog during development."""
+    """Report only the CLI distribution identity, never the Corpus version."""
 
-    return installed_distribution_version() or catalog().svc_version
+    return installed_distribution_version() or "source-tree"
