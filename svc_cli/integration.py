@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Literal, TypeAlias
 
 from .catalog import sha256_bytes
 
@@ -27,6 +28,17 @@ SKILL_MARKER_RE = re.compile(
     re.MULTILINE,
 )
 
+IntegrationInspectionStatus: TypeAlias = Literal[
+    "missing",
+    "unanchored",
+    "modified",
+    "current",
+    "outdated",
+    "unowned",
+    "clean-generated",
+]
+IntegrationWriteAction: TypeAlias = Literal["create", "append", "refresh"]
+
 
 class IntegrationProblem(ValueError):
     def __init__(self, code: str, message: str) -> None:
@@ -37,14 +49,14 @@ class IntegrationProblem(ValueError):
 
 @dataclass(frozen=True)
 class IntegrationInspection:
-    status: str
+    status: IntegrationInspectionStatus
     content: str | None
     match: re.Match[str] | None = None
 
 
 @dataclass(frozen=True)
 class DesiredIntegration:
-    action: str
+    action: IntegrationWriteAction
     reason: str
     content: bytes
 

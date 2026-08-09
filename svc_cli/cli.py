@@ -9,7 +9,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Never, Sequence, cast
+from typing import Any, Literal, Never, Sequence, cast
 
 from ._execution import ExecutionStore
 from .analysis.protocol import AnalysisProtocolError
@@ -17,14 +17,40 @@ from .analysis.query import query_schema
 from .analysis.read import read_schema
 from .analysis.service import execute_query, execute_read
 from .errors import SvcError
-from .dev.runtime import ensure_target, inspect_dev_identity, inspect_dev_status, stop_target
+from .dev.runtime import (
+    DevEnsureOutput,
+    DevIdentityOutput,
+    DevStatusOutput,
+    DevStopOutput,
+    DevTargetError,
+    DevTargetObservation,
+    ensure_target,
+    inspect_dev_identity,
+    inspect_dev_status,
+    stop_target,
+)
+from .dev.readiness import ProbeObservation
 from .lookup import (
     LOOKUP_DISCOVERY_HINT,
-    READ_GUIDANCE_COMMAND,
     CorpusLookup,
     LookupQuery,
 )
-from .project import InitPlan, apply_init, inspect_status, plan_init
+from .machine import (
+    CliUsageOutput,
+    dump_machine_output,
+    unscoped_machine_object,
+)
+from .output_schema import RegisteredMachineOutput, read_output_schema
+from .project import (
+    ConfigurationUnavailableStatus,
+    InitApplyOutput,
+    InitPlan,
+    ProjectInvalidStatus,
+    RootStatusOutput,
+    apply_init,
+    inspect_status,
+    plan_init,
+)
 from .run.runtime import (
     execute_entry,
     follow_run,
@@ -33,7 +59,14 @@ from .run.runtime import (
     receipt,
 )
 from .release import catalog, runtime_version
-from .upgrade import UpgradePlan, UpgradeTarget, apply_upgrade, plan_upgrade
+from .upgrade import (
+    RemainingTarget,
+    UpgradeApplyOutput,
+    UpgradePlan,
+    UpgradeTarget,
+    apply_upgrade,
+    plan_upgrade,
+)
 from .telemetry.agent_threads import ArchiveFilter
 from .telemetry.service import (
     export_agent_thread,
@@ -51,9 +84,46 @@ class CliUsageError(ValueError):
     """Argument grammar error raised without argparse writing side effects."""
 
 
+class OutputSchemaRequested(Exception):
+    def __init__(self, key: str) -> None:
+        super().__init__(key)
+        self.key = key
+
+
+class OutputSchemaAction(argparse.Action):
+    def __init__(
+        self,
+        option_strings: Sequence[str],
+        dest: str,
+        *,
+        schema_key: str,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(option_strings, dest, nargs=0, **kwargs)
+        self.schema_key = schema_key
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: str | None = None,
+    ) -> Never:
+        raise OutputSchemaRequested(self.schema_key)
+
+
 class SvcArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> Never:
         raise CliUsageError(message)
+
+
+def _add_output_schema(parser: argparse.ArgumentParser, key: str) -> None:
+    parser.add_argument(
+        "--json-schema",
+        action=OutputSchemaAction,
+        schema_key=key,
+        help="Emit the packaged JSON Schema for this command's machine output",
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -106,6 +176,7 @@ def _parser() -> argparse.ArgumentParser:
     lookup.add_argument(
         "--limit", type=_lookup_limit, help="Maximum keyword results (1-50)"
     )
+    _add_output_schema(lookup, "lookup")
     lookup.add_argument(
         "--json",
         action="store_true",
@@ -131,8 +202,12 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("repo", nargs="?", default=".", help="Project directory")
     init.add_argument("--apply", metavar="PLAN_DIGEST")
     init.add_argument(
-        "--json", action="store_true", dest="json_output", help="Emit compact scripts/CI JSON"
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit compact scripts/CI JSON",
     )
+    _add_output_schema(init, "init")
 
     status = subparsers.add_parser(
         "status",
@@ -145,8 +220,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     status.add_argument("repo", nargs="?", default=".", help="Project directory")
     status.add_argument(
-        "--json", action="store_true", dest="json_output", help="Emit the complete compact scripts/CI projection"
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit the complete compact scripts/CI projection",
     )
+    _add_output_schema(status, "status")
 
     upgrade = subparsers.add_parser(
         "upgrade",
@@ -166,8 +245,12 @@ def _parser() -> argparse.ArgumentParser:
     upgrade.add_argument("--target", choices=("config", "corpus"))
     upgrade.add_argument("--apply", metavar="PLAN_DIGEST")
     upgrade.add_argument(
-        "--json", action="store_true", dest="json_output", help="Emit compact scripts/CI JSON"
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit compact scripts/CI JSON",
     )
+    _add_output_schema(upgrade, "upgrade")
 
     dev = subparsers.add_parser(
         "dev", help="Observe, ensure, or stop declared consumer dev capabilities"
@@ -195,6 +278,7 @@ def _parser() -> argparse.ArgumentParser:
         dest="json_output",
         help="Emit the complete compact scripts/CI projection",
     )
+    _add_output_schema(dev_status, "dev-status")
     dev_identity = dev_commands.add_parser(
         "identity",
         help="Show the resolved workspace identity used for dev coordination",
@@ -202,6 +286,7 @@ def _parser() -> argparse.ArgumentParser:
     dev_identity.add_argument(
         "--repo", default=".", help="Workspace directory (default: current directory)"
     )
+    _add_output_schema(dev_identity, "dev-identity")
     dev_identity.add_argument(
         "--json",
         action="store_true",
@@ -226,6 +311,7 @@ def _parser() -> argparse.ArgumentParser:
     dev_ensure.add_argument(
         "--repo", default=".", help="Workspace directory (default: current directory)"
     )
+    _add_output_schema(dev_ensure, "dev-ensure")
     dev_ensure.add_argument(
         "--json",
         action="store_true",
@@ -251,6 +337,7 @@ def _parser() -> argparse.ArgumentParser:
     dev_stop.add_argument(
         "--repo", default=".", help="Workspace directory (default: current directory)"
     )
+    _add_output_schema(dev_stop, "dev-stop")
     dev_stop.add_argument(
         "--json",
         action="store_true",
@@ -284,6 +371,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--repo", default=".", help="Workspace directory (default: current directory)"
     )
+    _add_output_schema(run, "run")
     run.add_argument(
         "--json",
         action="store_true",
@@ -371,15 +459,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise CliUsageError(
                     "svc run requires exactly one entry, --follow ID, or --inspect ID"
                 )
+    except OutputSchemaRequested as request:
+        _emit_unscoped_json(read_output_schema(request.key))
+        return EXIT_OK
     except CliUsageError as error:
         if raw_argv[:1] == ["analysis"] or "--json" in raw_argv:
-            _emit_json(
-                {
-                    "code": "invalid-cli-usage",
-                    "message": str(error),
-                },
-                stream=sys.stderr,
-            )
+            _emit_json(CliUsageOutput(message=str(error)), stream=sys.stderr)
         else:
             print(f"svc: invalid-cli-usage: {error}", file=sys.stderr)
             if not raw_argv or raw_argv[:1] == ["lookup"]:
@@ -401,7 +486,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "--scope applies only to --keyword or --regex.",
                 )
             lookup_limit = args.limit if args.limit is not None else 10
-            scope = args.scope or "both"
+            scope = cast(Literal["path", "both"], args.scope or "both")
             if args.list_prefix is not None:
                 query = LookupQuery("list", args.list_prefix, limit=lookup_limit)
             elif args.path is not None:
@@ -415,16 +500,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return EXIT_OK
 
         if args.command == "status":
-            payload = inspect_status(Path(args.repo))
-            _emit_status(payload, json_output)
-            return EXIT_OK if payload["healthy"] else EXIT_CONFLICT
+            status_payload = inspect_status(Path(args.repo))
+            _emit_status(status_payload, json_output)
+            return EXIT_OK if status_payload.healthy else EXIT_CONFLICT
 
         if args.command == "upgrade":
             target = cast(UpgradeTarget | None, args.target)
             upgrade_plan = plan_upgrade(Path(args.repo), target)
             if args.apply:
-                payload = apply_upgrade(upgrade_plan, args.apply)
-                _emit_upgrade_apply(payload, json_output)
+                upgrade_payload = apply_upgrade(upgrade_plan, args.apply)
+                _emit_upgrade_apply(upgrade_payload, json_output)
                 return EXIT_OK
             _emit_upgrade_plan(upgrade_plan, json_output)
             return (
@@ -435,23 +520,23 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if args.command == "dev":
             if args.dev_command == "identity":
-                payload = inspect_dev_identity(Path(args.repo))
-                _emit_dev_identity(payload, json_output)
+                identity_payload = inspect_dev_identity(Path(args.repo))
+                _emit_dev_identity(identity_payload, json_output)
                 return EXIT_OK
             if args.dev_command == "status":
-                payload = inspect_dev_status(Path(args.repo), args.target)
-                _emit_dev_status(payload, json_output)
-                return EXIT_OK if payload["healthy"] else EXIT_CONFLICT
+                dev_status_payload = inspect_dev_status(Path(args.repo), args.target)
+                _emit_dev_status(dev_status_payload, json_output)
+                return EXIT_OK if dev_status_payload.healthy else EXIT_CONFLICT
             if args.dev_command == "stop":
-                payload = stop_target(
+                stop_payload = stop_target(
                     Path(args.repo),
                     args.target,
                     on_selected=None if json_output else _emit_dev_stop_selected,
                 )
-                _emit_dev_stop(payload, json_output)
-                return _dev_stop_exit_code(payload)
+                _emit_dev_stop(stop_payload, json_output)
+                return _dev_stop_exit_code(stop_payload)
             try:
-                payload = ensure_target(
+                ensure_payload = ensure_target(
                     Path(args.repo),
                     args.target,
                     on_selected=None if json_output else _emit_dev_ensure_selected,
@@ -459,9 +544,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             except SvcError as error:
                 if not _is_expected_ensure_outcome(error):
                     raise
-                payload = dict(error.details)
-            _emit_dev_ensure(payload, json_output)
-            return _dev_ensure_exit_code(payload)
+                ensure_payload = DevEnsureOutput.model_validate(
+                    error.details, strict=False
+                )
+            _emit_dev_ensure(ensure_payload, json_output)
+            return _dev_ensure_exit_code(ensure_payload)
 
         if args.command == "run":
             return _run_declared(args, json_output)
@@ -474,24 +561,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.telemetry_resource == "agent-thread"
                 and args.agent_thread_command == "list"
             ):
-                payload = list_agent_threads(
+                telemetry_payload = list_agent_threads(
                     args.codex_home, args.limit, args.archive_state
                 )
-                _emit_telemetry_list(payload, json_output)
+                _emit_telemetry_list(telemetry_payload, json_output)
                 return EXIT_OK
-            payload = export_agent_thread(
+            telemetry_payload = export_agent_thread(
                 codex_home=args.codex_home,
                 thread_id=args.thread_id,
                 source=args.source,
                 output=args.output,
             )
-            _emit_telemetry_export(payload, json_output)
+            _emit_telemetry_export(telemetry_payload, json_output)
             return EXIT_OK
 
         local_plan = plan_init(Path(args.repo))
         if args.apply:
-            payload = apply_init(local_plan, args.apply)
-            _emit_init_apply(payload, json_output)
+            init_payload = apply_init(local_plan, args.apply)
+            _emit_init_apply(init_payload, json_output)
             return EXIT_OK
         _emit_init_plan(local_plan, json_output)
         return EXIT_CONFLICT if local_plan.blockers else EXIT_OK
@@ -499,7 +586,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         _emit_error(error, json_output)
         return _exit_code(error)
     except AnalysisProtocolError as error:
-        _emit_json(error.as_dict(), stream=sys.stderr)
+        _emit_unscoped_json(error.as_dict(), stream=sys.stderr)
         return _analysis_exit_code(error)
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
         _emit_error(SvcError("invalid-release", str(error)), json_output)
@@ -574,7 +661,7 @@ def _run_declared(args: argparse.Namespace, json_output: bool) -> int:
             stderr_sink=stderr_sink,
             on_selected=callback,
         )
-    payload = receipt(outcome, command)
+    payload = receipt(outcome, cast(Any, command))
     if json_output:
         _emit_json(payload)
     else:
@@ -595,118 +682,106 @@ def _emit_run_selected(record: Any, role: str) -> None:
     )
 
 
-def _emit_dev_stop(payload: dict[str, object], json_output: bool) -> None:
+def _emit_dev_stop(payload: DevStopOutput, json_output: bool) -> None:
     if json_output:
         _emit_json(payload)
         return
-    workspace = cast(dict[str, object], payload["workspace"])
-    capability = cast(dict[str, object], payload["capability"])
     print(
-        f"svc dev {payload['target']}: {payload['status']}; "
-        f"instance {workspace['instance']}; scope {capability['scope']}"
+        f"svc dev {payload.target}: {payload.status}; "
+        f"instance {payload.workspace.instance}; scope {payload.capability.scope}"
     )
-    attempt = payload.get("attempt")
-    if isinstance(attempt, dict):
-        print(f"$ {_display_argv(cast(Sequence[str], attempt['argv']))}")
-        role = attempt["caller_role"]
-        state = attempt["state"]
-        detail = (
-            f", exit {attempt['exit_code']}" if "exit_code" in attempt else ""
-        )
-        print(f"Execution: {attempt['execution_id']} ({role}), {state}{detail}")
-        logs = cast(dict[str, dict[str, object]], attempt["logs"])
-        if "merged" in logs:
-            print(f"Stop log: {logs['merged']['path']}")
-            if payload["status"] == "stop-failed" and logs["merged"]["bytes"]:
-                tail = _file_tail(Path(str(logs["merged"]["path"])))
-                if tail:
-                    print("Stop output (tail):")
-                    for line in tail.splitlines():
-                        print(f"  {line}")
-    probe = payload.get("probe")
-    if isinstance(probe, dict):
-        disposition = "ready" if probe["healthy"] else "not ready"
-        print(f"Final probe: {probe['kind']} {probe['reason']} — {disposition}")
-    elif "probe_error" in payload:
-        error = cast(dict[str, object], payload["probe_error"])
-        print(f"Final probe: unverified — {error['code']}: {error['message']}")
-
-
-def _emit_dev_identity(payload: dict[str, object], json_output: bool) -> None:
-    if json_output:
-        _emit_json(payload)
-        return
-    workspace = cast(dict[str, object], payload["workspace"])
-    print("svc dev identity")
-    print(f"instance: {workspace['instance']}")
-    print(f"root: {workspace['root']}")
-    print(
-        f"repository: {workspace['repository_kind']} {workspace['repository_id']}"
-    )
-    print(f"worktree: {workspace['worktree_id']}")
-    print(f"namespace: {workspace['namespace_id']}")
-
-
-def _emit_dev_ensure(payload: dict[str, object], json_output: bool) -> None:
-    if json_output:
-        _emit_json(payload)
-        return
-    workspace = cast(dict[str, object], payload["workspace"])
-    capability = cast(dict[str, object], payload["capability"])
-    if payload.get("caller_status") == "detached":
-        attempt = cast(dict[str, object], payload["attempt"])
-        logs = cast(dict[str, dict[str, object]], attempt["logs"])
+    attempt = payload.attempt
+    if attempt is not None:
+        print(f"$ {_display_argv(attempt.argv)}")
+        role = attempt.caller_role
+        state = attempt.state
+        detail = f", exit {attempt.exit_code}" if attempt.exit_code is not None else ""
+        print(f"Execution: {attempt.execution_id} ({role}), {state}{detail}")
+        log = attempt.logs.merged
+        print(f"Stop log: {log.path}")
+        if payload.status == "stop-failed" and log.bytes:
+            tail = _file_tail(Path(log.path))
+            if tail:
+                print("Stop output (tail):")
+                for line in tail.splitlines():
+                    print(f"  {line}")
+    if payload.probe is not None:
+        disposition = "ready" if payload.probe.healthy else "not ready"
         print(
-            f"svc dev {payload['target']}: detached from start "
-            f"{attempt['execution_id']}; scope {capability['scope']}"
+            f"Final probe: {payload.probe.kind} {payload.probe.reason} — {disposition}"
         )
-        print(f"Execution state: {attempt['state']}")
-        print(f"Startup log: {logs['merged']['path']}")
+    elif payload.probe_error is not None:
+        print(
+            "Final probe: unverified — "
+            f"{payload.probe_error.code}: {payload.probe_error.message}"
+        )
+
+
+def _emit_dev_identity(payload: DevIdentityOutput, json_output: bool) -> None:
+    if json_output:
+        _emit_json(payload)
         return
-    ready = payload.get("ready") is True
-    lead = "ready" if ready else str(payload["status"])
-    outcome = f" ({payload['status']})" if ready else ""
+    workspace = payload.workspace
+    print("svc dev identity")
+    print(f"instance: {workspace.instance}")
+    print(f"root: {workspace.root}")
+    print(f"repository: {workspace.repository_kind} {workspace.repository_id}")
+    print(f"worktree: {workspace.worktree_id}")
+    print(f"namespace: {workspace.namespace_id}")
+
+
+def _emit_dev_ensure(payload: DevEnsureOutput, json_output: bool) -> None:
+    if json_output:
+        _emit_json(payload)
+        return
+    if payload.caller_status == "detached":
+        assert payload.attempt is not None
+        print(
+            f"svc dev {payload.target}: detached from start "
+            f"{payload.attempt.execution_id}; scope {payload.capability.scope}"
+        )
+        print(f"Execution state: {payload.attempt.state}")
+        print(f"Startup log: {payload.attempt.logs.merged.path}")
+        return
+    ready = payload.ready is True
+    lead = "ready" if ready else payload.status
+    outcome = f" ({payload.status})" if ready else ""
     print(
-        f"svc dev {payload['target']}: {lead}{outcome}; "
-        f"instance {workspace['instance']}; scope {capability['scope']}"
+        f"svc dev {payload.target}: {lead}{outcome}; "
+        f"instance {payload.workspace.instance}; scope {payload.capability.scope}"
     )
-    probe = cast(dict[str, object], payload["probe"])
-    print(f"Probe: {probe['kind']} {_probe_text_detail(probe)}")
-    if not ready and "probe_argv" in payload:
-        print(f"$ {_display_argv(cast(Sequence[str], payload['probe_argv']))}")
-    access = cast(list[str], payload.get("access", []))
-    if access:
-        for value in access:
+    if payload.probe is not None:
+        print(f"Probe: {payload.probe.kind} {_probe_text_detail(payload.probe)}")
+    if not ready and payload.probe_argv is not None:
+        print(f"$ {_display_argv(payload.probe_argv)}")
+    if payload.access:
+        for value in payload.access:
             print(f"Access: {value}")
-    else:
-        output = probe.get("output")
-        if isinstance(output, str) and output:
+    elif payload.probe is not None:
+        if payload.probe.output:
+            output = payload.probe.output
             preview, omitted = _text_preview(output)
             print("Probe output:")
             for line in preview.splitlines() or [preview]:
                 print(f"  {line}")
-            if omitted or probe.get("output_truncated"):
+            if omitted or payload.probe.output_truncated:
                 print("  … output truncated; use --json for the bounded capture")
-        elif not ready and probe["kind"] == "exec":
+        elif not ready and payload.probe.kind == "exec":
             print("Probe output: empty")
-    attempt_value = payload.get("attempt")
-    if isinstance(attempt_value, dict):
-        logs = cast(dict[str, dict[str, object]], attempt_value["logs"])
+    if payload.attempt is not None:
         print(
-            f"Execution: {attempt_value['execution_id']} "
-            f"({attempt_value['caller_role']}), {attempt_value['state']}"
+            f"Execution: {payload.attempt.execution_id} "
+            f"({payload.attempt.caller_role}), {payload.attempt.state}"
         )
-        print(f"Startup log: {logs['merged']['path']}")
-    if payload["status"] == "manual-action-required":
+        print(f"Startup log: {payload.attempt.logs.merged.path}")
+    if payload.status == "manual-action-required":
         print(
             "No SVC command can provision this target; follow the Consumer "
             "project's guidance."
         )
 
 
-def _emit_dev_ensure_selected(
-    record: Any, caller_role: str, log_path: str
-) -> None:
+def _emit_dev_ensure_selected(record: Any, caller_role: str, log_path: str) -> None:
     if caller_role == "owner":
         print(
             f"svc dev {record.subject}: starting `{_display_argv(record.argv)}`",
@@ -735,98 +810,95 @@ def _emit_dev_stop_selected(record: Any, caller_role: str, log_path: str) -> Non
 
 
 def _is_expected_ensure_outcome(error: SvcError) -> bool:
-    return error.code in {
-        "manual-action-required",
-        "occupied-unhealthy",
-        "readiness-timeout",
-        "provision-exited",
-        "activation-timeout",
-        "activation-failed",
-        "dev-owner-lost",
-        "ensure-interrupted",
-    } and error.details.get("command") == "dev ensure"
+    return (
+        error.code
+        in {
+            "manual-action-required",
+            "occupied-unhealthy",
+            "readiness-timeout",
+            "provision-exited",
+            "activation-timeout",
+            "activation-failed",
+            "dev-owner-lost",
+            "ensure-interrupted",
+        }
+        and error.details.get("command") == "dev ensure"
+    )
 
 
-def _dev_ensure_exit_code(payload: dict[str, object]) -> int:
-    if payload.get("status") == "interrupted" or payload.get("caller_status") == "detached":
+def _dev_ensure_exit_code(payload: DevEnsureOutput) -> int:
+    if payload.status == "interrupted" or payload.caller_status == "detached":
         return 130
-    return EXIT_OK if payload.get("ready") is True else EXIT_CONFLICT
+    return EXIT_OK if payload.ready is True else EXIT_CONFLICT
 
 
-def _emit_dev_status(payload: dict[str, object], json_output: bool) -> None:
+def _emit_dev_status(payload: DevStatusOutput, json_output: bool) -> None:
     if json_output:
         _emit_json(payload)
         return
-    workspace = cast(dict[str, object], payload["workspace"])
-    status = str(payload["status"])
+    status = payload.status
     if status in {"invalid-configuration", "not-configured"}:
-        print(f"svc dev status: {status}; instance {workspace['instance']}")
-        if "reason" in payload:
-            print(f"Reason: {payload['reason']}")
+        print(f"svc dev status: {status}; instance {payload.workspace.instance}")
+        if payload.reason is not None:
+            print(f"Reason: {payload.reason}")
         if status == "not-configured":
             print("No dev targets are declared in svc.json.")
         return
-    targets = cast(list[dict[str, object]], payload["targets"])
+    targets = payload.targets or ()
     ready_count = sum(
         1
         for entry in targets
-        if isinstance(entry.get("probe"), dict)
-        and cast(dict[str, object], entry["probe"])["healthy"]
+        if isinstance(entry, DevTargetObservation) and entry.probe.healthy
     )
     print(
         f"svc dev status: {status} — {ready_count}/{len(targets)} ready; "
-        f"instance {workspace['instance']}"
+        f"instance {payload.workspace.instance}"
     )
     ensure_targets: list[str] = []
     for entry in targets:
-        if "error" in entry:
-            error = cast(dict[str, object], entry["error"])
-            print(f"error      {entry['target']}  {error['code']}: {error['message']}")
+        if isinstance(entry, DevTargetError):
+            print(
+                f"error      {entry.target}  {entry.error.code}: {entry.error.message}"
+            )
             continue
-        probe = cast(dict[str, object], entry["probe"])
-        capability = cast(dict[str, object], entry["capability"])
-        disposition = "ready" if probe["healthy"] else "not-ready"
-        detail = _probe_text_detail(probe)
-        continuation = entry.get("continuation")
+        disposition = "ready" if entry.probe.healthy else "not-ready"
+        detail = _probe_text_detail(entry.probe)
+        continuation = entry.continuation
         suffix = f"; {continuation}" if continuation is not None else ""
         print(
-            f"{disposition:<10} {entry['target']}  {capability['scope']}  "
-            f"{probe['kind']} {detail}{suffix}"
+            f"{disposition:<10} {entry.target}  {entry.capability.scope}  "
+            f"{entry.probe.kind} {detail}{suffix}"
         )
-        if not probe["healthy"] and "probe_argv" in entry:
-            print(
-                f"  $ {_display_argv(cast(Sequence[str], entry['probe_argv']))}"
-            )
-        access = cast(list[str], entry["access"])
-        for value in access:
+        if not entry.probe.healthy and entry.probe_argv is not None:
+            print(f"  $ {_display_argv(entry.probe_argv)}")
+        for value in entry.access:
             print(f"  Access: {value}")
-        output = probe.get("output")
-        if isinstance(output, str) and output:
-            preview, omitted = _text_preview(output)
+        if entry.probe.output:
+            preview, omitted = _text_preview(entry.probe.output)
             print("  Probe output:")
             for line in preview.splitlines() or [preview]:
                 print(f"    {line}")
-            if omitted or probe.get("output_truncated"):
+            if omitted or entry.probe.output_truncated:
                 print("    … output truncated; use --json for the bounded capture")
-        elif probe["kind"] == "exec" and not probe["healthy"]:
+        elif entry.probe.kind == "exec" and not entry.probe.healthy:
             print("  Probe output: empty")
         if continuation == "ensure":
-            ensure_targets.append(str(entry["target"]))
+            ensure_targets.append(entry.target)
     if ensure_targets:
         selected = ensure_targets[0] if len(ensure_targets) == 1 else "<target>"
         print(
             "Ensure one: "
             f"svc dev ensure {shlex.quote(selected)} --repo "
-            f"{shlex.quote(str(workspace['root']))}"
+            f"{shlex.quote(str(payload.workspace.root))}"
         )
 
 
-def _probe_text_detail(probe: dict[str, object]) -> str:
-    if probe["kind"] == "exec" and "exit_code" in probe:
-        return f"exit {probe['exit_code']}"
-    if probe["kind"] == "http" and "status_code" in probe:
-        return f"status {probe['status_code']}"
-    return str(probe["reason"])
+def _probe_text_detail(probe: ProbeObservation) -> str:
+    if probe.kind == "exec" and probe.exit_code is not None:
+        return f"exit {probe.exit_code}"
+    if probe.kind == "http" and probe.status_code is not None:
+        return f"status {probe.status_code}"
+    return probe.reason
 
 
 def _text_preview(value: str, limit: int = 1_200) -> tuple[str, bool]:
@@ -846,10 +918,10 @@ def _file_tail(path: Path, limit: int = 1_200) -> str | None:
     return value.decode("utf-8", errors="replace").rstrip("\n") or None
 
 
-def _dev_stop_exit_code(payload: dict[str, object]) -> int:
-    if payload.get("caller_status") in {"interrupted", "detached"}:
+def _dev_stop_exit_code(payload: DevStopOutput) -> int:
+    if payload.caller_status in {"interrupted", "detached"}:
         return 130
-    return EXIT_OK if payload.get("status") == "stopped" else EXIT_CONFLICT
+    return EXIT_OK if payload.status == "stopped" else EXIT_CONFLICT
 
 
 def _emit_run_terminal(outcome: Any, *, inspect: bool) -> None:
@@ -932,7 +1004,7 @@ def _run_analysis_tool(args: argparse.Namespace) -> int:
                 "--schema cannot be combined with --input or --request.",
             )
         payload = query_schema() if args.analysis_tool == "query" else read_schema()
-        _emit_json(payload)
+        _emit_unscoped_json(payload)
         return EXIT_OK
     if args.input is None or args.request is None:
         raise AnalysisProtocolError(
@@ -944,7 +1016,7 @@ def _run_analysis_tool(args: argparse.Namespace) -> int:
         payload = execute_query(args.input, request)
     else:
         payload = execute_read(args.input, request)
-    _emit_json(payload)
+    _emit_unscoped_json(payload)
     return EXIT_OK
 
 
@@ -970,15 +1042,16 @@ def _telemetry_limit(value: str) -> int:
 
 def _emit_upgrade_plan(plan: UpgradePlan, json_output: bool) -> None:
     if json_output:
-        _emit_json(plan.as_dict())
+        _emit_json(plan.as_output())
         return
     print(f"svc upgrade: {plan.status}")
     print(f"Repository: {plan.repo}")
     if plan.target is None:
-        configuration = cast(dict[str, object], plan.details["configuration"])
-        corpus_state = cast(dict[str, object], plan.details["corpus"])
-        print(f"Configuration: schema {configuration['schema']} (current)")
-        print(f"Corpus: baseline {corpus_state['project_version']} (current)")
+        configuration = plan.details.configuration
+        corpus_state = plan.details.corpus
+        assert configuration is not None and corpus_state is not None
+        print(f"Configuration: schema {configuration.config_schema} (current)")
+        print(f"Corpus: baseline {corpus_state.project_version} (current)")
         print("Project SVC upgrade state is current.")
         return
 
@@ -1002,21 +1075,22 @@ def _emit_upgrade_plan(plan: UpgradePlan, json_output: bool) -> None:
             for line in guide.text.splitlines():
                 print(f"  {line}" if line else "")
     else:
-        corpus_details = cast(dict[str, object], plan.details["corpus"])
-        releases = cast(list[dict[str, object]], corpus_details["releases"])
+        corpus_details = plan.details.corpus
+        assert corpus_details is not None and corpus_details.releases is not None
+        releases = corpus_details.releases
         print(f"\nCorpus releases ({len(releases)}):")
         paths: list[str] = []
         for release in releases:
-            migration = str(release["migration"])
+            migration = release.migration
             label = (
                 "guidance required"
                 if migration == "guide"
                 else "migration not required"
             )
-            print(f"  {release['version']}  {label}")
-            for guide_ref in cast(list[dict[str, str]], release.get("guides", [])):
-                paths.append(guide_ref["path"])
-                print(f"    {guide_ref['path']}")
+            print(f"  {release.version}  {label}")
+            for guide_ref in release.guides or ():
+                paths.append(guide_ref.path)
+                print(f"    {guide_ref.path}")
         if paths:
             print("\nRead required guidance:")
             for path in paths:
@@ -1041,81 +1115,78 @@ def _emit_upgrade_plan(plan: UpgradePlan, json_output: bool) -> None:
     )
 
 
-def _emit_upgrade_apply(payload: dict[str, object], json_output: bool) -> None:
+def _emit_upgrade_apply(payload: UpgradeApplyOutput, json_output: bool) -> None:
     if json_output:
         _emit_json(payload)
         return
     print("svc upgrade: applied")
-    print(f"Repository: {payload['repo']}")
-    target = str(payload["target"])
-    if target == "config":
-        details = cast(dict[str, object], payload["configuration"])
-        print(
-            f"Target: config (schema {details['from_schema']} -> {details['to_schema']})"
-        )
+    print(f"Repository: {payload.repo}")
+    if payload.target == "config":
+        details = payload.configuration
+        assert details is not None
+        print(f"Target: config (schema {details.from_schema} -> {details.to_schema})")
     else:
-        details = cast(dict[str, object], payload["corpus"])
+        corpus_details = payload.corpus
+        assert corpus_details is not None
         print(
-            f"Target: corpus (baseline {details['from_version']} -> {details['to_version']})"
+            "Target: corpus "
+            f"(baseline {corpus_details.from_version} -> {corpus_details.to_version})"
         )
-    print(f"Applied plan: {payload['plan_digest']}")
-    migration = cast(dict[str, object], payload["migration"])
-    if migration["disposition"] == "caller-asserted":
+    print(f"Applied plan: {payload.plan_digest}")
+    if payload.migration.disposition == "caller-asserted":
         print(
             "Migration guidance: asserted complete by caller; project-owned work not verified by SVC"
         )
     else:
         print("Migration guidance: not required")
-    operations = cast(list[dict[str, object]], payload["operations"])
-    print(f"\nChanged ({len(operations)}):")
-    for operation in operations:
-        print(f"  {operation['action']} {operation['path']}")
-    verification = cast(dict[str, object], payload["verification"])
-    print(f"\nVerification: {verification['scope']} {verification['status']}")
-    remaining = cast(list[dict[str, object]], payload["remaining_targets"])
-    if remaining:
-        _emit_upgrade_remaining(tuple(remaining), label="Reminder")
+    print(f"\nChanged ({len(payload.operations)}):")
+    for operation in payload.operations:
+        print(f"  {operation.action} {operation.path}")
+    print(f"\nVerification: {payload.verification.scope} {payload.verification.status}")
+    if payload.remaining_targets:
+        _emit_upgrade_remaining(payload.remaining_targets, label="Reminder")
         print("Next upgrade:")
-        print(f"  svc upgrade {shlex.quote(str(payload['repo']))}")
+        print(f"  svc upgrade {shlex.quote(payload.repo)}")
     else:
         print("\nRemaining upgrade targets: none")
         print("Next observation:")
-        print(f"  svc status {shlex.quote(str(payload['repo']))}")
+        print(f"  svc status {shlex.quote(payload.repo)}")
 
 
 def _emit_upgrade_target_heading(plan: UpgradePlan) -> None:
-    if plan.target == "config" and "configuration" in plan.details:
-        details = cast(dict[str, object], plan.details["configuration"])
-        if "from_schema" in details:
+    if plan.target == "config" and plan.details.configuration is not None:
+        details = plan.details.configuration
+        if details.from_schema is not None:
             print(
-                f"Target: config (schema {details['from_schema']} -> {details['to_schema']})"
+                f"Target: config (schema {details.from_schema} -> {details.to_schema})"
             )
             return
-    if plan.target == "corpus" and "corpus" in plan.details:
-        details = cast(dict[str, object], plan.details["corpus"])
-        if "from_version" in details:
+    if plan.target == "corpus" and plan.details.corpus is not None:
+        corpus_details = plan.details.corpus
+        if corpus_details.from_version is not None:
             print(
-                f"Target: corpus (baseline {details['from_version']} -> {details['to_version']})"
+                "Target: corpus "
+                f"(baseline {corpus_details.from_version} -> "
+                f"{corpus_details.to_version})"
             )
             return
     print(f"Target: {plan.target}")
 
 
 def _emit_upgrade_remaining(
-    remaining: Sequence[dict[str, object]], *, label: str
+    remaining: Sequence[RemainingTarget], *, label: str
 ) -> None:
     for fact in remaining:
-        target = str(fact["target"])
-        if target == "corpus":
-            transition = f"{fact['from_version']} -> {fact['to_version']}"
+        if fact.target == "corpus":
+            transition = f"{fact.from_version} -> {fact.to_version}"
         else:
-            transition = f"schema {fact['from_schema']} -> {fact['to_schema']}"
-        print(f"\n{label}: {target} upgrade {fact['status']} ({transition})")
+            transition = f"schema {fact.from_schema} -> {fact.to_schema}"
+        print(f"\n{label}: {fact.target} upgrade {fact.status} ({transition})")
 
 
 def _emit_init_plan(plan: InitPlan, json_output: bool) -> None:
     if json_output:
-        _emit_json(plan.as_dict())
+        _emit_json(plan.as_output())
         return
     suffix = "; no changes can be applied" if plan.status == "blocked" else ""
     print(f"svc init: {plan.status}{suffix}")
@@ -1130,10 +1201,10 @@ def _emit_init_plan(plan: InitPlan, json_output: bool) -> None:
     )
     print(f"Corpus: {plan.corpus_version}")
     baseline = plan.corpus_baseline
-    if baseline["disposition"] == "create":
-        print(f"Corpus baseline: create {baseline['version']}")
+    if baseline.disposition == "create":
+        print(f"Corpus baseline: create {baseline.version}")
     else:
-        print(f"Corpus baseline: {baseline['version'] or 'unavailable'} (unchanged)")
+        print(f"Corpus baseline: {baseline.version or 'unavailable'} (unchanged)")
     if plan.status == "blocked":
         print()
         _emit_blockers(plan.blockers)
@@ -1152,38 +1223,37 @@ def _emit_init_plan(plan: InitPlan, json_output: bool) -> None:
     print(f"  svc init {shlex.quote(str(plan.repo))} --apply {plan.digest}")
 
 
-def _emit_init_apply(payload: dict[str, object], json_output: bool) -> None:
+def _emit_init_apply(payload: InitApplyOutput, json_output: bool) -> None:
     if json_output:
         _emit_json(payload)
         return
-    print(f"svc init: {payload['status']}")
-    print(f"Repository: {payload['repo']}")
-    print(f"Corpus: {payload['corpus_version']}")
-    baseline = cast(dict[str, object], payload["corpus_baseline"])
-    if baseline["disposition"] == "create":
-        print(f"Corpus baseline: created {baseline['version']}")
+    print(f"svc init: {payload.status}")
+    print(f"Repository: {payload.repo}")
+    print(f"Corpus: {payload.corpus_version}")
+    if payload.corpus_baseline.disposition == "create":
+        print(f"Corpus baseline: created {payload.corpus_baseline.version}")
     else:
-        print(f"Corpus baseline: {baseline['version'] or 'unavailable'} (unchanged)")
-    print(f"Applied plan: {payload['plan_digest']}")
-    operations = cast(list[dict[str, object]], payload["operations"])
-    if operations:
-        print(f"\nChanged ({len(operations)}):")
+        print(
+            "Corpus baseline: "
+            f"{payload.corpus_baseline.version or 'unavailable'} (unchanged)"
+        )
+    print(f"Applied plan: {payload.plan_digest}")
+    if payload.operations:
+        print(f"\nChanged ({len(payload.operations)}):")
         past = {
             "create": "created",
             "append": "appended",
             "refresh": "refreshed",
             "delete": "deleted",
         }
-        for operation in operations:
-            _, extent, _ = _init_operation_text(str(operation["path"]))
-            print(
-                f"  {past[str(operation['action'])]:9} {operation['path']} ({extent})"
-            )
+        for operation in payload.operations:
+            _, extent, _ = _init_operation_text(operation.path)
+            print(f"  {past[operation.action]:9} {operation.path} ({extent})")
     else:
         print("Changed: none; no managed operation required a write")
     print("\nVerification: all planned path postconditions passed")
     print("Next observation:")
-    print(f"  svc status {shlex.quote(str(payload['repo']))}")
+    print(f"  svc status {shlex.quote(payload.repo)}")
 
 
 def _init_operation_text(path: str) -> tuple[str, str, str]:
@@ -1209,53 +1279,57 @@ def _init_operation_text(path: str) -> tuple[str, str, str]:
     return values[path]
 
 
-def _emit_status(payload: dict[str, Any], json_output: bool) -> None:
+def _emit_status(payload: RootStatusOutput, json_output: bool) -> None:
     if json_output:
         _emit_json(payload)
         return
-    installed = payload["installed_cli_version"] or "source-tree"
-    corpus_state = payload["corpus"]
-    configuration = payload["configuration"]
-    project_version = corpus_state["project_version"] or "absent"
-    lead = "healthy" if payload["healthy"] else str(payload["status"])
+    installed = payload.installed_cli_version or "source-tree"
+    project_version = payload.corpus.project_version or "absent"
+    lead = "healthy" if payload.healthy else payload.status
     print(
-        f"SVC {lead} — CLI {installed} ({payload['resource_mode']}); "
-        f"Corpus {corpus_state['available_version']}; project baseline {project_version} "
-        f"({corpus_state['status']}); configuration {configuration['status']}"
+        f"SVC {lead} — CLI {installed} ({payload.resource_mode}); "
+        f"Corpus {payload.corpus.available_version}; project baseline {project_version} "
+        f"({payload.corpus.status}); configuration {payload.configuration.status}"
     )
-    next_action = payload["next"]
-    if not payload["healthy"]:
-        print(f"Next: {next_action['action']} — {next_action['reason']}")
-        command = next_action.get("command")
-        if isinstance(command, list):
-            print("  " + shlex.join([str(part) for part in command]))
-    message = payload["project"].get("message") or configuration.get("message")
+    if not payload.healthy:
+        print(f"Next: {payload.next.action} — {payload.next.reason}")
+        if payload.next.command is not None:
+            print("  " + shlex.join(payload.next.command))
+    project_message = (
+        payload.project.message
+        if isinstance(payload.project, ProjectInvalidStatus)
+        else None
+    )
+    configuration_message = (
+        payload.configuration.message
+        if isinstance(payload.configuration, ConfigurationUnavailableStatus)
+        else None
+    )
+    message = project_message or configuration_message
     if message:
         print(f"Configuration: {message}")
-    integration = payload["integration"]
-    anomalies = integration["anomalies"]
+    anomalies = payload.integration.anomalies
     if anomalies:
         print(
-            f"Integration: {integration['status']} ({len(anomalies)} anomalous surface(s))"
+            f"Integration: {payload.integration.status} "
+            f"({len(anomalies)} anomalous surface(s))"
         )
         for item in anomalies:
-            print(f"  {item['status']:16} {item['path']} ({item['kind']})")
-    workspace = payload["workspace"]
+            print(f"  {item.status:16} {item.path} ({item.kind})")
     print(
-        f"Workspace: {workspace['root']} ({workspace['repository_kind']}; "
-        f"worktree {workspace['worktree_id']}; instance {workspace['instance']})"
+        f"Workspace: {payload.workspace.root} ({payload.workspace.repository_kind}; "
+        f"worktree {payload.workspace.worktree_id}; "
+        f"instance {payload.workspace.instance})"
     )
-    dev_targets = payload["dev"]["targets"]
-    if dev_targets:
-        print("Dev: " + ", ".join(dev_targets))
-    run_entries = payload["run"]["entries"]
-    if run_entries:
-        print("Run: " + ", ".join(run_entries))
+    if payload.dev.targets:
+        print("Dev: " + ", ".join(payload.dev.targets))
+    if payload.run.entries:
+        print("Run: " + ", ".join(payload.run.entries))
 
 
 def _emit_telemetry_list(payload: dict[str, Any], json_output: bool) -> None:
     if json_output:
-        _emit_json(payload)
+        _emit_unscoped_json(payload)
         return
     threads = payload["threads"]
     print(f"SVC telemetry agent-thread list: {len(threads)} thread(s)")
@@ -1270,7 +1344,7 @@ def _emit_telemetry_list(payload: dict[str, Any], json_output: bool) -> None:
 
 def _emit_telemetry_export(payload: dict[str, Any], json_output: bool) -> None:
     if json_output:
-        _emit_json(payload)
+        _emit_unscoped_json(payload)
         return
     evidence = payload["evidence"]
     if isinstance(evidence, dict):
@@ -1281,7 +1355,7 @@ def _emit_telemetry_export(payload: dict[str, Any], json_output: bool) -> None:
 
 def _emit_lookup(response: Any, json_output: bool) -> None:
     if json_output:
-        _emit_json(response.as_dict())
+        _emit_json(response.as_output())
         return
     if response.query.mode == "path":
         content = response.document.content
@@ -1334,7 +1408,7 @@ def _emit_blockers(blockers: Sequence[Any]) -> None:
 
 def _emit_error(error: SvcError, json_output: bool) -> None:
     if json_output:
-        _emit_json(error.as_dict(), stream=sys.stderr)
+        _emit_json(error.as_output(), stream=sys.stderr)
         return
     print(f"svc: {error.code}: {error.message}", file=sys.stderr)
     details = dict(error.details)
@@ -1373,12 +1447,14 @@ def _emit_error(error: SvcError, json_output: bool) -> None:
         print(f"Hint: {hint}", file=sys.stderr)
 
 
-def _emit_json(payload: dict[str, object], stream: Any | None = None) -> None:
+def _emit_json(payload: RegisteredMachineOutput, stream: Any | None = None) -> None:
     output = stream or sys.stdout
-    json.dump(
-        payload, output, ensure_ascii=False, separators=(",", ":"), sort_keys=True
-    )
-    output.write("\n")
+    dump_machine_output(payload, output)
+
+
+def _emit_unscoped_json(payload: dict[str, Any], stream: Any | None = None) -> None:
+    output = stream or sys.stdout
+    dump_machine_output(unscoped_machine_object(payload), output)
 
 
 def _exit_code(error: SvcError) -> int:

@@ -9,16 +9,20 @@ import subprocess
 import threading
 import time
 import urllib.parse
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Protocol
+from typing import Callable, Iterable, Literal, Protocol, TypeAlias
 
 import urllib3
 
 from ..config import ExecProbe, HttpProbe, TargetConfig, TcpProbe
 from ..errors import SvcError
+from ..machine import MachineModel
 from ..workspace import WorkspaceIdentity
-from .identity import interpolate_dev_argv, interpolate_dev_value, require_worktree_provenance
+from .identity import (
+    interpolate_dev_argv,
+    interpolate_dev_value,
+    require_worktree_provenance,
+)
 
 
 class _HTTPResponse(Protocol):
@@ -27,42 +31,36 @@ class _HTTPResponse(Protocol):
     def close(self) -> None: ...
 
 
-@dataclass(frozen=True)
-class ProbeObservation:
-    kind: str
+ProbeKind: TypeAlias = Literal["http", "tcp", "exec"]
+ProbeReason: TypeAlias = Literal[
+    "accepted-status",
+    "unexpected-status",
+    "connected",
+    "timeout",
+    "unreachable",
+    "deadline-exhausted",
+    "exec-start-failed",
+    "zero-exit",
+    "nonzero-exit",
+    "output-limit",
+]
+
+
+class ProbeObservation(MachineModel):
+    kind: ProbeKind
     healthy: bool
-    reason: str
+    reason: ProbeReason
     endpoint_identity: str
     responded: bool = False
     status_code: int | None = None
     exit_code: int | None = None
     output: str | None = None
     output_bytes: int | None = None
-    output_truncated: bool = False
-
-    def as_dict(self) -> dict[str, object]:
-        result: dict[str, object] = {
-            "kind": self.kind,
-            "healthy": self.healthy,
-            "reason": self.reason,
-            "endpoint_identity": self.endpoint_identity,
-            "responded": self.responded,
-        }
-        if self.status_code is not None:
-            result["status_code"] = self.status_code
-        if self.exit_code is not None:
-            result["exit_code"] = self.exit_code
-        if self.output is not None:
-            result["output"] = self.output
-        if self.output_bytes is not None:
-            result["output_bytes"] = self.output_bytes
-            result["output_truncated"] = self.output_truncated
-        return result
+    output_truncated: bool | None = None
 
 
-@dataclass(frozen=True)
-class ResolvedProbe:
-    kind: str
+class ResolvedProbe(MachineModel):
+    kind: ProbeKind
     endpoint_identity: str
     url: str | None = None
     host: str | None = None
@@ -81,16 +79,16 @@ def resolve_probe(
     if isinstance(probe, HttpProbe):
         url = interpolate_dev_value(probe.url, workspace, target=target_name)
         require_worktree_provenance(target.scope, url, workspace)
-        return ResolvedProbe("http", url, url=url)
+        return ResolvedProbe(kind="http", endpoint_identity=url, url=url)
     if isinstance(probe, TcpProbe):
         host = interpolate_dev_value(probe.host, workspace, target=target_name)
         endpoint = f"tcp://{host}:{probe.port}"
         require_worktree_provenance(target.scope, endpoint, workspace)
-        return ResolvedProbe("tcp", endpoint, host=host)
+        return ResolvedProbe(kind="tcp", endpoint_identity=endpoint, host=host)
     argv = interpolate_dev_argv(probe.argv, workspace, target=target_name)
     endpoint = "exec:" + "\0".join(argv)
     require_worktree_provenance(target.scope, endpoint, workspace)
-    return ResolvedProbe("exec", endpoint, argv=argv)
+    return ResolvedProbe(kind="exec", endpoint_identity=endpoint, argv=argv)
 
 
 def probe_target(
@@ -102,10 +100,15 @@ def probe_target(
 ) -> ProbeObservation:
     probe = target.probe
     resolved = resolve_probe(target, workspace, target_name=target_name)
-    effective_timeout = min(probe.timeout, timeout) if timeout is not None else probe.timeout
+    effective_timeout = (
+        min(probe.timeout, timeout) if timeout is not None else probe.timeout
+    )
     if effective_timeout <= 0:
         return ProbeObservation(
-            probe.kind, False, "deadline-exhausted", resolved.endpoint_identity
+            kind=probe.kind,
+            healthy=False,
+            reason="deadline-exhausted",
+            endpoint_identity=resolved.endpoint_identity,
         )
     if isinstance(probe, HttpProbe):
         assert resolved.url is not None
@@ -137,22 +140,29 @@ def probe_http(
         if opener is not None:
             response = opener(probe.method, path, headers, timeout)
             try:
-                status = int(getattr(response, "status"))
+                status = int(response.status)
             finally:
                 response.close()
         else:
-            status = _pinned_http_status(probe, parsed, addresses, path, headers, deadline)
+            status = _pinned_http_status(
+                probe, parsed, addresses, path, headers, deadline
+            )
     except (urllib3.exceptions.HTTPError, OSError, ssl.SSLError, TimeoutError) as error:
-        return ProbeObservation("http", False, _network_error_reason(error), url)
+        return ProbeObservation(
+            kind="http",
+            healthy=False,
+            reason=_network_error_reason(error),
+            endpoint_identity=url,
+        )
     lower, upper = probe.success_status
     healthy = lower <= status <= upper
     return ProbeObservation(
-        "http",
-        healthy,
-        "accepted-status" if healthy else "unexpected-status",
-        url,
-        True,
-        status,
+        kind="http",
+        healthy=healthy,
+        reason="accepted-status" if healthy else "unexpected-status",
+        endpoint_identity=url,
+        responded=True,
+        status_code=status,
     )
 
 
@@ -171,19 +181,37 @@ def probe_tcp(
     for address in addresses:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return ProbeObservation("tcp", False, "timeout", endpoint)
+            return ProbeObservation(
+                kind="tcp",
+                healthy=False,
+                reason="timeout",
+                endpoint_identity=endpoint,
+            )
         family = socket.AF_INET6 if ":" in address else socket.AF_INET
         try:
             with socket.socket(family, socket.SOCK_STREAM) as connection:
                 connection.settimeout(remaining)
                 connection.connect((address, probe.port))
-            return ProbeObservation("tcp", True, "connected", endpoint, True)
+            return ProbeObservation(
+                kind="tcp",
+                healthy=True,
+                reason="connected",
+                endpoint_identity=endpoint,
+                responded=True,
+            )
         except OSError as error:
             last_error = error
-    return ProbeObservation("tcp", False, _network_error_reason(last_error), endpoint)
+    return ProbeObservation(
+        kind="tcp",
+        healthy=False,
+        reason=_network_error_reason(last_error),
+        endpoint_identity=endpoint,
+    )
 
 
-def probe_exec(probe: ExecProbe, argv: tuple[str, ...], cwd: Path, *, timeout: float) -> ProbeObservation:
+def probe_exec(
+    probe: ExecProbe, argv: tuple[str, ...], cwd: Path, *, timeout: float
+) -> ProbeObservation:
     captured = bytearray()
     overflow = False
     try:
@@ -196,7 +224,12 @@ def probe_exec(probe: ExecProbe, argv: tuple[str, ...], cwd: Path, *, timeout: f
             close_fds=True,
         )
     except OSError:
-        return ProbeObservation("exec", False, "exec-start-failed", "exec:" + "\0".join(argv))
+        return ProbeObservation(
+            kind="exec",
+            healthy=False,
+            reason="exec-start-failed",
+            endpoint_identity="exec:" + "\0".join(argv),
+        )
     assert process.stdout is not None
     output = process.stdout
 
@@ -219,10 +252,10 @@ def probe_exec(probe: ExecProbe, argv: tuple[str, ...], cwd: Path, *, timeout: f
         reader.join(timeout=1)
         process.stdout.close()
         return ProbeObservation(
-            "exec",
-            False,
-            "timeout",
-            "exec:" + "\0".join(argv),
+            kind="exec",
+            healthy=False,
+            reason="timeout",
+            endpoint_identity="exec:" + "\0".join(argv),
             output=_decode_probe_output(captured),
             output_bytes=len(captured),
             output_truncated=overflow,
@@ -230,10 +263,14 @@ def probe_exec(probe: ExecProbe, argv: tuple[str, ...], cwd: Path, *, timeout: f
     reader.join(timeout=1)
     process.stdout.close()
     return ProbeObservation(
-        "exec",
-        code == 0 and not overflow,
-        "zero-exit" if code == 0 and not overflow else "nonzero-exit" if code else "output-limit",
-        "exec:" + "\0".join(argv),
+        kind="exec",
+        healthy=code == 0 and not overflow,
+        reason="zero-exit"
+        if code == 0 and not overflow
+        else "nonzero-exit"
+        if code
+        else "output-limit",
+        endpoint_identity="exec:" + "\0".join(argv),
         exit_code=code,
         output=_decode_probe_output(captured),
         output_bytes=len(captured),
@@ -254,13 +291,24 @@ def resolve_dev_cwd(
     target: str,
 ) -> Path:
     value = interpolate_dev_value(configured or ".", workspace, target=target)
-    candidate = (root / value).resolve() if not Path(value).is_absolute() else Path(value).resolve()
+    candidate = (
+        (root / value).resolve()
+        if not Path(value).is_absolute()
+        else Path(value).resolve()
+    )
     try:
         candidate.relative_to(root)
     except ValueError as error:
-        raise SvcError("dev-cwd-escapes-workspace", "Dev command working directory escapes the workspace.") from error
+        raise SvcError(
+            "dev-cwd-escapes-workspace",
+            "Dev command working directory escapes the workspace.",
+        ) from error
     if not candidate.is_dir():
-        raise SvcError("dev-cwd-not-directory", "Dev command working directory does not exist.", {"cwd": value})
+        raise SvcError(
+            "dev-cwd-not-directory",
+            "Dev command working directory does not exist.",
+            {"cwd": value},
+        )
     return candidate
 
 
@@ -297,14 +345,21 @@ def _pinned_http_status(
                 retries=False,
                 redirect=False,
                 assert_same_host=False,
-                timeout=urllib3.Timeout(total=remaining, connect=remaining, read=remaining),
+                timeout=urllib3.Timeout(
+                    total=remaining, connect=remaining, read=remaining
+                ),
                 preload_content=False,
             )
             try:
                 return int(response.status)
             finally:
                 response.close()
-        except (urllib3.exceptions.HTTPError, OSError, ssl.SSLError, TimeoutError) as error:
+        except (
+            urllib3.exceptions.HTTPError,
+            OSError,
+            ssl.SSLError,
+            TimeoutError,
+        ) as error:
             last_error = error
         finally:
             pool.close()
@@ -315,12 +370,23 @@ def _pinned_http_status(
 
 def _validate_http_url(value: str) -> urllib.parse.SplitResult:
     parsed = urllib.parse.urlsplit(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
-        raise SvcError("invalid-http-probe-url", "HTTP probe URL must be an absolute HTTP(S) URL without credentials or fragments.")
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.fragment
+    ):
+        raise SvcError(
+            "invalid-http-probe-url",
+            "HTTP probe URL must be an absolute HTTP(S) URL without credentials or fragments.",
+        )
     try:
         _ = parsed.port
     except ValueError as error:
-        raise SvcError("invalid-http-probe-url", "HTTP probe URL has an invalid port.") from error
+        raise SvcError(
+            "invalid-http-probe-url", "HTTP probe URL has an invalid port."
+        ) from error
     return parsed
 
 
@@ -338,19 +404,38 @@ def _resolve_addresses(
     else:
         try:
             addresses = tuple(
-                sorted({str(entry[4][0]) for entry in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)})
+                sorted(
+                    {
+                        str(entry[4][0])
+                        for entry in socket.getaddrinfo(
+                            host, port, type=socket.SOCK_STREAM
+                        )
+                    }
+                )
             )
         except socket.gaierror as error:
-            raise SvcError("probe-address-unresolved", "Dev probe hostname could not be resolved.", {"host": host}) from error
+            raise SvcError(
+                "probe-address-unresolved",
+                "Dev probe hostname could not be resolved.",
+                {"host": host},
+            ) from error
     if not addresses:
-        raise SvcError("probe-address-unresolved", "Dev probe hostname resolved to no addresses.", {"host": host})
+        raise SvcError(
+            "probe-address-unresolved",
+            "Dev probe hostname resolved to no addresses.",
+            {"host": host},
+        )
     return addresses
 
 
 def _enforce_address_scope(addresses: Iterable[str], network_scope: str) -> None:
     if network_scope == "remote":
         return
-    non_loopback = [address for address in addresses if not ipaddress.ip_address(address).is_loopback]
+    non_loopback = [
+        address
+        for address in addresses
+        if not ipaddress.ip_address(address).is_loopback
+    ]
     if non_loopback:
         raise SvcError(
             "remote-probe-not-allowed",
@@ -359,7 +444,11 @@ def _enforce_address_scope(addresses: Iterable[str], network_scope: str) -> None
         )
 
 
-def _network_error_reason(error: BaseException | None) -> str:
-    if isinstance(error, (socket.timeout, TimeoutError, urllib3.exceptions.TimeoutError)):
+def _network_error_reason(
+    error: BaseException | None,
+) -> Literal["timeout", "unreachable"]:
+    if isinstance(
+        error, (socket.timeout, TimeoutError, urllib3.exceptions.TimeoutError)
+    ):
         return "timeout"
     return "unreachable"

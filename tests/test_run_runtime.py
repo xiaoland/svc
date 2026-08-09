@@ -63,6 +63,11 @@ def test_run_resolution_applies_overlay_env_precedence_and_private_digest(
     assert run.environment["LITERAL"] == "${HOME}"
     assert "inline" not in json.dumps({"digest": run.effective_entry_digest})
 
+    with pytest.raises(SvcError) as unknown:
+        resolve_run(tmp_path, "missing", namespace="fixture")
+    assert unknown.value.code == "unknown-run-entry"
+    assert unknown.value.details["available_entries"] == ["check"]
+
 
 def test_execution_record_and_receipt_never_store_environment_values(
     tmp_path: Path,
@@ -83,7 +88,7 @@ def test_execution_record_and_receipt_never_store_environment_values(
     )
     assert outcome.record is not None
     assert secret not in json.dumps(outcome.record.as_dict())
-    assert secret not in json.dumps(receipt(outcome, "run"))
+    assert secret not in json.dumps(receipt(outcome, "run").as_dict())
 
 
 def test_interrupt_after_publication_returns_the_known_execution_receipt(
@@ -107,12 +112,10 @@ def test_interrupt_after_publication_returns_the_known_execution_receipt(
     assert outcome.record is not None
     assert outcome.record.state == "interrupted"
     assert outcome.record.process_id is None
-    assert receipt(outcome, "run")["execution_id"] == outcome.record.execution_id
+    assert receipt(outcome, "run").execution_id == outcome.record.execution_id
 
 
-@pytest.mark.parametrize(
-    "content", ["VALUE\n", "BAD='unterminated\n"]
-)
+@pytest.mark.parametrize("content", ["VALUE\n", "BAD='unterminated\n"])
 def test_run_resolution_rejects_malformed_or_valueless_env_without_publication(
     tmp_path: Path, content: str
 ) -> None:
@@ -274,7 +277,7 @@ def test_follow_and_inspect_use_record_authority_after_config_changes(
     )
     assert replay == b"evidence\n"
     assert followed.record == inspected.record == owner.record
-    assert receipt(inspected, "run inspect")["state"] == "exited"
+    assert receipt(inspected, "run inspect").state == "exited"
 
 
 def test_run_follow_rejects_dev_domain_and_other_workspace(tmp_path: Path) -> None:

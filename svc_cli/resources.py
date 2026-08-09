@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
-from typing import Protocol
+from typing import Literal, Protocol
 
 from .catalog import normalized_document_path
 
@@ -28,7 +28,7 @@ def _packaged_data_root() -> Resource | None:
     return None
 
 
-def resource_mode() -> str:
+def resource_mode() -> Literal["wheel", "source"]:
     return "wheel" if _packaged_data_root() is not None else "source"
 
 

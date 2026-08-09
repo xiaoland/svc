@@ -2,7 +2,8 @@ kind: major
 component: cli
 body: >-
   Reshape the core CLI around independent upgrade targets, Agent-readable
-  output, shared bounded runs, and declared dev lifecycle actions.
+  output, shared bounded runs, declared dev lifecycle actions, and discoverable
+  versioned schemas for typed machine output.
 custom:
   Migration: not-applicable
   FromSchema: ""

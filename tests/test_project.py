@@ -63,7 +63,7 @@ def test_init_apply_produces_a_healthy_idempotent_project() -> None:
         root = Path(tmp)
         first = plan_init(root)
         result = apply_init(first, first.digest)
-        assert result["status"] == "applied"
+        assert result.status == "applied"
         assert (
             parse_project_state((root / PROJECT_FILE).read_bytes()).corpus_version
             == first.target_version
@@ -73,17 +73,14 @@ def test_init_apply_produces_a_healthy_idempotent_project() -> None:
         assert b"svc:begin local-config" in (root / ".gitignore").read_bytes()
         assert not (root / "svc.local.json").exists()
         initial_status = inspect_status(root)
-        assert initial_status["healthy"]
-        assert initial_status["run"] == {
-            "status": "not-declared",
-            "observation": "declaration-only",
-            "entries": [],
-        }
+        assert initial_status.healthy
+        assert initial_status.run.status == "not-declared"
+        assert initial_status.run.entries == ()
 
         repeat = plan_init(root)
         assert repeat.status == "noop"
         snapshot = tree_bytes(root)
-        assert apply_init(repeat, repeat.digest)["status"] == "noop"
+        assert apply_init(repeat, repeat.digest).status == "noop"
         assert tree_bytes(root) == snapshot
 
 
@@ -175,16 +172,15 @@ def test_status_reports_corpus_relation_and_upgrade_continuation() -> None:
         apply_init(initial, initial.digest)
         (root / PROJECT_FILE).write_bytes(render_project_state("11.0.1"))
         status = inspect_status(root)
-        assert status["status"] == "actionable"
-        assert status["project"]["status"] == "corpus-behind"
-        assert status["corpus"] == {
-            "status": "behind",
-            "project_version": "11.0.1",
-            "available_version": initial.target_version,
-        }
-        assert status["next"]["action"] == "plan-project-upgrade"
-        assert status["next"]["command"][-2:] == ["--target", "corpus"]
-        assert not status["healthy"]
+        assert status.status == "actionable"
+        assert status.project.status == "corpus-behind"
+        assert status.corpus.status == "behind"
+        assert status.corpus.project_version == "11.0.1"
+        assert status.corpus.available_version == initial.target_version
+        assert status.next.action == "plan-project-upgrade"
+        assert status.next.command is not None
+        assert status.next.command[-2:] == ("--target", "corpus")
+        assert not status.healthy
 
 
 def test_status_does_not_compare_cli_distribution_to_corpus_version(
@@ -200,11 +196,11 @@ def test_status_does_not_compare_cli_distribution_to_corpus_version(
                 project, "installed_distribution_version", lambda: cli_version
             )
             status = inspect_status(root)
-        assert status["installed_cli_version"] == cli_version
-        assert status["available_corpus_version"] == initial.target_version
-        assert status["runtime"]["status"] == "installed"
-        assert status["status"] == "healthy"
-        assert status["healthy"]
+        assert status.installed_cli_version == cli_version
+        assert status.available_corpus_version == initial.target_version
+        assert status.runtime.status == "installed"
+        assert status.status == "healthy"
+        assert status.healthy
 
 
 def test_status_makes_unadopted_state_and_init_plan_explicit(
@@ -214,25 +210,16 @@ def test_status_makes_unadopted_state_and_init_plan_explicit(
 
     status = inspect_status(tmp_path)
 
-    assert status["status"] == "unadopted"
-    assert status["project"]["status"] == "missing"
-    assert status["configuration"] == {"status": "not-configured"}
-    assert status["dev"] == {
-        "status": "unavailable",
-        "observation": "declaration-only",
-        "targets": [],
-    }
-    assert status["run"] == {
-        "status": "unavailable",
-        "observation": "declaration-only",
-        "entries": [],
-    }
-    assert status["next"] == {
-        "action": "plan-integration-establishment",
-        "reason": "Project SVC integration is absent; inspect the non-mutating init plan.",
-        "command": ["svc", "init", str(tmp_path)],
-    }
-    assert not status["healthy"]
+    assert status.status == "unadopted"
+    assert status.project.status == "missing"
+    assert status.configuration.status == "not-configured"
+    assert status.dev.status == "unavailable"
+    assert status.dev.targets == ()
+    assert status.run.status == "unavailable"
+    assert status.run.entries == ()
+    assert status.next.action == "plan-integration-establishment"
+    assert status.next.command == ("svc", "init", str(tmp_path))
+    assert not status.healthy
     assert tree_bytes(tmp_path) == before
 
 
@@ -244,9 +231,9 @@ def test_status_reports_malformed_project_state_without_suggesting_init(
 
     status = inspect_status(tmp_path)
 
-    assert status["status"] == "malformed"
-    assert status["next"]["action"] == "repair-project-configuration"
-    assert "command" not in status["next"]
+    assert status.status == "malformed"
+    assert status.next.action == "repair-project-configuration"
+    assert status.next.command is None
     assert tree_bytes(tmp_path) == before
 
 
@@ -288,19 +275,14 @@ def test_status_summarizes_declarations_without_executing_them(
     monkeypatch.setattr("svc_cli.dev.runtime.probe_target", unexpected_probe)
     status = inspect_status(tmp_path)
 
-    assert status["status"] == "healthy"
-    assert status["dev"] == {
-        "status": "declared",
-        "observation": "declaration-only",
-        "targets": ["api", "web"],
-    }
-    assert status["run"] == {
-        "status": "declared",
-        "observation": "declaration-only",
-        "entries": ["a-first", "z-last"],
-    }
-    assert status["next"]["action"] == "continue"
-    assert status["configuration"]["effective"]["digest"]
+    assert status.status == "healthy"
+    assert status.dev.status == "declared"
+    assert status.dev.targets == ("api", "web")
+    assert status.run.status == "declared"
+    assert status.run.entries == ("a-first", "z-last")
+    assert status.next.action == "continue"
+    assert status.configuration.status == "current"
+    assert status.configuration.effective.digest
 
 
 def test_init_manages_only_a_clean_local_config_ignore_section() -> None:

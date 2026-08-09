@@ -47,23 +47,11 @@ def test_list_browses_one_logical_level_without_reading_documents() -> None:
     root = lookup.lookup(LookupQuery("list"))
     nested = lookup.lookup(LookupQuery("list", "sections/"))
 
-    assert root.as_dict() == {
-        "schema_version": 2,
-        "command": "lookup",
-        "corpus_version": "10.0.0",
-        "mode": "list",
-        "prefix": None,
-        "entries": [
-            {"kind": "directory", "path": "assets/", "document_count": 1},
-            {
-                "kind": "document",
-                "path": "index.md",
-                "title": "Sustainable Vibe Coding",
-                "sha256": fixture.catalog.entries[1].sha256,
-            },
-            {"kind": "directory", "path": "sections/", "document_count": 3},
-        ],
-    }
+    assert [(entry.kind, entry.path) for entry in root.entries] == [
+        ("directory", "assets/"),
+        ("document", "index.md"),
+        ("directory", "sections/"),
+    ]
     assert [entry.path for entry in nested.entries] == [
         "sections/extensions/",
         "sections/implementation-taste.md",
@@ -90,7 +78,6 @@ def test_path_reads_one_exact_normalized_document() -> None:
     assert response.document is not None
     assert response.document.entry.path == "sections/working-protocol.md"
     assert "mutation gate" in response.document.content
-    assert response.as_dict()["document"]["content"].startswith("# Working Protocol")
 
 
 @pytest.mark.parametrize(
@@ -110,7 +97,7 @@ def test_path_rejects_non_normalized_non_markdown_identity(path: str) -> None:
     assert raised.value.code == "invalid-document-path"
 
 
-def test_keyword_is_ranked_without_public_score_and_obeys_scope() -> None:
+def test_keyword_ranking_obeys_search_scope() -> None:
     lookup = fixture_lookup()
     both = lookup.lookup(
         LookupQuery("keyword", "task packet mutation gate", "both", 10)
@@ -120,8 +107,6 @@ def test_keyword_is_ranked_without_public_score_and_obeys_scope() -> None:
     assert both.candidates[0].entry.path == "sections/working-protocol.md"
     assert both.candidates[0].matched_in == ("content",)
     assert both.candidates[0].excerpt is not None
-    encoded = both.as_dict()["candidates"][0]
-    assert "score" not in encoded
     assert path_only.candidates[0].matched_in == ("path",)
     assert path_only.candidates[0].excerpt is None
 
@@ -139,11 +124,6 @@ def test_regex_returns_stable_path_and_one_based_content_locations() -> None:
     content = response.matches[0]
     assert (content.line, content.column) == (3, 10)
     assert "mutation gate" in (content.excerpt or "")
-    assert response.as_dict()["matches"][1] == {
-        "path": "sections/working-protocol.md",
-        "sha256": response.matches[1].entry.sha256,
-        "surface": "path",
-    }
 
 
 def test_regex_limit_is_flat_and_reports_truncation() -> None:

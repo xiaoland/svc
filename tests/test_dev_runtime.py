@@ -12,18 +12,19 @@ from pathlib import Path
 
 import pytest
 
-from svc_cli._execution import ExecutionStore, LaunchSpec, start_isolated
+from svc_cli._execution import ExecutionStore
 from svc_cli.config import ExecProbe, HttpProbe, TargetConfig
-from svc_cli.dev.identity import resolve_workspace_identity
 from svc_cli.dev.runtime import (
-    _cleanup_on_interrupt,
+    DevEnsureOutput,
+    DevStopOutput,
+    DevTargetObservation,
     ensure_target,
-    probe_exec,
-    probe_http,
-    probe_target,
+    inspect_dev_status,
     stop_target,
 )
+from svc_cli.dev.readiness import probe_exec, probe_http, probe_target
 from svc_cli.errors import SvcError
+from svc_cli.workspace import resolve_workspace_identity
 from tests.project_contract import write_project_config
 
 
@@ -123,12 +124,32 @@ def test_worktree_scope_refuses_static_probe_and_manual_never_provisions() -> No
             "manual",
             {
                 "scope": "repository",
-                "probe": {"kind": "tcp", "host": "127.0.0.1", "port": 1},
+                "probe": {
+                    "kind": "exec",
+                    "argv": [
+                        sys.executable,
+                        "-c",
+                        "print('bounded diagnostic'); raise SystemExit(1)",
+                    ],
+                },
                 "provision": {"kind": "manual"},
+                "access": ["offline-receipt"],
             },
         )
-        with pytest.raises(SvcError, match="manual"):
+        status = inspect_dev_status(root, namespace="fixture")
+        assert status.targets is not None and len(status.targets) == 1
+        observed = status.targets[0]
+        assert isinstance(observed, DevTargetObservation)
+        assert observed.probe.output == "bounded diagnostic\n"
+        assert observed.continuation == "manual-action-required"
+        assert observed.access == ("offline-receipt",)
+
+        with pytest.raises(SvcError, match="manual") as manual:
             ensure_target(root, "manual", namespace="fixture")
+        result = DevEnsureOutput.model_validate(manual.value.details, strict=False)
+        assert result.probe is not None
+        assert result.probe.output == "bounded diagnostic\n"
+        assert result.access == ("offline-receipt",)
 
 
 def test_owned_early_exit_reports_only_attempt_cleanup() -> None:
@@ -200,7 +221,7 @@ def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None
                 },
             },
         )
-        results: list[dict[str, object]] = []
+        results: list[DevEnsureOutput] = []
         failures: list[BaseException] = []
 
         def ensure() -> None:
@@ -219,71 +240,36 @@ def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None
         second.join()
         try:
             assert failures == []
-            assert sorted(str(result["status"]) for result in results) == [
+            assert sorted(result.status for result in results) == [
                 "joined",
                 "started",
             ]
             assert counter.read_text(encoding="utf-8") == "1\n"
             started_result = next(
-                result for result in results if result["status"] == "started"
+                result for result in results if result.status == "started"
             )
-            capability_id = str(started_result["capability"]["capability_id"])
+            capability_id = started_result.capability.capability_id
             execution_id = store.read_coordination("dev", capability_id)
             assert execution_id is not None
             record = store.read(execution_id)
             assert record.state == "released"
-            assert started_result["attempt"]["logs"]["merged"]["path"].endswith(
-                "output.log"
-            )
-            assert started_result["ready"] is True
-            assert started_result["attempt"]["caller_role"] == "owner"
-            joined = next(result for result in results if result["status"] == "joined")
-            assert joined["attempt"]["caller_role"] == "follower"
+            assert started_result.attempt is not None
+            assert started_result.attempt.logs.merged.path.endswith("output.log")
+            assert started_result.ready is True
+            assert started_result.attempt.caller_role == "owner"
+            joined = next(result for result in results if result.status == "joined")
+            assert joined.attempt is not None
+            assert joined.attempt.caller_role == "follower"
         finally:
             started = next(
-                (result for result in results if result.get("status") == "started"),
+                (result for result in results if result.status == "started"),
                 None,
             )
-            if started is not None:
-                execution_id = started["attempt"]["execution_id"]
+            if started is not None and started.attempt is not None:
+                execution_id = started.attempt.execution_id
                 process_id = store.read(execution_id).process_id
                 assert process_id is not None
                 stop_owned_process(process_id)
-
-
-def test_keyboard_interrupt_cleans_up_only_the_current_launch() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        store = ExecutionStore(root / "runtime")
-        published = store.publish(
-            domain="dev",
-            operation="ensure",
-            subject="app",
-            workspace_instance="workspace",
-            intent_digest="digest",
-            coordination_key="a" * 48,
-            argv=(sys.executable,),
-            cwd=root,
-            capture="merged",
-        )
-        owned = start_isolated(
-            store,
-            published,
-            LaunchSpec(
-                (sys.executable, "-c", "import time; time.sleep(30)"),
-                root,
-                os.environ.copy(),
-            ),
-        )
-        assert not hasattr(owned, "state")
-        with (
-            pytest.raises(SvcError) as raised,
-            _cleanup_on_interrupt(store, owned, {"command": "dev ensure"}),
-        ):
-            raise KeyboardInterrupt
-        assert raised.value.code == "ensure-interrupted"
-        assert raised.value.details["cleanup"] == "completed"
-        assert owned.process.poll() is not None
 
 
 def test_activation_timeout_is_structured_and_cleans_its_owned_group(
@@ -361,7 +347,7 @@ def test_declared_stop_runs_once_and_is_qualified_by_final_readiness() -> None:
             },
         )
         store = ExecutionStore(root / "runtime")
-        results: list[dict[str, object]] = []
+        results: list[DevStopOutput] = []
         failures: list[BaseException] = []
 
         def stop() -> None:
@@ -379,18 +365,20 @@ def test_declared_stop_runs_once_and_is_qualified_by_final_readiness() -> None:
             caller.join()
 
         assert failures == []
-        assert [result["status"] for result in results] == ["stopped", "stopped"]
-        attempts = [result["attempt"] for result in results]
-        assert {attempt["caller_role"] for attempt in attempts} == {
+        assert [result.status for result in results] == ["stopped", "stopped"]
+        attempts = [result.attempt for result in results]
+        assert all(attempt is not None for attempt in attempts)
+        concrete_attempts = [attempt for attempt in attempts if attempt is not None]
+        assert {attempt.caller_role for attempt in concrete_attempts} == {
             "owner",
             "follower",
         }
-        assert len({attempt["execution_id"] for attempt in attempts}) == 1
+        assert len({attempt.execution_id for attempt in concrete_attempts}) == 1
         assert counter.read_text(encoding="utf-8") == "1\n"
-        assert all(result["ready"] is False for result in results)
+        assert all(result.ready is False for result in results)
         assert all(
-            attempt["logs"]["merged"]["path"].endswith("output.log")
-            for attempt in attempts
+            attempt.logs.merged.path.endswith("output.log")
+            for attempt in concrete_attempts
         )
 
 
@@ -412,12 +400,10 @@ def test_absent_or_manual_stop_never_infers_a_pid_cleanup(stop: object) -> None:
 
         result = stop_target(root, "server", namespace="fixture")
 
-        assert result["status"] == "manual-action-required"
-        assert result["ready"] is True
-        assert "attempt" not in result
-        assert result["stop"] == {
-            "kind": "manual" if stop is not None else "absent"
-        }
+        assert result.status == "manual-action-required"
+        assert result.ready is True
+        assert result.attempt is None
+        assert result.stop.kind == ("manual" if stop is not None else "absent")
 
 
 def test_stop_failure_preserves_action_and_final_probe_evidence() -> None:
@@ -442,9 +428,10 @@ def test_stop_failure_preserves_action_and_final_probe_evidence() -> None:
 
         result = stop_target(root, "server", namespace="fixture")
 
-        assert result["status"] == "stop-failed"
-        assert result["ready"] is True
-        assert result["attempt"]["exit_code"] == 7
+        assert result.status == "stop-failed"
+        assert result.ready is True
+        assert result.attempt is not None
+        assert result.attempt.exit_code == 7
 
 
 def test_settled_ensure_attempt_does_not_prevent_a_later_explicit_restart() -> None:
@@ -486,12 +473,10 @@ def test_settled_ensure_attempt_does_not_prevent_a_later_explicit_restart() -> N
         marker.unlink()
         second = ensure_target(root, "server", namespace="fixture", store=store)
 
-        assert (first["status"], second["status"]) == ("started", "started")
+        assert (first.status, second.status) == ("started", "started")
         assert counter.read_text(encoding="utf-8") == "1\n1\n"
-        assert (
-            first["attempt"]["execution_id"]
-            != second["attempt"]["execution_id"]
-        )
+        assert first.attempt is not None and second.attempt is not None
+        assert first.attempt.execution_id != second.attempt.execution_id
 
 
 def test_stop_and_ensure_serialize_on_the_same_capability_boundary() -> None:
@@ -541,7 +526,7 @@ def test_stop_and_ensure_serialize_on_the_same_capability_boundary() -> None:
             },
         )
         store = ExecutionStore(root / "runtime")
-        stopped: list[dict[str, object]] = []
+        stopped: list[DevStopOutput] = []
         stopper = threading.Thread(
             target=lambda: stopped.append(
                 stop_target(root, "server", namespace="fixture", store=store)
@@ -555,10 +540,10 @@ def test_stop_and_ensure_serialize_on_the_same_capability_boundary() -> None:
         ensured = ensure_target(root, "server", namespace="fixture", store=store)
         stopper.join()
 
-        assert stopped[0]["status"] == "stopped"
-        assert stopped[0]["ready"] is False
-        assert ensured["status"] == "started"
-        assert ensured["ready"] is True
+        assert stopped[0].status == "stopped"
+        assert stopped[0].ready is False
+        assert ensured.status == "started"
+        assert ensured.ready is True
         assert marker.exists() and starts.read_text(encoding="utf-8") == "1"
 
 

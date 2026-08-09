@@ -10,9 +10,9 @@ from svc_cli.dev.identity import (
     interpolate_dev_value,
     require_worktree_provenance,
     resolve_capability_identity,
-    resolve_workspace_identity,
 )
 from svc_cli.errors import SvcError
+from svc_cli.workspace import resolve_workspace_identity
 
 
 def test_non_git_fallback_and_scope_specific_lock_identity() -> None:

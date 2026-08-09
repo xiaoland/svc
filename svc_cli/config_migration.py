@@ -126,9 +126,7 @@ def _base_operations(
         operations.extend(
             _profile_token_replacements(targets, "/dev/targets", selected)
         )
-    operations.append(
-        {"op": "replace", "path": "/schema_version", "value": 3}
-    )
+    operations.append({"op": "replace", "path": "/schema_version", "value": 3})
     return operations
 
 
@@ -216,9 +214,7 @@ def _walk_strings(value: object, pointer: str) -> Iterable[tuple[str, str]]:
         yield pointer, value
     elif isinstance(value, dict):
         for key in sorted(value):
-            yield from _walk_strings(
-                value[key], f"{pointer}/{_pointer_part(str(key))}"
-            )
+            yield from _walk_strings(value[key], f"{pointer}/{_pointer_part(str(key))}")
     elif isinstance(value, list):
         for index, item in enumerate(value):
             yield from _walk_strings(item, f"{pointer}/{index}")
@@ -244,9 +240,7 @@ def _apply_patch(
     return result
 
 
-def _validate_legacy_effective(
-    base: dict[str, Any], local: dict[str, Any]
-) -> None:
+def _validate_legacy_effective(base: dict[str, Any], local: dict[str, Any]) -> None:
     effective = _merge(base, local)
     parse_legacy_project_config(
         render_config_value(effective), "effective legacy configuration"

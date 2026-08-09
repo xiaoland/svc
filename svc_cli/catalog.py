@@ -36,9 +36,7 @@ def require_semver(value: object, label: str) -> str:
     try:
         parsed = Version(value)
     except ValueError as error:
-        raise ValueError(
-            f"{label} must be stable x.y.z SemVer: {value!r}"
-        ) from error
+        raise ValueError(f"{label} must be stable x.y.z SemVer: {value!r}") from error
     if parsed.prerelease or parsed.build or str(parsed) != value:
         raise ValueError(f"{label} must be stable x.y.z SemVer: {value!r}")
     return value
@@ -55,7 +53,9 @@ def normalized_document_path(value: object, label: str = "document path") -> str
         or any(part.startswith(".") for part in path.parts)
         or path.suffix != ".md"
     ):
-        raise ValueError(f"{label} must be a visible normalized Markdown path: {value!r}")
+        raise ValueError(
+            f"{label} must be a visible normalized Markdown path: {value!r}"
+        )
     normalized = path.as_posix()
     if normalized != value:
         raise ValueError(f"{label} must use normalized POSIX separators: {value!r}")
@@ -66,8 +66,7 @@ def normalized_migration_path(value: object) -> str:
     path = normalized_document_path(value, "Corpus migration guide path")
     if not path.startswith("migrations/"):
         raise ValueError(
-            "Corpus migration guide path must be under migrations/: "
-            f"{value!r}"
+            f"Corpus migration guide path must be under migrations/: {value!r}"
         )
     return path
 
@@ -94,14 +93,10 @@ class CorpusMigration:
         status = raw.get("status")
         if status == "not-required":
             if set(raw) != {"status"}:
-                raise ValueError(
-                    "not-required Corpus migration has unsupported fields"
-                )
+                raise ValueError("not-required Corpus migration has unsupported fields")
             return cls(status)
         if status != "guide":
-            raise ValueError(
-                "Corpus migration status must be guide or not-required"
-            )
+            raise ValueError("Corpus migration status must be guide or not-required")
         if set(raw) != {"status", "paths"}:
             raise ValueError("guide Corpus migration has unsupported fields")
         paths_raw = raw.get("paths")
@@ -134,9 +129,7 @@ class CorpusRelease:
             raise ValueError("Corpus release has unsupported fields")
         return cls(
             require_semver(raw.get("version"), "Corpus release version"),
-            require_semver(
-                raw.get("previous_version"), "Corpus previous version"
-            ),
+            require_semver(raw.get("previous_version"), "Corpus previous version"),
             CorpusMigration.from_mapping(raw.get("migration")),
         )
 
@@ -259,7 +252,9 @@ class Catalog:
         if not isinstance(raw, dict):
             raise ValueError("Catalog must be a JSON object")
         if raw.get("schema_version") != CATALOG_SCHEMA_VERSION:
-            raise ValueError(f"Unsupported catalog schema: {raw.get('schema_version')!r}")
+            raise ValueError(
+                f"Unsupported catalog schema: {raw.get('schema_version')!r}"
+            )
         if set(raw) != {
             "schema_version",
             "corpus_version",

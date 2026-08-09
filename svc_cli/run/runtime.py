@@ -17,6 +17,7 @@ from filelock import BaseFileLock, Timeout
 from .._execution import (
     ACTIVE_STATES,
     ExecutionRecord,
+    ExecutionState,
     ExecutionStore,
     LaunchSpec,
     follow_execution,
@@ -28,11 +29,48 @@ from .._execution import (
 )
 from ..config import ConfigError, RunEntry, load_config
 from ..errors import SvcError
+from ..machine import MachineModel
 from ..workspace import WorkspaceIdentity, resolve_workspace_identity
 
 
 CallerRole = Literal["owner", "follower", "inspector"]
 SelectedCallback = Callable[[ExecutionRecord, CallerRole], None]
+
+
+class RunLogReference(MachineModel):
+    path: str
+    bytes: int
+
+
+class RunLogs(MachineModel):
+    stdout: RunLogReference
+    stderr: RunLogReference
+
+
+class RunReceipt(MachineModel):
+    """Public receipt for execute, follow, and inspect callers."""
+
+    machine_exclude_none = True
+
+    schema_version: Literal[2] = 2
+    command: Literal["run", "run follow", "run inspect"]
+    caller_role: CallerRole
+    entry: str
+    caller_status: Literal["detached"] | None = None
+    execution_id: str | None = None
+    workspace_instance: str | None = None
+    effective_entry_digest: str | None = None
+    state: ExecutionState | None = None
+    argv: tuple[str, ...] | None = None
+    cwd: str | None = None
+    env_files: tuple[str, ...] | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_ms: int | None = None
+    exit_code: int | None = None
+    requested_signal: str | None = None
+    termination_signal: str | None = None
+    logs: RunLogs | None = None
 
 
 @dataclass(frozen=True)
@@ -84,7 +122,9 @@ def resolve_run(
     workspace = resolve_workspace_identity(repo, namespace=namespace)
     cwd = _resolve_directory(workspace.root, entry.cwd)
     env_files, file_layers = _load_env_files(workspace.root, entry.env_files)
-    environment = _resolve_environment(os.environ if ambient is None else ambient, file_layers, entry.env)
+    environment = _resolve_environment(
+        os.environ if ambient is None else ambient, file_layers, entry.env
+    )
     _validate_launch(entry.argv, cwd, env_files, environment)
     effective_digest = _effective_digest(entry, cwd, env_files, file_layers)
     coordination_key = _digest(
@@ -146,9 +186,7 @@ def execute_entry(
                 lost = mark_owner_lost(authority, current)
                 if _same_intent(lost, selected):
                     _notify(on_selected, lost, "follower")
-                    return RunOutcome(
-                        "follower", entry_name, lost, store=authority
-                    )
+                    return RunOutcome("follower", entry_name, lost, store=authority)
         return _own_run(authority, selected, stdout_sink, stderr_sink, on_selected)
     except KeyboardInterrupt:
         return RunOutcome("owner", entry_name, None, detached=True, store=authority)
@@ -204,62 +242,61 @@ def inspect_run(
     )
 
 
-def receipt(outcome: RunOutcome, command: str) -> dict[str, object]:
+def receipt(
+    outcome: RunOutcome, command: Literal["run", "run follow", "run inspect"]
+) -> RunReceipt:
     if outcome.detached:
-        result: dict[str, object] = {
-            "schema_version": 2,
-            "command": command,
-            "caller_role": outcome.caller_role,
-            "entry": outcome.entry,
-            "caller_status": "detached",
-        }
-        if outcome.record is not None:
-            record = outcome.record
-            result.update(
-                {
-                    "execution_id": record.execution_id,
-                    "workspace_instance": record.workspace_instance,
-                    "effective_entry_digest": record.intent_digest,
-                    "state": record.state,
-                    "argv": list(record.argv),
-                    "cwd": record.cwd,
-                    "env_files": list(record.env_files),
-                    "started_at": record.started_at,
-                }
-            )
-            if outcome.store is not None:
-                result["logs"] = {
-                    stream: outcome.store.log_reference(record, stream).as_dict()
-                    for stream in ("stdout", "stderr")
-                }
-        return result
+        record = outcome.record
+        return RunReceipt(
+            command=command,
+            caller_role=outcome.caller_role,
+            entry=outcome.entry,
+            caller_status="detached",
+            execution_id=None if record is None else record.execution_id,
+            workspace_instance=None if record is None else record.workspace_instance,
+            effective_entry_digest=None if record is None else record.intent_digest,
+            state=None if record is None else record.state,
+            argv=None if record is None else record.argv,
+            cwd=None if record is None else record.cwd,
+            env_files=None if record is None else record.env_files,
+            started_at=None if record is None else record.started_at,
+            logs=_run_logs(outcome.store, record),
+        )
     if outcome.record is None:
         raise ValueError("settled run outcome has no execution record")
     record = outcome.record
-    result = {
-        "schema_version": 2,
-        "command": command,
-        "caller_role": outcome.caller_role,
-        "execution_id": record.execution_id,
-        "entry": record.subject,
-        "workspace_instance": record.workspace_instance,
-        "effective_entry_digest": record.intent_digest,
-        "state": record.state,
-        "argv": list(record.argv),
-        "cwd": record.cwd,
-        "env_files": list(record.env_files),
-        "started_at": record.started_at,
-    }
-    for key in ("finished_at", "duration_ms", "exit_code", "requested_signal", "termination_signal"):
-        value = getattr(record, key)
-        if value is not None:
-            result[key] = value
-    if outcome.store is not None:
-        result["logs"] = {
-            stream: outcome.store.log_reference(record, stream).as_dict()
-            for stream in ("stdout", "stderr")
-        }
-    return result
+    return RunReceipt(
+        command=command,
+        caller_role=outcome.caller_role,
+        execution_id=record.execution_id,
+        entry=record.subject,
+        workspace_instance=record.workspace_instance,
+        effective_entry_digest=record.intent_digest,
+        state=record.state,
+        argv=record.argv,
+        cwd=record.cwd,
+        env_files=record.env_files,
+        started_at=record.started_at,
+        finished_at=record.finished_at,
+        duration_ms=record.duration_ms,
+        exit_code=record.exit_code,
+        requested_signal=record.requested_signal,
+        termination_signal=record.termination_signal,
+        logs=_run_logs(outcome.store, record),
+    )
+
+
+def _run_logs(
+    store: ExecutionStore | None, record: ExecutionRecord | None
+) -> RunLogs | None:
+    if store is None or record is None:
+        return None
+    stdout = store.log_reference(record, "stdout")
+    stderr = store.log_reference(record, "stderr")
+    return RunLogs(
+        stdout=RunLogReference(path=stdout.path, bytes=stdout.bytes),
+        stderr=RunLogReference(path=stderr.path, bytes=stderr.bytes),
+    )
 
 
 def outcome_exit_code(outcome: RunOutcome, *, inspect: bool = False) -> int:
@@ -344,7 +381,12 @@ def _join_or_claim_after_publication(
             ):
                 _notify(on_selected, current, "follower")
                 try:
-                    final = follow_execution(store, current_id, stdout_sink=stdout_sink, stderr_sink=stderr_sink)
+                    final = follow_execution(
+                        store,
+                        current_id,
+                        stdout_sink=stdout_sink,
+                        stderr_sink=stderr_sink,
+                    )
                     return RunOutcome("follower", selected.entry, final, store=store)
                 except KeyboardInterrupt:
                     return RunOutcome(
@@ -378,19 +420,24 @@ def _join_or_claim_after_publication(
                     return RunOutcome("follower", selected.entry, previous, store=store)
             return _own_run(store, selected, stdout_sink, stderr_sink, on_selected)
         except KeyboardInterrupt:
-            return RunOutcome(
-                "owner", selected.entry, None, detached=True, store=store
-            )
+            return RunOutcome("owner", selected.entry, None, detached=True, store=store)
         finally:
             lock.release()
 
 
-def _select_run_record(store: ExecutionStore, execution_id: str, workspace: WorkspaceIdentity) -> ExecutionRecord:
+def _select_run_record(
+    store: ExecutionStore, execution_id: str, workspace: WorkspaceIdentity
+) -> ExecutionRecord:
     record = store.read(require_execution_id(execution_id))
     if record.domain != "run":
-        raise SvcError("execution-domain-mismatch", "The execution ID does not belong to svc run.")
+        raise SvcError(
+            "execution-domain-mismatch", "The execution ID does not belong to svc run."
+        )
     if record.workspace_instance != workspace.instance:
-        raise SvcError("execution-workspace-mismatch", "The execution ID belongs to a different workspace.")
+        raise SvcError(
+            "execution-workspace-mismatch",
+            "The execution ID belongs to a different workspace.",
+        )
     if record.operation != "execute":
         raise SvcError(
             "execution-operation-mismatch",
@@ -412,7 +459,9 @@ def _reconcile(store: ExecutionStore, record: ExecutionRecord) -> ExecutionRecor
     return reconcile_owner_loss(store, record)
 
 
-def _notify(callback: SelectedCallback | None, record: ExecutionRecord, role: CallerRole) -> None:
+def _notify(
+    callback: SelectedCallback | None, record: ExecutionRecord, role: CallerRole
+) -> None:
     if callback is not None:
         callback(record, role)
 
@@ -421,11 +470,17 @@ def _resolve_directory(root: Path, configured: str) -> Path:
     path = Path(configured)
     candidate = path.resolve() if path.is_absolute() else (root / path).resolve()
     if not candidate.is_dir():
-        raise SvcError("run-cwd-not-directory", "Run working directory does not exist.", {"cwd": str(candidate)})
+        raise SvcError(
+            "run-cwd-not-directory",
+            "Run working directory does not exist.",
+            {"cwd": str(candidate)},
+        )
     return candidate
 
 
-def _load_env_files(root: Path, configured: list[str]) -> tuple[tuple[Path, ...], tuple[dict[str, str], ...]]:
+def _load_env_files(
+    root: Path, configured: list[str]
+) -> tuple[tuple[Path, ...], tuple[dict[str, str], ...]]:
     paths: list[Path] = []
     layers: list[dict[str, str]] = []
     for value in configured:
@@ -434,19 +489,35 @@ def _load_env_files(root: Path, configured: list[str]) -> tuple[tuple[Path, ...]
         try:
             snapshot = path.read_bytes()
         except OSError as error:
-            raise SvcError("run-env-file-unreadable", "Declared run environment file cannot be read.", {"path": str(path)}) from error
+            raise SvcError(
+                "run-env-file-unreadable",
+                "Declared run environment file cannot be read.",
+                {"path": str(path)},
+            ) from error
         try:
             text = snapshot.decode("utf-8")
         except UnicodeDecodeError as error:
-            raise SvcError("run-env-file-invalid", "Declared run environment file must be UTF-8.", {"path": str(path)}) from error
+            raise SvcError(
+                "run-env-file-invalid",
+                "Declared run environment file must be UTF-8.",
+                {"path": str(path)},
+            ) from error
         layer: dict[str, str] = {}
         for binding in parse_stream(io.StringIO(text)):
             if binding.error:
-                raise SvcError("run-env-file-invalid", "Declared run environment file contains malformed dotenv syntax.", {"path": str(path)})
+                raise SvcError(
+                    "run-env-file-invalid",
+                    "Declared run environment file contains malformed dotenv syntax.",
+                    {"path": str(path)},
+                )
             if binding.key is None:
                 continue
             if binding.value is None:
-                raise SvcError("run-env-file-invalid", "Declared run environment variable has no value.", {"path": str(path), "key": binding.key})
+                raise SvcError(
+                    "run-env-file-invalid",
+                    "Declared run environment variable has no value.",
+                    {"path": str(path), "key": binding.key},
+                )
             _validate_env_pair(binding.key, binding.value)
             _set_environment(layer, binding.key, binding.value)
         paths.append(path)
@@ -478,10 +549,18 @@ def _set_environment(target: dict[str, str], key: str, value: str) -> None:
 
 def _validate_env_pair(key: str, value: str) -> None:
     if not key or "=" in key or "\0" in key or "\0" in value:
-        raise SvcError("invalid-run-environment", "Run environment contains an invalid key or value.")
+        raise SvcError(
+            "invalid-run-environment",
+            "Run environment contains an invalid key or value.",
+        )
 
 
-def _validate_launch(argv: list[str], cwd: Path, env_files: tuple[Path, ...], environment: Mapping[str, str]) -> None:
+def _validate_launch(
+    argv: list[str],
+    cwd: Path,
+    env_files: tuple[Path, ...],
+    environment: Mapping[str, str],
+) -> None:
     values = [*argv, str(cwd), *(str(path) for path in env_files)]
     try:
         for value in values:
@@ -490,7 +569,10 @@ def _validate_launch(argv: list[str], cwd: Path, env_files: tuple[Path, ...], en
             os.fsencode(key)
             os.fsencode(value)
     except (UnicodeEncodeError, ValueError) as error:
-        raise SvcError("invalid-run-launch-encoding", "Run launch values cannot be encoded by this platform.") from error
+        raise SvcError(
+            "invalid-run-launch-encoding",
+            "Run launch values cannot be encoded by this platform.",
+        ) from error
 
 
 def _effective_digest(
@@ -514,7 +596,13 @@ def _effective_digest(
         ],
         "env": normalized(entry.env),
     }
-    encoded = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    encoded = json.dumps(
+        material,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 

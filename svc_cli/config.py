@@ -58,9 +58,7 @@ class HttpProbe(_StrictModel):
     def validate_status_and_tls(self) -> Self:
         lower, upper = self.success_status
         if not 100 <= lower <= upper <= 599:
-            raise ValueError(
-                "success_status must be an inclusive HTTP status interval"
-            )
+            raise ValueError("success_status must be an inclusive HTTP status interval")
         if self.insecure_tls and self.network_scope != "loopback":
             raise ValueError("insecure_tls is allowed only for loopback HTTP probes")
         return self
@@ -128,9 +126,7 @@ class ManualStop(_StrictModel):
     kind: Literal["manual"]
 
 
-StopAction: TypeAlias = Annotated[
-    ExecStop | ManualStop, Field(discriminator="kind")
-]
+StopAction: TypeAlias = Annotated[ExecStop | ManualStop, Field(discriminator="kind")]
 
 
 class _TargetBase(_StrictModel):
@@ -372,7 +368,9 @@ def _validate_names(values: Mapping[str, object], kind: str) -> None:
 def _load_required_json(path: Path, label: str) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         kind = "symlink" if path.is_symlink() else "regular file"
-        expected = "regular file" if kind == "regular file" else "non-symlink regular file"
+        expected = (
+            "regular file" if kind == "regular file" else "non-symlink regular file"
+        )
         raise ConfigError(f"{label} must be a {expected}")
     try:
         return _parse_json_bytes(path.read_bytes(), label)

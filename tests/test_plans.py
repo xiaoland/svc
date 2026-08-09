@@ -19,13 +19,13 @@ def test_file_state_signature_names_absence_content_and_intended_mode(
 ) -> None:
     mutation = make_write(tmp_path, "new.txt", "create", "test", b"new\n")
 
-    assert mutation.before.as_dict() == {"state": "absent"}
-    assert mutation.after.as_dict()["state"] == "file"
-    assert mutation.after.as_dict()["sha256"]
+    assert mutation.before.state == "absent"
+    assert mutation.after.state == "file"
+    assert mutation.after.sha256
     if os.name == "nt":
-        assert "posix_mode" not in mutation.after.as_dict()
+        assert mutation.after.posix_mode is None
     else:
-        assert mutation.after.as_dict()["posix_mode"] == 0o644
+        assert mutation.after.posix_mode == 0o644
 
 
 def test_rollback_restores_exact_existing_mode_after_later_failure(
@@ -104,10 +104,8 @@ def test_delete_is_verified_and_rollback_recreates_exact_file(
     if os.name != "nt":
         assert retired.stat().st_mode & 0o777 == 0o600
 
-    deletion = _plan(
-        tmp_path, make_delete(tmp_path, "retired.txt", "delete", "retire")
-    )
-    assert apply_local_plan(deletion, deletion.digest)["status"] == "applied"
+    deletion = _plan(tmp_path, make_delete(tmp_path, "retired.txt", "delete", "retire"))
+    assert apply_local_plan(deletion, deletion.digest).status == "applied"
     assert not retired.exists()
 
 
@@ -169,7 +167,7 @@ def test_platform_without_posix_mode_omits_and_does_not_verify_mode(
 
     assert mutation.before.posix_mode is None
     assert mutation.after.posix_mode is None
-    assert apply_local_plan(transaction, transaction.digest)["status"] == "applied"
+    assert apply_local_plan(transaction, transaction.digest).status == "applied"
 
 
 def test_rollback_failure_names_unrestored_path_and_uncertain_effect(

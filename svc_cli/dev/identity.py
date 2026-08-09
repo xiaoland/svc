@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Literal, Sequence, cast
 
 from ..errors import SvcError
-from ..workspace import WorkspaceIdentity, resolve_workspace_identity
+from ..machine import MachineModel
+from ..workspace import WorkspaceIdentity
 
 
 _TOKEN = re.compile(r"\$\{([^}]+)\}")
@@ -20,6 +20,7 @@ _TOKEN_NAMES = frozenset(
     }
 )
 _SCOPES = frozenset({"worktree", "repository", "host"})
+DevScope = Literal["worktree", "repository", "host"]
 
 
 def _digest(*parts: str, length: int = 20) -> str:
@@ -27,22 +28,12 @@ def _digest(*parts: str, length: int = 20) -> str:
     return hashlib.sha256(payload).hexdigest()[:length]
 
 
-@dataclass(frozen=True)
-class CapabilityIdentity:
-    scope: str
+class CapabilityIdentity(MachineModel):
+    scope: DevScope
     target: str
     endpoint_id: str
     scope_id: str
     capability_id: str
-
-    def as_dict(self) -> dict[str, str]:
-        return {
-            "scope": self.scope,
-            "target": self.target,
-            "endpoint_id": self.endpoint_id,
-            "scope_id": self.scope_id,
-            "capability_id": self.capability_id,
-        }
 
 
 def resolve_capability_identity(
@@ -56,7 +47,9 @@ def resolve_capability_identity(
     """Identify one declared capability independently of an operation intent."""
 
     if scope not in _SCOPES:
-        raise SvcError("invalid-dev-scope", "Dev target scope is invalid.", {"scope": scope})
+        raise SvcError(
+            "invalid-dev-scope", "Dev target scope is invalid.", {"scope": scope}
+        )
     if not target or not endpoint_identity:
         raise SvcError("invalid-dev-identity", "Dev identity fields must be non-empty.")
     if scope == "worktree":
@@ -65,13 +58,15 @@ def resolve_capability_identity(
         scope_id = workspace.repository_id
     else:
         if not host_key:
-            raise SvcError("missing-host-key", "Host-scoped targets require an explicit host_key.")
+            raise SvcError(
+                "missing-host-key", "Host-scoped targets require an explicit host_key."
+            )
         scope_id = _digest("host-scope", workspace.namespace_id, host_key)
 
     endpoint_id = _digest("endpoint", endpoint_identity)
     material = (workspace.namespace_id, scope, scope_id, target)
     return CapabilityIdentity(
-        scope=scope,
+        scope=cast(DevScope, scope),
         target=target,
         endpoint_id=endpoint_id,
         scope_id=scope_id,
@@ -107,11 +102,15 @@ def interpolate_dev_argv(
     argv: Sequence[str], workspace: WorkspaceIdentity, *, target: str
 ) -> tuple[str, ...]:
     if not argv or any(not isinstance(item, str) or not item for item in argv):
-        raise SvcError("invalid-dev-argv", "Dev command argv must be a non-empty string array.")
+        raise SvcError(
+            "invalid-dev-argv", "Dev command argv must be a non-empty string array."
+        )
     return tuple(interpolate_dev_value(item, workspace, target=target) for item in argv)
 
 
-def require_worktree_provenance(scope: str, endpoint_identity: str, workspace: WorkspaceIdentity) -> None:
+def require_worktree_provenance(
+    scope: str, endpoint_identity: str, workspace: WorkspaceIdentity
+) -> None:
     """Reject static healthy endpoints for application targets in linked worktrees."""
 
     if scope == "worktree" and workspace.instance not in endpoint_identity:

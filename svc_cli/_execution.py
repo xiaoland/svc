@@ -39,7 +39,14 @@ CapturePolicy = Literal["split", "merged"]
 
 ACTIVE_STATES = frozenset({"starting", "running"})
 TERMINAL_STATES = frozenset(
-    {"exited", "interrupted", "start-failed", "capture-failed", "owner-lost", "released"}
+    {
+        "exited",
+        "interrupted",
+        "start-failed",
+        "capture-failed",
+        "owner-lost",
+        "released",
+    }
 )
 _SAFE_COORDINATION_KEY = re.compile(r"^[a-f0-9]{16,64}$")
 _SPLIT_STREAMS: tuple[Literal["stdout", "stderr"], ...] = ("stdout", "stderr")
@@ -138,7 +145,9 @@ class ExecutionStore:
     """Strict local record, log, coordination-pointer, and lock storage."""
 
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or Path(user_runtime_dir("svc", ensure_exists=True)) / "execution"
+        self.root = (
+            root or Path(user_runtime_dir("svc", ensure_exists=True)) / "execution"
+        )
         _ensure_private_dir(self.root)
         _ensure_private_dir(self.root / "coordination")
 
@@ -157,7 +166,10 @@ class ExecutionStore:
         if not path.exists():
             return None
         value = _read_json(path)
-        if set(value) != {"schema_version", "execution_id"} or value.get("schema_version") != 2:
+        if (
+            set(value) != {"schema_version", "execution_id"}
+            or value.get("schema_version") != 2
+        ):
             raise _state_error(
                 "execution-coordination-invalid",
                 "Execution coordination pointer is malformed.",
@@ -247,7 +259,9 @@ class ExecutionStore:
         try:
             return _record_from_dict(value, expected_id=parsed)
         except (KeyError, TypeError, ValueError) as error:
-            raise _state_error("execution-record-invalid", "Execution record is malformed.", path) from error
+            raise _state_error(
+                "execution-record-invalid", "Execution record is malformed.", path
+            ) from error
 
     def write(self, record: ExecutionRecord) -> None:
         path = self.execution_dir(record.execution_id) / "execution.json"
@@ -256,7 +270,9 @@ class ExecutionStore:
     def execution_dir(self, execution_id: object) -> Path:
         return self.root / require_execution_id(execution_id)
 
-    def log_path(self, record: ExecutionRecord, stream: Literal["stdout", "stderr", "merged"]) -> Path:
+    def log_path(
+        self, record: ExecutionRecord, stream: Literal["stdout", "stderr", "merged"]
+    ) -> Path:
         if record.capture == "merged":
             if stream != "merged":
                 raise ValueError("merged execution has no attributed stream log")
@@ -289,7 +305,10 @@ class ExecutionStore:
                 value = _read_json(path)
             except SvcError:
                 continue
-            if value.get("schema_version") != 1 or value.get("state") not in ACTIVE_STATES:
+            if (
+                value.get("schema_version") != 1
+                or value.get("state") not in ACTIVE_STATES
+            ):
                 continue
             domain = value.get("domain")
             slot_key = value.get("slot_key")
@@ -318,13 +337,20 @@ class ExecutionStore:
 
 def require_execution_id(value: object) -> str:
     if not isinstance(value, str):
-        raise SvcError("invalid-execution-id", "Execution ID must be a canonical UUIDv4 string.")
+        raise SvcError(
+            "invalid-execution-id", "Execution ID must be a canonical UUIDv4 string."
+        )
     try:
         parsed = uuid.UUID(value)
     except (ValueError, AttributeError) as error:
-        raise SvcError("invalid-execution-id", "Execution ID must be a canonical UUIDv4 string.") from error
+        raise SvcError(
+            "invalid-execution-id", "Execution ID must be a canonical UUIDv4 string."
+        ) from error
     if parsed.version != 4 or str(parsed) != value:
-        raise SvcError("invalid-execution-id", "Execution ID must use canonical lowercase UUIDv4 spelling.")
+        raise SvcError(
+            "invalid-execution-id",
+            "Execution ID must use canonical lowercase UUIDv4 spelling.",
+        )
     return value
 
 
@@ -428,8 +454,12 @@ def run_foreground(
             )
         except OSError as error:
             if requested:
-                return settle_unstarted_interruption(store, published.record, requested[-1])
-            return _settle(store, published.record, "start-failed", failure_reason=str(error))
+                return settle_unstarted_interruption(
+                    store, published.record, requested[-1]
+                )
+            return _settle(
+                store, published.record, "start-failed", failure_reason=str(error)
+            )
         bind_process(process)
         record = replace(published.record, state="running", process_id=process.pid)
         try:
@@ -444,8 +474,12 @@ def run_foreground(
             raise
         assert process.stdout is not None and process.stderr is not None
         readers = (
-            threading.Thread(target=drain, args=("stdout", process.stdout), daemon=True),
-            threading.Thread(target=drain, args=("stderr", process.stderr), daemon=True),
+            threading.Thread(
+                target=drain, args=("stdout", process.stdout), daemon=True
+            ),
+            threading.Thread(
+                target=drain, args=("stderr", process.stderr), daemon=True
+            ),
         )
         for reader in readers:
             reader.start()
@@ -521,7 +555,11 @@ def terminate_owned(
                 owned.process.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 pass
-    termination = _signal_name(-owned.process.returncode) if owned.process.returncode is not None and owned.process.returncode < 0 else None
+    termination = (
+        _signal_name(-owned.process.returncode)
+        if owned.process.returncode is not None and owned.process.returncode < 0
+        else None
+    )
     return _settle(
         store,
         owned.record,
@@ -575,7 +613,9 @@ def settle_unstarted_interruption(
     return interrupted
 
 
-def reconcile_owner_loss(store: ExecutionStore, record: ExecutionRecord) -> ExecutionRecord:
+def reconcile_owner_loss(
+    store: ExecutionStore, record: ExecutionRecord
+) -> ExecutionRecord:
     """Use the abandoned domain lifetime lock as the sole owner-loss proof."""
 
     if record.state not in ACTIVE_STATES:
@@ -587,7 +627,11 @@ def reconcile_owner_loss(store: ExecutionStore, record: ExecutionRecord) -> Exec
         return store.read(record.execution_id)
     try:
         current = store.read(record.execution_id)
-        return mark_owner_lost(store, current) if current.state in ACTIVE_STATES else current
+        return (
+            mark_owner_lost(store, current)
+            if current.state in ACTIVE_STATES
+            else current
+        )
     finally:
         lock.release()
 
@@ -604,7 +648,10 @@ def follow_execution(
 
     record = store.read(execution_id)
     if record.capture != "split":
-        raise SvcError("execution-not-followable", "This execution has no public attributed output streams.")
+        raise SvcError(
+            "execution-not-followable",
+            "This execution has no public attributed output streams.",
+        )
     offsets = {"stdout": 0, "stderr": 0}
     sinks = {"stdout": stdout_sink, "stderr": stderr_sink}
     while True:
@@ -623,7 +670,9 @@ def follow_execution(
                             except (BrokenPipeError, OSError, ValueError):
                                 sinks[name] = None
             except OSError as error:
-                raise _state_error("execution-log-unreadable", "Execution output cannot be read.", path) from error
+                raise _state_error(
+                    "execution-log-unreadable", "Execution output cannot be read.", path
+                ) from error
         record = reconcile_owner_loss(store, store.read(execution_id))
         if record.state in TERMINAL_STATES:
             # The owner writes terminal state only after EOF; one final pass
@@ -647,7 +696,9 @@ def follow_execution(
         time.sleep(poll_interval)
 
 
-def wait_execution(store: ExecutionStore, execution_id: str, *, poll_interval: float = 0.05) -> ExecutionRecord:
+def wait_execution(
+    store: ExecutionStore, execution_id: str, *, poll_interval: float = 0.05
+) -> ExecutionRecord:
     while True:
         record = reconcile_owner_loss(store, store.read(execution_id))
         if record.state in TERMINAL_STATES:
@@ -694,13 +745,17 @@ def _owned_signal_handlers(
     if threading.current_thread() is not threading.main_thread():
         yield lambda _process: None
         return
-    handled = tuple(number for number in (signal.SIGINT, signal.SIGTERM) if number is not None)
+    handled = tuple(
+        number for number in (signal.SIGINT, signal.SIGTERM) if number is not None
+    )
     previous = {number: signal.getsignal(number) for number in handled}
     terminal_group_delivery = _terminal_group_delivery()
     process_holder: list[subprocess.Popen[bytes]] = []
     deferred: list[int] = []
 
-    def forward(process: subprocess.Popen[bytes], number: int, *, force: bool = False) -> None:
+    def forward(
+        process: subprocess.Popen[bytes], number: int, *, force: bool = False
+    ) -> None:
         if force or number != signal.SIGINT or not terminal_group_delivery:
             _best_effort_signal(process, number)
 
@@ -843,7 +898,11 @@ def _record_from_dict(value: dict[str, object], *, expected_id: str) -> Executio
     domain = value["domain"]
     state = value["state"]
     capture = value["capture"]
-    if domain not in {"run", "dev"} or state not in ACTIVE_STATES | TERMINAL_STATES or capture not in {"split", "merged"}:
+    if (
+        domain not in {"run", "dev"}
+        or state not in ACTIVE_STATES | TERMINAL_STATES
+        or capture not in {"split", "merged"}
+    ):
         raise ValueError("record enum is invalid")
     strings = (
         "operation",
@@ -859,11 +918,17 @@ def _record_from_dict(value: dict[str, object], *, expected_id: str) -> Executio
     _require_coordination_key(str(value["coordination_key"]))
     argv = value["argv"]
     env_files = value["env_files"]
-    if not isinstance(argv, list) or not argv or not all(isinstance(item, str) for item in argv):
+    if (
+        not isinstance(argv, list)
+        or not argv
+        or not all(isinstance(item, str) for item in argv)
+    ):
         raise TypeError("record argv is invalid")
     if not argv[0]:
         raise ValueError("record executable is empty")
-    if not isinstance(env_files, list) or not all(isinstance(item, str) for item in env_files):
+    if not isinstance(env_files, list) or not all(
+        isinstance(item, str) for item in env_files
+    ):
         raise TypeError("record env_files is invalid")
     owner_pid = value["owner_pid"]
     if type(owner_pid) is not int or owner_pid <= 0:
@@ -875,7 +940,12 @@ def _record_from_dict(value: dict[str, object], *, expected_id: str) -> Executio
     for key in integer_fields:
         if key in value and type(value[key]) is not int:
             raise TypeError(f"record {key} is invalid")
-    for key in ("finished_at", "requested_signal", "termination_signal", "failure_reason"):
+    for key in (
+        "finished_at",
+        "requested_signal",
+        "termination_signal",
+        "failure_reason",
+    ):
         if key in value and not isinstance(value[key], str):
             raise TypeError(f"record {key} is invalid")
     _validate_record_lifecycle(value, str(domain), str(state), str(capture))
@@ -915,7 +985,9 @@ def _validate_record_lifecycle(
     state: str,
     capture: str,
 ) -> None:
-    if (domain == "run" and capture != "split") or (domain == "dev" and capture != "merged"):
+    if (domain == "run" and capture != "split") or (
+        domain == "dev" and capture != "merged"
+    ):
         raise ValueError("record capture policy does not match domain")
     if domain == "run" and state == "released":
         raise ValueError("run execution cannot be released")
@@ -934,17 +1006,20 @@ def _validate_record_lifecycle(
         raise ValueError("record process ID is invalid")
     if state == "starting" and process_id is not None:
         raise ValueError("starting record cannot have a process ID")
-    if state in {"running", "exited", "capture-failed", "released"} and process_id is None:
+    if (
+        state in {"running", "exited", "capture-failed", "released"}
+        and process_id is None
+    ):
         raise ValueError("started record requires a process ID")
-    if state == "interrupted" and process_id is None and "requested_signal" not in value:
+    if (
+        state == "interrupted"
+        and process_id is None
+        and "requested_signal" not in value
+    ):
         raise ValueError("unstarted interruption requires the requested signal")
     if state == "exited":
         exit_code = value.get("exit_code")
-        if (
-            type(exit_code) is not int
-            or exit_code < -(1 << 31)
-            or exit_code >= 1 << 32
-        ):
+        if type(exit_code) is not int or exit_code < -(1 << 31) or exit_code >= 1 << 32:
             raise ValueError("exited record requires a 32-bit exit code")
     elif "exit_code" in value:
         raise ValueError("non-exit record cannot have an exit code")
@@ -962,21 +1037,42 @@ def _parse_timestamp(value: str) -> datetime:
 def _read_json(path: Path) -> dict[str, object]:
     try:
         raw = path.read_bytes()
-        value = json.loads(raw.decode("utf-8"), object_pairs_hook=_reject_duplicate_keys, parse_constant=_reject_constant)
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_constant,
+        )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
-        raise _state_error("execution-state-unreadable", "Execution state cannot be read safely.", path) from error
+        raise _state_error(
+            "execution-state-unreadable", "Execution state cannot be read safely.", path
+        ) from error
     if not isinstance(value, dict) or _contains_null(value):
-        raise _state_error("execution-state-invalid", "Execution state must be a strict JSON object.", path)
+        raise _state_error(
+            "execution-state-invalid",
+            "Execution state must be a strict JSON object.",
+            path,
+        )
     return value
 
 
 def _atomic_json(path: Path, value: Mapping[str, object]) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    payload = (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+    payload = (
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
     descriptor = -1
     temporary = ""
     try:
-        descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        descriptor, temporary = tempfile.mkstemp(
+            prefix=f".{path.name}.", dir=path.parent
+        )
         os.fchmod(descriptor, 0o600)
         with os.fdopen(descriptor, "wb") as stream:
             descriptor = -1
@@ -992,7 +1088,9 @@ def _atomic_json(path: Path, value: Mapping[str, object]) -> None:
                 os.unlink(temporary)
             except OSError:
                 pass
-        raise _state_error("execution-storage-failed", "Execution state could not be persisted.", path) from error
+        raise _state_error(
+            "execution-storage-failed", "Execution state could not be persisted.", path
+        ) from error
 
 
 def _create_private_file(path: Path) -> BinaryIO:
@@ -1000,14 +1098,22 @@ def _create_private_file(path: Path) -> BinaryIO:
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         return os.fdopen(descriptor, "wb", buffering=0)
     except OSError as error:
-        raise _state_error("execution-storage-failed", "Execution output storage could not be created.", path) from error
+        raise _state_error(
+            "execution-storage-failed",
+            "Execution output storage could not be created.",
+            path,
+        ) from error
 
 
 def _ensure_private_dir(path: Path) -> None:
     try:
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
     except OSError as error:
-        raise _state_error("execution-storage-failed", "Execution runtime directory is unavailable.", path) from error
+        raise _state_error(
+            "execution-storage-failed",
+            "Execution runtime directory is unavailable.",
+            path,
+        ) from error
 
 
 def _require_coordination_key(value: str) -> None:
@@ -1046,7 +1152,11 @@ def _contains_null(value: object) -> bool:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
 
 
 def _monotonic_duration_ms(record: ExecutionRecord) -> int:

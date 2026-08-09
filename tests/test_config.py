@@ -169,11 +169,7 @@ def test_overlay_refuses_corpus_authority_unknown_paths_and_invalid_schema() -> 
         {
             "schema_version": 3,
             "dev": {
-                "targets": {
-                    "frontend": {
-                        "probe": {"kind": "http", "made_up": True}
-                    }
-                }
+                "targets": {"frontend": {"probe": {"kind": "http", "made_up": True}}}
             },
         },
         {"schema_version": 3, "run": {"check": {"unknown": True}}},

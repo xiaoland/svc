@@ -7,10 +7,11 @@ import os
 import platform
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from .errors import SvcError
+from .machine import MachineModel
 
 
 def _digest(*parts: str, length: int = 20) -> str:
@@ -18,29 +19,20 @@ def _digest(*parts: str, length: int = 20) -> str:
     return hashlib.sha256(payload).hexdigest()[:length]
 
 
-@dataclass(frozen=True)
-class WorkspaceIdentity:
+class WorkspaceIdentity(MachineModel):
     """Stable identity facts for one executable workspace."""
 
     root: Path
     namespace_id: str
-    repository_kind: str
+    repository_kind: Literal["git", "non-git"]
     repository_id: str
     worktree_id: str
     instance: str
 
-    def as_dict(self) -> dict[str, str]:
-        return {
-            "root": str(self.root),
-            "namespace_id": self.namespace_id,
-            "repository_kind": self.repository_kind,
-            "repository_id": self.repository_id,
-            "worktree_id": self.worktree_id,
-            "instance": self.instance,
-        }
 
-
-def resolve_workspace_identity(root: Path, *, namespace: str | None = None) -> WorkspaceIdentity:
+def resolve_workspace_identity(
+    root: Path, *, namespace: str | None = None
+) -> WorkspaceIdentity:
     """Resolve Git common/private worktree facts, with a deterministic fallback."""
 
     workspace = _workspace_root(root)
@@ -59,7 +51,11 @@ def resolve_workspace_identity(root: Path, *, namespace: str | None = None) -> W
 
     common_dir, git_dir = git
     common_id = _digest("git-common", str(common_dir))
-    private_marker = "main" if git_dir == common_dir else _relative_private_marker(common_dir, git_dir)
+    private_marker = (
+        "main"
+        if git_dir == common_dir
+        else _relative_private_marker(common_dir, git_dir)
+    )
     worktree_id = _digest("git-worktree", common_id, private_marker)
     return WorkspaceIdentity(
         root=workspace,
@@ -75,16 +71,25 @@ def _workspace_root(root: Path) -> Path:
     try:
         resolved = root.resolve(strict=True)
     except OSError as error:
-        raise SvcError("workspace-not-directory", "Workspace does not exist.", {"root": str(root)}) from error
+        raise SvcError(
+            "workspace-not-directory", "Workspace does not exist.", {"root": str(root)}
+        ) from error
     if not resolved.is_dir():
-        raise SvcError("workspace-not-directory", "Workspace is not a directory.", {"root": str(root)})
+        raise SvcError(
+            "workspace-not-directory",
+            "Workspace is not a directory.",
+            {"root": str(root)},
+        )
     return resolved
 
 
 def _namespace_id(namespace: str | None) -> str:
     if namespace is not None:
         if not namespace or "\0" in namespace:
-            raise SvcError("invalid-execution-namespace", "Execution namespace must be a non-empty string.")
+            raise SvcError(
+                "invalid-execution-namespace",
+                "Execution namespace must be a non-empty string.",
+            )
         material = namespace
     else:
         uid = str(os.getuid()) if hasattr(os, "getuid") else "unknown-user"
@@ -113,12 +118,18 @@ def _git_paths(workspace: Path) -> tuple[Path, Path] | None:
     lines = completed.stdout.splitlines()
     if len(lines) != 3 or lines[0] != "false":
         if lines and lines[0] == "true":
-            raise SvcError("bare-repository", "A bare Git repository is not an executable workspace.")
+            raise SvcError(
+                "bare-repository",
+                "A bare Git repository is not an executable workspace.",
+            )
         return None
     common_dir = Path(lines[1]).resolve()
     git_dir = Path(lines[2]).resolve()
     if not common_dir.is_dir() or not git_dir.is_dir():
-        raise SvcError("invalid-git-worktree", "Git did not report usable worktree administration directories.")
+        raise SvcError(
+            "invalid-git-worktree",
+            "Git did not report usable worktree administration directories.",
+        )
     return common_dir, git_dir
 
 

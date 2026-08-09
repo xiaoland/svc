@@ -26,7 +26,7 @@ custom:
   FromSchema: ""
   ToSchema: ""
   Guidance: |-
-{chr(10).join(f'    {line}' for line in guidance.splitlines())}
+{chr(10).join(f"    {line}" for line in guidance.splitlines())}
 time: 2026-08-08T00:00:00Z
 """
 

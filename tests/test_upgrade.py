@@ -78,20 +78,18 @@ def test_targetless_upgrade_selects_config_then_hands_off_to_corpus(
         "svc.json",
         "svc.local.json",
     ]
-    assert plan.as_dict()["remaining_targets"] == [
-        {
-            "target": "corpus",
-            "status": "pending",
-            "from_version": "10.0.1",
-            "to_version": "12.0.0",
-        }
-    ]
+    assert len(plan.remaining_targets) == 1
+    remaining = plan.remaining_targets[0]
+    assert remaining.target == "corpus"
+    assert remaining.status == "pending"
+    assert remaining.from_version == "10.0.1"
+    assert remaining.to_version == "12.0.0"
     assert plan.digest is not None
 
     receipt = apply_upgrade(plan, plan.digest)
 
-    assert receipt["status"] == "applied"
-    assert receipt["migration"]["disposition"] == "caller-asserted"
+    assert receipt.status == "applied"
+    assert receipt.migration.disposition == "caller-asserted"
     transformed = parse_project_config((tmp_path / "svc.json").read_bytes())
     assert transformed.corpus_version == "10.0.1"
     assert transformed.dev is not None
@@ -102,12 +100,14 @@ def test_targetless_upgrade_selects_config_then_hands_off_to_corpus(
     corpus = plan_upgrade(tmp_path)
     assert corpus.target == "corpus"
     assert corpus.status == "migration-required"
-    assert corpus.details["corpus"]["from_version"] == "10.0.1"
-    assert len(corpus.details["corpus"]["releases"]) == 4
+    assert corpus.details.corpus is not None
+    assert corpus.details.corpus.from_version == "10.0.1"
+    assert corpus.details.corpus.releases is not None
+    assert len(corpus.details.corpus.releases) == 4
     assert corpus.digest is not None
 
     corpus_receipt = apply_upgrade(corpus, corpus.digest)
-    assert corpus_receipt["remaining_targets"] == []
+    assert corpus_receipt.remaining_targets == ()
     assert (
         parse_project_config((tmp_path / "svc.json").read_bytes()).corpus_version
         == "12.0.0"
@@ -159,11 +159,13 @@ def test_corpus_plan_references_guides_and_does_not_bind_project_documents(
         encoding="utf-8",
     )
     plan = plan_upgrade(tmp_path, "corpus")
-    corpus = plan.details["corpus"]
-    guides = corpus["releases"][0]["guides"]
+    corpus = plan.details.corpus
+    assert corpus is not None and corpus.releases is not None
+    guides = corpus.releases[0].guides
+    assert guides is not None
 
     assert plan.status == "migration-required"
-    assert [guide["path"] for guide in guides] == [
+    assert [guide.path for guide in guides] == [
         "migrations/agent-analysis-query-read.md",
         "migrations/agent-task-performance-analysis.md",
         "migrations/local-trust-boundary.md",

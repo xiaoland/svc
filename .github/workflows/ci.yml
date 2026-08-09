@@ -52,6 +52,10 @@ jobs:
         env:
           SVC_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: pdm run check-release-projections --compare-ref "$SVC_BASE_REF"
+      - name: Validate CLI output schema projections and compatibility
+        env:
+          SVC_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: pdm run check-cli-output-schemas --compare-ref "$SVC_BASE_REF"
       - run: pdm run check-documents
       - run: pdm run lint-tests
       - run: pdm run typecheck
@@ -89,6 +93,7 @@ jobs:
           python -m venv /tmp/svc-wheel
           /tmp/svc-wheel/bin/pip install dist/*.whl
           /tmp/svc-wheel/bin/svc --help
+          /tmp/svc-wheel/bin/svc run --json-schema
           /tmp/svc-wheel/bin/svc lookup --path sections/working-protocol.md --json
           repo=$(mktemp -d)
           plan=$(/tmp/svc-wheel/bin/svc init "$repo" --json)

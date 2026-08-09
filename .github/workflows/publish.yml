@@ -76,6 +76,10 @@ jobs:
         env:
           SVC_BASE_REF: ${{ github.event.before }}
         run: pdm run check-release-projections --compare-ref "$SVC_BASE_REF"
+      - name: Validate CLI output schema projections and compatibility
+        env:
+          SVC_BASE_REF: ${{ github.event.before }}
+        run: pdm run check-cli-output-schemas --compare-ref "$SVC_BASE_REF"
       - name: Build the tagged distributions
         env:
           PDM_BUILD_SCM_VERSION: ${{ needs.prepare.outputs.version }}
@@ -95,6 +99,7 @@ jobs:
           python -m venv /tmp/svc-release
           /tmp/svc-release/bin/pip install release/python/*.whl
           /tmp/svc-release/bin/svc --help
+          /tmp/svc-release/bin/svc run --json-schema
           /tmp/svc-release/bin/svc lookup --path sections/working-protocol.md --json
           repo=$(mktemp -d)
           plan=$(/tmp/svc-release/bin/svc init "$repo" --json)

@@ -46,13 +46,13 @@ def test_record_coordination_round_trip(tmp_path: Path) -> None:
     store = ExecutionStore(tmp_path / "runtime")
     published = publish(store)
     store.write_coordination("run", COORDINATION, published.record.execution_id)
-    assert (
-        store.read_coordination("run", COORDINATION)
-        == published.record.execution_id
-    )
+    assert store.read_coordination("run", COORDINATION) == published.record.execution_id
     assert store.read(published.record.execution_id) == published.record
 
-def test_foreground_capture_preserves_binary_streams_and_sink_failure(tmp_path: Path) -> None:
+
+def test_foreground_capture_preserves_binary_streams_and_sink_failure(
+    tmp_path: Path,
+) -> None:
     store = ExecutionStore(tmp_path / "runtime")
     published = store.publish(
         domain="run",
@@ -80,7 +80,9 @@ def test_foreground_capture_preserves_binary_streams_and_sink_failure(tmp_path: 
         os.environ.copy(),
     )
     stderr = io.BytesIO()
-    record = run_foreground(store, published, spec, stdout_sink=ClosedSink(), stderr_sink=stderr)
+    record = run_foreground(
+        store, published, spec, stdout_sink=ClosedSink(), stderr_sink=stderr
+    )
     assert record.state == "exited"
     assert record.exit_code == 0
     assert store.log_path(record, "stdout").read_bytes() == b"out\xff"
@@ -89,19 +91,25 @@ def test_foreground_capture_preserves_binary_streams_and_sink_failure(tmp_path: 
 
     replay_out = io.BytesIO()
     replay_err = io.BytesIO()
-    followed = follow_execution(store, record.execution_id, stdout_sink=replay_out, stderr_sink=replay_err)
+    followed = follow_execution(
+        store, record.execution_id, stdout_sink=replay_out, stderr_sink=replay_err
+    )
     assert followed == record
     assert replay_out.getvalue() == b"out\xff"
     assert replay_err.getvalue() == b"err\xfe"
 
 
-def test_reader_normalizes_a_persisted_windows_dword_exit_status(tmp_path: Path) -> None:
+def test_reader_normalizes_a_persisted_windows_dword_exit_status(
+    tmp_path: Path,
+) -> None:
     store = ExecutionStore(tmp_path / "runtime")
     published = publish(store)
     record = run_foreground(
         store,
         published,
-        LaunchSpec((sys.executable, "-c", "raise SystemExit(7)"), tmp_path, os.environ.copy()),
+        LaunchSpec(
+            (sys.executable, "-c", "raise SystemExit(7)"), tmp_path, os.environ.copy()
+        ),
         stdout_sink=None,
         stderr_sink=None,
     )
@@ -123,7 +131,9 @@ def test_foreground_log_open_failure_is_a_capture_failure(tmp_path: Path) -> Non
     record = run_foreground(
         store,
         published,
-        LaunchSpec((sys.executable, "-c", "print('output')"), tmp_path, os.environ.copy()),
+        LaunchSpec(
+            (sys.executable, "-c", "print('output')"), tmp_path, os.environ.copy()
+        ),
         stdout_sink=None,
         stderr_sink=None,
     )
@@ -153,7 +163,9 @@ def test_isolated_execution_can_settle_release_or_be_terminated(tmp_path: Path) 
     started = start_isolated(
         store,
         bounded,
-        LaunchSpec((sys.executable, "-c", "print('activated')"), tmp_path, os.environ.copy()),
+        LaunchSpec(
+            (sys.executable, "-c", "print('activated')"), tmp_path, os.environ.copy()
+        ),
     )
     assert not hasattr(started, "state")
     settled = wait_owned(store, started)  # type: ignore[arg-type]
@@ -164,7 +176,11 @@ def test_isolated_execution_can_settle_release_or_be_terminated(tmp_path: Path) 
     owned = start_isolated(
         store,
         long_lived,
-        LaunchSpec((sys.executable, "-c", "import time; time.sleep(30)"), tmp_path, os.environ.copy()),
+        LaunchSpec(
+            (sys.executable, "-c", "import time; time.sleep(30)"),
+            tmp_path,
+            os.environ.copy(),
+        ),
     )
     assert not hasattr(owned, "state")
     released = release_owned(store, owned)  # type: ignore[arg-type]
@@ -175,7 +191,11 @@ def test_isolated_execution_can_settle_release_or_be_terminated(tmp_path: Path) 
     terminate_candidate = start_isolated(
         store,
         terminated_launch,
-        LaunchSpec((sys.executable, "-c", "import time; time.sleep(30)"), tmp_path, os.environ.copy()),
+        LaunchSpec(
+            (sys.executable, "-c", "import time; time.sleep(30)"),
+            tmp_path,
+            os.environ.copy(),
+        ),
     )
     terminated = terminate_owned(store, terminate_candidate)  # type: ignore[arg-type]
     assert terminated.state == "interrupted"

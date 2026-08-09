@@ -49,6 +49,8 @@ build-monolith = "python -m tools.build_monolith"
 check-documents = "python -m tools.build_monolith --check"
 build-release-projections = "python -m tools.build_release_projections"
 check-release-projections = "python -m tools.build_release_projections --check"
+build-cli-output-schemas = "python -m tools.build_cli_output_schemas"
+check-cli-output-schemas = "python -m tools.build_cli_output_schemas --check"
 svc = "python -m svc_cli.cli"
 test = "pytest tests"
 lint-tests = "ruff check tests --select E4,E7,E9,F,B,SIM,PT,TID251 --ignore PT007,PT018"
@@ -71,6 +73,8 @@ files = [
     "svc_cli/_execution.py",
     "svc_cli/integration.py",
     "svc_cli/lookup.py",
+    "svc_cli/machine.py",
+    "svc_cli/output_schema.py",
     "svc_cli/plans.py",
     "svc_cli/project.py",
     "svc_cli/release.py",
@@ -96,6 +100,7 @@ files = [
     "svc_cli/telemetry/providers/codex_trajectory.py",
     "tests/agent_thread_contract.py",
     "tests/project_contract.py",
+    "tools/build_cli_output_schemas.py",
 ]
 plugins = ["pydantic.mypy"]
 check_untyped_defs = true
@@ -163,6 +168,33 @@ name = "Release authority remains project-domain neutral"
 type = "forbidden"
 source_modules = ["svc_cli.release"]
 forbidden_modules = ["svc_cli.dev", "svc_cli.project", "svc_cli.run", "svc_cli.upgrade"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Typed machine primitives remain public-domain neutral"
+type = "forbidden"
+source_modules = ["svc_cli.machine"]
+forbidden_modules = [
+    "svc_cli.analysis",
+    "svc_cli.dev",
+    "svc_cli.project",
+    "svc_cli.run",
+    "svc_cli.telemetry",
+    "svc_cli.upgrade",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Command domains do not depend on the output schema registry"
+type = "forbidden"
+source_modules = [
+    "svc_cli.dev",
+    "svc_cli.lookup",
+    "svc_cli.project",
+    "svc_cli.run",
+    "svc_cli.upgrade",
+]
+forbidden_modules = ["svc_cli.output_schema"]
 allow_indirect_imports = true
 
 [tool.pytest.ini_options]

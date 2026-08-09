@@ -4,16 +4,58 @@ from __future__ import annotations
 
 import os
 import tempfile
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal, TypeAlias
+
+from pydantic import Field
 
 from .catalog import canonical_json, sha256_bytes
 from .errors import SvcError
+from .machine import MachineModel
 
 
 PLAN_SCHEMA_VERSION = 2
 CREATED_TEXT_MODE = 0o644
+FileStateKind: TypeAlias = Literal["absent", "file"]
+PlanAction: TypeAlias = Literal["create", "append", "refresh", "rewrite", "delete"]
+RollbackStatus: TypeAlias = Literal["succeeded", "conflicted", "failed"]
+LocalApplyStatus: TypeAlias = Literal["noop", "applied"]
+
+
+class BlockerOutput(MachineModel):
+    code: str
+    path: str
+    message: str
+
+
+class FileStateOutput(MachineModel):
+    state: FileStateKind
+    sha256: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    posix_mode: int | None = Field(default=None, exclude_if=lambda value: value is None)
+
+
+class FileMutationOutput(MachineModel):
+    path: str
+    action: PlanAction
+    reason: str
+    before: FileStateOutput
+    after: FileStateOutput
+
+
+class RollbackOutput(MachineModel):
+    status: RollbackStatus
+    restored_paths: tuple[str, ...]
+    preserved_external_paths: tuple[str, ...]
+    unrestored_paths: tuple[str, ...]
+
+
+class LocalApplyResult(MachineModel):
+    status: LocalApplyStatus
+    changed: int
+    verification: Literal["passed"]
+    plan_digest: str
 
 
 def normalized_target_path(value: str) -> str:
@@ -39,15 +81,18 @@ class Blocker:
     path: str
     message: str
 
-    def as_dict(self) -> dict[str, str]:
-        return {"code": self.code, "path": self.path, "message": self.message}
+    def as_dict(self) -> dict[str, object]:
+        return dict(self.as_output().as_dict())
+
+    def as_output(self) -> BlockerOutput:
+        return BlockerOutput(code=self.code, path=self.path, message=self.message)
 
 
 @dataclass(frozen=True)
 class FileState:
     """Exact observable state for one absent or regular-file path."""
 
-    state: str
+    state: FileStateKind
     sha256: str | None = None
     posix_mode: int | None = None
 
@@ -64,12 +109,14 @@ class FileState:
             raise ValueError("A POSIX file mode must contain only permission bits")
 
     def as_dict(self) -> dict[str, object]:
-        value: dict[str, object] = {"state": self.state}
-        if self.sha256 is not None:
-            value["sha256"] = self.sha256
-        if self.posix_mode is not None:
-            value["posix_mode"] = self.posix_mode
-        return value
+        return dict(self.as_output().as_dict())
+
+    def as_output(self) -> FileStateOutput:
+        return FileStateOutput(
+            state=self.state,
+            sha256=self.sha256,
+            posix_mode=self.posix_mode,
+        )
 
 
 ABSENT_FILE = FileState("absent")
@@ -78,7 +125,7 @@ ABSENT_FILE = FileState("absent")
 @dataclass(frozen=True)
 class PlannedFileMutation:
     path: str
-    action: str
+    action: PlanAction
     reason: str
     before: FileState
     after: FileState
@@ -107,18 +154,21 @@ class PlannedFileMutation:
         }
 
     def as_dict(self) -> dict[str, object]:
-        return {
-            "path": self.path,
-            "action": self.action,
-            "reason": self.reason,
-            "before": self.before.as_dict(),
-            "after": self.after.as_dict(),
-        }
+        return dict(self.as_output().as_dict())
+
+    def as_output(self) -> FileMutationOutput:
+        return FileMutationOutput(
+            path=self.path,
+            action=self.action,
+            reason=self.reason,
+            before=self.before.as_output(),
+            after=self.after.as_output(),
+        )
 
 
 @dataclass(frozen=True)
 class RollbackReport:
-    status: str
+    status: RollbackStatus
     restored_paths: tuple[str, ...] = ()
     preserved_external_paths: tuple[str, ...] = ()
     unrestored_paths: tuple[str, ...] = ()
@@ -132,12 +182,15 @@ class RollbackReport:
         return "restored"
 
     def as_dict(self) -> dict[str, object]:
-        return {
-            "status": self.status,
-            "restored_paths": list(self.restored_paths),
-            "preserved_external_paths": list(self.preserved_external_paths),
-            "unrestored_paths": list(self.unrestored_paths),
-        }
+        return dict(self.as_output().as_dict())
+
+    def as_output(self) -> RollbackOutput:
+        return RollbackOutput(
+            status=self.status,
+            restored_paths=self.restored_paths,
+            preserved_external_paths=self.preserved_external_paths,
+            unrestored_paths=self.unrestored_paths,
+        )
 
 
 @dataclass(frozen=True)
@@ -154,7 +207,7 @@ class LocalPlan:
             raise ValueError("A local plan may mutate each path only once")
 
     @property
-    def status(self) -> str:
+    def status(self) -> Literal["blocked", "ready", "noop"]:
         if self.blockers:
             return "blocked"
         return "ready" if self.mutations else "noop"
@@ -176,26 +229,11 @@ class LocalPlan:
             ],
         }
 
-    def as_dict(self) -> dict[str, object]:
-        action_counts: dict[str, int] = {}
-        for mutation in self.mutations:
-            action_counts[mutation.action] = action_counts.get(mutation.action, 0) + 1
-        return {
-            "schema_version": PLAN_SCHEMA_VERSION,
-            "command": self.command,
-            "status": self.status,
-            "target_version": self.target_version,
-            "operations": [mutation.as_dict() for mutation in self.mutations],
-            "blockers": [blocker.as_dict() for blocker in self.blockers],
-            "summary": action_counts,
-            "plan_digest": self.digest,
-        }
-
 
 def make_write(
     repo: Path,
     path: str,
-    action: str,
+    action: PlanAction,
     reason: str,
     content: bytes,
 ) -> PlannedFileMutation:
@@ -220,7 +258,7 @@ def make_write(
 def make_delete(
     repo: Path,
     path: str,
-    action: str,
+    action: PlanAction,
     reason: str,
 ) -> PlannedFileMutation:
     target = _absolute_target(repo, path)
@@ -239,7 +277,7 @@ def make_delete(
     )
 
 
-def apply_local_plan(plan: LocalPlan, approved_digest: str) -> dict[str, object]:
+def apply_local_plan(plan: LocalPlan, approved_digest: str) -> LocalApplyResult:
     """Apply exactly one approved file-state transaction."""
 
     if approved_digest != plan.digest:
@@ -263,12 +301,12 @@ def apply_local_plan(plan: LocalPlan, approved_digest: str) -> dict[str, object]
 
     _assert_preconditions(plan)
     if not plan.mutations:
-        return {
-            "status": "noop",
-            "changed": 0,
-            "verification": "passed",
-            "plan_digest": plan.digest,
-        }
+        return LocalApplyResult(
+            status="noop",
+            changed=0,
+            verification="passed",
+            plan_digest=plan.digest,
+        )
 
     attempted: list[PlannedFileMutation] = []
     created_directories: list[Path] = []
@@ -279,9 +317,7 @@ def apply_local_plan(plan: LocalPlan, approved_digest: str) -> dict[str, object]
             try:
                 for mutation in plan.mutations:
                     target = _absolute_target(plan.repo, mutation.path)
-                    _assert_mutation_precondition(
-                        plan.repo.resolve(), target, mutation
-                    )
+                    _assert_mutation_precondition(plan.repo.resolve(), target, mutation)
                     if mutation.after.state == "file":
                         _ensure_parent_directories(
                             plan.repo.resolve(), target, created_directories
@@ -332,17 +368,15 @@ def apply_local_plan(plan: LocalPlan, approved_digest: str) -> dict[str, object]
             {"repository_effect": "none"},
         ) from error
 
-    return {
-        "status": "applied",
-        "changed": len(plan.mutations),
-        "verification": "passed",
-        "plan_digest": plan.digest,
-    }
+    return LocalApplyResult(
+        status="applied",
+        changed=len(plan.mutations),
+        verification="passed",
+        plan_digest=plan.digest,
+    )
 
 
-def _stage_after_content(
-    plan: LocalPlan, staging: Path
-) -> dict[str, bytes]:
+def _stage_after_content(plan: LocalPlan, staging: Path) -> dict[str, bytes]:
     staged: dict[str, bytes] = {}
     for index, mutation in enumerate(plan.mutations):
         if mutation.after_content is None:
@@ -448,9 +482,7 @@ def _assert_mutation_precondition(
             )
 
 
-def _ensure_parent_directories(
-    root: Path, target: Path, created: list[Path]
-) -> None:
+def _ensure_parent_directories(root: Path, target: Path, created: list[Path]) -> None:
     pending: list[Path] = []
     cursor = target.parent
     while cursor != root and not cursor.exists():
@@ -549,11 +581,11 @@ def _rollback(
         except (OSError, SvcError):
             unrestored.append(mutation.path)
     for directory in reversed(created_directories):
-        try:
+        with suppress(OSError):
             directory.rmdir()
-        except OSError:
-            pass
-    status = "failed" if unrestored else "conflicted" if preserved else "succeeded"
+    status: RollbackStatus = (
+        "failed" if unrestored else "conflicted" if preserved else "succeeded"
+    )
     return RollbackReport(
         status,
         tuple(reversed(restored)),

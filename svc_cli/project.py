@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal, TypeAlias, cast
+
+from pydantic import Field
 
 from semantic_version import Version  # type: ignore[import-untyped]
 
@@ -25,6 +27,7 @@ from .errors import SvcError
 from .integration import (
     DesiredIntegration,
     IntegrationInspection,
+    IntegrationInspectionStatus,
     IntegrationProblem,
     desired_local_config_ignore,
     desired_navigation,
@@ -32,9 +35,13 @@ from .integration import (
     inspect_navigation,
     inspect_retired_skill,
 )
+from .machine import MachineModel
 from .plans import (
     Blocker,
+    BlockerOutput,
+    FileStateOutput,
     LocalPlan,
+    PlanAction,
     PlannedFileMutation,
     apply_local_plan,
     make_delete,
@@ -42,7 +49,7 @@ from .plans import (
 )
 from .release import catalog, installed_distribution_version
 from .resources import resource_mode
-from .workspace import resolve_workspace_identity
+from .workspace import WorkspaceIdentity, resolve_workspace_identity
 
 
 PROJECT_SCHEMA_VERSION = CONFIG_SCHEMA_VERSION
@@ -50,13 +57,214 @@ PROJECT_FILE = "svc.json"
 CODEX_SKILL_FILE = ".agents/skills/svc/SKILL.md"
 AGENTS_FILE = "AGENTS.md"
 DOCS_INDEX_FILE = "docs/index.md"
+GuidanceKind: TypeAlias = Literal[
+    "agent-router", "docs-navigation", "legacy-cli-skill", "local-config-ignore"
+]
+NextAction: TypeAlias = Literal[
+    "plan-integration-establishment",
+    "repair-project-configuration",
+    "plan-project-upgrade",
+    "migrate-project-configuration",
+    "plan-integration-repair",
+    "install-compatible-corpus",
+    "continue",
+]
+InitSurface: TypeAlias = Literal[
+    "project-state",
+    "local-config-ignore",
+    "agent-router",
+    "docs-navigation",
+    "legacy-cli-skill",
+]
+InitExtent: TypeAlias = Literal["whole-file", "svc-managed-block"]
+
+
+class CorpusBaselineOutput(MachineModel):
+    disposition: Literal["create", "unchanged"]
+    version: str | None
+
+
+class InitOperationOutput(MachineModel):
+    action: PlanAction
+    path: str
+    surface: InitSurface
+    extent: InitExtent
+    before: FileStateOutput
+    after: FileStateOutput
+
+
+class InitVerificationOutput(MachineModel):
+    scope: Literal["planned-path-postconditions"] = "planned-path-postconditions"
+    status: Literal["passed"] = "passed"
+
+
+class InitPlanOutput(MachineModel):
+    schema_version: Literal[2] = 2
+    command: Literal["init"] = "init"
+    mode: Literal["plan"] = "plan"
+    status: Literal["blocked", "ready", "noop"]
+    repo: str
+    intent: Literal["establish", "repair"]
+    corpus_version: str
+    corpus_baseline: CorpusBaselineOutput
+    operations: tuple[InitOperationOutput, ...]
+    blockers: tuple[BlockerOutput, ...]
+    plan_digest: str | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+
+class InitApplyOutput(MachineModel):
+    schema_version: Literal[2] = 2
+    command: Literal["init"] = "init"
+    mode: Literal["apply"] = "apply"
+    status: Literal["noop", "applied"]
+    repo: str
+    intent: Literal["establish", "repair"]
+    corpus_version: str
+    corpus_baseline: CorpusBaselineOutput
+    plan_digest: str
+    operations: tuple[InitOperationOutput, ...]
+    verification: InitVerificationOutput
+
+
+class ProjectMissingStatus(MachineModel):
+    path: str
+    status: Literal["missing"] = "missing"
+    corpus_version: None = None
+
+
+class ProjectInvalidStatus(MachineModel):
+    path: str
+    status: Literal["invalid"] = "invalid"
+    message: str
+
+
+class ProjectSchemaBlockedStatus(MachineModel):
+    path: str
+    status: Literal["schema-write-blocked"] = "schema-write-blocked"
+    schema_version: int
+    corpus_version: str
+
+
+class ProjectVersionStatus(MachineModel):
+    path: str
+    status: Literal["current", "corpus-behind", "corpus-ahead"]
+    schema_version: int
+    corpus_version: str
+
+
+ProjectStatus: TypeAlias = (
+    ProjectMissingStatus
+    | ProjectInvalidStatus
+    | ProjectSchemaBlockedStatus
+    | ProjectVersionStatus
+)
+
+
+class ConfigurationUnavailableStatus(MachineModel):
+    status: Literal["invalid", "not-configured", "not-inspected"]
+    message: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    reason: str | None = Field(default=None, exclude_if=lambda value: value is None)
+
+
+class ConfigurationFileStatus(MachineModel):
+    path: str
+    status: Literal["valid", "absent"]
+    digest: str | None
+
+
+class ConfigurationEffectiveStatus(MachineModel):
+    status: Literal["valid"] = "valid"
+    digest: str
+
+
+class ConfigurationCurrentStatus(MachineModel):
+    status: Literal["current"] = "current"
+    base: ConfigurationFileStatus
+    local: ConfigurationFileStatus
+    effective: ConfigurationEffectiveStatus
+
+
+ConfigurationStatus: TypeAlias = (
+    ConfigurationUnavailableStatus | ConfigurationCurrentStatus
+)
+
+
+class DeclaredDevStatus(MachineModel):
+    status: Literal["unavailable", "not-declared", "declared"]
+    observation: Literal["declaration-only"] = "declaration-only"
+    targets: tuple[str, ...]
+
+
+class DeclaredRunStatus(MachineModel):
+    status: Literal["unavailable", "not-declared", "declared"]
+    observation: Literal["declaration-only"] = "declaration-only"
+    entries: tuple[str, ...]
+
+
+class GuidanceStatus(MachineModel):
+    path: str
+    kind: GuidanceKind
+    status: IntegrationInspectionStatus
+    message: str | None = Field(default=None, exclude_if=lambda value: value is None)
+
+
+class NextActionOutput(MachineModel):
+    action: NextAction
+    reason: str
+    command: tuple[str, ...] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+
+class CorpusStatusOutput(MachineModel):
+    status: Literal["absent", "behind", "current", "ahead", "unavailable"]
+    project_version: str | None
+    available_version: str
+
+
+class IntegrationAnomaly(MachineModel):
+    path: str
+    kind: GuidanceKind
+    status: IntegrationInspectionStatus
+
+
+class IntegrationStatusOutput(MachineModel):
+    status: Literal["blocked", "repairable", "current"]
+    anomalies: tuple[IntegrationAnomaly, ...]
+
+
+class RuntimeStatusOutput(MachineModel):
+    status: Literal["source-tree", "installed"]
+
+
+class RootStatusOutput(MachineModel):
+    schema_version: Literal[2] = 2
+    status: Literal["unadopted", "malformed", "actionable", "healthy"]
+    next: NextActionOutput
+    installed_cli_version: str | None
+    available_corpus_version: str
+    resource_mode: Literal["source", "wheel"]
+    runtime: RuntimeStatusOutput
+    workspace: WorkspaceIdentity
+    project: ProjectStatus
+    corpus: CorpusStatusOutput
+    configuration: ConfigurationStatus
+    dev: DeclaredDevStatus
+    run: DeclaredRunStatus
+    managed_ignore: GuidanceStatus
+    guidance: tuple[GuidanceStatus, ...]
+    retired_skill: GuidanceStatus
+    integration: IntegrationStatusOutput
+    healthy: bool
 
 
 @dataclass(frozen=True)
 class InitPlan:
     local_plan: LocalPlan
-    intent: str
-    corpus_baseline: dict[str, object]
+    intent: Literal["establish", "repair"]
+    corpus_baseline: CorpusBaselineOutput
 
     @property
     def repo(self) -> Path:
@@ -79,7 +287,7 @@ class InitPlan:
         return self.local_plan.blockers
 
     @property
-    def status(self) -> str:
+    def status(self) -> Literal["blocked", "ready", "noop"]:
         return self.local_plan.status
 
     @property
@@ -95,9 +303,9 @@ class InitPlan:
             "repo": str(self.repo),
             "intent": self.intent,
             "corpus_version": self.corpus_version,
-            "corpus_baseline": self.corpus_baseline,
+            "corpus_baseline": self.corpus_baseline.as_dict(),
             "operations": [
-                _init_operation(mutation, signature=True) for mutation in self.mutations
+                _init_operation_signature(mutation) for mutation in self.mutations
             ],
             "blockers": [
                 {"code": blocker.code, "path": blocker.path}
@@ -105,24 +313,19 @@ class InitPlan:
             ],
         }
 
-    def as_dict(self) -> dict[str, object]:
-        result: dict[str, object] = {
-            "schema_version": 2,
-            "command": "init",
-            "mode": "plan",
-            "status": self.status,
-            "repo": str(self.repo),
-            "intent": self.intent,
-            "corpus_version": self.corpus_version,
-            "corpus_baseline": self.corpus_baseline,
-            "operations": []
+    def as_output(self) -> InitPlanOutput:
+        return InitPlanOutput(
+            status=cast(Literal["blocked", "ready", "noop"], self.status),
+            repo=str(self.repo),
+            intent=self.intent,
+            corpus_version=self.corpus_version,
+            corpus_baseline=self.corpus_baseline,
+            operations=()
             if self.blockers
-            else [_init_operation(mutation) for mutation in self.mutations],
-            "blockers": [blocker.as_dict() for blocker in self.blockers],
-        }
-        if self.digest is not None:
-            result["plan_digest"] = self.digest
-        return result
+            else tuple(_init_operation(mutation) for mutation in self.mutations),
+            blockers=tuple(blocker.as_output() for blocker in self.blockers),
+            plan_digest=self.digest,
+        )
 
 
 def render_project_state(corpus_version: str) -> bytes:
@@ -168,11 +371,13 @@ def plan_init(repo: Path) -> InitPlan:
     blockers: list[Blocker] = []
     writes = []
     state_content = _read_project_content(root, blockers)
-    intent = "establish" if state_content is None else "repair"
-    baseline: dict[str, object] = {
-        "disposition": "create" if state_content is None else "unchanged",
-        "version": target_version if state_content is None else None,
-    }
+    intent: Literal["establish", "repair"] = (
+        "establish" if state_content is None else "repair"
+    )
+    baseline = CorpusBaselineOutput(
+        disposition="create" if state_content is None else "unchanged",
+        version=target_version if state_content is None else None,
+    )
     if state_content is None and not any(
         blocker.path == PROJECT_FILE for blocker in blockers
     ):
@@ -206,7 +411,10 @@ def plan_init(repo: Path) -> InitPlan:
             blockers.append(Blocker("invalid-project-state", PROJECT_FILE, str(error)))
         else:
             _block_noncurrent_schema(state, blockers)
-            baseline["version"] = _state_corpus_version(state)
+            baseline = CorpusBaselineOutput(
+                disposition=baseline.disposition,
+                version=_state_corpus_version(state),
+            )
             if not blockers:
                 try:
                     load_config(root)
@@ -253,7 +461,7 @@ def plan_init(repo: Path) -> InitPlan:
     )
 
 
-def apply_init(plan: InitPlan, approved_digest: str) -> dict[str, object]:
+def apply_init(plan: InitPlan, approved_digest: str) -> InitApplyOutput:
     if plan.digest is None:
         raise SvcError(
             "plan-blocked",
@@ -286,36 +494,32 @@ def apply_init(plan: InitPlan, approved_digest: str) -> dict[str, object]:
             **error.details,
         }
         raise
-    return {
-        "schema_version": 2,
-        "command": "init",
-        "mode": "apply",
-        "status": result["status"],
-        "repo": str(plan.repo),
-        "intent": plan.intent,
-        "corpus_version": plan.corpus_version,
-        "corpus_baseline": plan.corpus_baseline,
-        "plan_digest": approved_digest,
-        "operations": [_init_operation(mutation) for mutation in plan.mutations],
-        "verification": {
-            "scope": "planned-path-postconditions",
-            "status": "passed",
-        },
-    }
+    return InitApplyOutput(
+        status=result.status,
+        repo=str(plan.repo),
+        intent=plan.intent,
+        corpus_version=plan.corpus_version,
+        corpus_baseline=plan.corpus_baseline,
+        plan_digest=approved_digest,
+        operations=tuple(_init_operation(mutation) for mutation in plan.mutations),
+        verification=InitVerificationOutput(),
+    )
 
 
-def inspect_status(repo: Path) -> dict[str, object]:
+def inspect_status(repo: Path) -> RootStatusOutput:
     """Inspect one repository without probing or changing a dev capability."""
 
     root = _require_repo(repo)
     corpus = catalog()
     installed_cli_version = installed_distribution_version()
-    runtime_status = "source-tree" if installed_cli_version is None else "installed"
+    runtime_status: Literal["source-tree", "installed"] = (
+        "source-tree" if installed_cli_version is None else "installed"
+    )
     project = _inspect_project(root, corpus.corpus_version)
     configuration, resolved = _inspect_configuration(root, project)
     dev = _inspect_dev_declaration(resolved)
     run = _inspect_run_declaration(resolved)
-    guidance = [
+    guidance = (
         _inspect_guidance(
             root,
             AGENTS_FILE,
@@ -328,7 +532,7 @@ def inspect_status(repo: Path) -> dict[str, object]:
             "docs-navigation",
             lambda content: inspect_navigation(content, DOCS_INDEX_FILE),
         ),
-    ]
+    )
     retired_skill = _inspect_guidance(
         root,
         CODEX_SKILL_FILE,
@@ -339,11 +543,11 @@ def inspect_status(repo: Path) -> dict[str, object]:
         root, ".gitignore", "local-config-ignore", inspect_local_config_ignore
     )
     healthy = (
-        project["status"] == "current"
-        and configuration["status"] == "current"
-        and managed_ignore["status"] == "current"
-        and all(item["status"] == "current" for item in guidance)
-        and retired_skill["status"] in {"missing", "unowned"}
+        project.status == "current"
+        and configuration.status == "current"
+        and managed_ignore.status == "current"
+        and all(item.status == "current" for item in guidance)
+        and retired_skill.status in {"missing", "unowned"}
     )
     status, next_action = _status_decision(
         root,
@@ -355,26 +559,25 @@ def inspect_status(repo: Path) -> dict[str, object]:
     )
     corpus_status = _corpus_status(project, corpus.corpus_version)
     integration_status = _integration_status(guidance, managed_ignore, retired_skill)
-    return {
-        "schema_version": 2,
-        "status": status,
-        "next": next_action,
-        "installed_cli_version": installed_cli_version,
-        "available_corpus_version": corpus.corpus_version,
-        "resource_mode": resource_mode(),
-        "runtime": {"status": runtime_status},
-        "workspace": resolve_workspace_identity(root).as_dict(),
-        "project": project,
-        "corpus": corpus_status,
-        "configuration": configuration,
-        "dev": dev,
-        "run": run,
-        "managed_ignore": managed_ignore,
-        "guidance": guidance,
-        "retired_skill": retired_skill,
-        "integration": integration_status,
-        "healthy": healthy,
-    }
+    return RootStatusOutput(
+        status=status,
+        next=next_action,
+        installed_cli_version=installed_cli_version,
+        available_corpus_version=corpus.corpus_version,
+        resource_mode=resource_mode(),
+        runtime=RuntimeStatusOutput(status=runtime_status),
+        workspace=resolve_workspace_identity(root),
+        project=project,
+        corpus=corpus_status,
+        configuration=configuration,
+        dev=dev,
+        run=run,
+        managed_ignore=managed_ignore,
+        guidance=guidance,
+        retired_skill=retired_skill,
+        integration=integration_status,
+        healthy=healthy,
+    )
 
 
 def _require_repo(repo: Path) -> Path:
@@ -464,10 +667,8 @@ def _plan_retired_skill(
     return []
 
 
-def _init_operation(
-    mutation: PlannedFileMutation, *, signature: bool = False
-) -> dict[str, object]:
-    surfaces = {
+def _init_operation(mutation: PlannedFileMutation) -> InitOperationOutput:
+    surfaces: dict[str, tuple[InitSurface, InitExtent]] = {
         PROJECT_FILE: ("project-state", "whole-file"),
         ".gitignore": ("local-config-ignore", "svc-managed-block"),
         AGENTS_FILE: ("agent-router", "svc-managed-block"),
@@ -475,146 +676,141 @@ def _init_operation(
         CODEX_SKILL_FILE: ("legacy-cli-skill", "whole-file"),
     }
     surface, extent = surfaces[mutation.path]
-    result: dict[str, object] = {
-        "action": mutation.action,
-        "path": mutation.path,
-        "surface": surface,
-        "extent": extent,
-        "before": mutation.before.as_dict(),
-        "after": mutation.after.as_dict(),
+    return InitOperationOutput(
+        action=mutation.action,
+        path=mutation.path,
+        surface=surface,
+        extent=extent,
+        before=mutation.before.as_output(),
+        after=mutation.after.as_output(),
+    )
+
+
+def _init_operation_signature(mutation: PlannedFileMutation) -> dict[str, object]:
+    return {
+        **_init_operation(mutation).as_dict(),
+        "parent_preconditions": [list(item) for item in mutation.parent_preconditions],
     }
-    if signature:
-        result["parent_preconditions"] = [
-            list(item) for item in mutation.parent_preconditions
-        ]
-    return result
 
 
-def _inspect_project(root: Path, available_version: str) -> dict[str, object]:
+def _inspect_project(root: Path, available_version: str) -> ProjectStatus:
     try:
         content = _read_optional(root, PROJECT_FILE)
     except SvcError as error:
-        return {"path": PROJECT_FILE, "status": "invalid", "message": error.message}
+        return ProjectInvalidStatus(path=PROJECT_FILE, message=error.message)
     if content is None:
-        return {
-            "path": PROJECT_FILE,
-            "status": "missing",
-            "corpus_version": None,
-        }
+        return ProjectMissingStatus(path=PROJECT_FILE)
     try:
         state = parse_project_state(content)
     except ValueError as error:
-        return {"path": PROJECT_FILE, "status": "invalid", "message": str(error)}
+        return ProjectInvalidStatus(path=PROJECT_FILE, message=str(error))
     if state.schema_version != PROJECT_SCHEMA_VERSION:
-        return {
-            "path": PROJECT_FILE,
-            "status": "schema-write-blocked",
-            "schema_version": state.schema_version,
-            "corpus_version": _state_corpus_version(state),
-        }
-    return {
-        "path": PROJECT_FILE,
-        "status": "current"
+        return ProjectSchemaBlockedStatus(
+            path=PROJECT_FILE,
+            schema_version=state.schema_version,
+            corpus_version=_state_corpus_version(state),
+        )
+    status: Literal["current", "corpus-behind", "corpus-ahead"] = (
+        "current"
         if _state_corpus_version(state) == available_version
         else (
             "corpus-behind"
             if Version(_state_corpus_version(state)) < Version(available_version)
             else "corpus-ahead"
-        ),
-        "schema_version": state.schema_version,
-        "corpus_version": _state_corpus_version(state),
-    }
+        )
+    )
+    return ProjectVersionStatus(
+        path=PROJECT_FILE,
+        status=status,
+        schema_version=state.schema_version,
+        corpus_version=_state_corpus_version(state),
+    )
 
 
 def _inspect_configuration(
     root: Path,
-    project: dict[str, object],
-) -> tuple[dict[str, object], ResolvedConfig | None]:
-    project_status = str(project["status"])
+    project: ProjectStatus,
+) -> tuple[ConfigurationStatus, ResolvedConfig | None]:
+    project_status = project.status
     if project_status == "missing":
         try:
             local = _read_optional(root, LOCAL_CONFIG_FILE)
         except SvcError as error:
-            return {"status": "invalid", "message": error.message}, None
+            return ConfigurationUnavailableStatus(
+                status="invalid", message=error.message
+            ), None
         if local is None:
-            return {"status": "not-configured"}, None
-        return {
-            "status": "invalid",
-            "message": f"{LOCAL_CONFIG_FILE} exists while {PROJECT_FILE} is absent.",
-        }, None
+            return ConfigurationUnavailableStatus(status="not-configured"), None
+        return ConfigurationUnavailableStatus(
+            status="invalid",
+            message=f"{LOCAL_CONFIG_FILE} exists while {PROJECT_FILE} is absent.",
+        ), None
     if project_status not in {"current", "corpus-behind", "corpus-ahead"}:
-        return {
-            "status": "not-inspected",
-            "reason": "project-state-not-current-schema",
-        }, None
+        return ConfigurationUnavailableStatus(
+            status="not-inspected", reason="project-state-not-current-schema"
+        ), None
     try:
         resolved = load_config(root)
     except ConfigError as error:
-        return {"status": "invalid", "message": str(error)}, None
+        return ConfigurationUnavailableStatus(
+            status="invalid", message=str(error)
+        ), None
     return (
-        {
-            "status": "current",
-            "base": {
-                "path": PROJECT_FILE,
-                "status": "valid",
-                "digest": resolved.base_digest,
-            },
-            "local": {
-                "path": LOCAL_CONFIG_FILE,
-                "status": "absent" if resolved.local is None else "valid",
-                "digest": resolved.local_digest,
-            },
-            "effective": {"status": "valid", "digest": resolved.effective_digest},
-        },
+        ConfigurationCurrentStatus(
+            base=ConfigurationFileStatus(
+                path=PROJECT_FILE,
+                status="valid",
+                digest=resolved.base_digest,
+            ),
+            local=ConfigurationFileStatus(
+                path=LOCAL_CONFIG_FILE,
+                status="absent" if resolved.local is None else "valid",
+                digest=resolved.local_digest,
+            ),
+            effective=ConfigurationEffectiveStatus(digest=resolved.effective_digest),
+        ),
         resolved,
     )
 
 
-def _inspect_dev_declaration(resolved: ResolvedConfig | None) -> dict[str, object]:
-    result: dict[str, object] = {
-        "observation": "declaration-only",
-        "targets": [],
-    }
+def _inspect_dev_declaration(resolved: ResolvedConfig | None) -> DeclaredDevStatus:
     if resolved is None:
-        return {"status": "unavailable", **result}
+        return DeclaredDevStatus(status="unavailable", targets=())
     dev = resolved.effective.dev
     if dev is None:
-        return {"status": "not-declared", **result}
-    return {
-        "status": "declared",
-        "observation": "declaration-only",
-        "targets": sorted(dev.targets),
-    }
+        return DeclaredDevStatus(status="not-declared", targets=())
+    return DeclaredDevStatus(status="declared", targets=tuple(sorted(dev.targets)))
 
 
-def _inspect_run_declaration(resolved: ResolvedConfig | None) -> dict[str, object]:
-    result: dict[str, object] = {"observation": "declaration-only", "entries": []}
+def _inspect_run_declaration(resolved: ResolvedConfig | None) -> DeclaredRunStatus:
     if resolved is None:
-        return {"status": "unavailable", **result}
+        return DeclaredRunStatus(status="unavailable", entries=())
     entries = sorted(resolved.base.run)
-    return {
-        "status": "declared" if entries else "not-declared",
-        "observation": "declaration-only",
-        "entries": entries,
-    }
+    return DeclaredRunStatus(
+        status="declared" if entries else "not-declared",
+        entries=tuple(entries),
+    )
 
 
 def _status_decision(
     root: Path,
-    project: dict[str, object],
-    configuration: dict[str, object],
-    guidance: list[dict[str, str]],
-    managed_ignore: dict[str, str],
-    retired_skill: dict[str, str],
-) -> tuple[str, dict[str, object]]:
-    project_status = str(project["status"])
-    configuration_status = str(configuration["status"])
+    project: ProjectStatus,
+    configuration: ConfigurationStatus,
+    guidance: tuple[GuidanceStatus, ...],
+    managed_ignore: GuidanceStatus,
+    retired_skill: GuidanceStatus,
+) -> tuple[
+    Literal["unadopted", "malformed", "actionable", "healthy"],
+    NextActionOutput,
+]:
+    project_status = project.status
+    configuration_status = configuration.status
     if project_status == "missing":
         if configuration_status == "not-configured":
             return "unadopted", _next_action(
                 "plan-integration-establishment",
                 "Project SVC integration is absent; inspect the non-mutating init plan.",
-                command=["svc", "init", str(root)],
+                command=("svc", "init", str(root)),
             )
         return "malformed", _next_action(
             "repair-project-configuration",
@@ -626,28 +822,31 @@ def _status_decision(
             "Project configuration is invalid; repair the Consumer-owned file before continuing.",
         )
     if project_status == "schema-write-blocked":
-        if project.get("schema_version") == 2:
+        if (
+            isinstance(project, ProjectSchemaBlockedStatus)
+            and project.schema_version == 2
+        ):
             return "actionable", _next_action(
                 "plan-project-upgrade",
                 "Project configuration schema has a supported exact migration.",
-                command=["svc", "upgrade", str(root), "--target", "config"],
+                command=("svc", "upgrade", str(root), "--target", "config"),
             )
         return "actionable", _next_action(
             "migrate-project-configuration",
             "Project configuration schema is outside the automatic migration range.",
         )
     integration = _integration_status(guidance, managed_ignore, retired_skill)
-    if integration["status"] != "current":
+    if integration.status != "current":
         return "actionable", _next_action(
             "plan-integration-repair",
             "Managed SVC integration needs review; inspect the non-mutating init plan.",
-            command=["svc", "init", str(root)],
+            command=("svc", "init", str(root)),
         )
     if project_status == "corpus-behind":
         return "actionable", _next_action(
             "plan-project-upgrade",
             "The project Corpus baseline is behind the installed Corpus.",
-            command=["svc", "upgrade", str(root), "--target", "corpus"],
+            command=("svc", "upgrade", str(root), "--target", "corpus"),
         )
     if project_status == "corpus-ahead":
         return "actionable", _next_action(
@@ -661,53 +860,54 @@ def _status_decision(
 
 
 def _next_action(
-    action: str,
+    action: NextAction,
     reason: str,
     *,
-    command: list[str] | None = None,
-) -> dict[str, object]:
-    result: dict[str, object] = {
-        "action": action,
-        "reason": reason,
-    }
-    if command is not None:
-        result["command"] = command
-    return result
+    command: tuple[str, ...] | None = None,
+) -> NextActionOutput:
+    return NextActionOutput(action=action, reason=reason, command=command)
 
 
 def _corpus_status(
-    project: dict[str, object], available_version: str
-) -> dict[str, object]:
-    project_status = str(project["status"])
-    version = project.get("corpus_version")
-    relation = {
-        "missing": "absent",
-        "corpus-behind": "behind",
-        "current": "current",
-        "corpus-ahead": "ahead",
-    }.get(project_status, "unavailable")
-    return {
-        "status": relation,
-        "project_version": version,
-        "available_version": available_version,
-    }
+    project: ProjectStatus, available_version: str
+) -> CorpusStatusOutput:
+    project_status = project.status
+    version = (
+        project.corpus_version
+        if not isinstance(project, ProjectInvalidStatus)
+        else None
+    )
+    relation = cast(
+        Literal["absent", "behind", "current", "ahead", "unavailable"],
+        {
+            "missing": "absent",
+            "corpus-behind": "behind",
+            "current": "current",
+            "corpus-ahead": "ahead",
+        }.get(project_status, "unavailable"),
+    )
+    return CorpusStatusOutput(
+        status=relation,
+        project_version=version,
+        available_version=available_version,
+    )
 
 
 def _integration_status(
-    guidance: list[dict[str, str]],
-    managed_ignore: dict[str, str],
-    retired_skill: dict[str, str],
-) -> dict[str, object]:
+    guidance: tuple[GuidanceStatus, ...],
+    managed_ignore: GuidanceStatus,
+    retired_skill: GuidanceStatus,
+) -> IntegrationStatusOutput:
     surfaces = [managed_ignore, *guidance, retired_skill]
-    blocked = [item for item in surfaces if item["status"] == "modified"]
+    blocked = [item for item in surfaces if item.status == "modified"]
     repairable = [
         item
         for item in surfaces
-        if item["status"] in {"missing", "unanchored", "outdated", "clean-generated"}
-        and not (item["kind"] == "legacy-cli-skill" and item["status"] == "missing")
+        if item.status in {"missing", "unanchored", "outdated", "clean-generated"}
+        and not (item.kind == "legacy-cli-skill" and item.status == "missing")
     ]
     if blocked:
-        status = "blocked"
+        status: Literal["blocked", "repairable", "current"] = "blocked"
         anomalies = blocked + repairable
     elif repairable:
         status = "repairable"
@@ -715,13 +915,13 @@ def _integration_status(
     else:
         status = "current"
         anomalies = []
-    return {
-        "status": status,
-        "anomalies": [
-            {"path": item["path"], "kind": item["kind"], "status": item["status"]}
+    return IntegrationStatusOutput(
+        status=status,
+        anomalies=tuple(
+            IntegrationAnomaly(path=item.path, kind=item.kind, status=item.status)
             for item in anomalies
-        ],
-    }
+        ),
+    )
 
 
 def _block_noncurrent_schema(
@@ -799,17 +999,32 @@ def _skip_json_space(text: str, index: int) -> int:
 def _inspect_guidance(
     root: Path,
     relative: str,
-    kind: str,
+    kind: GuidanceKind,
     inspect: Callable[[bytes | None], IntegrationInspection],
-) -> dict[str, str]:
+) -> GuidanceStatus:
     try:
         content = _read_optional(root, relative)
         inspection = inspect(content)
     except (IntegrationProblem, SvcError) as error:
-        return {
-            "path": relative,
-            "kind": kind,
-            "status": "modified",
-            "message": str(error),
-        }
-    return {"path": relative, "kind": kind, "status": inspection.status}
+        return GuidanceStatus(
+            path=relative,
+            kind=kind,
+            status="modified",
+            message=str(error),
+        )
+    return GuidanceStatus(
+        path=relative,
+        kind=kind,
+        status=cast(
+            Literal[
+                "clean-generated",
+                "current",
+                "missing",
+                "modified",
+                "outdated",
+                "unanchored",
+                "unowned",
+            ],
+            inspection.status,
+        ),
+    )

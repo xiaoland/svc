@@ -73,6 +73,7 @@ def test_single_profile_transform_is_explicit_lossless_and_v3_valid() -> None:
     assert transformed["run"] == legacy_base()["run"]
     assert parse_project_config(migration.base.content).schema_version == 3
 
+
 def test_base_without_dev_only_separates_versions_and_preserves_run() -> None:
     migration = migrate_v2_to_v3(encoded(legacy_base(dev=False)))
     transformed = json.loads(migration.base.content)
@@ -145,6 +146,4 @@ def test_legacy_source_parser_remains_strict() -> None:
             b'{"schema_version":2,"schema_version":2,"svc_version":"10.0.1"}'
         )
     with pytest.raises(ConfigError):
-        migrate_v2_to_v3(
-            b'{"schema_version":2,"svc_version":"10.0.1","stop":{}}'
-        )
+        migrate_v2_to_v3(b'{"schema_version":2,"svc_version":"10.0.1","stop":{}}')

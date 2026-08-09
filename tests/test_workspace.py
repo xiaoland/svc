@@ -7,7 +7,9 @@ from svc_cli.workspace import resolve_workspace_identity
 
 
 def _git(root: Path, *arguments: str) -> None:
-    subprocess.run(("git", "-C", str(root), *arguments), check=True, capture_output=True, text=True)
+    subprocess.run(
+        ("git", "-C", str(root), *arguments), check=True, capture_output=True, text=True
+    )
 
 
 def test_workspace_owner_distinguishes_linked_worktrees(tmp_path: Path) -> None:

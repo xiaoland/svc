@@ -8,15 +8,16 @@ import os
 import signal
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Literal, TypeAlias
 
 from filelock import BaseFileLock, Timeout
 
 from .._execution import (
     ACTIVE_STATES,
     ExecutionRecord,
+    ExecutionState,
     ExecutionStore,
     LaunchSpec,
     OwnedExecution,
@@ -38,6 +39,7 @@ from ..config import (
     load_config,
 )
 from ..errors import SvcError
+from ..machine import MachineErrorBody, MachineModel
 from ..workspace import WorkspaceIdentity, resolve_workspace_identity
 from .identity import (
     CapabilityIdentity,
@@ -47,16 +49,234 @@ from .identity import (
 )
 from .readiness import (
     ProbeObservation,
-    probe_exec,
-    probe_http,
     probe_target,
-    probe_tcp,
     resolve_dev_cwd,
     resolve_probe,
 )
 
 
 DevSelectedCallback = Callable[[ExecutionRecord, str, str], None]
+DevEnsureStatus: TypeAlias = (
+    ExecutionState
+    | Literal[
+        "reused",
+        "manual-action-required",
+        "lock-timeout",
+        "activation-timeout",
+        "activation-failed",
+        "started",
+        "readiness-timeout",
+        "child-exit",
+        "joined",
+        "conflict",
+        "waiting",
+    ]
+)
+
+
+class DevLogReference(MachineModel):
+    path: str
+    bytes: int
+
+
+class DevMergedLogs(MachineModel):
+    merged: DevLogReference
+
+
+class DevAttempt(MachineModel):
+    machine_exclude_none = True
+
+    caller_role: Literal["owner", "follower"]
+    execution_id: str
+    state: ExecutionState
+    argv: tuple[str, ...]
+    cwd: str
+    logs: DevMergedLogs
+    duration_ms: int | None = None
+    exit_code: int | None = None
+    requested_signal: str | None = None
+    termination_signal: str | None = None
+    failure_reason: str | None = None
+    timed_out: bool | None = None
+
+
+class ManualProvisionOutput(MachineModel):
+    kind: Literal["manual"] = "manual"
+
+
+class ExecProvisionOutput(MachineModel):
+    kind: Literal["exec"] = "exec"
+    mode: Literal["run", "activate"]
+
+
+DevProvisionOutput: TypeAlias = ManualProvisionOutput | ExecProvisionOutput
+
+
+class DevStopDeclaration(MachineModel):
+    kind: Literal["absent", "manual", "exec"]
+
+
+class DevIdentityOutput(MachineModel):
+    schema_version: Literal[2] = 2
+    command: Literal["dev identity"] = "dev identity"
+    workspace: WorkspaceIdentity
+
+
+class DevTargetObservation(MachineModel):
+    machine_exclude_none = True
+
+    target: str
+    effective_target_digest: str
+    capability: CapabilityIdentity
+    probe: ProbeObservation
+    access: tuple[str, ...]
+    provision: DevProvisionOutput
+    continuation: (
+        Literal["blocked-unhealthy-responder", "manual-action-required", "ensure"]
+        | None
+    ) = None
+    probe_argv: tuple[str, ...] | None = None
+
+
+class DevTargetError(MachineModel):
+    target: str
+    effective_target_digest: str
+    error: MachineErrorBody
+
+
+DevTargetStatus: TypeAlias = DevTargetObservation | DevTargetError
+
+
+class DevStatusOutput(MachineModel):
+    machine_exclude_none = True
+
+    schema_version: Literal[2] = 2
+    command: Literal["dev status"] = "dev status"
+    healthy: bool
+    status: Literal[
+        "healthy", "action-required", "invalid-configuration", "not-configured"
+    ]
+    workspace: WorkspaceIdentity
+    reason: str | None = None
+    targets: tuple[DevTargetStatus, ...] | None = None
+
+
+class DevEnsureContext(MachineModel):
+    target: str
+    ready: bool
+    effective_target_digest: str
+    workspace: WorkspaceIdentity
+    capability: CapabilityIdentity
+    access: tuple[str, ...]
+    provision: DevProvisionOutput
+    probe: ProbeObservation
+    probe_argv: tuple[str, ...] | None = None
+
+    def result(
+        self,
+        status: DevEnsureStatus,
+        *,
+        ready: bool | None = None,
+        probe: ProbeObservation | None = None,
+        attempt: DevAttempt | None = None,
+        caller_status: Literal["detached"] | None = None,
+        cleanup: Literal["completed", "unknown"] | None = None,
+        execution_id: str | None = None,
+    ) -> "DevEnsureOutput":
+        return DevEnsureOutput(
+            target=self.target,
+            ready=self.ready if ready is None else ready,
+            status=status,
+            effective_target_digest=self.effective_target_digest,
+            workspace=self.workspace,
+            capability=self.capability,
+            access=self.access,
+            provision=self.provision,
+            probe=self.probe if probe is None else probe,
+            probe_argv=self.probe_argv,
+            attempt=attempt,
+            caller_status=caller_status,
+            cleanup=cleanup,
+            execution_id=execution_id,
+        )
+
+
+class DevEnsureOutput(MachineModel):
+    machine_exclude_none = True
+
+    schema_version: Literal[2] = 2
+    command: Literal["dev ensure"] = "dev ensure"
+    target: str
+    ready: bool | None
+    status: DevEnsureStatus
+    effective_target_digest: str
+    workspace: WorkspaceIdentity
+    capability: CapabilityIdentity
+    access: tuple[str, ...]
+    provision: DevProvisionOutput
+    probe: ProbeObservation | None = None
+    probe_argv: tuple[str, ...] | None = None
+    attempt: DevAttempt | None = None
+    caller_status: Literal["detached"] | None = None
+    cleanup: Literal["completed", "unknown"] | None = None
+    execution_id: str | None = None
+
+
+class DevStopOutput(MachineModel):
+    machine_exclude_none = True
+
+    schema_version: Literal[2] = 2
+    command: Literal["dev stop"] = "dev stop"
+    target: str
+    effective_target_digest: str
+    workspace: WorkspaceIdentity
+    capability: CapabilityIdentity
+    stop: DevStopDeclaration
+    status: Literal[
+        "manual-action-required",
+        "waiting",
+        "stop-failed",
+        "stop-unverified",
+        "still-ready",
+        "stopped",
+    ]
+    ready: bool | None
+    probe: ProbeObservation | None = None
+    probe_error: MachineErrorBody | None = None
+    caller_status: Literal["detached", "interrupted"] | None = None
+    attempt: DevAttempt | None = None
+
+    def with_attempt(self, attempt: DevAttempt) -> "DevStopOutput":
+        return DevStopOutput(
+            target=self.target,
+            effective_target_digest=self.effective_target_digest,
+            workspace=self.workspace,
+            capability=self.capability,
+            stop=self.stop,
+            status=self.status,
+            ready=self.ready,
+            probe=self.probe,
+            probe_error=self.probe_error,
+            caller_status=self.caller_status,
+            attempt=attempt,
+        )
+
+    def with_caller_status(
+        self, caller_status: Literal["detached", "interrupted"]
+    ) -> "DevStopOutput":
+        return DevStopOutput(
+            target=self.target,
+            effective_target_digest=self.effective_target_digest,
+            workspace=self.workspace,
+            capability=self.capability,
+            stop=self.stop,
+            status=self.status,
+            ready=self.ready,
+            probe=self.probe,
+            probe_error=self.probe_error,
+            caller_status=caller_status,
+            attempt=self.attempt,
+        )
 
 
 def ensure_target(
@@ -66,7 +286,7 @@ def ensure_target(
     namespace: str | None = None,
     store: ExecutionStore | None = None,
     on_selected: DevSelectedCallback | None = None,
-) -> dict[str, object]:
+) -> DevEnsureOutput:
     """Ensure one capability without taking over an unowned process."""
 
     try:
@@ -78,7 +298,9 @@ def ensure_target(
             {"reason": str(error)},
         ) from error
     if resolved.effective.dev is None:
-        raise SvcError("dev-not-configured", "This project has no declared dev configuration.")
+        raise SvcError(
+            "dev-not-configured", "This project has no declared dev configuration."
+        )
     targets = resolved.effective.dev.targets
     if target_name not in targets:
         raise SvcError(
@@ -104,7 +326,9 @@ def ensure_target(
     pointer_before = authority.read_coordination("dev", identity.capability_id)
     pointer_before_active = (
         pointer_before is not None
-        and _same_dev_intent(authority.read(pointer_before), "ensure", target_name, intent_digest)
+        and _same_dev_intent(
+            authority.read(pointer_before), "ensure", target_name, intent_digest
+        )
         and authority.read(pointer_before).state in ACTIVE_STATES
     )
     try:
@@ -147,7 +371,7 @@ def stop_target(
     namespace: str | None = None,
     store: ExecutionStore | None = None,
     on_selected: DevSelectedCallback | None = None,
-) -> dict[str, object]:
+) -> DevStopOutput:
     """Run only the target's declared bounded stop action."""
 
     try:
@@ -159,7 +383,9 @@ def stop_target(
             {"reason": str(error)},
         ) from error
     if resolved.effective.dev is None:
-        raise SvcError("dev-not-configured", "This project has no declared dev configuration.")
+        raise SvcError(
+            "dev-not-configured", "This project has no declared dev configuration."
+        )
     targets = resolved.effective.dev.targets
     if target_name not in targets:
         raise SvcError(
@@ -236,9 +462,11 @@ def stop_target(
         lock.release()
 
 
-def inspect_dev_identity(repo: Path, *, namespace: str | None = None) -> dict[str, object]:
+def inspect_dev_identity(
+    repo: Path, *, namespace: str | None = None
+) -> DevIdentityOutput:
     workspace = resolve_workspace_identity(repo, namespace=namespace)
-    return {"schema_version": 2, "command": "dev identity", "workspace": workspace.as_dict()}
+    return DevIdentityOutput(workspace=workspace)
 
 
 def inspect_dev_status(
@@ -246,30 +474,26 @@ def inspect_dev_status(
     target_name: str | None = None,
     *,
     namespace: str | None = None,
-) -> dict[str, object]:
+) -> DevStatusOutput:
     workspace = resolve_workspace_identity(repo, namespace=namespace)
     try:
         resolved = load_config(repo)
     except ConfigError as error:
-        return {
-            "schema_version": 2,
-            "command": "dev status",
-            "healthy": False,
-            "status": "invalid-configuration",
-            "reason": str(error),
-            "workspace": workspace.as_dict(),
-        }
+        return DevStatusOutput(
+            healthy=False,
+            status="invalid-configuration",
+            reason=str(error),
+            workspace=workspace,
+        )
     if resolved.effective.dev is None:
-        return {
-            "schema_version": 2,
-            "command": "dev status",
-            "healthy": False,
-            "status": "not-configured",
-            "workspace": workspace.as_dict(),
-        }
+        return DevStatusOutput(
+            healthy=False,
+            status="not-configured",
+            workspace=workspace,
+        )
     targets = resolved.effective.dev.targets
     names = (target_name,) if target_name is not None else tuple(sorted(targets))
-    entries: list[dict[str, object]] = []
+    entries: list[DevTargetStatus] = []
     for name in names:
         target = targets.get(name)
         if target is None:
@@ -288,40 +512,35 @@ def inspect_dev_status(
                 endpoint_identity=resolved_probe.endpoint_identity,
                 host_key=target.host_key,
             )
-            entry: dict[str, object] = {
-                "target": name,
-                "effective_target_digest": _effective_target_digest(target),
-                "capability": identity.as_dict(),
-                "probe": observed.as_dict(),
-                "access": [
+            entry = DevTargetObservation(
+                target=name,
+                effective_target_digest=_effective_target_digest(target),
+                capability=identity,
+                probe=observed,
+                access=tuple(
                     interpolate_dev_value(value, workspace, target=name)
                     for value in target.access
-                ],
-                "provision": _provision_projection(target),
-            }
-            continuation = _dev_continuation(target, observed)
-            if continuation is not None:
-                entry["continuation"] = continuation
-            if resolved_probe.argv is not None:
-                entry["probe_argv"] = list(resolved_probe.argv)
+                ),
+                provision=_provision_projection(target),
+                continuation=_dev_continuation(target, observed),
+                probe_argv=resolved_probe.argv,
+            )
             entries.append(entry)
         except SvcError as error:
             entries.append(
-                {
-                    "target": name,
-                    "effective_target_digest": _effective_target_digest(target),
-                    "error": error.as_dict()["error"],
-                }
+                DevTargetError(
+                    target=name,
+                    effective_target_digest=_effective_target_digest(target),
+                    error=error.as_output().error,
+                )
             )
     healthy = bool(entries) and all(_entry_is_healthy(entry) for entry in entries)
-    return {
-        "schema_version": 2,
-        "command": "dev status",
-        "status": "healthy" if healthy else "action-required",
-        "healthy": healthy,
-        "workspace": workspace.as_dict(),
-        "targets": entries,
-    }
+    return DevStatusOutput(
+        status="healthy" if healthy else "action-required",
+        healthy=healthy,
+        workspace=workspace,
+        targets=tuple(entries),
+    )
 
 
 def _join_or_claim_stop(
@@ -336,7 +555,7 @@ def _join_or_claim_stop(
     target_digest: str,
     intent_digest: str,
     on_selected: DevSelectedCallback | None,
-) -> dict[str, object]:
+) -> DevStopOutput:
     while True:
         current_id = store.read_coordination("dev", identity.capability_id)
         if current_id is not None:
@@ -429,7 +648,7 @@ def _own_stop(
     target_digest: str,
     intent_digest: str,
     on_selected: DevSelectedCallback | None,
-) -> dict[str, object]:
+) -> DevStopOutput:
     action = target.stop
     if action is None or isinstance(action, ManualStop):
         observed, probe_error = _final_probe(target, workspace, target_name)
@@ -459,7 +678,9 @@ def _own_stop(
         cwd=cwd,
         capture="merged",
     )
-    store.write_coordination("dev", identity.capability_id, published.record.execution_id)
+    store.write_coordination(
+        "dev", identity.capability_id, published.record.execution_id
+    )
     _notify_dev_selected(store, published.record, "owner", on_selected)
     started = start_isolated(store, published, LaunchSpec(argv, cwd, environment))
     if isinstance(started, ExecutionRecord):
@@ -486,8 +707,7 @@ def _own_stop(
             store,
             caller_role="owner",
         )
-        result["caller_status"] = "interrupted"
-        return result
+        return result.with_caller_status("interrupted")
     if settled is None:
         settled = terminate_owned(store, started)
         return _stop_result(
@@ -522,12 +742,13 @@ def _stop_result(
     record: ExecutionRecord,
     store: ExecutionStore,
     *,
-    caller_role: str,
+    caller_role: Literal["owner", "follower"],
     timed_out: bool = False,
-) -> dict[str, object]:
+) -> DevStopOutput:
     observed, probe_error = _final_probe(target, workspace, target_name)
     ready = observed.healthy if observed is not None else None
     action_succeeded = record.state == "exited" and record.exit_code == 0
+    status: Literal["stop-failed", "stop-unverified", "still-ready", "stopped"]
     if not action_succeeded or timed_out:
         status = "stop-failed"
     elif ready is None:
@@ -547,10 +768,9 @@ def _stop_result(
         probe=observed,
         probe_error=probe_error,
     )
-    result["attempt"] = _attempt_projection(
-        record, store, caller_role=caller_role, timed_out=timed_out
+    return result.with_attempt(
+        _attempt_projection(record, store, caller_role=caller_role, timed_out=timed_out)
     )
-    return result
 
 
 def _detached_stop_result(
@@ -561,7 +781,7 @@ def _detached_stop_result(
     target_digest: str,
     record: ExecutionRecord,
     store: ExecutionStore,
-) -> dict[str, object]:
+) -> DevStopOutput:
     result = _stop_payload(
         target_name,
         workspace,
@@ -573,9 +793,9 @@ def _detached_stop_result(
         probe=None,
         probe_error=None,
     )
-    result["caller_status"] = "detached"
-    result["attempt"] = _attempt_projection(record, store, caller_role="follower")
-    return result
+    return result.with_attempt(
+        _attempt_projection(record, store, caller_role="follower")
+    ).with_caller_status("detached")
 
 
 def _stop_payload(
@@ -584,67 +804,63 @@ def _stop_payload(
     identity: CapabilityIdentity,
     target_digest: str,
     *,
-    status: str,
+    status: Literal[
+        "manual-action-required",
+        "waiting",
+        "stop-failed",
+        "stop-unverified",
+        "still-ready",
+        "stopped",
+    ],
     ready: bool | None,
-    stop_kind: str,
+    stop_kind: Literal["absent", "manual", "exec"],
     probe: ProbeObservation | None,
-    probe_error: dict[str, object] | None,
-) -> dict[str, object]:
-    result: dict[str, object] = {
-        "schema_version": 2,
-        "command": "dev stop",
-        "target": target_name,
-        "effective_target_digest": target_digest,
-        "workspace": workspace.as_dict(),
-        "capability": identity.as_dict(),
-        "stop": {"kind": stop_kind},
-        "status": status,
-        "ready": ready,
-    }
-    if probe is not None:
-        result["probe"] = probe.as_dict()
-    if probe_error is not None:
-        result["probe_error"] = probe_error
-    return result
+    probe_error: MachineErrorBody | None,
+) -> DevStopOutput:
+    return DevStopOutput(
+        target=target_name,
+        effective_target_digest=target_digest,
+        workspace=workspace,
+        capability=identity,
+        stop=DevStopDeclaration(kind=stop_kind),
+        status=status,
+        ready=ready,
+        probe=probe,
+        probe_error=probe_error,
+    )
 
 
 def _attempt_projection(
     record: ExecutionRecord,
     store: ExecutionStore,
     *,
-    caller_role: str,
+    caller_role: Literal["owner", "follower"],
     timed_out: bool = False,
-) -> dict[str, object]:
-    result: dict[str, object] = {
-        "caller_role": caller_role,
-        "execution_id": record.execution_id,
-        "state": record.state,
-        "argv": list(record.argv),
-        "cwd": record.cwd,
-        "logs": {"merged": store.log_reference(record, "merged").as_dict()},
-    }
-    for key in (
-        "duration_ms",
-        "exit_code",
-        "requested_signal",
-        "termination_signal",
-        "failure_reason",
-    ):
-        value = getattr(record, key)
-        if value is not None:
-            result[key] = value
-    if timed_out:
-        result["timed_out"] = True
-    return result
+) -> DevAttempt:
+    log = store.log_reference(record, "merged")
+    return DevAttempt(
+        caller_role=caller_role,
+        execution_id=record.execution_id,
+        state=record.state,
+        argv=record.argv,
+        cwd=record.cwd,
+        logs=DevMergedLogs(merged=DevLogReference(path=log.path, bytes=log.bytes)),
+        duration_ms=record.duration_ms,
+        exit_code=record.exit_code,
+        requested_signal=record.requested_signal,
+        termination_signal=record.termination_signal,
+        failure_reason=record.failure_reason,
+        timed_out=True if timed_out else None,
+    )
 
 
 def _final_probe(
     target: TargetConfig, workspace: WorkspaceIdentity, target_name: str
-) -> tuple[ProbeObservation | None, dict[str, object] | None]:
+) -> tuple[ProbeObservation | None, MachineErrorBody | None]:
     try:
         return probe_target(target, workspace, target_name=target_name), None
     except SvcError as error:
-        return None, error.as_dict()["error"]
+        return None, error.as_output().error
 
 
 def _ensure_under_lock(
@@ -657,7 +873,7 @@ def _ensure_under_lock(
     intent_digest: str,
     deadline: float,
     on_selected: DevSelectedCallback | None,
-) -> dict[str, object]:
+) -> DevEnsureOutput:
     current_id = store.read_coordination("dev", identity.capability_id)
     if current_id is not None:
         current = store.read(current_id)
@@ -672,7 +888,7 @@ def _ensure_under_lock(
     )
     base = _result_base(target, target_digest, workspace, identity, observed)
     if observed.healthy:
-        return {**base, "status": "reused"}
+        return base.result("reused")
     if observed.responded:
         raise _occupied_error(base)
 
@@ -681,7 +897,7 @@ def _ensure_under_lock(
         raise SvcError(
             "manual-action-required",
             "This target requires the consumer-declared manual provisioning action.",
-            {**base, "status": "manual-action-required"},
+            base.result("manual-action-required").as_dict(),
         )
     launched = _provision(
         store,
@@ -723,7 +939,7 @@ def _join_dev_attempt(
     intent_digest: str,
     deadline: float,
     on_selected: DevSelectedCallback | None,
-) -> dict[str, object]:
+) -> DevEnsureOutput:
     while _remaining(deadline) > 0:
         current_id = store.read_coordination("dev", identity.capability_id)
         if current_id is not None:
@@ -803,7 +1019,11 @@ def _join_dev_attempt(
         identity,
         probe_target(target, workspace, target_name=target_name, timeout=0),
     )
-    raise SvcError("dev-lock-timeout", "Timed out waiting for another ensure operation.", {**base, "status": "lock-timeout"})
+    raise SvcError(
+        "dev-lock-timeout",
+        "Timed out waiting for another ensure operation.",
+        base.result("lock-timeout").as_dict(),
+    )
 
 
 def _provision(
@@ -813,7 +1033,7 @@ def _provision(
     target_name: str,
     identity: CapabilityIdentity,
     intent_digest: str,
-    base: dict[str, object],
+    base: DevEnsureContext,
     on_selected: DevSelectedCallback | None,
     *,
     timeout: float,
@@ -856,14 +1076,15 @@ def _provision(
             "activation-timeout",
             "The declared activation command did not finish before the readiness deadline.",
             {
-                **base,
-                "status": "activation-timeout",
-                "attempt": _attempt_projection(
-                    terminated, store, caller_role="owner", timed_out=True
-                ),
-                "cleanup": "completed"
-                if terminated.state == "interrupted"
-                else "unknown",
+                **base.result(
+                    "activation-timeout",
+                    attempt=_attempt_projection(
+                        terminated, store, caller_role="owner", timed_out=True
+                    ),
+                    cleanup="completed"
+                    if terminated.state == "interrupted"
+                    else "unknown",
+                ).as_dict()
             },
         )
     if settled.state != "exited" or settled.exit_code != 0:
@@ -871,11 +1092,10 @@ def _provision(
             "activation-failed",
             "The declared activation command failed.",
             {
-                **base,
-                "status": "activation-failed",
-                "attempt": _attempt_projection(
-                    settled, store, caller_role="owner"
-                ),
+                **base.result(
+                    "activation-failed",
+                    attempt=_attempt_projection(settled, store, caller_role="owner"),
+                ).as_dict()
             },
         )
     return settled
@@ -886,10 +1106,10 @@ def _wait_for_external_readiness(
     workspace: WorkspaceIdentity,
     target_name: str,
     deadline: float,
-    base: dict[str, object],
+    base: DevEnsureContext,
     attempt: ExecutionRecord,
     store: ExecutionStore,
-) -> dict[str, object]:
+) -> DevEnsureOutput:
     while _remaining(deadline) > 0:
         observed = probe_target(
             target,
@@ -898,20 +1118,17 @@ def _wait_for_external_readiness(
             timeout=_remaining(deadline),
         )
         if observed.healthy:
-            return {
-                **base,
-                "ready": True,
-                "probe": observed.as_dict(),
-                "status": "started",
-                "attempt": _attempt_projection(
-                    attempt, store, caller_role="owner"
-                ),
-            }
+            return base.result(
+                "started",
+                ready=True,
+                probe=observed,
+                attempt=_attempt_projection(attempt, store, caller_role="owner"),
+            )
         time.sleep(min(target.poll_interval, _remaining(deadline)))
     raise SvcError(
         "readiness-timeout",
         "Activated target did not become ready before its deadline.",
-        {**base, "status": "readiness-timeout"},
+        base.result("readiness-timeout").as_dict(),
     )
 
 
@@ -921,9 +1138,9 @@ def _wait_for_owned_readiness(
     workspace: WorkspaceIdentity,
     target_name: str,
     deadline: float,
-    base: dict[str, object],
+    base: DevEnsureContext,
     owned: OwnedExecution,
-) -> dict[str, object]:
+) -> DevEnsureOutput:
     while _remaining(deadline) > 0:
         if owned.process.poll() is not None:
             settled = wait_owned(store, owned)
@@ -931,14 +1148,15 @@ def _wait_for_owned_readiness(
                 "provision-exited",
                 "The SVC-started provisioner exited before readiness.",
                 {
-                    **base,
-                    "status": "child-exit",
-                    "attempt": _attempt_projection(
-                        settled if settled is not None else owned.record,
-                        store,
-                        caller_role="owner",
-                    ),
-                    "cleanup": "completed",
+                    **base.result(
+                        "child-exit",
+                        attempt=_attempt_projection(
+                            settled if settled is not None else owned.record,
+                            store,
+                            caller_role="owner",
+                        ),
+                        cleanup="completed",
+                    ).as_dict()
                 },
             )
         observed = probe_target(
@@ -951,32 +1169,26 @@ def _wait_for_owned_readiness(
             try:
                 released = release_owned(store, owned)
             except SvcError:
-                try:
+                with suppress(SvcError):
                     terminate_owned(store, owned)
-                except SvcError:
-                    pass
                 raise
-            return {
-                **base,
-                "ready": True,
-                "probe": observed.as_dict(),
-                "status": "started",
-                "attempt": _attempt_projection(
-                    released, store, caller_role="owner"
-                ),
-            }
+            return base.result(
+                "started",
+                ready=True,
+                probe=observed,
+                attempt=_attempt_projection(released, store, caller_role="owner"),
+            )
         time.sleep(min(target.poll_interval, _remaining(deadline)))
     terminated = terminate_owned(store, owned)
     raise SvcError(
         "readiness-timeout",
         "SVC-started provisioner did not become ready before its deadline.",
         {
-            **base,
-            "status": "readiness-timeout",
-            "attempt": _attempt_projection(
-                terminated, store, caller_role="owner"
-            ),
-            "cleanup": "completed" if terminated.state == "interrupted" else "unknown",
+            **base.result(
+                "readiness-timeout",
+                attempt=_attempt_projection(terminated, store, caller_role="owner"),
+                cleanup="completed" if terminated.state == "interrupted" else "unknown",
+            ).as_dict()
         },
     )
 
@@ -991,7 +1203,7 @@ def _await_capability_after_attempt(
     record: ExecutionRecord,
     *,
     store: ExecutionStore | None = None,
-) -> dict[str, object]:
+) -> DevEnsureOutput:
     authority = store
     while record.state in ACTIVE_STATES and _remaining(deadline) > 0:
         time.sleep(min(0.02, _remaining(deadline)))
@@ -1007,31 +1219,29 @@ def _await_capability_after_attempt(
         )
         base = _result_base(target, target_digest, workspace, identity, observed)
         if observed.healthy:
-            result = {**base, "status": "joined"}
-            if authority is not None:
-                result["attempt"] = _attempt_projection(
-                    record, authority, caller_role="follower"
-                )
-            return result
+            attempt = (
+                _attempt_projection(record, authority, caller_role="follower")
+                if authority is not None
+                else None
+            )
+            return base.result("joined", attempt=attempt)
         if observed.responded:
             raise _occupied_error(base)
         if record.state not in {"released", "owner-lost", "exited"}:
             raise _attempt_error(record, base, authority)
         time.sleep(min(target.poll_interval, _remaining(deadline)))
-    observed = probe_target(
-        target, workspace, target_name=target_name, timeout=0
-    )
+    observed = probe_target(target, workspace, target_name=target_name, timeout=0)
     base = _result_base(target, target_digest, workspace, identity, observed)
     if record.state == "owner-lost":
         raise SvcError(
             "dev-owner-lost",
             "The provisioning owner was lost before the capability became ready.",
-            {**base, "status": "owner-lost", "execution_id": record.execution_id},
+            base.result("owner-lost", execution_id=record.execution_id).as_dict(),
         )
     raise SvcError(
         "readiness-timeout",
         "Observed provisioning attempt did not produce readiness before its deadline.",
-        {**base, "status": "readiness-timeout", "execution_id": record.execution_id},
+        base.result("readiness-timeout", execution_id=record.execution_id).as_dict(),
     )
 
 
@@ -1045,7 +1255,7 @@ def _join_ensure_attempt(
     deadline: float,
     record: ExecutionRecord,
     on_selected: DevSelectedCallback | None,
-) -> dict[str, object]:
+) -> DevEnsureOutput:
     _notify_dev_selected(store, record, "follower", on_selected)
     try:
         return _await_capability_after_attempt(
@@ -1059,50 +1269,59 @@ def _join_ensure_attempt(
             store=store,
         )
     except KeyboardInterrupt:
-        return {
-            "schema_version": 2,
-            "command": "dev ensure",
-            "target": target_name,
-            "ready": None,
-            "status": "waiting",
-            "caller_status": "detached",
-            "effective_target_digest": target_digest,
-            "workspace": workspace.as_dict(),
-            "capability": identity.as_dict(),
-            "access": [
+        return DevEnsureOutput(
+            target=target_name,
+            ready=None,
+            status="waiting",
+            caller_status="detached",
+            effective_target_digest=target_digest,
+            workspace=workspace,
+            capability=identity,
+            access=tuple(
                 interpolate_dev_value(value, workspace, target=target_name)
                 for value in target.access
-            ],
-            "provision": _provision_projection(target),
-            "attempt": _attempt_projection(
+            ),
+            provision=_provision_projection(target),
+            attempt=_attempt_projection(
                 store.read(record.execution_id), store, caller_role="follower"
             ),
-        }
+        )
 
 
 def _attempt_error(
     record: ExecutionRecord,
-    base: dict[str, object],
+    base: DevEnsureContext,
     store: ExecutionStore | None,
 ) -> SvcError:
-    details = {**base, "status": record.state, "execution_id": record.execution_id}
-    if store is not None:
-        details["attempt"] = _attempt_projection(
-            record, store, caller_role="follower"
-        )
-    return SvcError("provision-exited", "The shared provisioning attempt did not become ready.", details)
+    attempt = (
+        _attempt_projection(record, store, caller_role="follower")
+        if store is not None
+        else None
+    )
+    details = base.result(
+        record.state,
+        attempt=attempt,
+        execution_id=record.execution_id,
+    ).as_dict()
+    return SvcError(
+        "provision-exited",
+        "The shared provisioning attempt did not become ready.",
+        details,
+    )
 
 
 @contextmanager
 def _cleanup_on_interrupt(
     store: ExecutionStore,
     owned: OwnedExecution,
-    base: dict[str, object],
+    base: DevEnsureContext,
 ) -> Iterator[None]:
     if threading.current_thread() is not threading.main_thread():
         yield
         return
-    previous = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+    previous = {
+        number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)
+    }
 
     def interrupt(_number: int, _frame: object) -> None:
         raise KeyboardInterrupt
@@ -1118,12 +1337,15 @@ def _cleanup_on_interrupt(
                 "ensure-interrupted",
                 "Ensure was interrupted; SVC cleaned up only the launch it started in this attempt.",
                 {
-                    **base,
-                    "status": "interrupted",
-                    "attempt": _attempt_projection(
-                        terminated, store, caller_role="owner"
-                    ),
-                    "cleanup": "completed" if terminated.state == "interrupted" else "unknown",
+                    **base.result(
+                        "interrupted",
+                        attempt=_attempt_projection(
+                            terminated, store, caller_role="owner"
+                        ),
+                        cleanup="completed"
+                        if terminated.state == "interrupted"
+                        else "unknown",
+                    ).as_dict()
                 },
             ) from error
     finally:
@@ -1131,30 +1353,28 @@ def _cleanup_on_interrupt(
             signal.signal(number, handler)
 
 
-def _occupied_error(base: dict[str, object]) -> SvcError:
+def _occupied_error(base: DevEnsureContext) -> SvcError:
     return SvcError(
         "occupied-unhealthy",
         "A declared endpoint responded but did not satisfy readiness; SVC will not take it over.",
-        {**base, "status": "conflict"},
+        base.result("conflict").as_dict(),
     )
 
 
-def _entry_is_healthy(entry: dict[str, object]) -> bool:
-    probe = entry.get("probe")
-    return isinstance(probe, dict) and bool(probe.get("healthy"))
+def _entry_is_healthy(entry: DevTargetStatus) -> bool:
+    return isinstance(entry, DevTargetObservation) and entry.probe.healthy
 
 
-def _provision_projection(target: TargetConfig) -> dict[str, object]:
+def _provision_projection(target: TargetConfig) -> DevProvisionOutput:
     provision = target.provision
-    result: dict[str, object] = {"kind": provision.kind}
     if isinstance(provision, ExecProvision):
-        result["mode"] = provision.mode
-    return result
+        return ExecProvisionOutput(mode=provision.mode)
+    return ManualProvisionOutput()
 
 
 def _dev_continuation(
     target: TargetConfig, observed: ProbeObservation
-) -> str | None:
+) -> Literal["blocked-unhealthy-responder", "manual-action-required", "ensure"] | None:
     if observed.healthy:
         return None
     if observed.responded:
@@ -1170,35 +1390,29 @@ def _result_base(
     workspace: WorkspaceIdentity,
     identity: CapabilityIdentity,
     observed: ProbeObservation,
-) -> dict[str, object]:
-    result: dict[str, object] = {
-        "schema_version": 2,
-        "command": "dev ensure",
-        "target": identity.target,
-        "ready": observed.healthy,
-        "effective_target_digest": target_digest,
-        "workspace": workspace.as_dict(),
-        "capability": identity.as_dict(),
-        "access": [
+) -> DevEnsureContext:
+    resolved_probe = resolve_probe(target, workspace, target_name=identity.target)
+    return DevEnsureContext(
+        target=identity.target,
+        ready=observed.healthy,
+        effective_target_digest=target_digest,
+        workspace=workspace,
+        capability=identity,
+        access=tuple(
             interpolate_dev_value(value, workspace, target=identity.target)
             for value in target.access
-        ],
-        "provision": _provision_projection(target),
-        "probe": observed.as_dict(),
-    }
-    resolved_probe = resolve_probe(target, workspace, target_name=identity.target)
-    if resolved_probe.argv is not None:
-        result["probe_argv"] = list(resolved_probe.argv)
-    return result
+        ),
+        provision=_provision_projection(target),
+        probe=observed,
+        probe_argv=resolved_probe.argv,
+    )
 
 
 def _effective_target_digest(target: TargetConfig) -> str:
     return _json_digest(target.model_dump(mode="json", exclude_none=True))
 
 
-def _ensure_intent_digest(
-    target: TargetConfig, identity: CapabilityIdentity
-) -> str:
+def _ensure_intent_digest(target: TargetConfig, identity: CapabilityIdentity) -> str:
     value = target.model_dump(mode="json", exclude={"stop"}, exclude_none=True)
     return _json_digest(
         {"operation": "ensure", "endpoint_id": identity.endpoint_id, "target": value}
