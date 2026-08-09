@@ -1,18 +1,9 @@
 [project]
-name = "sustainable-vibe-coding"
-dynamic = ["version"]
-description = "Packaged SVC corpus and local development-collaboration CLI."
-readme = "README.md"
+name = "svc-workspace"
+version = "0.0.0"
+description = "Repository workspace for the SVC Corpus, tooling, and CLI."
 requires-python = ">=3.11"
-dependencies = [
-    "pydantic<3,>=2.13",
-    "platformdirs<5,>=4",
-    "filelock<4,>=3.29",
-    "jsonpatch<2,>=1.33",
-    "python-dotenv<2,>=1.2",
-    "semantic-version<3,>=2.10",
-    "urllib3<3,>=2.7",
-]
+dependencies = []
 
 [dependency-groups]
 quality = [
@@ -27,22 +18,11 @@ test = [
     "ruff>=0.15,<0.16",
 ]
 
-[project.scripts]
-svc = "svc_cli.cli:main"
-
-[build-system]
-requires = ["pdm-backend==2.4.9", "semantic-version<3,>=2.10"]
-build-backend = "pdm.backend"
-
 [tool.pdm]
-distribution = true
+distribution = false
 
-[tool.pdm.version]
-source = "scm"
-tag_filter = "v[0-9]*.[0-9]*.[0-9]*"
-tag_regex = '^v(?P<version>(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$'
-version_format = "pdm_build:format_scm_version"
-fallback_version = "0.0.0"
+[tool.pdm.workspace]
+members = ["svc_cli"]
 
 [tool.pdm.scripts]
 build-monolith = "python -m tools.build_monolith"
@@ -52,62 +32,61 @@ check-release-projections = "python -m tools.build_release_projections --check"
 build-cli-output-schemas = "python -m tools.build_cli_output_schemas"
 check-cli-output-schemas = "python -m tools.build_cli_output_schemas --check"
 svc = "python -m svc_cli.cli"
-test = "pytest tests"
-lint-tests = "ruff check tests --select E4,E7,E9,F,B,SIM,PT,TID251 --ignore PT007,PT018"
+test-root = "pytest tests"
+test-cli = "pytest svc_cli/tests"
+test = "pytest tests svc_cli/tests"
+lint-tests = "ruff check tests svc_cli/tests --select E4,E7,E9,F,B,SIM,PT,TID251 --ignore PT007,PT018"
 lint-imports = "lint-imports"
 lint-workflows = "zizmor --offline .github/workflows"
 typecheck = "mypy"
 
-[tool.pdm.build]
-includes = ["svc_cli"]
-source-includes = ["src", "tools", "tests", "pdm_build.py"]
-
 [tool.mypy]
 python_version = "3.11"
 files = [
-    "svc_cli/catalog.py",
-    "svc_cli/cli.py",
-    "svc_cli/cli_delivery.py",
-    "svc_cli/config.py",
-    "svc_cli/config_migration.py",
-    "svc_cli/errors.py",
-    "svc_cli/_execution.py",
-    "svc_cli/cli_output/lookup.py",
-    "svc_cli/cli_output/common.py",
-    "svc_cli/cli_output/dev.py",
-    "svc_cli/cli_output/model.py",
-    "svc_cli/cli_output/project.py",
-    "svc_cli/cli_output/run.py",
-    "svc_cli/cli_output/upgrade.py",
-    "svc_cli/integration.py",
-    "svc_cli/lookup.py",
-    "svc_cli/model.py",
-    "svc_cli/output_schema.py",
-    "svc_cli/plans.py",
-    "svc_cli/project.py",
-    "svc_cli/release.py",
-    "svc_cli/resources.py",
-    "svc_cli/upgrade.py",
-    "svc_cli/workspace.py",
-    "svc_cli/dev/identity.py",
-    "svc_cli/dev/readiness.py",
-    "svc_cli/dev/runtime.py",
-    "svc_cli/run/__init__.py",
-    "svc_cli/run/runtime.py",
-    "svc_cli/analysis/__init__.py",
-    "svc_cli/analysis/protocol.py",
-    "svc_cli/analysis/query.py",
-    "svc_cli/analysis/read.py",
-    "svc_cli/analysis/service.py",
-    "svc_cli/telemetry/agent_threads.py",
-    "svc_cli/telemetry/archive.py",
-    "svc_cli/telemetry/evidence.py",
-    "svc_cli/telemetry/service.py",
-    "svc_cli/telemetry/trajectory.py",
-    "svc_cli/telemetry/providers/codex_rollout.py",
-    "svc_cli/telemetry/providers/codex_trajectory.py",
-    "tests/agent_thread_contract.py",
-    "tests/project_contract.py",
+    "svc_cli/pdm_build.py",
+    "svc_cli/src/svc_cli/catalog.py",
+    "svc_cli/src/svc_cli/cli.py",
+    "svc_cli/src/svc_cli/cli_delivery.py",
+    "svc_cli/src/svc_cli/config.py",
+    "svc_cli/src/svc_cli/config_migration.py",
+    "svc_cli/src/svc_cli/errors.py",
+    "svc_cli/src/svc_cli/_execution.py",
+    "svc_cli/src/svc_cli/cli_output/lookup.py",
+    "svc_cli/src/svc_cli/cli_output/common.py",
+    "svc_cli/src/svc_cli/cli_output/dev.py",
+    "svc_cli/src/svc_cli/cli_output/model.py",
+    "svc_cli/src/svc_cli/cli_output/project.py",
+    "svc_cli/src/svc_cli/cli_output/run.py",
+    "svc_cli/src/svc_cli/cli_output/upgrade.py",
+    "svc_cli/src/svc_cli/integration.py",
+    "svc_cli/src/svc_cli/lookup.py",
+    "svc_cli/src/svc_cli/model.py",
+    "svc_cli/src/svc_cli/output_schema.py",
+    "svc_cli/src/svc_cli/plans.py",
+    "svc_cli/src/svc_cli/project.py",
+    "svc_cli/src/svc_cli/release.py",
+    "svc_cli/src/svc_cli/resources.py",
+    "svc_cli/src/svc_cli/upgrade.py",
+    "svc_cli/src/svc_cli/workspace.py",
+    "svc_cli/src/svc_cli/dev/identity.py",
+    "svc_cli/src/svc_cli/dev/readiness.py",
+    "svc_cli/src/svc_cli/dev/runtime.py",
+    "svc_cli/src/svc_cli/run/__init__.py",
+    "svc_cli/src/svc_cli/run/runtime.py",
+    "svc_cli/src/svc_cli/analysis/__init__.py",
+    "svc_cli/src/svc_cli/analysis/protocol.py",
+    "svc_cli/src/svc_cli/analysis/query.py",
+    "svc_cli/src/svc_cli/analysis/read.py",
+    "svc_cli/src/svc_cli/analysis/service.py",
+    "svc_cli/src/svc_cli/telemetry/agent_threads.py",
+    "svc_cli/src/svc_cli/telemetry/archive.py",
+    "svc_cli/src/svc_cli/telemetry/evidence.py",
+    "svc_cli/src/svc_cli/telemetry/service.py",
+    "svc_cli/src/svc_cli/telemetry/trajectory.py",
+    "svc_cli/src/svc_cli/telemetry/providers/codex_rollout.py",
+    "svc_cli/src/svc_cli/telemetry/providers/codex_trajectory.py",
+    "svc_cli/tests/svc_cli_test_support/agent_thread_contract.py",
+    "svc_cli/tests/svc_cli_test_support/project_contract.py",
     "tools/build_cli_output_schemas.py",
 ]
 plugins = ["pydantic.mypy"]
@@ -222,6 +201,7 @@ allow_indirect_imports = true
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
+pythonpath = [".", "svc_cli/tests"]
 
 [tool.ruff]
 target-version = "py311"

@@ -13,7 +13,7 @@ from svc_cli.analysis.protocol import (
 )
 from svc_cli.analysis.read import read_schema
 from svc_cli.analysis.service import execute_read
-from tests.agent_thread_contract import write_evidence_bundle
+from svc_cli_test_support.agent_thread_contract import write_evidence_bundle
 
 
 def _payload_bytes(item: dict[str, object]) -> bytes:

@@ -9,7 +9,7 @@ post exploitable details in a public issue or pull request.
 
 ## Set Up and Verify
 
-Use Python 3.11 or newer and PDM:
+Use Python 3.11 or newer and PDM 2.28 or newer:
 
 ```console
 pdm install -d -G test -G quality
@@ -21,11 +21,14 @@ pdm run lint-imports
 pdm run lint-workflows
 pdm run test
 pdm run build-monolith
-pdm build
+pdm build -p svc_cli
 pdm run svc lookup --path sections/working-protocol.md
 ```
 
-Canonical framework sources live under `src/`. Do not edit `build/monolith.md`; regenerate it with `pdm run build-monolith`.
+Canonical framework sources live under `src/`. The installable package uses the
+workspace member layout `svc_cli/src/svc_cli`, and its tests live under
+`svc_cli/tests`. Do not edit `build/monolith.md`; regenerate it with
+`pdm run build-monolith`.
 
 ## Commit Messages
 

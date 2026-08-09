@@ -15,7 +15,10 @@ from svc_cli.analysis.query import query_evidence, query_schema
 from svc_cli.analysis.service import execute_query
 from svc_cli.telemetry.evidence import validate_evidence
 from svc_cli.telemetry.trajectory import canonical_json_bytes
-from tests.agent_thread_contract import message_record, write_evidence_bundle
+from svc_cli_test_support.agent_thread_contract import (
+    message_record,
+    write_evidence_bundle,
+)
 
 
 def _bundle(

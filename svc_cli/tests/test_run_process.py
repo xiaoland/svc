@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.project_contract import write_project_config
+from svc_cli_test_support.project_contract import write_project_config
 
 
 EXECUTION_ID = re.compile(rb"owner ([0-9a-f-]{36})\n")
@@ -38,7 +38,7 @@ def write_run(root: Path, script: str) -> None:
 def start_owner(root: Path) -> tuple[subprocess.Popen[bytes], str]:
     process = subprocess.Popen(
         svc_command(root, "run", "check", "--repo", str(root)),
-        cwd=Path(__file__).parents[1],
+        cwd=root,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -83,7 +83,7 @@ def test_owner_sigint_settles_shared_execution_and_preserves_foreground_group(
                 str(tmp_path),
                 "--json",
             ),
-            cwd=Path(__file__).parents[1],
+            cwd=tmp_path,
             capture_output=True,
             check=False,
         )
@@ -113,7 +113,7 @@ def test_follower_sigint_detaches_without_interrupting_owner(tmp_path: Path) -> 
             str(tmp_path),
             "--json",
         ),
-        cwd=Path(__file__).parents[1],
+        cwd=tmp_path,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -166,7 +166,7 @@ def test_owner_loss_is_reconciled_without_same_invocation_replacement(
                 str(tmp_path),
                 "--json",
             ),
-            cwd=Path(__file__).parents[1],
+            cwd=tmp_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -188,7 +188,7 @@ def test_owner_loss_is_reconciled_without_same_invocation_replacement(
                 str(tmp_path),
                 "--json",
             ),
-            cwd=Path(__file__).parents[1],
+            cwd=tmp_path,
             capture_output=True,
             check=False,
         )
@@ -198,7 +198,7 @@ def test_owner_loss_is_reconciled_without_same_invocation_replacement(
 
         later = subprocess.run(
             svc_command(tmp_path, "run", "check", "--repo", str(tmp_path), "--json"),
-            cwd=Path(__file__).parents[1],
+            cwd=tmp_path,
             capture_output=True,
             check=False,
             timeout=5,

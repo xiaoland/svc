@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
+import runpy
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-import pdm_build
 from svc_cli import resources
 from svc_cli.catalog import parse_catalog, parse_version_index, sha256_bytes
 from tools.build_catalog import (
@@ -19,6 +19,9 @@ from tools.build_catalog import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PDM_BUILD_UPDATE_FILES = runpy.run_path(str(ROOT / "svc_cli/pdm_build.py"))[
+    "pdm_build_update_files"
+]
 
 
 def test_catalog_is_deterministic_and_covers_every_canonical_markdown_document() -> (
@@ -44,7 +47,7 @@ def test_catalog_is_deterministic_and_covers_every_canonical_markdown_document()
 
 def test_wheel_projection_contains_catalog_and_one_copy_of_each_document() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        files = build_projection(ROOT, Path(tmp))
+        files = build_projection(ROOT / "src", Path(tmp))
         assert "svc_cli/data/catalog.json" in files
         catalog = parse_catalog(files["svc_cli/data/catalog.json"].read_bytes())
         assert catalog.corpus_version == "12.0.0"
@@ -53,7 +56,6 @@ def test_wheel_projection_contains_catalog_and_one_copy_of_each_document() -> No
         }
         assert set(files) == {
             "svc_cli/data/catalog.json",
-            "svc_cli/data/migrations/config-2-3.json",
             *expected_corpus,
         }
         assert all(path.is_file() for path in files.values())
@@ -83,7 +85,7 @@ def test_wheel_projection_reads_corpus_version_from_source_index(
         encoding="utf-8",
     )
 
-    files = build_projection(root, tmp_path / "build")
+    files = build_projection(source, tmp_path / "build")
 
     catalog = parse_catalog(files["svc_cli/data/catalog.json"].read_bytes())
     assert catalog.corpus_version == "7.1.0"
@@ -97,21 +99,32 @@ def test_pdm_hook_ignores_distribution_version_for_corpus_projection() -> None:
         for package_version in ("12.3.4", "99.0.0"):
             context = SimpleNamespace(
                 target="wheel",
-                root=ROOT,
+                root=ROOT / "svc_cli",
                 build_dir=build_dir / package_version,
                 config=SimpleNamespace(metadata={"version": package_version}),
             )
             files: dict[str, Path] = {}
-            pdm_build.pdm_build_update_files(context, files)
+            PDM_BUILD_UPDATE_FILES(context, files)
             catalog_path = files["svc_cli/data/catalog.json"]
             assert catalog_path == context.build_dir / "svc_cli/data/catalog.json"
             assert parse_catalog(catalog_path.read_bytes()).corpus_version == "12.0.0"
             assert all(name.startswith("svc_cli/data/") for name in files)
 
-        untouched: dict[str, Path] = {}
+        sdist_files: dict[str, Path] = {}
         context.target = "sdist"
-        pdm_build.pdm_build_update_files(context, untouched)
-        assert untouched == {}
+        PDM_BUILD_UPDATE_FILES(context, sdist_files)
+        assert sdist_files["_build_inputs/corpus/version.json"] == (
+            ROOT / "src/version.json"
+        )
+        expected_paths = {
+            entry.path
+            for entry in parse_catalog(build_catalog_bytes(ROOT / "src")).entries
+        }
+        assert {
+            name.removeprefix("_build_inputs/corpus/")
+            for name in sdist_files
+            if name.endswith(".md")
+        } == expected_paths
 
 
 def test_source_catalog_uses_the_same_source_owned_corpus_version(

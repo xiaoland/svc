@@ -17,7 +17,10 @@ from svc_cli.run.runtime import (
     inspect_run,
     resolve_run,
 )
-from tests.project_contract import write_local_run_overlay, write_project_config
+from svc_cli_test_support.project_contract import (
+    write_local_run_overlay,
+    write_project_config,
+)
 
 
 def write_config(

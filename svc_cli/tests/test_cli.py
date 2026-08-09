@@ -9,7 +9,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from svc_cli.cli import EXIT_CONFLICT, EXIT_OK, main
-from tests.project_contract import write_project_config
+from svc_cli_test_support.project_contract import write_project_config
 
 
 def invoke_text(arguments: list[str]) -> tuple[int, str, str]:
@@ -229,7 +229,7 @@ def test_run_text_keeps_native_channels_and_wrapper_facts_separate() -> None:
                 "--repo",
                 str(root),
             ],
-            cwd=Path(__file__).parents[1],
+            cwd=root,
             capture_output=True,
             text=True,
             check=False,

@@ -6,7 +6,7 @@ from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from typing import Literal, Protocol
 
-from .catalog import normalized_document_path
+from .catalog import build_catalog_bytes, normalized_document_path
 
 
 class Resource(Protocol):
@@ -18,7 +18,15 @@ class Resource(Protocol):
 
 
 def source_root() -> Path:
-    return Path(__file__).resolve().parents[1] / "src"
+    member_root = Path(__file__).resolve().parents[2]
+    candidates = (
+        member_root.parent / "src",
+        member_root / "_build_inputs" / "corpus",
+    )
+    for candidate in candidates:
+        if candidate.is_dir() and (candidate / "version.json").is_file():
+            return candidate
+    raise FileNotFoundError("SVC source fallback is unavailable")
 
 
 def _packaged_data_root() -> Resource | None:
@@ -37,12 +45,7 @@ def read_catalog_bytes() -> bytes:
     if packaged is not None:
         return packaged.joinpath("catalog.json").read_bytes()
 
-    root = source_root()
-    if not root.is_dir():
-        raise FileNotFoundError("SVC source fallback is unavailable")
-    from tools.build_catalog import build_catalog_bytes
-
-    return build_catalog_bytes(root)
+    return build_catalog_bytes(source_root())
 
 
 def read_document(path: str) -> bytes:

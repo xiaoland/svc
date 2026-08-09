@@ -14,7 +14,9 @@ from svc_cli.output_schema import OUTPUT_SCHEMA_KEYS, generate_output_schema
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_ROOT = ROOT / "svc_cli" / "data" / "output-schemas"
+SCHEMA_ROOT = ROOT / "svc_cli" / "src" / "svc_cli" / "data" / "output-schemas"
+SCHEMA_REPOSITORY_PREFIX = "svc_cli/src/svc_cli/data/output-schemas"
+LEGACY_SCHEMA_REPOSITORY_PREFIX = "svc_cli/data/output-schemas"
 
 
 def _encoded(key: str) -> bytes:
@@ -81,8 +83,11 @@ def compare_ref(ref: str) -> list[str]:
 
     changed_existing: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
     for key in OUTPUT_SCHEMA_KEYS:
-        relative = f"svc_cli/data/output-schemas/{key}.json"
-        previous_bytes = _git_show(ref, relative)
+        previous_bytes = _git_show(ref, f"{SCHEMA_REPOSITORY_PREFIX}/{key}.json")
+        if previous_bytes is None:
+            previous_bytes = _git_show(
+                ref, f"{LEGACY_SCHEMA_REPOSITORY_PREFIX}/{key}.json"
+            )
         if previous_bytes is None:
             continue
         current = generate_output_schema(key)

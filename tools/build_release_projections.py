@@ -8,7 +8,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Iterable, Sequence
 
 import yaml
 from semantic_version import Version
@@ -73,7 +73,7 @@ class Projection:
         )
         files.update(
             {
-                root / "svc_cli/data/migrations" / name: content
+                root / "svc_cli/src/svc_cli/data/migrations" / name: content
                 for name, content in self.config_descriptors
             }
         )
@@ -328,7 +328,7 @@ def apply_projection(root: Path, *, check: bool) -> None:
     expected = projection.files(root)
     generated_roots = (
         root / "src/migrations",
-        root / "svc_cli/data/migrations",
+        root / "svc_cli/src/svc_cli/data/migrations",
     )
     expected_paths = set(expected)
     extras = {

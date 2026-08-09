@@ -16,9 +16,11 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - Release configuration, version, Behavioral SemVer evidence, and notes:
   `.changie.yaml`, Changie data under `changes/`, generated `CHANGELOG.md`,
   GitHub Releases, and `CONTRIBUTING.md`
-- Consumer runtime, project integration, and packaged-resource access: `svc_cli/`
-- Catalog/wheel projection: `tools/build_catalog.py` and `pdm_build.py`
-- Monolith behavior: `tools/build_monolith.py` and `tests/`
+- Consumer runtime, project integration, and packaged-resource access:
+  `svc_cli/src/svc_cli/`; its tests live under `svc_cli/tests/`
+- Catalog/wheel projection: `svc_cli/src/svc_cli/catalog.py`,
+  `tools/build_catalog.py`, and `svc_cli/pdm_build.py`
+- Monolith and root repository-tool behavior: `tools/` and root `tests/`
 - Volatile work: `tasks/`; delete packets when their task closes, with no archive or deletion-time promotion review.
 
 `build/monolith.md` is generated output, never an editing source.
@@ -26,13 +28,13 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 ## Development Workflow
 
 - Runtime: Python 3.11+
-- Environment and commands: PDM
+- Environment and commands: PDM 2.28+
 - Install: `pdm install`
 - Test: `pdm run test`
 - Consumer CLI smoke test: `pdm run svc --help`
-- Build the installable distribution: `pdm build`
+- Build the installable distribution: `pdm build -p svc_cli`
 - Build the ignored reference artifact: `pdm run build-monolith`
-- Inspect the packaged corpus locally: `pdm run svc lookup --name 'sections/working-protocol\\.md'`
+- Inspect the packaged corpus locally: `pdm run svc lookup --path sections/working-protocol.md`
 - Search source with `rg`; exclude `tasks/`, `.venv/`, and `build/` unless they are the target.
 - Diagnose builder failures from the reported source file and Markdown target; missing local paths and fragments are contract failures.
 
@@ -42,5 +44,7 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - Load `src/sections/implementation-taste.md` only when a change shapes code structure, boundaries, data, authority, naming, abstraction, or complexity.
 - Apply the nearest local `AGENTS.md` as an additive constraint when one exists.
 - Edit canonical source first. Update a template only when its consumer-facing shape changes.
-- Keep `src/` free of Python runtime and build-tool code; package projections belong under `svc_cli/` and repository tooling under `tools/`.
+- Keep `src/` free of Python runtime and build-tool code; package sources and
+  projections belong under `svc_cli/`, and repository tooling belongs under
+  `tools/`.
 - Do not add a layer, template, tool, or agent surface without a distinct owner, trigger, consumer, and verification path.

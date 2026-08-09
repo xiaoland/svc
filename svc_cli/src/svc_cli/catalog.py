@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 from semantic_version import Version  # type: ignore[import-untyped]
@@ -338,3 +338,61 @@ def parse_catalog(content: bytes) -> Catalog:
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("Catalog must be valid UTF-8 JSON") from error
     return Catalog.from_mapping(raw)
+
+
+def canonical_documents(source_root: Path) -> list[tuple[str, Path]]:
+    """Return every canonical Markdown document without following source escapes."""
+
+    root = source_root.resolve()
+    if not root.is_dir():
+        raise FileNotFoundError(f"Canonical SVC source does not exist: {source_root}")
+    documents: list[tuple[str, Path]] = []
+    for path in sorted(root.rglob("*.md")):
+        if path.is_symlink():
+            raise ValueError(
+                f"Canonical source may not contain a symlinked Markdown document: {path}"
+            )
+        if not path.is_file():
+            continue
+        resolved = path.resolve()
+        try:
+            relative = resolved.relative_to(root).as_posix()
+        except ValueError as error:
+            raise ValueError(f"Canonical source escapes src/: {path}") from error
+        documents.append((normalized_document_path(relative), resolved))
+    if not documents:
+        raise ValueError("Canonical SVC source contains no Markdown documents")
+    return documents
+
+
+def read_version_index(source_root: Path) -> CorpusVersionIndex:
+    version_path = source_root / "version.json"
+    if not version_path.is_file():
+        raise FileNotFoundError(f"Corpus version index does not exist: {version_path}")
+    return parse_version_index(version_path.read_bytes())
+
+
+def build_catalog_bytes(source_root: Path) -> bytes:
+    documents = canonical_documents(source_root)
+    return catalog_bytes(
+        read_version_index(source_root),
+        ((relative, path.read_bytes()) for relative, path in documents),
+    )
+
+
+def build_projection(source_root: Path, output_dir: Path) -> dict[str, Path]:
+    """Build the exact derived Corpus/catalog mapping for an installed wheel."""
+
+    documents = canonical_documents(source_root)
+    catalog = catalog_bytes(
+        read_version_index(source_root),
+        ((relative, path.read_bytes()) for relative, path in documents),
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    catalog_path = output_dir / "catalog.json"
+    catalog_path.write_bytes(catalog)
+
+    files: dict[str, Path] = {"svc_cli/data/catalog.json": catalog_path}
+    for relative, source in documents:
+        files[f"svc_cli/data/corpus/{relative}"] = source
+    return files

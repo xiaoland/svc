@@ -25,7 +25,7 @@ from svc_cli.dev.runtime import (
 from svc_cli.dev.readiness import probe_exec, probe_http, probe_target
 from svc_cli.errors import SvcError
 from svc_cli.workspace import resolve_workspace_identity
-from tests.project_contract import write_project_config
+from svc_cli_test_support.project_contract import write_project_config
 
 
 class _Response:

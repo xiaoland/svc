@@ -5,7 +5,7 @@
 groups = ["default", "quality", "test"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:9c25e40d48a02ae1355150c80ff046be9b2078a6274f51857ee45c11a1ed3cdf"
+content_hash = "sha256:860293178a8f2e56e835d52eebb7b0a801198cf7e1fd873eb0e670f6b8833489"
 
 [[metadata.targets]]
 requires_python = ">=3.11"
@@ -802,6 +802,24 @@ groups = ["default"]
 files = [
     {file = "semantic_version-2.10.0-py2.py3-none-any.whl", hash = "sha256:de78a3b8e0feda74cabc54aab2da702113e33ac9d9eb9d2389bcf1f58b7d9177"},
     {file = "semantic_version-2.10.0.tar.gz", hash = "sha256:bdabb6d336998cbb378d4b9db3a4b56a1e3235701dc05ea2690d9a997ed5041c"},
+]
+
+[[package]]
+name = "sustainable-vibe-coding"
+version = "11.0.1"
+requires_python = ">=3.11"
+editable = true
+path = "./svc_cli"
+summary = "Packaged SVC corpus and local development-collaboration CLI."
+groups = ["default"]
+dependencies = [
+    "filelock<4,>=3.29",
+    "jsonpatch<2,>=1.33",
+    "platformdirs<5,>=4",
+    "pydantic<3,>=2.13",
+    "python-dotenv<2,>=1.2",
+    "semantic-version<3,>=2.10",
+    "urllib3<3,>=2.7",
 ]
 
 [[package]]
