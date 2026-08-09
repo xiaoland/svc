@@ -5,13 +5,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Annotated, Callable, Literal, Sequence, TypeAlias, cast
-
-from pydantic import Field
+from typing import Callable, Literal, Sequence, cast
 
 from .catalog import Catalog, CatalogEntry, normalized_document_path, sha256_bytes
 from .errors import SvcError
-from .machine import MachineModel
 from .resources import read_document
 
 
@@ -43,96 +40,6 @@ class LookupQuery:
             raise ValueError("Lookup scope must be path or both")
         if not 1 <= self.limit <= 50:
             raise ValueError("Lookup limit must be between 1 and 50")
-
-
-class CorpusDocumentReference(MachineModel):
-    path: str
-    title: str
-    sha256: str
-
-    @classmethod
-    def from_entry(cls, entry: CatalogEntry) -> "CorpusDocumentReference":
-        return cls(path=entry.path, title=entry.title, sha256=entry.sha256)
-
-
-class LookupDirectoryEntry(MachineModel):
-    kind: Literal["directory"] = "directory"
-    path: str
-    document_count: int
-
-
-class LookupDocumentEntry(CorpusDocumentReference):
-    kind: Literal["document"] = "document"
-
-
-LookupListEntry: TypeAlias = Annotated[
-    LookupDirectoryEntry | LookupDocumentEntry, Field(discriminator="kind")
-]
-
-
-class LookupDocument(CorpusDocumentReference):
-    content: str
-
-
-class LookupKeywordCandidate(CorpusDocumentReference):
-    matched_in: tuple[Literal["path", "content"], ...]
-    excerpt: str | None = None
-
-
-class LookupRegexMatch(MachineModel):
-    machine_exclude_none = True
-
-    path: str
-    sha256: str
-    surface: Literal["path", "content"]
-    line: int | None = None
-    column: int | None = None
-    excerpt: str | None = None
-
-
-class _LookupOutput(MachineModel):
-    schema_version: Literal[2] = 2
-    command: Literal["lookup"] = "lookup"
-    corpus_version: str
-
-
-class LookupListOutput(_LookupOutput):
-    mode: Literal["list"] = "list"
-    prefix: str | None
-    entries: tuple[LookupListEntry, ...]
-
-
-class LookupPathOutput(_LookupOutput):
-    mode: Literal["path"] = "path"
-    document: LookupDocument
-
-
-class LookupKeywordOutput(_LookupOutput):
-    machine_exclude_none = True
-
-    mode: Literal["keyword"] = "keyword"
-    query: str
-    scope: Literal["path", "both"]
-    limit: int
-    truncated: bool
-    candidates: tuple[LookupKeywordCandidate, ...]
-
-
-class LookupRegexOutput(_LookupOutput):
-    machine_exclude_none = True
-
-    mode: Literal["regex"] = "regex"
-    query: str
-    scope: Literal["path", "both"]
-    limit: int
-    truncated: bool
-    matches: tuple[LookupRegexMatch, ...]
-
-
-LookupOutput: TypeAlias = Annotated[
-    LookupListOutput | LookupPathOutput | LookupKeywordOutput | LookupRegexOutput,
-    Field(discriminator="mode"),
-]
 
 
 @dataclass(frozen=True)
@@ -177,83 +84,6 @@ class LookupResponse:
     matches: tuple[RegexMatch, ...] = ()
     truncated: bool = False
     prefix: str | None = None
-
-    def as_output(self) -> LookupOutput:
-        if self.query.mode == "list":
-            entries: list[LookupListEntry] = []
-            for entry in self.entries:
-                if entry.kind == "directory":
-                    assert entry.document_count is not None
-                    entries.append(
-                        LookupDirectoryEntry(
-                            path=entry.path,
-                            document_count=entry.document_count,
-                        )
-                    )
-                else:
-                    assert entry.title is not None and entry.sha256 is not None
-                    entries.append(
-                        LookupDocumentEntry(
-                            path=entry.path,
-                            title=entry.title,
-                            sha256=entry.sha256,
-                        )
-                    )
-            return LookupListOutput(
-                corpus_version=self.corpus_version,
-                prefix=self.prefix,
-                entries=tuple(entries),
-            )
-        if self.query.mode == "path":
-            assert self.document is not None
-            return LookupPathOutput(
-                corpus_version=self.corpus_version,
-                document=LookupDocument(
-                    **CorpusDocumentReference.from_entry(
-                        self.document.entry
-                    ).model_dump(),
-                    content=self.document.content,
-                ),
-            )
-        assert self.query.value is not None
-        assert self.query.scope in {"path", "both"}
-        scope: Literal["path", "both"] = (
-            "path" if self.query.scope == "path" else "both"
-        )
-        if self.query.mode == "keyword":
-            return LookupKeywordOutput(
-                corpus_version=self.corpus_version,
-                query=self.query.value,
-                scope=scope,
-                limit=self.query.limit,
-                truncated=self.truncated,
-                candidates=tuple(
-                    LookupKeywordCandidate(
-                        **CorpusDocumentReference.from_entry(item.entry).model_dump(),
-                        matched_in=item.matched_in,
-                        excerpt=item.excerpt,
-                    )
-                    for item in self.candidates
-                ),
-            )
-        return LookupRegexOutput(
-            corpus_version=self.corpus_version,
-            query=self.query.value,
-            scope=scope,
-            limit=self.query.limit,
-            truncated=self.truncated,
-            matches=tuple(
-                LookupRegexMatch(
-                    path=item.entry.path,
-                    sha256=item.entry.sha256,
-                    surface="path" if item.surface == "path" else "content",
-                    line=item.line,
-                    column=item.column,
-                    excerpt=item.excerpt,
-                )
-                for item in self.matches
-            ),
-        )
 
 
 class CorpusLookup:

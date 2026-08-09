@@ -1,11 +1,19 @@
-"""Stable error values shared by the CLI's machine and human interfaces."""
+"""Interface-neutral failures raised or observed by application services."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
 
-from .machine import MachineError, MachineErrorBody, json_compatible
+from .model import ValueModel
+
+
+class Failure(ValueModel):
+    """An immutable snapshot when a failure is part of a larger service result."""
+
+    code: str
+    message: str
+    details: dict[str, Any]
 
 
 @dataclass
@@ -16,13 +24,5 @@ class SvcError(Exception):
     message: str
     details: dict[str, Any] = field(default_factory=dict)
 
-    def as_output(self) -> MachineError:
-        details = json_compatible(self.details)
-        assert isinstance(details, dict)
-        return MachineError(
-            error=MachineErrorBody(
-                code=self.code,
-                message=self.message,
-                details=details,
-            )
-        )
+    def snapshot(self) -> Failure:
+        return Failure(code=self.code, message=self.message, details=dict(self.details))

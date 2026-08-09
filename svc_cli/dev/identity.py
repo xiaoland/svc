@@ -7,7 +7,7 @@ import re
 from typing import Literal, Sequence, cast
 
 from ..errors import SvcError
-from ..machine import MachineModel
+from ..model import ValueModel
 from ..workspace import WorkspaceIdentity
 
 
@@ -28,7 +28,7 @@ def _digest(*parts: str, length: int = 20) -> str:
     return hashlib.sha256(payload).hexdigest()[:length]
 
 
-class CapabilityIdentity(MachineModel):
+class CapabilityIdentity(ValueModel):
     scope: DevScope
     target: str
     endpoint_id: str

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from .errors import SvcError
-from .machine import MachineModel
+from .model import ValueModel
 
 
 def _digest(*parts: str, length: int = 20) -> str:
@@ -19,7 +19,7 @@ def _digest(*parts: str, length: int = 20) -> str:
     return hashlib.sha256(payload).hexdigest()[:length]
 
 
-class WorkspaceIdentity(MachineModel):
+class WorkspaceIdentity(ValueModel):
     """Stable identity facts for one executable workspace."""
 
     root: Path

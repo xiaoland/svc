@@ -1,4 +1,4 @@
-"""Typed ownership and deterministic serialization for SVC machine output."""
+"""Typed ownership and deterministic serialization for CLI machine output."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import IO, Any, ClassVar, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, JsonValue, RootModel
+
+from ..errors import Failure, SvcError
 
 
 class MachineModel(BaseModel):
@@ -55,8 +57,22 @@ class UnscopedMachineObject(RootModel[dict[str, JsonValue]]):
 MachineOutput: TypeAlias = MachineModel | UnscopedMachineObject
 
 
+def project_error(error: SvcError) -> MachineError:
+    return MachineError(error=project_failure(error.snapshot()))
+
+
+def project_failure(failure: Failure) -> MachineErrorBody:
+    details = json_compatible(failure.details)
+    assert isinstance(details, dict)
+    return MachineErrorBody(
+        code=failure.code,
+        message=failure.message,
+        details=details,
+    )
+
+
 def json_compatible(value: Any) -> JsonValue:
-    """Project diagnostic values onto JSON without inventing string repr protocols."""
+    """Project diagnostic values onto JSON without inventing repr protocols."""
 
     if value is None or isinstance(value, (str, bool, int, float)):
         return value
@@ -77,7 +93,7 @@ def unscoped_machine_object(value: Mapping[str, Any]) -> UnscopedMachineObject:
 
 
 def dump_machine_output(value: MachineOutput, stream: IO[str]) -> None:
-    """Write one sorted, compact, UTF-8 JSON object and one trailing newline."""
+    """Write one sorted, compact UTF-8 JSON object and a trailing newline."""
 
     payload = value.model_dump(
         mode="json",

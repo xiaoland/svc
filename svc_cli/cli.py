@@ -8,21 +8,37 @@ import os
 import shlex
 import subprocess
 import sys
+from functools import partial
 from pathlib import Path
-from typing import Any, Literal, Never, Sequence, cast
+from typing import Any, Literal, Never, Sequence, TextIO, cast
 
 from ._execution import ExecutionStore
 from .analysis.protocol import AnalysisProtocolError
 from .analysis.query import query_schema
 from .analysis.read import read_schema
 from .analysis.service import execute_query, execute_read
+from .cli_output.lookup import project_lookup
+from .cli_output.dev import (
+    project_dev_ensure,
+    project_dev_identity,
+    project_dev_status,
+    project_dev_stop,
+)
+from .cli_output.project import (
+    project_init_apply,
+    project_init_plan,
+    project_status,
+)
+from .cli_output.run import project_run_receipt, run_exit_code
+from .cli_output.upgrade import project_upgrade_apply, project_upgrade_plan
+from .cli_delivery import deliver_error, deliver_result
 from .errors import SvcError
 from .dev.runtime import (
-    DevEnsureOutput,
-    DevIdentityOutput,
-    DevStatusOutput,
-    DevStopOutput,
-    DevTargetError,
+    DevEnsureResult,
+    DevIdentityResult,
+    DevStatusResult,
+    DevStopResult,
+    DevTargetFailure,
     DevTargetObservation,
     ensure_target,
     inspect_dev_identity,
@@ -34,8 +50,9 @@ from .lookup import (
     LOOKUP_DISCOVERY_HINT,
     CorpusLookup,
     LookupQuery,
+    LookupResponse,
 )
-from .machine import (
+from .cli_output.model import (
     CliUsageOutput,
     dump_machine_output,
     unscoped_machine_object,
@@ -43,10 +60,10 @@ from .machine import (
 from .output_schema import RegisteredMachineOutput, read_output_schema
 from .project import (
     ConfigurationUnavailableStatus,
-    InitApplyOutput,
+    InitApplyResult,
     InitPlan,
     ProjectInvalidStatus,
-    RootStatusOutput,
+    ProjectStatusInspection,
     apply_init,
     inspect_status,
     plan_init,
@@ -55,13 +72,11 @@ from .run.runtime import (
     execute_entry,
     follow_run,
     inspect_run,
-    outcome_exit_code,
-    receipt,
 )
 from .release import catalog, runtime_version
 from .upgrade import (
     RemainingTarget,
-    UpgradeApplyOutput,
+    UpgradeApplyResult,
     UpgradePlan,
     UpgradeTarget,
     apply_upgrade,
@@ -126,6 +141,29 @@ def _add_output_schema(parser: argparse.ArgumentParser, key: str) -> None:
     )
 
 
+def _add_machine_output(
+    parser: argparse.ArgumentParser,
+    key: str,
+    json_help: str,
+    *,
+    schema_first: bool = False,
+) -> None:
+    def add_json() -> None:
+        parser.add_argument(
+            "--json",
+            action="store_true",
+            dest="json_output",
+            help=json_help,
+        )
+
+    if schema_first:
+        _add_output_schema(parser, key)
+        add_json()
+    else:
+        add_json()
+        _add_output_schema(parser, key)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = SvcArgumentParser(
         prog="svc",
@@ -176,12 +214,11 @@ def _parser() -> argparse.ArgumentParser:
     lookup.add_argument(
         "--limit", type=_lookup_limit, help="Maximum keyword results (1-50)"
     )
-    _add_output_schema(lookup, "lookup")
-    lookup.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_output",
-        help="Emit compact mode-specific JSON for scripts and CI",
+    _add_machine_output(
+        lookup,
+        "lookup",
+        "Emit compact mode-specific JSON for scripts and CI",
+        schema_first=True,
     )
 
     init = subparsers.add_parser(
@@ -201,13 +238,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     init.add_argument("repo", nargs="?", default=".", help="Project directory")
     init.add_argument("--apply", metavar="PLAN_DIGEST")
-    init.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_output",
-        help="Emit compact scripts/CI JSON",
-    )
-    _add_output_schema(init, "init")
+    _add_machine_output(init, "init", "Emit compact scripts/CI JSON")
 
     status = subparsers.add_parser(
         "status",
@@ -219,13 +250,9 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     status.add_argument("repo", nargs="?", default=".", help="Project directory")
-    status.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_output",
-        help="Emit the complete compact scripts/CI projection",
+    _add_machine_output(
+        status, "status", "Emit the complete compact scripts/CI projection"
     )
-    _add_output_schema(status, "status")
 
     upgrade = subparsers.add_parser(
         "upgrade",
@@ -244,13 +271,7 @@ def _parser() -> argparse.ArgumentParser:
     upgrade.add_argument("repo", nargs="?", default=".", help="Project directory")
     upgrade.add_argument("--target", choices=("config", "corpus"))
     upgrade.add_argument("--apply", metavar="PLAN_DIGEST")
-    upgrade.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_output",
-        help="Emit compact scripts/CI JSON",
-    )
-    _add_output_schema(upgrade, "upgrade")
+    _add_machine_output(upgrade, "upgrade", "Emit compact scripts/CI JSON")
 
     dev = subparsers.add_parser(
         "dev", help="Observe, ensure, or stop declared consumer dev capabilities"
@@ -272,13 +293,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     dev_status.add_argument("target", nargs="?")
     dev_status.add_argument("--repo", default=".")
-    dev_status.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_output",
-        help="Emit the complete compact scripts/CI projection",
+    _add_machine_output(
+        dev_status,
+        "dev-status",
+        "Emit the complete compact scripts/CI projection",
     )
-    _add_output_schema(dev_status, "dev-status")
     dev_identity = dev_commands.add_parser(
         "identity",
         help="Show the resolved workspace identity used for dev coordination",
@@ -286,12 +305,11 @@ def _parser() -> argparse.ArgumentParser:
     dev_identity.add_argument(
         "--repo", default=".", help="Workspace directory (default: current directory)"
     )
-    _add_output_schema(dev_identity, "dev-identity")
-    dev_identity.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_output",
-        help="Emit compact exact identity JSON for scripts and CI",
+    _add_machine_output(
+        dev_identity,
+        "dev-identity",
+        "Emit compact exact identity JSON for scripts and CI",
+        schema_first=True,
     )
     dev_ensure = dev_commands.add_parser(
         "ensure",
@@ -311,12 +329,11 @@ def _parser() -> argparse.ArgumentParser:
     dev_ensure.add_argument(
         "--repo", default=".", help="Workspace directory (default: current directory)"
     )
-    _add_output_schema(dev_ensure, "dev-ensure")
-    dev_ensure.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_output",
-        help="Emit one compact terminal scripts/CI result and suppress live progress",
+    _add_machine_output(
+        dev_ensure,
+        "dev-ensure",
+        "Emit one compact terminal scripts/CI result and suppress live progress",
+        schema_first=True,
     )
     dev_stop = dev_commands.add_parser(
         "stop",
@@ -337,12 +354,11 @@ def _parser() -> argparse.ArgumentParser:
     dev_stop.add_argument(
         "--repo", default=".", help="Workspace directory (default: current directory)"
     )
-    _add_output_schema(dev_stop, "dev-stop")
-    dev_stop.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_output",
-        help="Emit one compact terminal scripts/CI result and suppress live progress",
+    _add_machine_output(
+        dev_stop,
+        "dev-stop",
+        "Emit one compact terminal scripts/CI result and suppress live progress",
+        schema_first=True,
     )
     run = subparsers.add_parser(
         "run",
@@ -371,12 +387,11 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--repo", default=".", help="Workspace directory (default: current directory)"
     )
-    _add_output_schema(run, "run")
-    run.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_output",
-        help="Emit one compact receipt and suppress native/live display",
+    _add_machine_output(
+        run,
+        "run",
+        "Emit one compact receipt and suppress native/live display",
+        schema_first=True,
     )
 
     telemetry = subparsers.add_parser(
@@ -496,59 +511,94 @@ def main(argv: Sequence[str] | None = None) -> int:
             else:
                 query = LookupQuery("regex", args.regex, scope, lookup_limit)
             response = CorpusLookup(catalog()).lookup(query)
-            _emit_lookup(response, json_output)
-            return EXIT_OK
+            return deliver_result(
+                response,
+                json_output=json_output,
+                project=project_lookup,
+                render=_render_lookup,
+                exit_code=EXIT_OK,
+            )
 
         if args.command == "status":
             status_payload = inspect_status(Path(args.repo))
-            _emit_status(status_payload, json_output)
-            return EXIT_OK if status_payload.healthy else EXIT_CONFLICT
+            return deliver_result(
+                status_payload,
+                json_output=json_output,
+                project=project_status,
+                render=_render_status,
+                exit_code=EXIT_OK if status_payload.healthy else EXIT_CONFLICT,
+            )
 
         if args.command == "upgrade":
             target = cast(UpgradeTarget | None, args.target)
             upgrade_plan = plan_upgrade(Path(args.repo), target)
             if args.apply:
                 upgrade_payload = apply_upgrade(upgrade_plan, args.apply)
-                _emit_upgrade_apply(upgrade_payload, json_output)
-                return EXIT_OK
-            _emit_upgrade_plan(upgrade_plan, json_output)
-            return (
-                EXIT_CONFLICT
-                if upgrade_plan.status in {"migration-required", "blocked"}
-                else EXIT_OK
+                return deliver_result(
+                    upgrade_payload,
+                    json_output=json_output,
+                    project=project_upgrade_apply,
+                    render=_render_upgrade_apply,
+                    exit_code=EXIT_OK,
+                )
+            return deliver_result(
+                upgrade_plan,
+                json_output=json_output,
+                project=project_upgrade_plan,
+                render=_render_upgrade_plan,
+                exit_code=(
+                    EXIT_CONFLICT
+                    if upgrade_plan.status in {"migration-required", "blocked"}
+                    else EXIT_OK
+                ),
             )
 
         if args.command == "dev":
             if args.dev_command == "identity":
                 identity_payload = inspect_dev_identity(Path(args.repo))
-                _emit_dev_identity(identity_payload, json_output)
-                return EXIT_OK
+                return deliver_result(
+                    identity_payload,
+                    json_output=json_output,
+                    project=project_dev_identity,
+                    render=_render_dev_identity,
+                    exit_code=EXIT_OK,
+                )
             if args.dev_command == "status":
                 dev_status_payload = inspect_dev_status(Path(args.repo), args.target)
-                _emit_dev_status(dev_status_payload, json_output)
-                return EXIT_OK if dev_status_payload.healthy else EXIT_CONFLICT
+                return deliver_result(
+                    dev_status_payload,
+                    json_output=json_output,
+                    project=project_dev_status,
+                    render=_render_dev_status,
+                    exit_code=(
+                        EXIT_OK if dev_status_payload.healthy else EXIT_CONFLICT
+                    ),
+                )
             if args.dev_command == "stop":
                 stop_payload = stop_target(
                     Path(args.repo),
                     args.target,
                     on_selected=None if json_output else _emit_dev_stop_selected,
                 )
-                _emit_dev_stop(stop_payload, json_output)
-                return _dev_stop_exit_code(stop_payload)
-            try:
-                ensure_payload = ensure_target(
-                    Path(args.repo),
-                    args.target,
-                    on_selected=None if json_output else _emit_dev_ensure_selected,
+                return deliver_result(
+                    stop_payload,
+                    json_output=json_output,
+                    project=project_dev_stop,
+                    render=_render_dev_stop,
+                    exit_code=_dev_stop_exit_code(stop_payload),
                 )
-            except SvcError as error:
-                if not _is_expected_ensure_outcome(error):
-                    raise
-                ensure_payload = DevEnsureOutput.model_validate(
-                    error.details, strict=False
-                )
-            _emit_dev_ensure(ensure_payload, json_output)
-            return _dev_ensure_exit_code(ensure_payload)
+            ensure_payload = ensure_target(
+                Path(args.repo),
+                args.target,
+                on_selected=None if json_output else _emit_dev_ensure_selected,
+            )
+            return deliver_result(
+                ensure_payload,
+                json_output=json_output,
+                project=project_dev_ensure,
+                render=_render_dev_ensure,
+                exit_code=_dev_ensure_exit_code(ensure_payload),
+            )
 
         if args.command == "run":
             return _run_declared(args, json_output)
@@ -578,19 +628,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         local_plan = plan_init(Path(args.repo))
         if args.apply:
             init_payload = apply_init(local_plan, args.apply)
-            _emit_init_apply(init_payload, json_output)
-            return EXIT_OK
-        _emit_init_plan(local_plan, json_output)
-        return EXIT_CONFLICT if local_plan.blockers else EXIT_OK
+            return deliver_result(
+                init_payload,
+                json_output=json_output,
+                project=project_init_apply,
+                render=_render_init_apply,
+                exit_code=EXIT_OK,
+            )
+        return deliver_result(
+            local_plan,
+            json_output=json_output,
+            project=project_init_plan,
+            render=_render_init_plan,
+            exit_code=EXIT_CONFLICT if local_plan.blockers else EXIT_OK,
+        )
     except SvcError as error:
-        _emit_error(error, json_output)
-        return _exit_code(error)
+        return deliver_error(
+            error,
+            json_output=json_output,
+            render=_render_error,
+            exit_code=_exit_code(error),
+        )
     except AnalysisProtocolError as error:
         _emit_unscoped_json(error.as_dict(), stream=sys.stderr)
         return _analysis_exit_code(error)
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
-        _emit_error(SvcError("invalid-release", str(error)), json_output)
-        return EXIT_FAILURE
+        failure = SvcError("invalid-release", str(error))
+        return deliver_error(
+            failure,
+            json_output=json_output,
+            render=_render_error,
+            exit_code=EXIT_FAILURE,
+        )
 
 
 def _analysis_request(source: str) -> object:
@@ -661,12 +730,12 @@ def _run_declared(args: argparse.Namespace, json_output: bool) -> int:
             stderr_sink=stderr_sink,
             on_selected=callback,
         )
-    payload = receipt(outcome, cast(Any, command))
+    payload = project_run_receipt(outcome, cast(Any, command))
     if json_output:
         _emit_json(payload)
     else:
         _emit_run_terminal(outcome, inspect=args.inspect is not None)
-    return outcome_exit_code(outcome, inspect=args.inspect is not None)
+    return run_exit_code(outcome, inspect=args.inspect is not None)
 
 
 def _emit_run_selected(record: Any, role: str) -> None:
@@ -682,100 +751,94 @@ def _emit_run_selected(record: Any, role: str) -> None:
     )
 
 
-def _emit_dev_stop(payload: DevStopOutput, json_output: bool) -> None:
-    if json_output:
-        _emit_json(payload)
-        return
-    print(
+def _render_dev_stop(payload: DevStopResult, stream: TextIO) -> None:
+    write = partial(print, file=stream)
+    write(
         f"svc dev {payload.target}: {payload.status}; "
         f"instance {payload.workspace.instance}; scope {payload.capability.scope}"
     )
     attempt = payload.attempt
     if attempt is not None:
-        print(f"$ {_display_argv(attempt.argv)}")
+        write(f"$ {_display_argv(attempt.argv)}")
         role = attempt.caller_role
         state = attempt.state
         detail = f", exit {attempt.exit_code}" if attempt.exit_code is not None else ""
-        print(f"Execution: {attempt.execution_id} ({role}), {state}{detail}")
+        write(f"Execution: {attempt.execution_id} ({role}), {state}{detail}")
         log = attempt.logs.merged
-        print(f"Stop log: {log.path}")
+        write(f"Stop log: {log.path}")
         if payload.status == "stop-failed" and log.bytes:
             tail = _file_tail(Path(log.path))
             if tail:
-                print("Stop output (tail):")
+                write("Stop output (tail):")
                 for line in tail.splitlines():
-                    print(f"  {line}")
+                    write(f"  {line}")
     if payload.probe is not None:
         disposition = "ready" if payload.probe.healthy else "not ready"
-        print(
+        write(
             f"Final probe: {payload.probe.kind} {payload.probe.reason} — {disposition}"
         )
     elif payload.probe_error is not None:
-        print(
+        write(
             "Final probe: unverified — "
             f"{payload.probe_error.code}: {payload.probe_error.message}"
         )
 
 
-def _emit_dev_identity(payload: DevIdentityOutput, json_output: bool) -> None:
-    if json_output:
-        _emit_json(payload)
-        return
+def _render_dev_identity(payload: DevIdentityResult, stream: TextIO) -> None:
+    write = partial(print, file=stream)
     workspace = payload.workspace
-    print("svc dev identity")
-    print(f"instance: {workspace.instance}")
-    print(f"root: {workspace.root}")
-    print(f"repository: {workspace.repository_kind} {workspace.repository_id}")
-    print(f"worktree: {workspace.worktree_id}")
-    print(f"namespace: {workspace.namespace_id}")
+    write("svc dev identity")
+    write(f"instance: {workspace.instance}")
+    write(f"root: {workspace.root}")
+    write(f"repository: {workspace.repository_kind} {workspace.repository_id}")
+    write(f"worktree: {workspace.worktree_id}")
+    write(f"namespace: {workspace.namespace_id}")
 
 
-def _emit_dev_ensure(payload: DevEnsureOutput, json_output: bool) -> None:
-    if json_output:
-        _emit_json(payload)
-        return
+def _render_dev_ensure(payload: DevEnsureResult, stream: TextIO) -> None:
+    write = partial(print, file=stream)
     if payload.caller_status == "detached":
         assert payload.attempt is not None
-        print(
+        write(
             f"svc dev {payload.target}: detached from start "
             f"{payload.attempt.execution_id}; scope {payload.capability.scope}"
         )
-        print(f"Execution state: {payload.attempt.state}")
-        print(f"Startup log: {payload.attempt.logs.merged.path}")
+        write(f"Execution state: {payload.attempt.state}")
+        write(f"Startup log: {payload.attempt.logs.merged.path}")
         return
     ready = payload.ready is True
     lead = "ready" if ready else payload.status
     outcome = f" ({payload.status})" if ready else ""
-    print(
+    write(
         f"svc dev {payload.target}: {lead}{outcome}; "
         f"instance {payload.workspace.instance}; scope {payload.capability.scope}"
     )
     if payload.probe is not None:
-        print(f"Probe: {payload.probe.kind} {_probe_text_detail(payload.probe)}")
+        write(f"Probe: {payload.probe.kind} {_probe_text_detail(payload.probe)}")
     if not ready and payload.probe_argv is not None:
-        print(f"$ {_display_argv(payload.probe_argv)}")
+        write(f"$ {_display_argv(payload.probe_argv)}")
     if payload.access:
         for value in payload.access:
-            print(f"Access: {value}")
+            write(f"Access: {value}")
     elif payload.probe is not None:
         if payload.probe.output:
             output = payload.probe.output
             preview, omitted = _text_preview(output)
-            print("Probe output:")
+            write("Probe output:")
             for line in preview.splitlines() or [preview]:
-                print(f"  {line}")
+                write(f"  {line}")
             if omitted or payload.probe.output_truncated:
-                print("  … output truncated; use --json for the bounded capture")
+                write("  … output truncated; use --json for the bounded capture")
         elif not ready and payload.probe.kind == "exec":
-            print("Probe output: empty")
+            write("Probe output: empty")
     if payload.attempt is not None:
-        print(
+        write(
             f"Execution: {payload.attempt.execution_id} "
             f"({payload.attempt.caller_role}), {payload.attempt.state}"
         )
-        print(f"Startup log: {payload.attempt.logs.merged.path}")
+        write(f"Startup log: {payload.attempt.logs.merged.path}")
     if payload.status == "manual-action-required":
-        print(
+        write(
             "No SVC command can provision this target; follow the Consumer "
             "project's guidance."
         )
@@ -809,40 +872,21 @@ def _emit_dev_stop_selected(record: Any, caller_role: str, log_path: str) -> Non
     print(f"Waiting for stop; log: {log_path}", file=sys.stderr)
 
 
-def _is_expected_ensure_outcome(error: SvcError) -> bool:
-    return (
-        error.code
-        in {
-            "manual-action-required",
-            "occupied-unhealthy",
-            "readiness-timeout",
-            "provision-exited",
-            "activation-timeout",
-            "activation-failed",
-            "dev-owner-lost",
-            "ensure-interrupted",
-        }
-        and error.details.get("command") == "dev ensure"
-    )
-
-
-def _dev_ensure_exit_code(payload: DevEnsureOutput) -> int:
+def _dev_ensure_exit_code(payload: DevEnsureResult) -> int:
     if payload.status == "interrupted" or payload.caller_status == "detached":
         return 130
     return EXIT_OK if payload.ready is True else EXIT_CONFLICT
 
 
-def _emit_dev_status(payload: DevStatusOutput, json_output: bool) -> None:
-    if json_output:
-        _emit_json(payload)
-        return
+def _render_dev_status(payload: DevStatusResult, stream: TextIO) -> None:
+    write = partial(print, file=stream)
     status = payload.status
     if status in {"invalid-configuration", "not-configured"}:
-        print(f"svc dev status: {status}; instance {payload.workspace.instance}")
+        write(f"svc dev status: {status}; instance {payload.workspace.instance}")
         if payload.reason is not None:
-            print(f"Reason: {payload.reason}")
+            write(f"Reason: {payload.reason}")
         if status == "not-configured":
-            print("No dev targets are declared in svc.json.")
+            write("No dev targets are declared in svc.json.")
         return
     targets = payload.targets or ()
     ready_count = sum(
@@ -850,14 +894,14 @@ def _emit_dev_status(payload: DevStatusOutput, json_output: bool) -> None:
         for entry in targets
         if isinstance(entry, DevTargetObservation) and entry.probe.healthy
     )
-    print(
+    write(
         f"svc dev status: {status} — {ready_count}/{len(targets)} ready; "
         f"instance {payload.workspace.instance}"
     )
     ensure_targets: list[str] = []
     for entry in targets:
-        if isinstance(entry, DevTargetError):
-            print(
+        if isinstance(entry, DevTargetFailure):
+            write(
                 f"error      {entry.target}  {entry.error.code}: {entry.error.message}"
             )
             continue
@@ -865,28 +909,28 @@ def _emit_dev_status(payload: DevStatusOutput, json_output: bool) -> None:
         detail = _probe_text_detail(entry.probe)
         continuation = entry.continuation
         suffix = f"; {continuation}" if continuation is not None else ""
-        print(
+        write(
             f"{disposition:<10} {entry.target}  {entry.capability.scope}  "
             f"{entry.probe.kind} {detail}{suffix}"
         )
         if not entry.probe.healthy and entry.probe_argv is not None:
-            print(f"  $ {_display_argv(entry.probe_argv)}")
+            write(f"  $ {_display_argv(entry.probe_argv)}")
         for value in entry.access:
-            print(f"  Access: {value}")
+            write(f"  Access: {value}")
         if entry.probe.output:
             preview, omitted = _text_preview(entry.probe.output)
-            print("  Probe output:")
+            write("  Probe output:")
             for line in preview.splitlines() or [preview]:
-                print(f"    {line}")
+                write(f"    {line}")
             if omitted or entry.probe.output_truncated:
-                print("    … output truncated; use --json for the bounded capture")
+                write("    … output truncated; use --json for the bounded capture")
         elif entry.probe.kind == "exec" and not entry.probe.healthy:
-            print("  Probe output: empty")
+            write("  Probe output: empty")
         if continuation == "ensure":
             ensure_targets.append(entry.target)
     if ensure_targets:
         selected = ensure_targets[0] if len(ensure_targets) == 1 else "<target>"
-        print(
+        write(
             "Ensure one: "
             f"svc dev ensure {shlex.quote(selected)} --repo "
             f"{shlex.quote(str(payload.workspace.root))}"
@@ -918,7 +962,7 @@ def _file_tail(path: Path, limit: int = 1_200) -> str | None:
     return value.decode("utf-8", errors="replace").rstrip("\n") or None
 
 
-def _dev_stop_exit_code(payload: DevStopOutput) -> int:
+def _dev_stop_exit_code(payload: DevStopResult) -> int:
     if payload.caller_status in {"interrupted", "detached"}:
         return 130
     return EXIT_OK if payload.status == "stopped" else EXIT_CONFLICT
@@ -1040,45 +1084,45 @@ def _telemetry_limit(value: str) -> int:
     return limit
 
 
-def _emit_upgrade_plan(plan: UpgradePlan, json_output: bool) -> None:
-    if json_output:
-        _emit_json(plan.as_output())
-        return
-    print(f"svc upgrade: {plan.status}")
-    print(f"Repository: {plan.repo}")
+def _render_upgrade_plan(plan: UpgradePlan, stream: TextIO) -> None:
+    write = partial(print, file=stream)
+    write(f"svc upgrade: {plan.status}")
+    write(f"Repository: {plan.repo}")
     if plan.target is None:
         configuration = plan.details.configuration
         corpus_state = plan.details.corpus
         assert configuration is not None and corpus_state is not None
-        print(f"Configuration: schema {configuration.config_schema} (current)")
-        print(f"Corpus: baseline {corpus_state.project_version} (current)")
-        print("Project SVC upgrade state is current.")
+        write(f"Configuration: schema {configuration.config_schema} (current)")
+        write(f"Corpus: baseline {corpus_state.project_version} (current)")
+        write("Project SVC upgrade state is current.")
         return
 
-    _emit_upgrade_target_heading(plan)
+    _emit_upgrade_target_heading(plan, stream)
     if plan.status == "blocked":
-        print("No changes can be applied.")
-        _emit_blockers(plan.blockers)
-        _emit_upgrade_remaining(plan.remaining_targets, label="Other target")
-        print("Next: resolve the blocker, then recompute this target:")
-        print(f"  svc upgrade {shlex.quote(str(plan.repo))} --target {plan.target}")
+        write("No changes can be applied.")
+        _emit_blockers(plan.blockers, stream)
+        _emit_upgrade_remaining(
+            plan.remaining_targets, label="Other target", stream=stream
+        )
+        write("Next: resolve the blocker, then recompute this target:")
+        write(f"  svc upgrade {shlex.quote(str(plan.repo))} --target {plan.target}")
         return
 
     if plan.target == "config":
-        print("\nAutomatic config changes:")
+        write("\nAutomatic config changes:")
         for change in plan.automatic_changes:
-            print(f"  {change}")
+            write(f"  {change}")
         for guide in plan.config_guides:
-            print(
+            write(
                 f"\nProject migration guidance ({guide.identifier}, sha256:{guide.sha256}):"
             )
             for line in guide.text.splitlines():
-                print(f"  {line}" if line else "")
+                write(f"  {line}" if line else "")
     else:
         corpus_details = plan.details.corpus
         assert corpus_details is not None and corpus_details.releases is not None
         releases = corpus_details.releases
-        print(f"\nCorpus releases ({len(releases)}):")
+        write(f"\nCorpus releases ({len(releases)}):")
         paths: list[str] = []
         for release in releases:
             migration = release.migration
@@ -1087,111 +1131,111 @@ def _emit_upgrade_plan(plan: UpgradePlan, json_output: bool) -> None:
                 if migration == "guide"
                 else "migration not required"
             )
-            print(f"  {release.version}  {label}")
+            write(f"  {release.version}  {label}")
             for guide_ref in release.guides or ():
                 paths.append(guide_ref.path)
-                print(f"    {guide_ref.path}")
+                write(f"    {guide_ref.path}")
         if paths:
-            print("\nRead required guidance:")
+            write("\nRead required guidance:")
             for path in paths:
-                print(f"  svc lookup --path {shlex.quote(path)}")
-            print(
+                write(f"  svc lookup --path {shlex.quote(path)}")
+            write(
                 "\nSVC will only record the reviewed Corpus baseline; it will not "
                 "modify project-owned SVC documents."
             )
 
-    print(f"\nWould change ({len(plan.mutations)}):")
+    write(f"\nWould change ({len(plan.mutations)}):")
     for operation in plan.mutations:
-        print(f"  {operation.action} {operation.path} - {operation.reason}")
-    _emit_upgrade_remaining(plan.remaining_targets, label="Reminder")
+        write(f"  {operation.action} {operation.path} - {operation.reason}")
+    _emit_upgrade_remaining(plan.remaining_targets, label="Reminder", stream=stream)
     assert plan.digest is not None
     if plan.status == "migration-required":
-        print("\nAfter completing the migration guidance, apply this exact plan:")
+        write("\nAfter completing the migration guidance, apply this exact plan:")
     else:
-        print("\nApply this exact plan:")
-    print(
+        write("\nApply this exact plan:")
+    write(
         f"  svc upgrade {shlex.quote(str(plan.repo))} --target {plan.target} "
         f"--apply {plan.digest}"
     )
 
 
-def _emit_upgrade_apply(payload: UpgradeApplyOutput, json_output: bool) -> None:
-    if json_output:
-        _emit_json(payload)
-        return
-    print("svc upgrade: applied")
-    print(f"Repository: {payload.repo}")
+def _render_upgrade_apply(payload: UpgradeApplyResult, stream: TextIO) -> None:
+    write = partial(print, file=stream)
+    write("svc upgrade: applied")
+    write(f"Repository: {payload.repo}")
     if payload.target == "config":
         details = payload.configuration
         assert details is not None
-        print(f"Target: config (schema {details.from_schema} -> {details.to_schema})")
+        write(f"Target: config (schema {details.from_schema} -> {details.to_schema})")
     else:
         corpus_details = payload.corpus
         assert corpus_details is not None
-        print(
+        write(
             "Target: corpus "
             f"(baseline {corpus_details.from_version} -> {corpus_details.to_version})"
         )
-    print(f"Applied plan: {payload.plan_digest}")
+    write(f"Applied plan: {payload.plan_digest}")
     if payload.migration.disposition == "caller-asserted":
-        print(
+        write(
             "Migration guidance: asserted complete by caller; project-owned work not verified by SVC"
         )
     else:
-        print("Migration guidance: not required")
-    print(f"\nChanged ({len(payload.operations)}):")
+        write("Migration guidance: not required")
+    write(f"\nChanged ({len(payload.operations)}):")
     for operation in payload.operations:
-        print(f"  {operation.action} {operation.path}")
-    print(f"\nVerification: {payload.verification.scope} {payload.verification.status}")
+        write(f"  {operation.action} {operation.path}")
+    write(f"\nVerification: {payload.verification.scope} {payload.verification.status}")
     if payload.remaining_targets:
-        _emit_upgrade_remaining(payload.remaining_targets, label="Reminder")
-        print("Next upgrade:")
-        print(f"  svc upgrade {shlex.quote(payload.repo)}")
+        _emit_upgrade_remaining(
+            payload.remaining_targets, label="Reminder", stream=stream
+        )
+        write("Next upgrade:")
+        write(f"  svc upgrade {shlex.quote(payload.repo)}")
     else:
-        print("\nRemaining upgrade targets: none")
-        print("Next observation:")
-        print(f"  svc status {shlex.quote(payload.repo)}")
+        write("\nRemaining upgrade targets: none")
+        write("Next observation:")
+        write(f"  svc status {shlex.quote(payload.repo)}")
 
 
-def _emit_upgrade_target_heading(plan: UpgradePlan) -> None:
+def _emit_upgrade_target_heading(plan: UpgradePlan, stream: TextIO) -> None:
+    write = partial(print, file=stream)
     if plan.target == "config" and plan.details.configuration is not None:
         details = plan.details.configuration
         if details.from_schema is not None:
-            print(
+            write(
                 f"Target: config (schema {details.from_schema} -> {details.to_schema})"
             )
             return
     if plan.target == "corpus" and plan.details.corpus is not None:
         corpus_details = plan.details.corpus
         if corpus_details.from_version is not None:
-            print(
+            write(
                 "Target: corpus "
                 f"(baseline {corpus_details.from_version} -> "
                 f"{corpus_details.to_version})"
             )
             return
-    print(f"Target: {plan.target}")
+    write(f"Target: {plan.target}")
 
 
 def _emit_upgrade_remaining(
-    remaining: Sequence[RemainingTarget], *, label: str
+    remaining: Sequence[RemainingTarget], *, label: str, stream: TextIO
 ) -> None:
+    write = partial(print, file=stream)
     for fact in remaining:
         if fact.target == "corpus":
             transition = f"{fact.from_version} -> {fact.to_version}"
         else:
             transition = f"schema {fact.from_schema} -> {fact.to_schema}"
-        print(f"\n{label}: {fact.target} upgrade {fact.status} ({transition})")
+        write(f"\n{label}: {fact.target} upgrade {fact.status} ({transition})")
 
 
-def _emit_init_plan(plan: InitPlan, json_output: bool) -> None:
-    if json_output:
-        _emit_json(plan.as_output())
-        return
+def _render_init_plan(plan: InitPlan, stream: TextIO) -> None:
+    write = partial(print, file=stream)
     suffix = "; no changes can be applied" if plan.status == "blocked" else ""
-    print(f"svc init: {plan.status}{suffix}")
-    print(f"Repository: {plan.repo}")
-    print(
+    write(f"svc init: {plan.status}{suffix}")
+    write(f"Repository: {plan.repo}")
+    write(
         "Intent: "
         + (
             "establish project integration"
@@ -1199,47 +1243,45 @@ def _emit_init_plan(plan: InitPlan, json_output: bool) -> None:
             else "repair managed integration"
         )
     )
-    print(f"Corpus: {plan.corpus_version}")
+    write(f"Corpus: {plan.corpus_version}")
     baseline = plan.corpus_baseline
     if baseline.disposition == "create":
-        print(f"Corpus baseline: create {baseline.version}")
+        write(f"Corpus baseline: create {baseline.version}")
     else:
-        print(f"Corpus baseline: {baseline.version or 'unavailable'} (unchanged)")
+        write(f"Corpus baseline: {baseline.version or 'unavailable'} (unchanged)")
     if plan.status == "blocked":
-        print()
-        _emit_blockers(plan.blockers)
-        print("Next: resolve the blocker, then recompute the plan:")
-        print(f"  svc init {shlex.quote(str(plan.repo))}")
+        write()
+        _emit_blockers(plan.blockers, stream)
+        write("Next: resolve the blocker, then recompute the plan:")
+        write(f"  svc init {shlex.quote(str(plan.repo))}")
         return
     if plan.status == "noop":
-        print("Managed integration is current; no changes.")
+        write("Managed integration is current; no changes.")
         return
-    print(f"\nWould change ({len(plan.mutations)}):")
+    write(f"\nWould change ({len(plan.mutations)}):")
     for mutation in plan.mutations:
         surface, extent, reason = _init_operation_text(mutation.path)
-        print(f"  {mutation.action:7} {mutation.path} ({extent}) - {reason}")
+        write(f"  {mutation.action:7} {mutation.path} ({extent}) - {reason}")
     assert plan.digest is not None
-    print("\nApply exact plan:")
-    print(f"  svc init {shlex.quote(str(plan.repo))} --apply {plan.digest}")
+    write("\nApply exact plan:")
+    write(f"  svc init {shlex.quote(str(plan.repo))} --apply {plan.digest}")
 
 
-def _emit_init_apply(payload: InitApplyOutput, json_output: bool) -> None:
-    if json_output:
-        _emit_json(payload)
-        return
-    print(f"svc init: {payload.status}")
-    print(f"Repository: {payload.repo}")
-    print(f"Corpus: {payload.corpus_version}")
+def _render_init_apply(payload: InitApplyResult, stream: TextIO) -> None:
+    write = partial(print, file=stream)
+    write(f"svc init: {payload.status}")
+    write(f"Repository: {payload.repo}")
+    write(f"Corpus: {payload.corpus_version}")
     if payload.corpus_baseline.disposition == "create":
-        print(f"Corpus baseline: created {payload.corpus_baseline.version}")
+        write(f"Corpus baseline: created {payload.corpus_baseline.version}")
     else:
-        print(
+        write(
             "Corpus baseline: "
             f"{payload.corpus_baseline.version or 'unavailable'} (unchanged)"
         )
-    print(f"Applied plan: {payload.plan_digest}")
+    write(f"Applied plan: {payload.plan_digest}")
     if payload.operations:
-        print(f"\nChanged ({len(payload.operations)}):")
+        write(f"\nChanged ({len(payload.operations)}):")
         past = {
             "create": "created",
             "append": "appended",
@@ -1248,12 +1290,12 @@ def _emit_init_apply(payload: InitApplyOutput, json_output: bool) -> None:
         }
         for operation in payload.operations:
             _, extent, _ = _init_operation_text(operation.path)
-            print(f"  {past[operation.action]:9} {operation.path} ({extent})")
+            write(f"  {past[operation.action]:9} {operation.path} ({extent})")
     else:
-        print("Changed: none; no managed operation required a write")
-    print("\nVerification: all planned path postconditions passed")
-    print("Next observation:")
-    print(f"  svc status {shlex.quote(payload.repo)}")
+        write("Changed: none; no managed operation required a write")
+    write("\nVerification: all planned path postconditions passed")
+    write("Next observation:")
+    write(f"  svc status {shlex.quote(str(payload.repo))}")
 
 
 def _init_operation_text(path: str) -> tuple[str, str, str]:
@@ -1279,22 +1321,20 @@ def _init_operation_text(path: str) -> tuple[str, str, str]:
     return values[path]
 
 
-def _emit_status(payload: RootStatusOutput, json_output: bool) -> None:
-    if json_output:
-        _emit_json(payload)
-        return
+def _render_status(payload: ProjectStatusInspection, stream: TextIO) -> None:
+    write = partial(print, file=stream)
     installed = payload.installed_cli_version or "source-tree"
     project_version = payload.corpus.project_version or "absent"
     lead = "healthy" if payload.healthy else payload.status
-    print(
+    write(
         f"SVC {lead} — CLI {installed} ({payload.resource_mode}); "
         f"Corpus {payload.corpus.available_version}; project baseline {project_version} "
         f"({payload.corpus.status}); configuration {payload.configuration.status}"
     )
     if not payload.healthy:
-        print(f"Next: {payload.next.action} — {payload.next.reason}")
+        write(f"Next: {payload.next.action} — {payload.next.reason}")
         if payload.next.command is not None:
-            print("  " + shlex.join(payload.next.command))
+            write("  " + shlex.join(payload.next.command))
     project_message = (
         payload.project.message
         if isinstance(payload.project, ProjectInvalidStatus)
@@ -1307,24 +1347,24 @@ def _emit_status(payload: RootStatusOutput, json_output: bool) -> None:
     )
     message = project_message or configuration_message
     if message:
-        print(f"Configuration: {message}")
+        write(f"Configuration: {message}")
     anomalies = payload.integration.anomalies
     if anomalies:
-        print(
+        write(
             f"Integration: {payload.integration.status} "
             f"({len(anomalies)} anomalous surface(s))"
         )
         for item in anomalies:
-            print(f"  {item.status:16} {item.path} ({item.kind})")
-    print(
+            write(f"  {item.status:16} {item.path} ({item.kind})")
+    write(
         f"Workspace: {payload.workspace.root} ({payload.workspace.repository_kind}; "
         f"worktree {payload.workspace.worktree_id}; "
         f"instance {payload.workspace.instance})"
     )
     if payload.dev.targets:
-        print("Dev: " + ", ".join(payload.dev.targets))
+        write("Dev: " + ", ".join(payload.dev.targets))
     if payload.run.entries:
-        print("Run: " + ", ".join(payload.run.entries))
+        write("Run: " + ", ".join(payload.run.entries))
 
 
 def _emit_telemetry_list(payload: dict[str, Any], json_output: bool) -> None:
@@ -1353,64 +1393,62 @@ def _emit_telemetry_export(payload: dict[str, Any], json_output: bool) -> None:
         print("SVC telemetry agent-thread export: exported")
 
 
-def _emit_lookup(response: Any, json_output: bool) -> None:
-    if json_output:
-        _emit_json(response.as_output())
-        return
+def _render_lookup(response: LookupResponse, stream: TextIO) -> None:
+    write = partial(print, file=stream)
     if response.query.mode == "path":
+        assert response.document is not None
         content = response.document.content
-        print(content, end="" if content.endswith("\n") else "\n")
+        write(content, end="" if content.endswith("\n") else "\n")
         return
     if response.query.mode == "list":
         for entry in response.entries:
             if entry.kind == "directory":
-                print(f"{entry.path:<40} {entry.document_count} documents")
+                write(f"{entry.path:<40} {entry.document_count} documents")
             else:
-                print(f"{entry.path:<40} {entry.title}")
-        print("\nExpand: svc lookup --list <directory>")
-        print("Read:   svc lookup --path <document>")
+                write(f"{entry.path:<40} {entry.title}")
+        write("\nExpand: svc lookup --list <directory>")
+        write("Read:   svc lookup --path <document>")
         return
     if response.query.mode == "keyword":
         if not response.candidates:
-            print(f"No SVC Corpus matches for: {response.query.value}")
+            write(f"No SVC Corpus matches for: {response.query.value}")
             return
         for candidate in response.candidates:
-            print(f"{candidate.entry.path:<40} {candidate.entry.title}")
+            write(f"{candidate.entry.path:<40} {candidate.entry.title}")
             if candidate.excerpt is not None:
-                print(f"  {candidate.excerpt}")
+                write(f"  {candidate.excerpt}")
             else:
-                print("  [path match]")
+                write("  [path match]")
     else:
         if not response.matches:
-            print(f"No SVC Corpus matches for: {response.query.value}")
+            write(f"No SVC Corpus matches for: {response.query.value}")
             return
         for match in response.matches:
             if match.surface == "path":
-                print(f"[path] {match.entry.path}")
+                write(f"[path] {match.entry.path}")
             else:
-                print(
+                write(
                     f"{match.entry.path}:{match.line}:{match.column}: {match.excerpt}"
                 )
     if response.truncated:
-        print(f"Results truncated at --limit {response.query.limit}.")
-    print("\nRead one: svc lookup --path <path>")
+        write(f"Results truncated at --limit {response.query.limit}.")
+    write("\nRead one: svc lookup --path <path>")
 
 
-def _emit_blockers(blockers: Sequence[Any]) -> None:
+def _emit_blockers(blockers: Sequence[Any], stream: TextIO) -> None:
+    write = partial(print, file=stream)
     if not blockers:
         return
-    print("Blockers:")
+    write("Blockers:")
     for blocker in blockers:
         path = getattr(blocker, "path", None)
         location = f" {path}:" if path else ""
-        print(f"  {blocker.code}:{location} {blocker.message}")
+        write(f"  {blocker.code}:{location} {blocker.message}")
 
 
-def _emit_error(error: SvcError, json_output: bool) -> None:
-    if json_output:
-        _emit_json(error.as_output(), stream=sys.stderr)
-        return
-    print(f"svc: {error.code}: {error.message}", file=sys.stderr)
+def _render_error(error: SvcError, stream: TextIO) -> None:
+    write = partial(print, file=stream)
+    write(f"svc: {error.code}: {error.message}")
     details = dict(error.details)
     hint = details.pop("hint", None)
     labels = {
@@ -1427,7 +1465,7 @@ def _emit_error(error: SvcError, json_output: bool) -> None:
     for key, label in labels.items():
         value = details.get(key)
         if isinstance(value, (str, int, float, bool)):
-            print(f"{label}: {value}", file=sys.stderr)
+            write(f"{label}: {value}")
             rendered.add(key)
     for key, label in (
         ("available_entries", "Available entries"),
@@ -1435,16 +1473,16 @@ def _emit_error(error: SvcError, json_output: bool) -> None:
     ):
         value = details.get(key)
         if isinstance(value, list) and all(isinstance(item, str) for item in value):
-            print(f"{label}: {', '.join(value) if value else 'none'}", file=sys.stderr)
+            write(f"{label}: {', '.join(value) if value else 'none'}")
             rendered.add(key)
     rollback = details.get("rollback")
     if isinstance(rollback, dict) and isinstance(rollback.get("status"), str):
-        print(f"Rollback: {rollback['status']}", file=sys.stderr)
+        write(f"Rollback: {rollback['status']}")
         rendered.add("rollback")
     if set(details) - rendered:
-        print("Structured details: rerun with --json.", file=sys.stderr)
+        write("Structured details: rerun with --json.")
     if isinstance(hint, str):
-        print(f"Hint: {hint}", file=sys.stderr)
+        write(f"Hint: {hint}")
 
 
 def _emit_json(payload: RegisteredMachineOutput, stream: Any | None = None) -> None:

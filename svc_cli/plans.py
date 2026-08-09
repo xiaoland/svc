@@ -9,11 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, TypeAlias
 
-from pydantic import Field
-
 from .catalog import canonical_json, sha256_bytes
 from .errors import SvcError
-from .machine import MachineModel
 
 
 PLAN_SCHEMA_VERSION = 2
@@ -24,34 +21,8 @@ RollbackStatus: TypeAlias = Literal["succeeded", "conflicted", "failed"]
 LocalApplyStatus: TypeAlias = Literal["noop", "applied"]
 
 
-class BlockerOutput(MachineModel):
-    code: str
-    path: str
-    message: str
-
-
-class FileStateOutput(MachineModel):
-    state: FileStateKind
-    sha256: str | None = Field(default=None, exclude_if=lambda value: value is None)
-    posix_mode: int | None = Field(default=None, exclude_if=lambda value: value is None)
-
-
-class FileMutationOutput(MachineModel):
-    path: str
-    action: PlanAction
-    reason: str
-    before: FileStateOutput
-    after: FileStateOutput
-
-
-class RollbackOutput(MachineModel):
-    status: RollbackStatus
-    restored_paths: tuple[str, ...]
-    preserved_external_paths: tuple[str, ...]
-    unrestored_paths: tuple[str, ...]
-
-
-class LocalApplyResult(MachineModel):
+@dataclass(frozen=True)
+class LocalApplyResult:
     status: LocalApplyStatus
     changed: int
     verification: Literal["passed"]
@@ -82,10 +53,7 @@ class Blocker:
     message: str
 
     def as_dict(self) -> dict[str, object]:
-        return dict(self.as_output().as_dict())
-
-    def as_output(self) -> BlockerOutput:
-        return BlockerOutput(code=self.code, path=self.path, message=self.message)
+        return {"code": self.code, "path": self.path, "message": self.message}
 
 
 @dataclass(frozen=True)
@@ -109,14 +77,12 @@ class FileState:
             raise ValueError("A POSIX file mode must contain only permission bits")
 
     def as_dict(self) -> dict[str, object]:
-        return dict(self.as_output().as_dict())
-
-    def as_output(self) -> FileStateOutput:
-        return FileStateOutput(
-            state=self.state,
-            sha256=self.sha256,
-            posix_mode=self.posix_mode,
-        )
+        result: dict[str, object] = {"state": self.state}
+        if self.sha256 is not None:
+            result["sha256"] = self.sha256
+        if self.posix_mode is not None:
+            result["posix_mode"] = self.posix_mode
+        return result
 
 
 ABSENT_FILE = FileState("absent")
@@ -154,16 +120,13 @@ class PlannedFileMutation:
         }
 
     def as_dict(self) -> dict[str, object]:
-        return dict(self.as_output().as_dict())
-
-    def as_output(self) -> FileMutationOutput:
-        return FileMutationOutput(
-            path=self.path,
-            action=self.action,
-            reason=self.reason,
-            before=self.before.as_output(),
-            after=self.after.as_output(),
-        )
+        return {
+            "path": self.path,
+            "action": self.action,
+            "reason": self.reason,
+            "before": self.before.as_dict(),
+            "after": self.after.as_dict(),
+        }
 
 
 @dataclass(frozen=True)
@@ -182,15 +145,12 @@ class RollbackReport:
         return "restored"
 
     def as_dict(self) -> dict[str, object]:
-        return dict(self.as_output().as_dict())
-
-    def as_output(self) -> RollbackOutput:
-        return RollbackOutput(
-            status=self.status,
-            restored_paths=self.restored_paths,
-            preserved_external_paths=self.preserved_external_paths,
-            unrestored_paths=self.unrestored_paths,
-        )
+        return {
+            "status": self.status,
+            "restored_paths": list(self.restored_paths),
+            "preserved_external_paths": list(self.preserved_external_paths),
+            "unrestored_paths": list(self.unrestored_paths),
+        }
 
 
 @dataclass(frozen=True)

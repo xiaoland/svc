@@ -16,7 +16,7 @@ import urllib3
 
 from ..config import ExecProbe, HttpProbe, TargetConfig, TcpProbe
 from ..errors import SvcError
-from ..machine import MachineModel
+from ..model import ValueModel
 from ..workspace import WorkspaceIdentity
 from .identity import (
     interpolate_dev_argv,
@@ -46,7 +46,7 @@ ProbeReason: TypeAlias = Literal[
 ]
 
 
-class ProbeObservation(MachineModel):
+class ProbeObservation(ValueModel):
     kind: ProbeKind
     healthy: bool
     reason: ProbeReason
@@ -59,7 +59,7 @@ class ProbeObservation(MachineModel):
     output_truncated: bool | None = None
 
 
-class ResolvedProbe(MachineModel):
+class ResolvedProbe(ValueModel):
     kind: ProbeKind
     endpoint_identity: str
     url: str | None = None

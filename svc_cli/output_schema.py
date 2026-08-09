@@ -3,22 +3,23 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from importlib import resources
 from typing import Any, TypeAlias
 
 from pydantic import JsonValue, TypeAdapter
 
-from .dev.runtime import (
+from .cli_output.dev import (
     DevEnsureOutput,
     DevIdentityOutput,
     DevStatusOutput,
     DevStopOutput,
 )
-from .lookup import LookupOutput
-from .machine import CliUsageOutput, MachineError
-from .project import InitApplyOutput, InitPlanOutput, RootStatusOutput
-from .run.runtime import RunReceipt
-from .upgrade import UpgradeApplyOutput, UpgradePlanOutput
+from .cli_output.lookup import LookupOutput
+from .cli_output.project import InitApplyOutput, InitPlanOutput, RootStatusOutput
+from .cli_output.model import CliUsageOutput, MachineError
+from .cli_output.run import RunReceipt
+from .cli_output.upgrade import UpgradeApplyOutput, UpgradePlanOutput
 
 
 LookupMachineOutput: TypeAlias = LookupOutput | MachineError | CliUsageOutput
@@ -52,57 +53,39 @@ RegisteredMachineOutput: TypeAlias = (
 )
 
 
-OUTPUT_SCHEMA_KEYS = (
-    "lookup",
-    "init",
-    "status",
-    "upgrade",
-    "dev-identity",
-    "dev-status",
-    "dev-ensure",
-    "dev-stop",
-    "run",
-)
+@dataclass(frozen=True)
+class OutputSchemaSpec:
+    result_schema_version: int
+    adapter: TypeAdapter[Any]
 
-_RESULT_SCHEMA_VERSIONS = {
-    "lookup": 2,
-    "init": 2,
-    "status": 2,
-    "upgrade": 1,
-    "dev-identity": 2,
-    "dev-status": 2,
-    "dev-ensure": 2,
-    "dev-stop": 2,
-    "run": 2,
-}
 
-_ADAPTERS: dict[str, TypeAdapter[Any]] = {
-    "lookup": TypeAdapter(LookupMachineOutput),
-    "init": TypeAdapter(InitMachineOutput),
-    "status": TypeAdapter(StatusMachineOutput),
-    "upgrade": TypeAdapter(UpgradeMachineOutput),
-    "dev-identity": TypeAdapter(DevIdentityMachineOutput),
-    "dev-status": TypeAdapter(DevStatusMachineOutput),
-    "dev-ensure": TypeAdapter(DevEnsureMachineOutput),
-    "dev-stop": TypeAdapter(DevStopMachineOutput),
-    "run": TypeAdapter(RunMachineOutput),
+OUTPUT_SCHEMA_SPECS = {
+    "lookup": OutputSchemaSpec(2, TypeAdapter(LookupMachineOutput)),
+    "init": OutputSchemaSpec(2, TypeAdapter(InitMachineOutput)),
+    "status": OutputSchemaSpec(2, TypeAdapter(StatusMachineOutput)),
+    "upgrade": OutputSchemaSpec(1, TypeAdapter(UpgradeMachineOutput)),
+    "dev-identity": OutputSchemaSpec(2, TypeAdapter(DevIdentityMachineOutput)),
+    "dev-status": OutputSchemaSpec(2, TypeAdapter(DevStatusMachineOutput)),
+    "dev-ensure": OutputSchemaSpec(2, TypeAdapter(DevEnsureMachineOutput)),
+    "dev-stop": OutputSchemaSpec(2, TypeAdapter(DevStopMachineOutput)),
+    "run": OutputSchemaSpec(2, TypeAdapter(RunMachineOutput)),
 }
+OUTPUT_SCHEMA_KEYS = tuple(OUTPUT_SCHEMA_SPECS)
 
 
 def generate_output_schema(key: str) -> dict[str, JsonValue]:
     """Generate one deterministic schema from the registered serialization model."""
 
     try:
-        adapter = _ADAPTERS[key]
-        version = _RESULT_SCHEMA_VERSIONS[key]
+        spec = OUTPUT_SCHEMA_SPECS[key]
     except KeyError as error:
         raise ValueError(f"Unknown output schema key: {key}") from error
-    generated = adapter.json_schema(mode="serialization")
+    generated = spec.adapter.json_schema(mode="serialization")
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": f"urn:svc:cli-output:{key}:v{version}",
+        "$id": f"urn:svc:cli-output:{key}:v{spec.result_schema_version}",
         "title": f"SVC {key} machine output",
-        "x-svc-result-schema-version": version,
+        "x-svc-result-schema-version": spec.result_schema_version,
         **generated,
     }
 
@@ -110,7 +93,7 @@ def generate_output_schema(key: str) -> dict[str, JsonValue]:
 def read_output_schema(key: str) -> dict[str, JsonValue]:
     """Read the packaged projection returned to consumers by --json-schema."""
 
-    if key not in _ADAPTERS:
+    if key not in OUTPUT_SCHEMA_SPECS:
         raise ValueError(f"Unknown output schema key: {key}")
     resource = resources.files("svc_cli").joinpath(
         "data", "output-schemas", f"{key}.json"

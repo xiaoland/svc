@@ -35,6 +35,12 @@ def test_machine_json_is_compact_for_results_and_errors() -> None:
     assert (code, stderr) == (EXIT_OK, "")
     assert assert_compact_json(stdout)["command"] == "lookup"
 
+    with tempfile.TemporaryDirectory() as tmp:
+        code, stdout, stderr = invoke_text(["status", tmp, "--json"])
+
+    assert (code, stderr) == (EXIT_CONFLICT, "")
+    assert assert_compact_json(stdout)["status"] == "unadopted"
+
     code, stdout, stderr = invoke_text(["status", "--unknown", "--json"])
 
     assert (code, stdout) == (2, "")
@@ -105,37 +111,6 @@ def test_dev_identity_text_describes_workspace() -> None:
         assert f"root: {root.resolve()}" in stdout
         assert "repository: non-git " in stdout
         assert "worktree:" in stdout and "namespace:" in stdout
-
-
-def test_dev_stop_expected_domain_result_is_compact_stdout_not_error_stderr() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        write_project_config(
-            root,
-            dev_targets={
-                "server": {
-                    "scope": "repository",
-                    "probe": {
-                        "kind": "exec",
-                        "argv": [
-                            sys.executable,
-                            "-c",
-                            "raise SystemExit(1)",
-                        ],
-                    },
-                    "provision": {"kind": "manual"},
-                }
-            },
-        )
-
-        code, stdout, stderr = invoke_text(
-            ["dev", "stop", "server", "--repo", str(root), "--json"]
-        )
-
-        assert (code, stderr) == (EXIT_CONFLICT, "")
-        payload = assert_compact_json(stdout)
-        assert payload["status"] == "manual-action-required"
-        assert payload["ready"] is False
 
 
 def test_dev_ensure_text_exposes_probe_and_manual_continuation() -> None:

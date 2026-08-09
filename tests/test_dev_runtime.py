@@ -15,8 +15,8 @@ import pytest
 from svc_cli._execution import ExecutionStore
 from svc_cli.config import ExecProbe, HttpProbe, TargetConfig
 from svc_cli.dev.runtime import (
-    DevEnsureOutput,
-    DevStopOutput,
+    DevEnsureResult,
+    DevStopResult,
     DevTargetObservation,
     ensure_target,
     inspect_dev_status,
@@ -144,9 +144,8 @@ def test_worktree_scope_refuses_static_probe_and_manual_never_provisions() -> No
         assert observed.continuation == "manual-action-required"
         assert observed.access == ("offline-receipt",)
 
-        with pytest.raises(SvcError, match="manual") as manual:
-            ensure_target(root, "manual", namespace="fixture")
-        result = DevEnsureOutput.model_validate(manual.value.details, strict=False)
+        result = ensure_target(root, "manual", namespace="fixture")
+        assert result.status == "manual-action-required"
         assert result.probe is not None
         assert result.probe.output == "bounded diagnostic\n"
         assert result.access == ("offline-receipt",)
@@ -182,13 +181,11 @@ def test_owned_early_exit_reports_only_attempt_cleanup() -> None:
                 },
             },
         )
-        with pytest.raises(SvcError) as raised:
-            ensure_target(root, "fails", namespace="fixture", store=store)
-        assert raised.value.code == "provision-exited"
-        assert raised.value.details["cleanup"] == "completed"
-        assert raised.value.details["attempt"]["logs"]["merged"]["path"].endswith(
-            "output.log"
-        )
+        result = ensure_target(root, "fails", namespace="fixture", store=store)
+        assert result.status == "child-exit"
+        assert result.cleanup == "completed"
+        assert result.attempt is not None
+        assert result.attempt.logs.merged.path.endswith("output.log")
 
 
 def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None:
@@ -221,7 +218,7 @@ def test_concurrent_ensure_starts_once_then_reuses_the_declared_server() -> None
                 },
             },
         )
-        results: list[DevEnsureOutput] = []
+        results: list[DevEnsureResult] = []
         failures: list[BaseException] = []
 
         def ensure() -> None:
@@ -299,16 +296,15 @@ def test_activation_timeout_is_structured_and_cleans_its_owned_group(
         },
     )
 
-    with pytest.raises(SvcError) as raised:
-        ensure_target(
-            tmp_path,
-            "activation",
-            namespace="fixture",
-            store=ExecutionStore(tmp_path / "runtime"),
-        )
+    result = ensure_target(
+        tmp_path,
+        "activation",
+        namespace="fixture",
+        store=ExecutionStore(tmp_path / "runtime"),
+    )
 
-    assert raised.value.code == "activation-timeout"
-    assert raised.value.details["cleanup"] == "completed"
+    assert result.status == "activation-timeout"
+    assert result.cleanup == "completed"
 
 
 def test_declared_stop_runs_once_and_is_qualified_by_final_readiness() -> None:
@@ -347,7 +343,7 @@ def test_declared_stop_runs_once_and_is_qualified_by_final_readiness() -> None:
             },
         )
         store = ExecutionStore(root / "runtime")
-        results: list[DevStopOutput] = []
+        results: list[DevStopResult] = []
         failures: list[BaseException] = []
 
         def stop() -> None:
@@ -526,7 +522,7 @@ def test_stop_and_ensure_serialize_on_the_same_capability_boundary() -> None:
             },
         )
         store = ExecutionStore(root / "runtime")
-        stopped: list[DevStopOutput] = []
+        stopped: list[DevStopResult] = []
         stopper = threading.Thread(
             target=lambda: stopped.append(
                 stop_target(root, "server", namespace="fixture", store=store)

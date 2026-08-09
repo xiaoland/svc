@@ -2,9 +2,9 @@
 
 - **Objective**: Reduce the test suite to the smallest maintainable proof set that protects public behavior, safety boundaries, recovery semantics, and cross-platform process contracts without coverage-driven cases or repeated implementation checks.
 - **Guardrails**: Do not weaken an externally observable CLI, project migration, file transaction, workspace, execution, `dev`, or `run` contract. Keep tests for security, concurrency, interruption, rollback, integrity, and platform-specific regressions when no cheaper gate proves them. Unit fixtures may exercise mechanics but never count as product acceptance. Preserve unrelated working-tree changes and do not commit without explicit authority.
-- **Verification**: 159 tests pass in about eight seconds. Enhanced test lint passes; mypy passes across 36 source/support files with the Pydantic plugin; all seven import contracts pass; output-schema and release projections, 22 Corpus documents, workflow lint, and build pass. A repository-external venv loads the built wheel from site-packages, retrieves all nine packaged command schemas as one compact line each, and performs exact Corpus lookup. Five real project roots accept typed status/init-plan/upgrade-plan/identity results without mutation; three adopted Consumers correctly stop at their pending schema-v2 configuration migration. Critical process/concurrency tests remain executable; fixture-only checks are not counted as product acceptance.
-- **Current Truth**: The reviewed suite collects 159 cases from 144 test functions and contains 5,419 Python lines, down from 198 cases, 174 functions, and 6,420 lines when shared support is counted consistently. Runtime remains about eight seconds. Removed proofs included mocked acceptance-harness internals, duplicate workspace Git scenarios, project-level transaction rollback repetitions, release snapshots already owned by `check-release-projections`, Pydantic frozen/extra behavior, private constant/helper checks, synonymous invalid-input variants, and JSON key-set/field-presence assertions now owned by the output-schema projection. `test_cli.py` now has 10 adapter tests instead of 17 mixed-layer tests: it owns help/grammar, compact framing, channel/exit routing, schema discovery, Agent/Human text, and native-output isolation. Lookup/init/upgrade JSON semantics remain with their typed controllers; manual dev probe evidence and unknown run-entry evidence were folded into existing domain tests without adding cases. Shared project-config builders removed schema-envelope repetition; activation timeout enters through public `ensure_target`; shared test infrastructure is typechecked; test lint enforces Pyflakes, Bugbear, safe simplifications, pytest correctness, and the existing import ban.
-- **Next Step**: Review the implementation and verification record. The core CLI machine boundary is implemented; analysis and telemetry remain explicit legacy/unscoped protocols outside this core-business unit. Do not commit without explicit authority.
+- **Verification**: 158 tests pass in about eight seconds. Enhanced test/source lint passes; mypy passes across 44 source/support files with the Pydantic plugin; all seven import contracts pass; all nine output schemas remain byte-identical to `ab97e97`; release projections, 22 Corpus documents, workflow lint, and wheel build pass. A repository-external venv loads the candidate wheel from site-packages. Baseline and candidate installed wheels match exit code, stdout, and stderr exactly for 26 read-only observations across five real roots, including status/init-plan/upgrade-plan/identity JSON and unchanged plan digests. No real Consumer mutation command was run; fixture-only checks are not counted as product acceptance.
+- **Current Truth**: The reviewed suite collects 158 cases from 143 test functions and contains 5,392 Python lines, down from 198 cases, 174 functions, and 6,420 lines when shared support is counted consistently. Runtime remains about eight seconds. `test_cli.py` has 9 adapter tests: one public protocol matrix now proves compact framing plus resolved-result, usage-error, and service-error routing; the redundant standalone dev-stop channel case was removed while its business behavior remains in runtime tests. Core services now return interface-neutral values and are mechanically forbidden from importing CLI output, delivery, or schema owners. Public Pydantic DTOs/projectors live under `svc_cli/cli_output`; one schema registry owns adapters/versions; one ordinary delivery owner selects JSON versus stream-explicit Human presentation; and expected `dev ensure` lifecycle outcomes are returned results rather than serialized errors. `run` native streaming and dev live progress remain deliberate specialized adapters. Analysis and telemetry remain outside this redesign.
+- **Next Step**: Review the completed diff and acceptance evidence. The independent [CLI interface/service separation plan](cli-interface-separation-plan.md) records the implemented topology and exact verification. Do not commit without explicit authority.
 
 ## Review Rules
 
@@ -19,13 +19,13 @@ A test is removed or narrowed when it only mirrors implementation structure, re-
 
 ## Retained Proof Ownership
 
-- CLI adapter and Agent/Human output protocol: 14 cases.
+- CLI adapter and Agent/Human output protocol: 13 cases.
 - Init/status/config migration/file transaction/upgrade behavior: 41 cases.
 - Corpus lookup/catalog/document/release tooling behavior: 38 cases.
 - Workspace/execution/dev/run coordination and process behavior: 37 cases.
 - Telemetry and analysis protocols (not redesigned in this unit): 29 cases.
 
-Parameterized boundary matrices account for the difference between 144 test functions and 159 collected cases. They remain only where cases represent different parser forms, migration-loss risks, protocol modes, or release state transitions.
+Parameterized boundary matrices account for the difference between 143 test functions and 158 collected cases. They remain only where cases represent different parser forms, migration-loss risks, protocol modes, or release state transitions.
 
 ## Machine JSON Contract Redesign — Implemented
 
@@ -46,3 +46,28 @@ typed output model -> Pydantic serialization -> command JSON
 - Keep a command/family `schema_version` literal and require it to advance with a changed packaged schema. The CLI package version reports the release; the output schema version tells a consumer which machine contract it received.
 
 This replaces per-command field-presence and exact-key assertions. It does **not** replace the smallest CLI adapter proofs for compact one-object framing, stdout versus stderr routing, exit-code mapping, native-output suppression, or follower/owner process behavior. A semantic differential check against the pre-refactor source confirmed unchanged lookup, real-project status/init/upgrade, and workspace-identity output; a mismatch in default-field serialization was fixed in the model layer rather than memorialized with another field assertion.
+
+## CLI Interface Boundary — Accepted Direction
+
+The detailed evidence, type ownership, implementation order, rehearsal, and real-project matrix live in the independent [CLI interface/service separation plan](cli-interface-separation-plan.md).
+
+The dependency and authority direction is:
+
+```text
+CLI parser/controller -> application service -> service result/facts
+        |                                      |
+        +---- CLI projection/presenter <-------+
+                         |
+                  terminal delivery
+          JSON/text, stdout/stderr, exit code
+```
+
+- The CLI owns argument grammar, command names, public output-schema versions, JSON aliases/exclusion, Human text, terminal channels, and process exit mapping. A service must not return a CLI `CommandOutcome`, know `--json`, choose stdout/stderr, or carry a public command envelope.
+- Services own use-case inputs, business validation, state transitions, coordination, and interface-neutral results/events. Pydantic itself is allowed when it improves those service contracts; inheriting the CLI-specific `MachineModel` is not. Config schemas and private execution-record schemas remain their data owners' formats and are not CLI leakage merely because they also have a `schema_version`.
+- Public Pydantic output models are explicit CLI projections over service results. `schema_version` and `command` are added at that boundary. Projection code stays typed and names the same semantic consistently; it must not fall back to arbitrary dictionary assembly.
+- `SvcError` remains a service failure with code/message/details; the CLI maps it to the public `MachineError` and terminal exit/channel. The service error type must not expose `as_output()` or import CLI machine models.
+- Process-output sinks and selected-execution notifications are valid service ports for execution use cases when they are interface-neutral and typed. CLI callbacks adapt those ports to terminal progress; service code must not import CLI presenters or emit terminal wording.
+- A single CLI terminal-delivery path should own compact serialization and resolved-result/error routing. Command-specific text renderers and status-to-exit policy remain at the CLI controller boundary. `run` native streaming and `dev` live progress remain explicit bounded exceptions rather than forcing every command through a general framework.
+- Do not introduce a controller/service class hierarchy or plugin framework. The target is a small one-way boundary with one source of truth for shared protocol decisions, not abstraction for its own sake.
+
+The present serialization and packaged-schema behavior remained the compatibility baseline during this migration. Semantic parity was proven before deleting the redundant adapter case; all ordinary core commands now traverse the shared CLI delivery boundary, and one representative matrix owns channel/compact/error routing.
