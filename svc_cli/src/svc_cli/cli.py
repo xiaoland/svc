@@ -197,6 +197,32 @@ def _uint64_argument(value: str) -> int:
     return parsed
 
 
+_DOUBLE_HELP_FORMATTER = argparse.RawDescriptionHelpFormatter
+_DOUBLE_TRUST_NOTICE = """Trust boundary:
+  The Consumer test remains the product oracle. A double proves only the
+  declared boundary behavior; it does not prove provider behavior or
+  currentness. An external materializer is unsandboxed Consumer-owned code;
+  its egress, state, determinism, and provider fidelity are not claimed.
+
+Agent rule:
+  Do not use double merely to make a test pass. If an invented fixture or
+  event, a permissive matcher, materializer state or nondeterminism, or missing
+  independent provider evidence could reduce test credibility or validity,
+  report the concern and obtain user confirmation before proceeding.
+
+Result protocol:
+  Exit 0 means the command objective was met, 2 is command misuse, 3 is a
+  resolved boundary non-success, and 4 is an infrastructure/internal failure.
+  Use --json for the compact machine result and --json-schema for its schema.
+
+Optional runtime:
+  pip install 'sustainable-vibe-coding[double]'"""
+
+
+def _double_help_epilog(command_help: str) -> str:
+    return f"{command_help}\n\n{_DOUBLE_TRUST_NOTICE}"
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = SvcArgumentParser(
         prog="svc",
@@ -429,19 +455,44 @@ def _parser() -> argparse.ArgumentParser:
 
     double = subparsers.add_parser(
         "double",
-        help="Run one strict external HTTP boundary scenario",
-        description=(
-            "Validate or run one claim-scoped external-system boundary. The Consumer "
-            "test remains the product oracle; SVC serves declared responses and emits "
-            "named events only when explicitly requested."
+        help="Experiment with one strict external HTTP boundary scenario",
+        description="""EXPERIMENTAL: validate or run one claim-scoped external-system
+boundary from a strict *.double.yaml BSL module. SVC serves only declared
+responses and emits a named inbound event only when explicitly requested.""",
+        epilog=_double_help_epilog(
+            """Typical lifecycle:
+  svc double validate checkout.double.yaml
+  svc double start checkout.double.yaml --target app=http://127.0.0.1:9010
+  svc double emit RUN_ID payment.succeeded
+  svc double observe RUN_ID
+  svc double stop RUN_ID
+
+Start reports the responder endpoint and RUN_ID. Point the real Consumer at
+that endpoint; the Consumer test drives the product and owns its assertions.
+Event target names and event names must already be declared by the module."""
         ),
+        formatter_class=_DOUBLE_HELP_FORMATTER,
     )
     double_commands = double.add_subparsers(dest="double_command", required=True)
     double_validate = double_commands.add_parser(
         "validate",
         help="Compile one BSL module without starting a process or materializer",
+        description="""EXPERIMENTAL: strictly compile one *.double.yaml BSL module and
+report its scenario digest, fidelity boundary, non-claims, and any diagnostic.
+This starts no responder and does not execute an external materializer.
+Validation proves declaration mechanics, not provider behavior or currentness.""",
+        epilog=_double_help_epilog(
+            """Example:
+  svc double validate checkout.double.yaml
+
+MODULE is the exact local boundary-scenario file to compile. Referenced
+contracts and assets must be local and remain inside its workspace."""
+        ),
+        formatter_class=_DOUBLE_HELP_FORMATTER,
     )
-    double_validate.add_argument("module", type=Path)
+    double_validate.add_argument(
+        "module", type=Path, metavar="MODULE", help="Exact *.double.yaml BSL module"
+    )
     _add_machine_output(
         double_validate,
         "double-validate",
@@ -451,23 +502,47 @@ def _parser() -> argparse.ArgumentParser:
     double_start = double_commands.add_parser(
         "start",
         help="Start one fresh detached loopback boundary run",
+        description="""EXPERIMENTAL: strictly compile MODULE and start one fresh detached
+boundary run. Start reports a loopback responder endpoint and a canonical UUIDv4
+RUN_ID; point the real Consumer at that endpoint. Runs are never reused.""",
+        epilog=_double_help_epilog(
+            """Example:
+  svc double start checkout.double.yaml --seed 42 \\
+    --clock 2026-08-11T10:00:00Z \\
+    --target app=http://127.0.0.1:9010
+
+Every event target declared by MODULE must have one exact NAME=ORIGIN binding.
+By default, origins must be numeric loopback. A remote origin also requires
+module policy and the matching --allow-remote-target NAME; delivery never
+redirects or retries."""
+        ),
+        formatter_class=_DOUBLE_HELP_FORMATTER,
     )
-    double_start.add_argument("module", type=Path)
-    double_start.add_argument("--seed", type=_uint64_argument)
-    double_start.add_argument("--clock", help="Fixed RFC3339 UTC clock ending in Z")
+    double_start.add_argument(
+        "module", type=Path, metavar="MODULE", help="Exact *.double.yaml BSL module"
+    )
+    double_start.add_argument(
+        "--seed",
+        type=_uint64_argument,
+        help="Unsigned 64-bit replay seed (default: generate and report one)",
+    )
+    double_start.add_argument(
+        "--clock",
+        help="Fixed RFC3339 UTC replay clock ending in Z (default: now and report it)",
+    )
     double_start.add_argument(
         "--target",
         action="append",
         default=[],
         metavar="NAME=ORIGIN",
-        help="Bind one declared event target to an origin",
+        help="Bind one declared event target name to its delivery origin",
     )
     double_start.add_argument(
         "--allow-remote-target",
         action="append",
         default=[],
         metavar="NAME",
-        help="Explicitly consent to one remotely bound target",
+        help="Explicitly consent to one remotely bound declared target",
     )
     _add_machine_output(
         double_start,
@@ -478,9 +553,26 @@ def _parser() -> argparse.ArgumentParser:
     double_emit = double_commands.add_parser(
         "emit",
         help="Explicitly deliver one named event through its active carrier",
+        description="""EXPERIMENTAL: ask the active carrier for RUN_ID to materialize and
+deliver one EVENT already declared by the started module. Emit cannot invent a
+payload or select a new target, and it never runs automatically after a response.""",
+        epilog=_double_help_epilog(
+            """Example:
+  svc double emit RUN_ID payment.succeeded
+
+RUN_ID is the canonical UUIDv4 returned by start. EVENT is one exact declared
+event name. Its target was bound by start; delivery makes one attempt with no
+redirect or retry. The Consumer still owns acknowledgement and product
+assertions."""
+        ),
+        formatter_class=_DOUBLE_HELP_FORMATTER,
     )
-    double_emit.add_argument("run_id")
-    double_emit.add_argument("event")
+    double_emit.add_argument(
+        "run_id", metavar="RUN_ID", help="Canonical UUIDv4 returned by start"
+    )
+    double_emit.add_argument(
+        "event", metavar="EVENT", help="Exact event name declared by the started module"
+    )
     _add_machine_output(
         double_emit,
         "double-emit",
@@ -490,8 +582,22 @@ def _parser() -> argparse.ArgumentParser:
     double_observe = double_commands.add_parser(
         "observe",
         help="Read bounded active or sealed boundary evidence",
+        description="""EXPERIMENTAL: read bounded responder, binding, event-delivery, and
+journal facts for one active or gracefully sealed RUN_ID. Observation is boundary
+evidence, never a Consumer test verdict or proof of provider fidelity.""",
+        epilog=_double_help_epilog(
+            """Example:
+  svc double observe RUN_ID
+
+RUN_ID is the canonical UUIDv4 returned by start. The active carrier is authority
+while reachable; after graceful stop, its sealed snapshot is authority. An
+unavailable carrier returns the last explicitly unsealed projection, not a guess."""
+        ),
+        formatter_class=_DOUBLE_HELP_FORMATTER,
     )
-    double_observe.add_argument("run_id")
+    double_observe.add_argument(
+        "run_id", metavar="RUN_ID", help="Canonical UUIDv4 returned by start"
+    )
     _add_machine_output(
         double_observe,
         "double-observe",
@@ -501,8 +607,22 @@ def _parser() -> argparse.ArgumentParser:
     double_stop = double_commands.add_parser(
         "stop",
         help="Gracefully seal one run through its private control capability",
+        description="""EXPERIMENTAL: ask the active carrier for RUN_ID to close its
+responder, settle owned work, and seal the final bounded observation. Repeating
+stop reads the sealed result; SVC never treats a recorded PID as authority.""",
+        epilog=_double_help_epilog(
+            """Example:
+  svc double stop RUN_ID
+
+RUN_ID is the canonical UUIDv4 returned by start. A successful stop makes the
+sealed snapshot authoritative. If authenticated control is unavailable, SVC
+reports the last unsealed projection and does not invent terminal state."""
+        ),
+        formatter_class=_DOUBLE_HELP_FORMATTER,
     )
-    double_stop.add_argument("run_id")
+    double_stop.add_argument(
+        "run_id", metavar="RUN_ID", help="Canonical UUIDv4 returned by start"
+    )
     _add_machine_output(
         double_stop,
         "double-stop",

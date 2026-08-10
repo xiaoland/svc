@@ -124,13 +124,14 @@ owns capability readiness, scope, reuse, and release after readiness.
 
 ## Managed External Boundaries
 
-SVC lets a Consumer verify one named product claim against its real application
-when an external HTTP system is unavailable, unsafe, costly, or unsuitable for
-deterministic writes. A versioned boundary-scenario module can declare strict
-outbound request matching and deterministic responses, plus named inbound
-events that a test emits explicitly. Examples, matchers, captures, derived
-values, closed semantic generators, managed assets, and provenance remain
-separate roles so protocol-shaped data does not invent provider business truth.
+`svc double` is experimental. It lets a Consumer verify one named product claim
+against its real application when an external HTTP system is unavailable,
+unsafe, costly, or unsuitable for deterministic writes. A versioned
+boundary-scenario module can declare strict outbound request matching and
+deterministic responses, plus named inbound events that a test emits explicitly.
+Examples, matchers, captures, derived values, closed semantic generators,
+managed assets, and provenance remain separate roles so protocol-shaped data
+does not invent provider business truth.
 
 The observable workflow is `svc double validate|start|emit|observe|stop`. Each
 start creates a fresh isolated loopback responder and reports its replay facts,
@@ -147,6 +148,12 @@ Consumer-owned arbitrary code: SVC bounds its envelope and execution resources
 without claiming its egress, determinism, immutability, or provider fidelity.
 OpenAPI may verify one selected local static 3.1 operation's schema mechanics;
 it does not define provider behavior or prove provider currentness.
+
+An Agent must not introduce or reshape a double merely to make a test pass. If
+an invented fixture or event, a permissive matcher, materializer state or
+nondeterminism, or missing independent provider evidence could reduce test
+credibility or validity, the Agent reports that concern and obtains the user's
+confirmation before proceeding.
 
 ## Expansion Rule
 

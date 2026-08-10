@@ -183,8 +183,12 @@
   adds the black-box Consumer product oracle, base/extra installed-wheel proof,
   release facts, and CI/publish preflight coverage. The final local gate passed
   236 tests plus every documented quality/projection/workflow/lock check; an
-  independent final review has no remaining blocker. Source changes remain
-  uncommitted pending Sir's separate command.
+  independent final review has no remaining blocker. The implementation was
+  committed as `f2c4df0` after Sir's separate command. A subsequent CLI-help
+  hardening pass makes all six `double` help surfaces self-contained about the
+  experimental status, command lifecycle, result protocol, fidelity and
+  materializer non-claims, and the Agent's obligation to report and confirm any
+  choice that could reduce test credibility or validity.
 - **External Consumer acceptance (complete)**: Sir requested a real replacement
   trial in an isolated `mvp-HA` worktree on `wsl.win-ws.localhost`: replace the
   WeChat Pay and Caocao Mobility fake servers with `svc double`, then run the

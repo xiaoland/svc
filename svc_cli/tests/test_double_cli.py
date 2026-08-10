@@ -172,13 +172,42 @@ def test_double_cli_preserves_typed_failures_and_safely_classifies_bugs(
 def test_double_help_and_schemas_are_self_contained() -> None:
     code, stdout, stderr = _invoke(["double", "--help"])
     assert (code, stderr) == (EXIT_OK, "")
-    assert "validate" in stdout and "start" in stdout and "emit" in stdout
-    assert "Consumer test remains the product oracle" in " ".join(stdout.split())
+    family_help = " ".join(stdout.split())
+    assert "EXPERIMENTAL" in family_help
+    assert "*.double.yaml BSL module" in family_help
+    assert "Consumer test remains the product oracle" in family_help
+    assert "does not prove provider behavior or currentness" in family_help
+    assert "Do not use double merely to make a test pass" in family_help
+    assert "could reduce test credibility or validity" in family_help
+    assert "report the concern and obtain user confirmation" in family_help
+    assert "external materializer is unsandboxed Consumer-owned code" in family_help
+    assert "svc double validate checkout.double.yaml" in family_help
+    assert "svc double emit RUN_ID payment.succeeded" in family_help
+    assert "pip install 'sustainable-vibe-coding[double]'" in family_help
 
-    for operation in ("validate", "start", "emit", "observe", "stop"):
+    operation_facts = {
+        "validate": ("starts no responder", "Exact *.double.yaml BSL module"),
+        "start": ("canonical UUIDv4 RUN_ID", "Every event target declared"),
+        "emit": ("cannot invent a payload", "Exact event name declared"),
+        "observe": ("never a Consumer test verdict", "sealed snapshot is authority"),
+        "stop": (
+            "never treats a recorded PID as authority",
+            "does not invent terminal state",
+        ),
+    }
+
+    for operation, facts in operation_facts.items():
         code, stdout, stderr = _invoke(["double", operation, "--help"])
         assert (code, stderr) == (EXIT_OK, "")
         assert f"usage: svc double {operation}" in stdout
+        operation_help = " ".join(stdout.split())
+        assert "EXPERIMENTAL" in operation_help
+        assert "Consumer test remains the product oracle" in operation_help
+        assert "Do not use double merely to make a test pass" in operation_help
+        assert "could reduce test credibility or validity" in operation_help
+        assert "obtain user confirmation before proceeding" in operation_help
+        assert "pip install 'sustainable-vibe-coding[double]'" in operation_help
+        assert all(fact in operation_help for fact in facts)
 
         code, stdout, stderr = _invoke(["double", operation, "--json-schema"])
         schema = _json(stdout)
