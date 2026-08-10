@@ -180,6 +180,24 @@ body:
       media-type: application/octet-stream
 ```
 
+Interaction requests may instead declare a strict form field map:
+
+```yaml
+body:
+  form-urlencoded:
+    ext_order_id:
+      $bsl:
+        kind: capture
+        name: external_order_id
+        match: {kind: regex, pattern: '^[0-9a-f-]{36}$'}
+```
+
+`form-urlencoded` is request-only. Its field values follow the query string
+surface (strings, typed string values, or arrays for repeated fields). Runtime
+parsing requires UTF-8 `name=value` pairs, strict percent encoding, and an exact
+declared field-name set; `+` decodes to space and ordering is insignificant.
+It adds no provider state and is not an OpenAPI JSON request schema claim.
+
 Structured bodies use deterministic `json.compact-utf8/v1`: UTF-8, no BOM,
 compact separators, preserved array order, and no non-finite numbers. JSON
 objects reject duplicate keys and request matching requires the same key set by
@@ -259,7 +277,8 @@ A response or event request may replace its ordinary headers/body
 materialization with `materializer`. The response still declares `status`; the
 event still declares `target`, and its request still declares `method` and
 `path`. In either case,
-ordinary `headers` and `body` are mutually exclusive with `materializer`:
+ordinary event `query`, `headers`, and `body` are mutually exclusive with
+`materializer`:
 
 ```yaml
 request:

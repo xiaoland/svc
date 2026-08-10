@@ -1,0 +1,12 @@
+kind: minor
+component: corpus
+body: >-
+  Define the boundary scenario language, Consumer-owned test oracle, explicit
+  callback model, deterministic replay facts, and honest egress non-claims for
+  managed external-system doubles.
+custom:
+  Migration: not-required
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
+time: 2026-08-10T00:00:00+08:00

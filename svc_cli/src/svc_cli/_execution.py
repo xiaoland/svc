@@ -24,7 +24,7 @@ from platformdirs import user_runtime_dir
 from .errors import SvcError
 
 
-ExecutionDomain = Literal["run", "dev"]
+ExecutionDomain = Literal["run", "dev", "double"]
 ExecutionState = Literal[
     "starting",
     "running",
@@ -212,7 +212,14 @@ class ExecutionStore:
         execution_id = str(uuid.uuid4())
         directory = self.execution_dir(execution_id)
         try:
-            directory.mkdir(mode=0o700)
+            try:
+                directory.mkdir(mode=0o700)
+            except OSError as error:
+                raise _state_error(
+                    "execution-storage-failed",
+                    "Execution runtime directory could not be created.",
+                    directory,
+                ) from error
             if capture == "split":
                 _create_private_file(directory / "stdout.log").close()
                 _create_private_file(directory / "stderr.log").close()
@@ -899,7 +906,7 @@ def _record_from_dict(value: dict[str, object], *, expected_id: str) -> Executio
     state = value["state"]
     capture = value["capture"]
     if (
-        domain not in {"run", "dev"}
+        domain not in {"run", "dev", "double"}
         or state not in ACTIVE_STATES | TERMINAL_STATES
         or capture not in {"split", "merged"}
     ):
@@ -986,7 +993,7 @@ def _validate_record_lifecycle(
     capture: str,
 ) -> None:
     if (domain == "run" and capture != "split") or (
-        domain == "dev" and capture != "merged"
+        domain in {"dev", "double"} and capture != "merged"
     ):
         raise ValueError("record capture policy does not match domain")
     if domain == "run" and state == "released":

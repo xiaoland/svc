@@ -1,0 +1,12 @@
+kind: minor
+component: cli
+body: >-
+  Add `svc double validate|start|emit|observe|stop` for strict, replayable HTTP
+  boundary scenarios with explicit callbacks, carrier-owned active state, and a
+  sealed graceful-stop observation.
+custom:
+  Migration: not-applicable
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
+time: 2026-08-10T00:00:00+08:00

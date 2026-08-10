@@ -15,6 +15,18 @@ from .cli_output.dev import (
     DevStatusOutput,
     DevStopOutput,
 )
+from .cli_output.double import (
+    DoubleEmitRuntimeUnavailableOutput,
+    DoubleEmitOutput,
+    DoubleObserveRuntimeUnavailableOutput,
+    DoubleObserveOutput,
+    DoubleStartRuntimeUnavailableOutput,
+    DoubleStartOutput,
+    DoubleStopRuntimeUnavailableOutput,
+    DoubleStopOutput,
+    DoubleValidateRuntimeUnavailableOutput,
+    DoubleValidateOutput,
+)
 from .cli_output.lookup import LookupOutput
 from .cli_output.project import InitApplyOutput, InitPlanOutput, RootStatusOutput
 from .cli_output.model import CliUsageOutput, MachineError
@@ -35,6 +47,36 @@ DevStatusMachineOutput: TypeAlias = DevStatusOutput | MachineError | CliUsageOut
 DevEnsureMachineOutput: TypeAlias = DevEnsureOutput | MachineError | CliUsageOutput
 DevStopMachineOutput: TypeAlias = DevStopOutput | MachineError | CliUsageOutput
 RunMachineOutput: TypeAlias = RunReceipt | MachineError | CliUsageOutput
+DoubleValidateMachineOutput: TypeAlias = (
+    DoubleValidateOutput
+    | DoubleValidateRuntimeUnavailableOutput
+    | MachineError
+    | CliUsageOutput
+)
+DoubleStartMachineOutput: TypeAlias = (
+    DoubleStartOutput
+    | DoubleStartRuntimeUnavailableOutput
+    | MachineError
+    | CliUsageOutput
+)
+DoubleEmitMachineOutput: TypeAlias = (
+    DoubleEmitOutput
+    | DoubleEmitRuntimeUnavailableOutput
+    | MachineError
+    | CliUsageOutput
+)
+DoubleObserveMachineOutput: TypeAlias = (
+    DoubleObserveOutput
+    | DoubleObserveRuntimeUnavailableOutput
+    | MachineError
+    | CliUsageOutput
+)
+DoubleStopMachineOutput: TypeAlias = (
+    DoubleStopOutput
+    | DoubleStopRuntimeUnavailableOutput
+    | MachineError
+    | CliUsageOutput
+)
 
 RegisteredMachineOutput: TypeAlias = (
     LookupOutput
@@ -48,6 +90,16 @@ RegisteredMachineOutput: TypeAlias = (
     | DevEnsureOutput
     | DevStopOutput
     | RunReceipt
+    | DoubleValidateOutput
+    | DoubleStartOutput
+    | DoubleEmitOutput
+    | DoubleObserveOutput
+    | DoubleStopOutput
+    | DoubleValidateRuntimeUnavailableOutput
+    | DoubleStartRuntimeUnavailableOutput
+    | DoubleEmitRuntimeUnavailableOutput
+    | DoubleObserveRuntimeUnavailableOutput
+    | DoubleStopRuntimeUnavailableOutput
     | MachineError
     | CliUsageOutput
 )
@@ -69,6 +121,11 @@ OUTPUT_SCHEMA_SPECS = {
     "dev-ensure": OutputSchemaSpec(2, TypeAdapter(DevEnsureMachineOutput)),
     "dev-stop": OutputSchemaSpec(2, TypeAdapter(DevStopMachineOutput)),
     "run": OutputSchemaSpec(2, TypeAdapter(RunMachineOutput)),
+    "double-validate": OutputSchemaSpec(1, TypeAdapter(DoubleValidateMachineOutput)),
+    "double-start": OutputSchemaSpec(1, TypeAdapter(DoubleStartMachineOutput)),
+    "double-emit": OutputSchemaSpec(1, TypeAdapter(DoubleEmitMachineOutput)),
+    "double-observe": OutputSchemaSpec(1, TypeAdapter(DoubleObserveMachineOutput)),
+    "double-stop": OutputSchemaSpec(1, TypeAdapter(DoubleStopMachineOutput)),
 }
 OUTPUT_SCHEMA_KEYS = tuple(OUTPUT_SCHEMA_SPECS)
 

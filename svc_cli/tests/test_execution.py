@@ -29,9 +29,10 @@ COORDINATION = "a" * 48
 
 
 def publish(store: ExecutionStore, *, domain: str = "run", capture: str = "split"):
+    operations = {"run": "execute", "dev": "ensure", "double": "carrier"}
     return store.publish(
         domain=domain,  # type: ignore[arg-type]
-        operation="execute" if domain == "run" else "ensure",
+        operation=operations[domain],
         subject="check",
         workspace_instance="workspace",
         intent_digest="digest",
@@ -48,6 +49,25 @@ def test_record_coordination_round_trip(tmp_path: Path) -> None:
     store.write_coordination("run", COORDINATION, published.record.execution_id)
     assert store.read_coordination("run", COORDINATION) == published.record.execution_id
     assert store.read(published.record.execution_id) == published.record
+
+
+def test_publish_classifies_execution_directory_creation_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = ExecutionStore(tmp_path / "runtime")
+    original_mkdir = Path.mkdir
+
+    def fail_execution_directory(path: Path, *args: object, **kwargs: object) -> None:
+        if path.parent == store.root:
+            raise PermissionError("read-only runtime")
+        original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", fail_execution_directory)
+
+    with pytest.raises(SvcError) as caught:
+        publish(store)
+
+    assert caught.value.code == "execution-storage-failed"
 
 
 def test_foreground_capture_preserves_binary_streams_and_sink_failure(
@@ -200,6 +220,38 @@ def test_isolated_execution_can_settle_release_or_be_terminated(tmp_path: Path) 
     terminated = terminate_owned(store, terminate_candidate)  # type: ignore[arg-type]
     assert terminated.state == "interrupted"
     assert terminated.requested_signal == "SIGTERM"
+
+
+def test_double_execution_requires_merged_capture_and_can_be_released(
+    tmp_path: Path,
+) -> None:
+    store = ExecutionStore(tmp_path / "runtime")
+    split = publish(store, domain="double", capture="split")
+
+    with pytest.raises(SvcError) as rejected:
+        store.read(split.record.execution_id)
+    assert rejected.value.code == "execution-record-invalid"
+
+    merged = publish(store, domain="double", capture="merged")
+    started = start_isolated(
+        store,
+        merged,
+        LaunchSpec(
+            (sys.executable, "-c", "import time; time.sleep(30)"),
+            tmp_path,
+            os.environ.copy(),
+        ),
+    )
+    assert not hasattr(started, "state")
+    try:
+        released = release_owned(store, started)  # type: ignore[arg-type]
+        assert released.domain == "double"
+        assert released.capture == "merged"
+        assert released.state == "released"
+        assert store.read(released.execution_id) == released
+    finally:
+        started.process.terminate()  # type: ignore[union-attr]
+        started.process.wait(timeout=3)  # type: ignore[union-attr]
 
 
 def test_lifetime_coordination_lock_is_cross_process_authority(tmp_path: Path) -> None:

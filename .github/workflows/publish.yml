@@ -71,7 +71,7 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install pdm==2.28.0
       - run: pdm lock --check
-      - run: pdm install --frozen-lockfile -d -G quality -G test
+      - run: pdm install --frozen-lockfile -d -G quality -G test -G double
       - name: Validate release projections and Corpus advancement
         env:
           SVC_BASE_REF: ${{ github.event.before }}
@@ -99,6 +99,19 @@ jobs:
           python -m venv /tmp/svc-release
           /tmp/svc-release/bin/pip install release/python/*.whl
           /tmp/svc-release/bin/svc --help
+          for operation in validate start emit observe stop; do
+            /tmp/svc-release/bin/svc double "$operation" --json-schema >/dev/null
+          done
+          /tmp/svc-release/bin/python -c \
+            'import importlib.util; assert all(importlib.util.find_spec(name) is None for name in ("cel_expr_python", "jsonschema", "ruamel"))'
+          set +e
+          unavailable=$(/tmp/svc-release/bin/svc double validate /dev/null --json)
+          unavailable_status=$?
+          set -e
+          test "$unavailable_status" -eq 3
+          /tmp/svc-release/bin/python -c \
+            'import json,sys; value=json.load(sys.stdin); assert value == {"schema_version":1,"command":"double validate","status":"double-runtime-unavailable","continuation":"pip install '\''sustainable-vibe-coding[double]'\''"}' \
+            <<<"$unavailable"
           /tmp/svc-release/bin/svc run --json-schema
           /tmp/svc-release/bin/svc lookup --path sections/working-protocol.md --json
           repo=$(mktemp -d)
@@ -106,6 +119,75 @@ jobs:
           digest=$(python -c 'import json,sys; print(json.load(sys.stdin)["plan_digest"])' <<<"$plan")
           /tmp/svc-release/bin/svc init "$repo" --apply "$digest"
           /tmp/svc-release/bin/svc status "$repo"
+      - name: Smoke-test the same wheel with the double extra
+        run: |
+          wheel=(release/python/*.whl)
+          test "${#wheel[@]}" -eq 1
+          python -m venv /tmp/svc-release-double
+          double_wheel="${wheel[0]}[double]"
+          /tmp/svc-release-double/bin/pip install "$double_wheel"
+          fixture="$GITHUB_WORKSPACE/svc_cli/tests/fixtures/double/payment.double.yaml"
+          smoke=$(mktemp -d)
+          cat >"$smoke/callback.py" <<'PY'
+          import http.server
+          import pathlib
+          import sys
+
+          class Callback(http.server.BaseHTTPRequestHandler):
+              def do_POST(self):
+                  self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                  self.send_response(204)
+                  self.end_headers()
+
+              def log_message(self, format, *args):
+                  pass
+
+          server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Callback)
+          pathlib.Path(sys.argv[1]).write_text(str(server.server_address[1]))
+          server.serve_forever()
+          PY
+          /tmp/svc-release-double/bin/python "$smoke/callback.py" "$smoke/port" &
+          callback_pid=$!
+          trap 'kill "$callback_pid" 2>/dev/null || true' EXIT
+          for _ in {1..100}; do
+            test -s "$smoke/port" && break
+            sleep 0.05
+          done
+          test -s "$smoke/port"
+          callback_origin="http://127.0.0.1:$(cat "$smoke/port")"
+
+          cd "$smoke"
+          /tmp/svc-release-double/bin/svc double validate "$fixture" --json >/dev/null
+          start=$(/tmp/svc-release-double/bin/svc double start "$fixture" \
+            --seed 7 \
+            --clock 2026-08-10T02:00:00Z \
+            --target "consumer.payment-events=$callback_origin" \
+            --json)
+          run_id=$(/tmp/svc-release-double/bin/python -c \
+            'import json,sys; print(json.load(sys.stdin)["run_id"])' <<<"$start")
+          responder=$(/tmp/svc-release-double/bin/python -c \
+            'import json,sys; print(json.load(sys.stdin)["responder_url"])' <<<"$start")
+          /tmp/svc-release-double/bin/python - "$responder" <<'PY'
+          import json
+          import sys
+          import urllib.request
+
+          request = urllib.request.Request(
+              sys.argv[1] + "/v1/payments?observed-at=2026-08-10T02%3A00%3A00Z&trace=trace-001",
+              data=json.dumps({"externalId": "00000000-0000-4000-8000-000000000001"}).encode(),
+              headers={
+                  "Content-Type": "application/json",
+                  "X-Request-Id": "00000000-0000-4000-8000-000000000002",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(request) as response:
+              assert response.status == 201
+          PY
+          /tmp/svc-release-double/bin/svc double emit "$run_id" payment.succeeded --json >/dev/null
+          /tmp/svc-release-double/bin/svc double observe "$run_id" --json >/dev/null
+          /tmp/svc-release-double/bin/svc double stop "$run_id" --json >/dev/null
+          /tmp/svc-release-double/bin/svc double stop "$run_id" --json >/dev/null
       - name: Add the prepared release notes
         env:
           TAG: ${{ needs.prepare.outputs.tag }}

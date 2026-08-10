@@ -173,13 +173,45 @@
   and failure branches through the current CLI/import, output-schema,
   workspace, execution, packaging, and workflow seams. It records closed risks
   plus five implementation-time red gates.
-- **Next Step**: Sir reviews the final amendments in
-  [`design-v2.md`](design-v2.md) and
-  [`impact-handshake-v2.md`](impact-handshake-v2.md), together with the
-  independent implementation plan and preflight rehearsal. Source mutation
-  remains paused. If Sir confirms the amended handshake and explicitly says to
-  start, implementation begins from canonical product/technical/runtime truth
-  and the bounded plan gates.
+- **Implementation status**: Sir explicitly authorized implementation on
+  2026-08-10 after asking that the task packet be committed first; the packet
+  was committed as `88ece68`. Slices 0-5 now have executable evidence: the
+  optional dependency/base-import boundary, strict compiler and immutable
+  recursive OpenAPI registry, in-process responder/materializer/event engine,
+  carrier-owned active authority, sealed stop, five CLI commands, output
+  schemas, two-run isolation, and control-unavailable/no-PID behavior. Slice 5
+  adds the black-box Consumer product oracle, base/extra installed-wheel proof,
+  release facts, and CI/publish preflight coverage. The final local gate passed
+  236 tests plus every documented quality/projection/workflow/lock check; an
+  independent final review has no remaining blocker. Source changes remain
+  uncommitted pending Sir's separate command.
+- **External Consumer acceptance (complete)**: Sir requested a real replacement
+  trial in an isolated `mvp-HA` worktree on `wsl.win-ws.localhost`: replace the
+  WeChat Pay and Caocao Mobility fake servers with `svc double`, then run the
+  existing system scenarios at their Consumer assertion boundary. The
+  replacement passed all `11` files / `39` tests twice (`183.19s`, `183.81s`),
+  after first proving and fixing dynamic form matching, event-to-responder
+  re-entry, and unrelated-route body parsing. A focused lifecycle rerun left a
+  zero-byte registry and no carrier/fake-server process. The original worktree
+  remains untouched, the acceptance Postgres resources were removed, and all
+  Consumer adapters/modules remain only in the disposable worktree. Detailed
+  evidence and the honest external-materializer state boundary are recorded in
+  [`mvp-ha-acceptance.md`](mvp-ha-acceptance.md).
+- **Implementation handoff evidence**:
+  - `pdm lock --check`, `pdm run test`, `pdm run lint-tests`,
+    `pdm run lint-imports`, `pdm run typecheck`, `pdm run check-documents`,
+    `pdm run check-release-projections`, `pdm run check-cli-output-schemas`,
+    `pdm run lint-workflows`, and `git diff --check` pass.
+  - The latest wheel passes a clean base-install smoke with no YAML, JSON
+    Schema, or CEL imports and the exact quoted extra continuation. The same
+    wheel installed with `[double]` passes validate/start, a real Consumer
+    outbound write, explicit callback, Consumer-owned public `paid` assertion,
+    observe, sealed stop, and idempotent stop outside the repository import
+    path.
+  - Local execution used Python 3.12 on macOS. CI and publish now admit Python
+    3.11/3.14 Linux double-wheel jobs, and the lock contains the pinned CEL
+    Linux wheels for both versions; those hosted jobs remain execution evidence
+    available only after a committed branch runs CI.
 
 - **Standing exploration authority**: Sir explicitly authorizes research,
   exploration, and disposable spikes without asking for further approval. Work
@@ -234,10 +266,13 @@ to an implementation decision:
   composite BSL language architecture, and the command family
   `validate|start|emit|observe|stop` without `check`. Spike evidence admits
   local typed-node authoring, a restricted CEL profile, raw/structured
-  event-body separation, and WireMock as reference rather than default. The
-  amended concrete grammar/dependency/runtime and Impact Handshake await final
-  confirmation and explicit source start.
-- **Work authorization**: task-packet research and disposable no-source
-  exploration/spikes are authorized on a standing basis. No source
-  implementation, repository dependency change, commit, irreversible external
-  mutation, or economically material action is authorized.
+  event-body separation, and WireMock as reference rather than default. Sir
+  confirmed the amended concrete grammar, dependency/runtime boundary, Impact
+  Handshake, and explicit source start. A whole-envelope event materializer
+  owns its query/headers/body so authored dead configuration is rejected.
+- **Work authorization**: Sir explicitly authorized the amended Impact
+  Handshake, requested a task-packet commit, and started source implementation
+  on 2026-08-10. The authorization covers the paths and state diff in
+  [`impact-handshake-v2.md`](impact-handshake-v2.md); further commits,
+  publishing, release, irreversible external mutation, and economically
+  material actions still require separate authority.

@@ -18,6 +18,27 @@ from .analysis.query import query_schema
 from .analysis.read import read_schema
 from .analysis.service import execute_query, execute_read
 from .cli_output.lookup import project_lookup
+from .cli_output.double import (
+    DoubleDiagnosticOutput,
+    DoubleEmitRuntimeUnavailableOutput,
+    DoubleEmitOutput,
+    DoubleJournalEntryOutput,
+    DoubleJournalFactsOutput,
+    DoubleJournalOutput,
+    DoubleObserveRuntimeUnavailableOutput,
+    DoubleObserveOutput,
+    DoubleReplayOutput,
+    DoubleRunObservationOutput,
+    DoubleRuntimeUnavailableOutput,
+    DoubleSnapshotOutput,
+    DoubleStartRuntimeUnavailableOutput,
+    DoubleStartOutput,
+    DoubleStopRuntimeUnavailableOutput,
+    DoubleStopOutput,
+    DoubleTargetOutput,
+    DoubleValidateRuntimeUnavailableOutput,
+    DoubleValidateOutput,
+)
 from .cli_output.dev import (
     project_dev_ensure,
     project_dev_identity,
@@ -162,6 +183,18 @@ def _add_machine_output(
     else:
         add_json()
         _add_output_schema(parser, key)
+
+
+def _uint64_argument(value: str) -> int:
+    try:
+        parsed = int(value, 10)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "must be an unsigned 64-bit integer"
+        ) from error
+    if not 0 <= parsed <= 18_446_744_073_709_551_615:
+        raise argparse.ArgumentTypeError("must be an unsigned 64-bit integer")
+    return parsed
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -394,6 +427,89 @@ def _parser() -> argparse.ArgumentParser:
         schema_first=True,
     )
 
+    double = subparsers.add_parser(
+        "double",
+        help="Run one strict external HTTP boundary scenario",
+        description=(
+            "Validate or run one claim-scoped external-system boundary. The Consumer "
+            "test remains the product oracle; SVC serves declared responses and emits "
+            "named events only when explicitly requested."
+        ),
+    )
+    double_commands = double.add_subparsers(dest="double_command", required=True)
+    double_validate = double_commands.add_parser(
+        "validate",
+        help="Compile one BSL module without starting a process or materializer",
+    )
+    double_validate.add_argument("module", type=Path)
+    _add_machine_output(
+        double_validate,
+        "double-validate",
+        "Emit the compact validation result",
+        schema_first=True,
+    )
+    double_start = double_commands.add_parser(
+        "start",
+        help="Start one fresh detached loopback boundary run",
+    )
+    double_start.add_argument("module", type=Path)
+    double_start.add_argument("--seed", type=_uint64_argument)
+    double_start.add_argument("--clock", help="Fixed RFC3339 UTC clock ending in Z")
+    double_start.add_argument(
+        "--target",
+        action="append",
+        default=[],
+        metavar="NAME=ORIGIN",
+        help="Bind one declared event target to an origin",
+    )
+    double_start.add_argument(
+        "--allow-remote-target",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Explicitly consent to one remotely bound target",
+    )
+    _add_machine_output(
+        double_start,
+        "double-start",
+        "Emit the compact start receipt",
+        schema_first=True,
+    )
+    double_emit = double_commands.add_parser(
+        "emit",
+        help="Explicitly deliver one named event through its active carrier",
+    )
+    double_emit.add_argument("run_id")
+    double_emit.add_argument("event")
+    _add_machine_output(
+        double_emit,
+        "double-emit",
+        "Emit the compact event delivery result",
+        schema_first=True,
+    )
+    double_observe = double_commands.add_parser(
+        "observe",
+        help="Read bounded active or sealed boundary evidence",
+    )
+    double_observe.add_argument("run_id")
+    _add_machine_output(
+        double_observe,
+        "double-observe",
+        "Emit the compact observation result",
+        schema_first=True,
+    )
+    double_stop = double_commands.add_parser(
+        "stop",
+        help="Gracefully seal one run through its private control capability",
+    )
+    double_stop.add_argument("run_id")
+    _add_machine_output(
+        double_stop,
+        "double-stop",
+        "Emit the compact stop result",
+        schema_first=True,
+    )
+
     telemetry = subparsers.add_parser(
         "telemetry", help="Collect explicit local observability evidence"
     )
@@ -600,6 +716,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 exit_code=_dev_ensure_exit_code(ensure_payload),
             )
 
+        if args.command == "double":
+            return _run_double(args, json_output)
+
         if args.command == "run":
             return _run_declared(args, json_output)
 
@@ -660,6 +779,359 @@ def main(argv: Sequence[str] | None = None) -> int:
             render=_render_error,
             exit_code=EXIT_FAILURE,
         )
+
+
+def _run_double(args: argparse.Namespace, json_output: bool) -> int:
+    command = cast(
+        Literal[
+            "double validate",
+            "double start",
+            "double emit",
+            "double observe",
+            "double stop",
+        ],
+        f"double {args.double_command}",
+    )
+    try:
+        from .double.service import (
+            emit_event,
+            observe_run,
+            start_run,
+            stop_run,
+            validate_module,
+        )
+    except ModuleNotFoundError as error:
+        optional_roots = {
+            "attrs",
+            "cel_expr_python",
+            "jsonschema",
+            "referencing",
+            "rpds",
+            "ruamel",
+        }
+        missing = (error.name or "").partition(".")[0]
+        if missing not in optional_roots:
+            raise SvcError(
+                "double-runtime-import-failed",
+                "The installed double runtime is incomplete.",
+                {"missing_module": error.name or "unknown"},
+            ) from error
+        unavailable_types = {
+            "double validate": DoubleValidateRuntimeUnavailableOutput,
+            "double start": DoubleStartRuntimeUnavailableOutput,
+            "double emit": DoubleEmitRuntimeUnavailableOutput,
+            "double observe": DoubleObserveRuntimeUnavailableOutput,
+            "double stop": DoubleStopRuntimeUnavailableOutput,
+        }
+        unavailable = unavailable_types[command]()
+        return _deliver_double_output(
+            unavailable,
+            json_output=json_output,
+            render=lambda stream: _render_double_unavailable(unavailable, stream),
+            exit_code=EXIT_CONFLICT,
+        )
+
+    try:
+        if args.double_command == "validate":
+            validate_result = validate_module(args.module)
+            validate_output = _project_double_validate(validate_result)
+            return _deliver_double_output(
+                validate_output,
+                json_output=json_output,
+                render=lambda stream: _render_double_validate(validate_output, stream),
+                exit_code=EXIT_OK if validate_output.valid else EXIT_CONFLICT,
+            )
+        if args.double_command == "start":
+            start_result = start_run(
+                args.module,
+                seed=args.seed,
+                clock=args.clock,
+                target_values=tuple(args.target),
+                allow_remote_names=tuple(args.allow_remote_target),
+            )
+            start_output = _project_double_start(start_result)
+            return _deliver_double_output(
+                start_output,
+                json_output=json_output,
+                render=lambda stream: _render_double_start(start_output, stream),
+                exit_code=EXIT_OK,
+            )
+        if args.double_command == "emit":
+            emit_result = emit_event(args.run_id, args.event)
+            emit_output = DoubleEmitOutput(
+                run_id=emit_result.run_id,
+                event=emit_result.event,
+                status=emit_result.status,
+                target=emit_result.target,
+                http_status=emit_result.http_status,
+                reason=emit_result.reason,
+            )
+            return _deliver_double_output(
+                emit_output,
+                json_output=json_output,
+                render=lambda stream: _render_double_emit(emit_output, stream),
+                exit_code=(
+                    EXIT_OK if emit_output.status == "acknowledged" else EXIT_CONFLICT
+                ),
+            )
+        if args.double_command == "observe":
+            observe_result = observe_run(args.run_id)
+            observe_output = DoubleObserveOutput(
+                observation=_project_double_observation(observe_result.observation),
+                authority=observe_result.authority,
+                control_status=observe_result.control_status,
+            )
+            return _deliver_double_output(
+                observe_output,
+                json_output=json_output,
+                render=lambda stream: _render_double_observe(observe_output, stream),
+                exit_code=(
+                    EXIT_CONFLICT
+                    if observe_output.control_status == "control-unavailable"
+                    else EXIT_OK
+                ),
+            )
+        stop_result = stop_run(args.run_id)
+        if stop_result.observation is None:
+            raise SvcError(
+                "double-control-protocol-invalid",
+                "Double stop result has no observation authority.",
+            )
+        stop_output = DoubleStopOutput(
+            run_id=stop_result.run_id,
+            status=stop_result.status,
+            sealed=stop_result.sealed,
+            idempotent=stop_result.idempotent,
+            observation=_project_double_observation(stop_result.observation),
+        )
+        return _deliver_double_output(
+            stop_output,
+            json_output=json_output,
+            render=lambda stream: _render_double_stop(stop_output, stream),
+            exit_code=(EXIT_OK if stop_output.status == "stopped" else EXIT_CONFLICT),
+        )
+    except SvcError:
+        raise
+    except Exception as error:
+        raise SvcError(
+            "double-internal-error",
+            "The double operation failed inside its runtime boundary.",
+            {"exception": type(error).__name__},
+        ) from error
+
+
+def _deliver_double_output(
+    output: RegisteredMachineOutput,
+    *,
+    json_output: bool,
+    render: Any,
+    exit_code: int,
+) -> int:
+    if json_output:
+        _emit_json(output)
+    else:
+        render(sys.stdout)
+    return exit_code
+
+
+def _project_double_validate(result: Any) -> DoubleValidateOutput:
+    diagnostic = result.diagnostic
+    return DoubleValidateOutput(
+        module=result.module,
+        scenario_name=result.scenario_name,
+        claim=result.claim,
+        valid=result.valid,
+        scenario_digest=result.scenario_digest,
+        fidelity=result.fidelity,
+        nonclaims=result.nonclaims,
+        snapshots=tuple(
+            DoubleSnapshotOutput(
+                logical_path=item.logical_path,
+                sha256=item.sha256,
+                bytes=item.bytes,
+            )
+            for item in result.snapshots
+        ),
+        diagnostic=(
+            None
+            if diagnostic is None
+            else DoubleDiagnosticOutput(
+                code=diagnostic.code,
+                message=diagnostic.message,
+                path=diagnostic.path,
+                line=diagnostic.line,
+                column=diagnostic.column,
+            )
+        ),
+    )
+
+
+def _project_double_start(result: Any) -> DoubleStartOutput:
+    return DoubleStartOutput(
+        run_id=result.run_id,
+        module=result.module,
+        scenario_name=result.scenario_name,
+        responder_url=result.responder_url,
+        scenario_digest=result.scenario_digest,
+        run_context_digest=result.run_context_digest,
+        replay=_project_double_replay(result.replay),
+        targets=tuple(_project_double_target(item) for item in result.targets),
+        nonclaims=result.nonclaims,
+    )
+
+
+def _project_double_observation(observation: Any) -> DoubleRunObservationOutput:
+    entries: list[DoubleJournalEntryOutput] = []
+    for item in observation.journal.entries:
+        facts = item.facts
+        diagnostics: list[str] = []
+        reason = facts.get("reason")
+        if isinstance(reason, str):
+            diagnostics.append(reason)
+        mismatch = facts.get("mismatch")
+        if isinstance(mismatch, list):
+            for candidate in mismatch[:8]:
+                if not isinstance(candidate, dict):
+                    continue
+                interaction = candidate.get("interaction")
+                reasons = candidate.get("reasons")
+                if isinstance(interaction, str) and isinstance(reasons, list):
+                    diagnostics.extend(
+                        f"{interaction}: {value}"
+                        for value in reasons[:8]
+                        if isinstance(value, str)
+                    )
+        http_status = facts.get("http_status", facts.get("response_status"))
+        body_hash = facts.get("body_sha256")
+        entries.append(
+            DoubleJournalEntryOutput(
+                sequence=item.sequence,
+                at=item.at,
+                kind=item.kind,
+                status=item.status,
+                facts=DoubleJournalFactsOutput(
+                    interaction=_string_fact(facts, "interaction"),
+                    event=_string_fact(facts, "event"),
+                    method=_string_fact(facts, "method"),
+                    path=_string_fact(facts, "path"),
+                    target=_string_fact(facts, "target"),
+                    http_status=(http_status if type(http_status) is int else None),
+                    request_sha256=(
+                        body_hash
+                        if item.kind == "request" and isinstance(body_hash, str)
+                        else None
+                    ),
+                    response_sha256=_string_fact(facts, "response_sha256"),
+                    diagnostics=tuple(diagnostics),
+                ),
+            )
+        )
+    return DoubleRunObservationOutput(
+        run_id=observation.run_id,
+        scenario_name=observation.scenario_name,
+        status=observation.status,
+        sealed=observation.sealed,
+        responder_url=observation.responder_url,
+        scenario_digest=observation.scenario_digest,
+        run_context_digest=observation.run_context_digest,
+        replay=_project_double_replay(observation.replay),
+        targets=tuple(_project_double_target(item) for item in observation.targets),
+        bindings=tuple(sorted(observation.bindings)),
+        journal=DoubleJournalOutput(
+            total=observation.journal.total,
+            retained=observation.journal.retained,
+            omitted=observation.journal.omitted,
+            entries=tuple(entries),
+        ),
+        nonclaims=observation.nonclaims,
+        failure=observation.failure,
+    )
+
+
+def _project_double_replay(replay: Any) -> DoubleReplayOutput:
+    return DoubleReplayOutput(
+        seed=replay.seed,
+        clock=replay.clock,
+        generators=replay.generators,
+        validators=replay.validators,
+        runtime=replay.runtime,
+    )
+
+
+def _project_double_target(target: Any) -> DoubleTargetOutput:
+    return DoubleTargetOutput(
+        name=target.name, origin=target.origin, remote=target.remote
+    )
+
+
+def _string_fact(facts: dict[str, Any], name: str) -> str | None:
+    value = facts.get(name)
+    return value if isinstance(value, str) else None
+
+
+def _render_double_unavailable(
+    output: DoubleRuntimeUnavailableOutput, stream: TextIO
+) -> None:
+    print("Double runtime is not installed.", file=stream)
+    print(f"Continue: {output.continuation}", file=stream)
+
+
+def _render_double_validate(output: DoubleValidateOutput, stream: TextIO) -> None:
+    if not output.valid:
+        assert output.diagnostic is not None
+        print(f"Invalid double module: {output.module}", file=stream)
+        print(f"{output.diagnostic.code}: {output.diagnostic.message}", file=stream)
+        return
+    print(f"Valid double scenario: {output.scenario_name}", file=stream)
+    print(f"Claim: {output.claim}", file=stream)
+    print(f"Scenario digest: {output.scenario_digest}", file=stream)
+    print(f"Fidelity: {', '.join(output.fidelity) or 'none'}", file=stream)
+    print(f"Non-claims: {', '.join(output.nonclaims) or 'none'}", file=stream)
+
+
+def _render_double_start(output: DoubleStartOutput, stream: TextIO) -> None:
+    print(f"Double run ready: {output.run_id}", file=stream)
+    print(f"Responder: {output.responder_url}", file=stream)
+    print(f"Scenario: {output.scenario_name} ({output.scenario_digest})", file=stream)
+    print(f"Run context: {output.run_context_digest}", file=stream)
+    print(
+        f"Replay: --seed {output.replay.seed} --clock {output.replay.clock}",
+        file=stream,
+    )
+    print(f"Non-claims: {', '.join(output.nonclaims)}", file=stream)
+
+
+def _render_double_emit(output: DoubleEmitOutput, stream: TextIO) -> None:
+    print(f"Event {output.event}: {output.status}", file=stream)
+    if output.target is not None:
+        print(f"Target: {output.target}", file=stream)
+    if output.http_status is not None:
+        print(f"Acknowledgement HTTP status: {output.http_status}", file=stream)
+    if output.reason is not None:
+        print(f"Reason: {output.reason}", file=stream)
+
+
+def _render_double_observe(output: DoubleObserveOutput, stream: TextIO) -> None:
+    observation = output.observation
+    print(f"Double run {observation.run_id}: {observation.status}", file=stream)
+    print(
+        f"Authority: {output.authority}; sealed: {str(observation.sealed).lower()}",
+        file=stream,
+    )
+    print(
+        "Journal: "
+        f"{observation.journal.retained} retained / "
+        f"{observation.journal.total} total / "
+        f"{observation.journal.omitted} omitted",
+        file=stream,
+    )
+    print(f"Bindings: {', '.join(observation.bindings) or 'none'}", file=stream)
+
+
+def _render_double_stop(output: DoubleStopOutput, stream: TextIO) -> None:
+    print(f"Double run {output.run_id}: {output.status}", file=stream)
+    print(f"Sealed: {str(output.sealed).lower()}", file=stream)
+    print(f"Idempotent replay: {str(output.idempotent).lower()}", file=stream)
 
 
 def _analysis_request(source: str) -> object:
@@ -1510,6 +1982,22 @@ def _exit_code(error: SvcError) -> int:
         return 130
     if error.code in {
         "apply-failed",
+        "double-carrier-exited",
+        "double-carrier-launch-failed",
+        "double-carrier-readiness-invalid",
+        "double-carrier-readiness-timeout",
+        "double-control-protocol-invalid",
+        "double-control-unavailable",
+        "double-internal-error",
+        "double-observation-invalid",
+        "double-observation-mismatch",
+        "double-observation-unreadable",
+        "double-run-collision",
+        "double-run-record-invalid",
+        "double-run-record-mismatch",
+        "double-run-record-unreadable",
+        "double-runtime-import-failed",
+        "double-storage-failed",
         "execution-capture-failed",
         "execution-coordination-invalid",
         "execution-coordination-mismatch",

@@ -5,6 +5,9 @@ description = "Repository workspace for the SVC Corpus, tooling, and CLI."
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+double = ["sustainable-vibe-coding[double]"]
+
 [dependency-groups]
 quality = [
     "mypy>=2.3,<2.4",
@@ -54,6 +57,7 @@ files = [
     "svc_cli/src/svc_cli/cli_output/lookup.py",
     "svc_cli/src/svc_cli/cli_output/common.py",
     "svc_cli/src/svc_cli/cli_output/dev.py",
+    "svc_cli/src/svc_cli/cli_output/double.py",
     "svc_cli/src/svc_cli/cli_output/model.py",
     "svc_cli/src/svc_cli/cli_output/project.py",
     "svc_cli/src/svc_cli/cli_output/run.py",
@@ -71,6 +75,13 @@ files = [
     "svc_cli/src/svc_cli/dev/identity.py",
     "svc_cli/src/svc_cli/dev/readiness.py",
     "svc_cli/src/svc_cli/dev/runtime.py",
+    "svc_cli/src/svc_cli/double/__init__.py",
+    "svc_cli/src/svc_cli/double/carrier.py",
+    "svc_cli/src/svc_cli/double/compiler.py",
+    "svc_cli/src/svc_cli/double/materialization.py",
+    "svc_cli/src/svc_cli/double/model.py",
+    "svc_cli/src/svc_cli/double/runtime.py",
+    "svc_cli/src/svc_cli/double/service.py",
     "svc_cli/src/svc_cli/run/__init__.py",
     "svc_cli/src/svc_cli/run/runtime.py",
     "svc_cli/src/svc_cli/analysis/__init__.py",
@@ -127,14 +138,14 @@ allow_indirect_imports = true
 name = "Shared workspace identity remains public-domain neutral"
 type = "forbidden"
 source_modules = ["svc_cli.workspace"]
-forbidden_modules = ["svc_cli.dev", "svc_cli.run"]
+forbidden_modules = ["svc_cli.dev", "svc_cli.double", "svc_cli.run"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Shared execution mechanics remain public-domain neutral"
 type = "forbidden"
 source_modules = ["svc_cli._execution"]
-forbidden_modules = ["svc_cli.dev", "svc_cli.run"]
+forbidden_modules = ["svc_cli.dev", "svc_cli.double", "svc_cli.run"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
@@ -143,6 +154,7 @@ type = "forbidden"
 source_modules = ["svc_cli.plans"]
 forbidden_modules = [
     "svc_cli.dev",
+    "svc_cli.double",
     "svc_cli.integration",
     "svc_cli.project",
     "svc_cli.run",
@@ -154,7 +166,13 @@ allow_indirect_imports = true
 name = "Release authority remains project-domain neutral"
 type = "forbidden"
 source_modules = ["svc_cli.release"]
-forbidden_modules = ["svc_cli.dev", "svc_cli.project", "svc_cli.run", "svc_cli.upgrade"]
+forbidden_modules = [
+    "svc_cli.dev",
+    "svc_cli.double",
+    "svc_cli.project",
+    "svc_cli.run",
+    "svc_cli.upgrade",
+]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
@@ -166,6 +184,7 @@ source_modules = [
     "svc_cli.config",
     "svc_cli.config_migration",
     "svc_cli.dev",
+    "svc_cli.double",
     "svc_cli.errors",
     "svc_cli.integration",
     "svc_cli.lookup",
@@ -189,6 +208,7 @@ name = "Command domains do not depend on the output schema registry"
 type = "forbidden"
 source_modules = [
     "svc_cli.dev",
+    "svc_cli.double",
     "svc_cli.lookup",
     "svc_cli.project",
     "svc_cli.run",
