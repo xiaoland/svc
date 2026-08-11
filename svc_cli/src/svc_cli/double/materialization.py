@@ -21,18 +21,15 @@ from typing import Any, Literal, cast
 from pydantic import JsonValue
 
 from ..errors import SvcError
+from .cel_profile import (
+    CelExpressionTooLarge,
+    CelProfileError,
+    evaluate_expression,
+    regex_matches,
+)
 from .model import Body, Matcher, Materializer, Replay, ValueNode, strict_json_value
 
 
-_CEL_PROFILE = """stdlib:
-  exclude_macros:
-    - all
-    - exists
-    - exists_one
-    - map
-    - filter
-"""
-_MAX_CEL_EXPRESSION_BYTES = 4_096
 _MAX_CEL_CONTEXT_BYTES = 262_144
 _MATERIALIZER_STDERR_BYTES = 65_536
 _RFC3339 = re.compile(
@@ -642,9 +639,7 @@ def _generate(node: ValueNode, seed: int, clock: str, key: str) -> JsonValue:
 def _evaluate_cel(
     source: str, context: MaterializationContext, request: JsonValue | None
 ) -> JsonValue:
-    if len(source.encode("utf-8")) > _MAX_CEL_EXPRESSION_BYTES:
-        raise SvcError("double-cel-too-large", "CEL expression exceeds its byte bound.")
-    data: dict[str, Any] = {
+    data: dict[str, JsonValue] = {
         "request": request,
         "bindings": dict(context.bindings),
         "run": {"seed": context.replay.seed, "clock": context.replay.clock},
@@ -655,23 +650,12 @@ def _evaluate_cel(
             "double-cel-context-too-large", "CEL context exceeds its byte bound."
         )
     try:
-        from cel_expr_python import cel  # type: ignore[import-untyped]
-
-        config = cel.NewEnvConfigFromYaml(_CEL_PROFILE)
-        environment = cel.NewEnv(
-            config=config,
-            variables={
-                "request": cel.Type.DYN,
-                "bindings": cel.Type.Map(cel.Type.STRING, cel.Type.DYN),
-                "run": cel.Type.DYN,
-                "scenario": cel.Type.DYN,
-            },
-        )
-        result = environment.compile(source).eval(data=data).plain_value()
-        return strict_json_value(result)
-    except SvcError:
-        raise
-    except Exception as error:
+        return evaluate_expression(source, data)
+    except CelExpressionTooLarge as error:
+        raise SvcError(
+            "double-cel-too-large", "CEL expression exceeds its byte bound."
+        ) from error
+    except CelProfileError as error:
         raise SvcError(
             "double-cel-evaluation-failed",
             "Restricted CEL expression could not be evaluated.",
@@ -681,18 +665,8 @@ def _evaluate_cel(
 
 def _cel_regex_match(value: str, pattern: str) -> bool:
     try:
-        from cel_expr_python import cel
-
-        config = cel.NewEnvConfigFromYaml(_CEL_PROFILE)
-        environment = cel.NewEnv(
-            config=config,
-            variables={"value": cel.Type.STRING, "pattern": cel.Type.STRING},
-        )
-        result = environment.compile("value.matches(pattern)").eval(
-            data={"value": value, "pattern": pattern}
-        )
-        return bool(result.plain_value())
-    except Exception as error:
+        return regex_matches(value, pattern)
+    except CelProfileError as error:
         raise SvcError(
             "double-regex-evaluation-failed",
             "CEL/RE2 matcher could not be evaluated.",

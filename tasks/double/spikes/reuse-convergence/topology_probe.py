@@ -22,6 +22,8 @@ POST_MIGRATION_CASES = {
     "test_tagged_ir_round_trip_preserves_the_serialized_contract",
     "test_missing_local_openapi_pointer_is_rejected_by_registry",
     "test_unselected_remote_openapi_reference_is_not_scenario_authority",
+    "test_cel_profile_inspection_freezes_the_dynamic_map_limitation",
+    "test_cel_profile_compilation_evaluation_and_regex_share_one_environment",
 }
 
 INTERFACE = {
@@ -61,6 +63,8 @@ LANGUAGE = {
     "test_cel_non_json_return_type_is_rejected": "double/language/test_cel.py",
     "test_cel_static_scan_ignores_comments_and_event_string_literals": "double/language/test_cel.py",
     "test_invalid_re2_pattern_is_a_stable_compile_error": "double/language/test_cel.py",
+    "test_cel_profile_inspection_freezes_the_dynamic_map_limitation": "double/language/test_cel.py",
+    "test_cel_profile_compilation_evaluation_and_regex_share_one_environment": "double/language/test_cel.py",
     "test_managed_assets_are_snapshotted_and_workspace_escape_is_rejected": "double/language/test_assets_and_materializers.py",
     "test_managed_raw_body_preserves_exact_bytes": "double/language/test_assets_and_materializers.py",
     "test_symlink_escape_is_rejected": "double/language/test_assets_and_materializers.py",

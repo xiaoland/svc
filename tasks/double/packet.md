@@ -250,9 +250,15 @@
   now share one immutable no-retrieval authority; selected-operation scope and
   scenario identity are unchanged. The complete suite is 240 passed and the
   same wheel passes clean base/extra installation checks.
-- **Next Step**: Define the compiler-convergence Impact Handshake, then isolate
-  the admitted CEL profile and remaining compiler responsibilities behind deep
-  boundaries without changing BSL grammar or diagnostics.
+- **Completed CEL-profile stage**: the shared environment, scanner limitation,
+  compiler/runtime projections, and compatibility evidence are recorded in
+  [`cel-profile-impact-handshake.md`](cel-profile-impact-handshake.md).
+  Compiler and runtime now use the same CEL/RE2 authority; the static scanner is
+  isolated and frozen because the selected binding exposes no checked AST. The
+  full suite is 242 passed with unchanged scenario identity.
+- **Next Step**: Bound the remaining compiler-convergence stage around deep
+  authoring, BSL semantic, and OpenAPI adapter interfaces; do not mechanically
+  split the compiler merely to reduce its line count.
 
 - **Standing exploration authority**: Sir explicitly authorizes research,
   exploration, and disposable spikes without asking for further approval. Work
@@ -284,6 +290,8 @@
   [`tagged-model-impact-handshake.md`](tagged-model-impact-handshake.md)
 - Authorized reference-authority Impact Handshake:
   [`reference-authority-impact-handshake.md`](reference-authority-impact-handshake.md)
+- Authorized CEL-profile Impact Handshake:
+  [`cel-profile-impact-handshake.md`](cel-profile-impact-handshake.md)
 - Replacement MVP design:
   [`design-v2.md`](design-v2.md)
 - Concrete BSL v0 authoring contract:

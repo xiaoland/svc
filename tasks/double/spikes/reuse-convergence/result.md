@@ -255,9 +255,11 @@ vectors after version, semantic, and license review.
 4. **Compiler convergence.** After duplicate authorities are removed, split the
    remaining compiler by deep boundaries—YAML surface, BSL semantics, CEL
    profile, OpenAPI adapter—rather than mechanically slicing the existing file.
-5. **CEL remains bounded.** Move the current scanner into the CEL adapter and
-   make its limitation explicit. Do not change grammar or add CEL features in
-   this migration.
+5. **CEL remains bounded — completed.** One CEL-profile adapter now owns the
+   environment, JSON type admission, compilation/evaluation, RE2, expression
+   bound, and the isolated scanner. The scanner limitation is explicit and
+   characterized; no grammar or CEL feature was added. Compiler and runtime
+   retain stable diagnostic projections while sharing the same mechanics.
 6. **Conformance follow-up.** Evaluate a pinned, license-reviewed subset of Pact
    matcher vectors as supplemental evidence, not as a new runtime dependency.
 

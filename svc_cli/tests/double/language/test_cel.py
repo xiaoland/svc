@@ -1,12 +1,52 @@
 from __future__ import annotations
 from pathlib import Path
 import pytest
+from svc_cli.double.cel_profile import (
+    evaluate_expression,
+    inspect_expression,
+    regex_matches,
+    validate_expression,
+)
 from svc_cli.double.compiler import (
     compile_scenario,
 )
 from svc_cli.errors import SvcError
 
 from ..support.scenarios import LANGUAGE_FIXTURES, one_interaction, write_module
+
+
+def test_cel_profile_inspection_freezes_the_dynamic_map_limitation() -> None:
+    inspection = inspect_expression(
+        "// bindings.in_comment\n"
+        "bindings.direct + bindings['indexed'] + 'bindings.in_string'"
+    )
+
+    assert inspection.bindings == frozenset({"direct", "indexed"})
+    assert inspection.dynamic_binding_access is False
+    assert inspection.uses_request is False
+
+    dynamic = inspect_expression("bindings['prefix_' + 'name'] + request.body.value")
+    assert dynamic.bindings == frozenset()
+    assert dynamic.dynamic_binding_access is True
+    assert dynamic.uses_request is True
+
+
+def test_cel_profile_compilation_evaluation_and_regex_share_one_environment() -> None:
+    source = "request.body.value + '-' + bindings.suffix"
+    validate_expression(source)
+
+    value = evaluate_expression(
+        source,
+        {
+            "request": {"body": {"value": "provider"}},
+            "bindings": {"suffix": "accepted"},
+            "run": {"seed": 7, "clock": "2026-08-10T02:00:00Z"},
+            "scenario": {"name": "payment"},
+        },
+    )
+
+    assert value == "provider-accepted"
+    assert regex_matches(value, r"^[a-z]+-[a-z]+$") is True
 
 
 @pytest.mark.parametrize(

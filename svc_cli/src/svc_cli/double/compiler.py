@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Literal, NoReturn, TypeAlias, cast
 from urllib.parse import unquote, urlsplit
 
-from cel_expr_python import cel  # type: ignore[import-untyped]
 from jsonschema.exceptions import SchemaError  # type: ignore[import-untyped]
 from pydantic import JsonValue
 from referencing.exceptions import Unresolvable
@@ -34,6 +33,15 @@ from ruamel.yaml.events import (
 )
 
 from ..errors import SvcError
+from .cel_profile import (
+    MAX_CEL_EXPRESSION_BYTES,
+    CelExpressionTooLarge,
+    CelProfileError,
+    inspect_expression,
+    regex_matches,
+    validate_expression,
+    validate_regex,
+)
 from .model import (
     Body,
     CaptureValueNode,
@@ -77,7 +85,6 @@ MAX_MODULE_BYTES = 1_048_576
 MAX_LOCAL_FILE_BYTES = 4_194_304
 MAX_YAML_NODES = 50_000
 MAX_YAML_DEPTH = 64
-MAX_CEL_EXPRESSION_BYTES = 4_096
 MAX_MATERIALIZER_ARGUMENTS = 64
 MAX_MATERIALIZER_TIMEOUT_MS = 30_000
 MAX_MATERIALIZER_OUTPUT_BYTES = 8_388_608
@@ -87,27 +94,6 @@ _BINDING_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _METHOD_RE = re.compile(r"^[A-Z][A-Z0-9!#$%&'*+.^_`|~-]*$")
 _HEADER_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 _OPENAPI_VERSION_RE = re.compile(r"^3\.1\.\d+$")
-_BINDING_DOT_RE = re.compile(r"\bbindings\.([a-z][a-z0-9_]*)\b")
-_BINDING_INDEX_RE = re.compile(r"\bbindings\[['\"]([a-z][a-z0-9_]*)['\"]\]")
-_BINDINGS_TOKEN_RE = re.compile(r"\bbindings\b")
-_REQUEST_TOKEN_RE = re.compile(r"\brequest\b")
-
-_CEL_PROFILE = """\
-stdlib:
-  exclude_macros:
-    - all
-    - exists
-    - exists_one
-    - map
-    - filter
-"""
-_CEL_VARIABLES = {
-    "request": cel.Type.Map(cel.Type.STRING, cel.Type.DYN),
-    "bindings": cel.Type.Map(cel.Type.STRING, cel.Type.DYN),
-    "run": cel.Type.Map(cel.Type.STRING, cel.Type.DYN),
-    "scenario": cel.Type.Map(cel.Type.STRING, cel.Type.DYN),
-}
-
 _REQUEST_NODE_KINDS = frozenset({"literal", "match", "capture", "managed"})
 _OUTPUT_NODE_KINDS = frozenset(
     {"literal", "example", "derived", "generated", "managed"}
@@ -1332,7 +1318,9 @@ class _Compiler:
         owner: CommentedMap,
         path: tuple[PathPart, ...],
     ) -> None:
-        if len(expression.encode("utf-8")) > MAX_CEL_EXPRESSION_BYTES:
+        try:
+            inspection = inspect_expression(expression)
+        except CelExpressionTooLarge:
             self._fail(
                 "double-cel-expression-too-large",
                 "CEL expression exceeds the BSL v0 byte bound.",
@@ -1341,13 +1329,7 @@ class _Compiler:
                 key="expression",
                 details={"max_bytes": MAX_CEL_EXPRESSION_BYTES},
             )
-        code_only = _cel_without_string_literals(expression)
-        references = set(_BINDING_DOT_RE.findall(code_only)) | set(
-            _BINDING_INDEX_RE.findall(code_only)
-        )
-        stripped = _BINDING_DOT_RE.sub("", code_only)
-        stripped = _BINDING_INDEX_RE.sub("", stripped)
-        if _BINDINGS_TOKEN_RE.search(stripped):
+        if inspection.dynamic_binding_access:
             self._fail(
                 "dynamic-double-binding-reference",
                 "CEL bindings must use a statically named binding.",
@@ -1355,7 +1337,7 @@ class _Compiler:
                 path,
                 key="expression",
             )
-        missing = sorted(references - set(available))
+        missing = sorted(inspection.bindings - set(available))
         if missing:
             self._fail(
                 "unavailable-double-binding",
@@ -1365,7 +1347,7 @@ class _Compiler:
                 key="expression",
                 details={"bindings": missing},
             )
-        if phase == "event" and _REQUEST_TOKEN_RE.search(code_only):
+        if phase == "event" and inspection.uses_request:
             self._fail(
                 "unavailable-double-request-context",
                 "Event derivation has no matched request context.",
@@ -1374,14 +1356,8 @@ class _Compiler:
                 key="expression",
             )
         try:
-            config = cel.NewEnvConfigFromYaml(_CEL_PROFILE)
-            environment = cel.NewEnv(config=config, variables=_CEL_VARIABLES)
-            program = environment.compile(expression)
-            if not _cel_type_is_json(program.return_type().name()):
-                raise TypeError(
-                    f"CEL return type is outside JSON values: {program.return_type()}"
-                )
-        except (RuntimeError, TypeError, ValueError) as error:
+            validate_expression(expression)
+        except CelProfileError as error:
             self._fail(
                 "invalid-double-cel",
                 "CEL expression is outside the restricted BSL v0 profile.",
@@ -1397,7 +1373,9 @@ class _Compiler:
         owner: CommentedMap,
         path: tuple[PathPart, ...],
     ) -> None:
-        if len(pattern.encode("utf-8")) > MAX_CEL_EXPRESSION_BYTES:
+        try:
+            validate_regex(pattern)
+        except CelExpressionTooLarge:
             self._fail(
                 "double-regex-too-large",
                 "Regex pattern exceeds the BSL v0 byte bound.",
@@ -1406,16 +1384,7 @@ class _Compiler:
                 key="pattern",
                 details={"max_bytes": MAX_CEL_EXPRESSION_BYTES},
             )
-        expression = f"''.matches({json.dumps(pattern)})"
-        try:
-            config = cel.NewEnvConfigFromYaml(_CEL_PROFILE)
-            program = cel.NewEnv(config=config, variables=_CEL_VARIABLES).compile(
-                expression
-            )
-            result = program.eval(data={name: {} for name in _CEL_VARIABLES})
-            if result.type() == cel.Type.ERROR:
-                raise RuntimeError(str(result.value()))
-        except (RuntimeError, TypeError, ValueError) as error:
+        except CelProfileError as error:
             self._fail(
                 "invalid-double-regex",
                 "Regex pattern is not valid in the CEL/RE2 profile.",
@@ -1445,8 +1414,8 @@ class _Compiler:
                 and (matcher.maximum is None or value <= matcher.maximum)
             )
         elif matcher.kind == "regex":
-            valid = isinstance(value, str) and _cel_regex_matches(
-                matcher.pattern or "", value
+            valid = isinstance(value, str) and regex_matches(
+                value, matcher.pattern or ""
             )
         elif matcher.kind == "semantic":
             valid = isinstance(value, str) and _semantic_valid(
@@ -2893,14 +2862,6 @@ def _resolve_executable(argv0: str, cwd: Path) -> Path | None:
     return resolved
 
 
-def _cel_regex_matches(pattern: str, value: str) -> bool:
-    config = cel.NewEnvConfigFromYaml(_CEL_PROFILE)
-    environment = cel.NewEnv(config=config, variables={"candidate": cel.Type.STRING})
-    expression = environment.compile(f"candidate.matches({json.dumps(pattern)})")
-    result = expression.eval(data={"candidate": value})
-    return bool(result.plain_value())
-
-
 def _semantic_valid(semantic: str, using: str, value: str) -> bool:
     if (semantic, using) == ("rfc.uuid", "svc.rfc-uuid/v1"):
         try:
@@ -2921,53 +2882,6 @@ def _semantic_valid(semantic: str, using: str, value: str) -> bool:
         except ValueError:
             return False
         return parsed_datetime.tzinfo is not None
-    return False
-
-
-def _cel_without_string_literals(source: str) -> str:
-    """Blank CEL string contents so static reference checks do not read literals."""
-
-    result = list(source)
-    index = 0
-    while index < len(source):
-        if source.startswith("//", index):
-            while index < len(source) and source[index] not in "\r\n":
-                result[index] = " "
-                index += 1
-            continue
-        quote = source[index]
-        if quote not in {"'", '"'}:
-            index += 1
-            continue
-        width = 3 if source.startswith(quote * 3, index) else 1
-        cursor = index
-        for offset in range(width):
-            result[index + offset] = " "
-        index += width
-        while index < len(source):
-            if source.startswith(quote * width, index):
-                for offset in range(width):
-                    result[index + offset] = " "
-                index += width
-                break
-            result[index] = " "
-            if source[index] == "\\" and index + 1 < len(source):
-                index += 1
-                result[index] = " "
-            index += 1
-        if index == cursor:
-            index += 1
-    return "".join(result)
-
-
-def _cel_type_is_json(type_name: str) -> bool:
-    compact = type_name.replace(" ", "")
-    if compact in {"DYN", "NULL", "BOOL", "INT", "UINT", "DOUBLE", "STRING"}:
-        return True
-    if compact.startswith("LIST<") and compact.endswith(">"):
-        return _cel_type_is_json(compact[5:-1])
-    if compact.startswith("MAP<STRING,") and compact.endswith(">"):
-        return _cel_type_is_json(compact[len("MAP<STRING,") : -1])
     return False
 
 

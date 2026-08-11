@@ -77,6 +77,7 @@ files = [
     "svc_cli/src/svc_cli/dev/runtime.py",
     "svc_cli/src/svc_cli/double/__init__.py",
     "svc_cli/src/svc_cli/double/carrier.py",
+    "svc_cli/src/svc_cli/double/cel_profile.py",
     "svc_cli/src/svc_cli/double/compiler.py",
     "svc_cli/src/svc_cli/double/materialization.py",
     "svc_cli/src/svc_cli/double/model.py",
