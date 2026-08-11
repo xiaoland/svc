@@ -281,8 +281,14 @@ vectors after version, semantic, and license review.
    bound, and the isolated scanner. The scanner limitation is explicit and
    characterized; no grammar or CEL feature was added. Compiler and runtime
    retain stable diagnostic projections while sharing the same mechanics.
-6. **Conformance follow-up.** Evaluate a pinned, license-reviewed subset of Pact
-   matcher vectors as supplemental evidence, not as a new runtime dependency.
+6. **Conformance follow-up — completed with a product decision boundary.** A
+   pinned external checkout at
+   `97abd7bfcec15f3532109f984db37bcb5ccfb49c` and its local Apache-2.0 license
+   are verified by the executable probe; no upstream files are vendored and no
+   dependency is added. Exact and simple body-regex facts align. Pact's
+   whole-value query/header regex rejects `9999X` for `\d{1,4}`, while the
+   documented CEL substring semantics accepts it. This is reported rather than
+   silently changed; a BSL product decision is required.
 
 Each production slice requires a new Impact Handshake and Sir's explicit start.
 The test-layout slice is complete and now provides the reviewable ownership

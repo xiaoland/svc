@@ -283,6 +283,15 @@
 - **Next Step**: Evaluate the optional Pact matcher-vector follow-up as
   supplemental conformance evidence only; do not import Pact runtime/provider
   state semantics or add a production dependency.
+- **Completed Pact conformance follow-up**: the pinned, license-checked matrix
+  and executable external-checkout probe are recorded in
+  [`pact-conformance-result.md`](pact-conformance-result.md). Exact and simple
+  body-regex facts align, but Pact whole-value query/header regex rejects
+  trailing content that CEL substring semantics currently accepts.
+- **Decision required**: choose whether BSL keeps explicit CEL substring
+  semantics, changes v0 regex to implicit whole-value matching as a
+  compatibility correction, or versions a separate whole-value matcher. No
+  production behavior changes until Sir confirms that language decision.
 
 - **Standing exploration authority**: Sir explicitly authorizes research,
   exploration, and disposable spikes without asking for further approval. Work
@@ -322,6 +331,8 @@
   [`openapi-profile-impact-handshake.md`](openapi-profile-impact-handshake.md)
 - Authored-shape reuse decision:
   [`authoring-shape-decision.md`](authoring-shape-decision.md)
+- Pact matcher conformance result:
+  [`pact-conformance-result.md`](pact-conformance-result.md)
 - Replacement MVP design:
   [`design-v2.md`](design-v2.md)
 - Concrete BSL v0 authoring contract:
