@@ -131,7 +131,7 @@ jobs:
             /tmp/svc-double-base/bin/svc double "$operation" --json-schema >/dev/null
           done
           /tmp/svc-double-base/bin/python -c \
-            'import importlib.util; assert all(importlib.util.find_spec(name) is None for name in ("cel_expr_python", "jsonschema", "ruamel"))'
+            'import importlib.util; assert all(importlib.util.find_spec(name) is None for name in ("cel_expr_python", "jsonschema", "referencing", "ruamel"))'
           set +e
           unavailable=$(/tmp/svc-double-base/bin/svc double validate /dev/null --json)
           unavailable_status=$?
@@ -144,7 +144,7 @@ jobs:
           python -m venv /tmp/svc-double-extra
           double_wheel="${wheel[0]}[double]"
           /tmp/svc-double-extra/bin/pip install "$double_wheel"
-          fixture="$GITHUB_WORKSPACE/svc_cli/tests/fixtures/double/payment.double.yaml"
+          fixture="$GITHUB_WORKSPACE/svc_cli/tests/double/fixtures/language/payment.double.yaml"
           smoke=$(mktemp -d)
           cat >"$smoke/callback.py" <<'PY'
           import http.server
