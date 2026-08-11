@@ -17,9 +17,9 @@ from typing import Any, Literal, NoReturn, TypeAlias, cast
 from urllib.parse import unquote, urlsplit
 
 from cel_expr_python import cel  # type: ignore[import-untyped]
-from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from jsonschema.exceptions import SchemaError  # type: ignore[import-untyped]
 from pydantic import JsonValue
+from referencing.exceptions import Unresolvable
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.error import YAMLError
@@ -65,6 +65,11 @@ from .model import (
     SourceLocation,
     StructuredBody,
     ValueNode,
+)
+from .schema_registry import (
+    build_schema_registry,
+    check_schema_graph,
+    resolve_document_reference,
 )
 
 
@@ -1687,6 +1692,8 @@ class _Compiler:
         response_schemas = self._extract_response_schemas(
             operation, source_path, document, documents, resource_uris
         )
+        schema_resources = self._compile_schema_resources(documents, resource_uris)
+        registry = build_schema_registry(schema_resources)
         for schema_name, schema in [
             ("request", request_schema),
             *(
@@ -1696,10 +1703,11 @@ class _Compiler:
         ]:
             if schema is None:
                 continue
-            self._reject_custom_schema_dialects(schema, source_text)
             try:
-                Draft202012Validator.check_schema(schema)
-            except SchemaError as error:
+                checked_schemas = check_schema_graph(schema, registry)
+                for checked_schema in checked_schemas:
+                    self._reject_custom_schema_dialects(checked_schema, source_text)
+            except (SchemaError, Unresolvable) as error:
                 self._contract_fail(
                     "Selected OpenAPI Schema Object is invalid for JSON Schema 2020-12.",
                     source_text,
@@ -1708,7 +1716,6 @@ class _Compiler:
                         "diagnostic": _bounded_diagnostic(error),
                     },
                 )
-        schema_resources = self._compile_schema_resources(documents, resource_uris)
         return Contract(
             source=source,
             method=method,
@@ -1741,8 +1748,11 @@ class _Compiler:
                 identity = (target_path, fragment)
                 if identity not in visiting:
                     visiting.add(identity)
-                    target = _json_pointer(target_document, fragment)
-                    if target is _MISSING:
+                    try:
+                        target = resolve_document_reference(
+                            documents, document_path, reference
+                        )
+                    except Unresolvable:
                         self._contract_fail(
                             "OpenAPI $ref fragment does not resolve.",
                             str(document_path),
@@ -1824,7 +1834,6 @@ class _Compiler:
         schema = media.get("schema") if isinstance(media, Mapping) else None
         if schema is None:
             return None
-        self._check_schema_graph(schema, document_path, document, documents, set())
         normalized = self._rewrite_schema_refs(
             schema,
             document_path,
@@ -1875,7 +1884,6 @@ class _Compiler:
             schema = media.get("schema") if isinstance(media, Mapping) else None
             if schema is None:
                 continue
-            self._check_schema_graph(schema, document_path, document, documents, set())
             normalized = self._rewrite_schema_refs(
                 schema,
                 document_path,
@@ -2028,61 +2036,6 @@ class _Compiler:
             )
         return uri + (f"#{parsed.fragment}" if parsed.fragment else "")
 
-    def _check_schema_graph(
-        self,
-        schema: object,
-        document_path: Path,
-        document: object,
-        documents: dict[Path, object],
-        checked: set[tuple[Path, str]],
-    ) -> None:
-        def check(
-            candidate: object, source_path: Path, source_document: object
-        ) -> None:
-            try:
-                Draft202012Validator.check_schema(candidate)
-            except SchemaError as error:
-                self._contract_fail(
-                    "Selected OpenAPI Schema Object is invalid for JSON Schema 2020-12.",
-                    str(source_path),
-                    details={"diagnostic": _bounded_diagnostic(error)},
-                )
-            self._reject_custom_schema_dialects(candidate, str(source_path))
-            scan(candidate, source_path, source_document)
-
-        def scan(candidate: object, source_path: Path, source_document: object) -> None:
-            if isinstance(candidate, Mapping):
-                reference = candidate.get("$ref")
-                if reference is not None:
-                    if not isinstance(reference, str):
-                        self._contract_fail(
-                            "OpenAPI $ref must be a string.", str(source_path)
-                        )
-                    target_path, fragment, target_document = self._resolve_ref(
-                        reference, source_path, source_document, documents
-                    )
-                    identity = (target_path, fragment)
-                    if identity not in checked:
-                        target = _json_pointer(target_document, fragment)
-                        if target is _MISSING:
-                            self._contract_fail(
-                                "OpenAPI $ref fragment does not resolve.",
-                                str(source_path),
-                                details={"ref": reference},
-                            )
-                        checked.add(identity)
-                        check(target, target_path, target_document)
-                for key, item in candidate.items():
-                    if key != "$ref":
-                        scan(item, source_path, source_document)
-            elif isinstance(candidate, Sequence) and not isinstance(
-                candidate, (str, bytes, bytearray)
-            ):
-                for item in candidate:
-                    scan(item, source_path, source_document)
-
-        check(schema, document_path, document)
-
     def _resolve_openapi_object(
         self,
         value: object,
@@ -2095,11 +2048,10 @@ class _Compiler:
         reference = value["$ref"]
         if not isinstance(reference, str):
             self._contract_fail("OpenAPI $ref must be a string.", str(document_path))
-        target_path, fragment, target_document = self._resolve_ref(
-            reference, document_path, document, documents
-        )
-        target = _json_pointer(target_document, fragment)
-        if target is _MISSING:
+        self._resolve_ref(reference, document_path, document, documents)
+        try:
+            target = resolve_document_reference(documents, document_path, reference)
+        except Unresolvable:
             self._contract_fail(
                 "OpenAPI $ref fragment does not resolve.",
                 str(document_path),
@@ -3073,31 +3025,6 @@ def _reject_json_duplicates(pairs: Iterable[tuple[str, object]]) -> dict[str, ob
 
 def _reject_json_constant(value: str) -> None:
     raise ValueError(f"non-finite JSON number: {value}")
-
-
-_MISSING = object()
-
-
-def _json_pointer(document: object, fragment: str) -> object:
-    if not fragment:
-        return document
-    current = document
-    for encoded in fragment.removeprefix("/").split("/"):
-        token = encoded.replace("~1", "/").replace("~0", "~")
-        if isinstance(current, Mapping) and token in current:
-            current = current[token]
-        elif isinstance(current, Sequence) and not isinstance(
-            current, (str, bytes, bytearray)
-        ):
-            if not re.fullmatch(r"0|[1-9][0-9]*", token):
-                return _MISSING
-            try:
-                current = current[int(token)]
-            except (ValueError, IndexError):
-                return _MISSING
-        else:
-            return _MISSING
-    return current
 
 
 def _bounded_diagnostic(error: BaseException, maximum: int = 1_000) -> str:

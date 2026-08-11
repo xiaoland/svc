@@ -244,10 +244,14 @@ vectors after version, semantic, and license review.
    variants with unchanged serialized field names. First make current compiler
    output those variants, then use TypeAdapters for authored structural shape.
    Translate validation errors through one source-location diagnostic adapter.
-3. **Reference authority.** Store selected schema URI references and immutable
-   resources, construct one no-retrieval registry adapter, and use it in compiler
-   checks and runtime validation. Remove manual walkers/rewriters only after the
-   payment and recursive characterization cases pass unchanged.
+3. **Reference authority — completed.** One no-retrieval registry adapter now
+   owns JSON Pointer/reference resolution, recursive graph checks, registry
+   construction, and runtime instance validation. SVC retains local containment,
+   selected-operation reachability, snapshots, dialect policy, and a narrow
+   stable-URN compatibility projection because removing that projection would
+   change the persisted IR and scenario digest. Payment, recursive, missing
+   pointer, remote fail-closed, base-wheel, extra-wheel, and full-suite evidence
+   pass with unchanged public scenario identity.
 4. **Compiler convergence.** After duplicate authorities are removed, split the
    remaining compiler by deep boundaries—YAML surface, BSL semantics, CEL
    profile, OpenAPI adapter—rather than mechanically slicing the existing file.

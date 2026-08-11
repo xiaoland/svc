@@ -38,6 +38,11 @@ from .model import (
     Scenario,
     TargetBinding,
 )
+from .schema_registry import (
+    SchemaRegistry,
+    build_schema_registry,
+    schema_validation_errors,
+)
 
 
 _MAX_BODY_BYTES = 1_048_576
@@ -62,7 +67,10 @@ class BoundaryEngine:
         self.scenario = scenario
         self.context = context
         self.targets = {binding.name: binding for binding in targets}
-        self._schema_registry = _schema_registry(scenario)
+        resources = (
+            () if scenario.contract is None else scenario.contract.schema_resources
+        )
+        self._schema_registry = build_schema_registry(resources)
         self._lock = threading.RLock()
         self._entries: deque[JournalEntry] = deque(maxlen=_MAX_JOURNAL_ENTRIES)
         self._journal_total = 0
@@ -833,34 +841,14 @@ def _string_headers(values: Mapping[str, object]) -> dict[str, str]:
     return headers
 
 
-def _schema_registry(scenario: Scenario) -> Any:
-    from referencing import Registry
-    from referencing.jsonschema import DRAFT202012
-
-    registry = Registry()
-    if scenario.contract is None:
-        return registry
-    for resource in scenario.contract.schema_resources:
-        registry = registry.with_resource(
-            resource.uri,
-            DRAFT202012.create_resource(resource.document),
-        )
-    return registry
-
-
 def _validate_schema(
     schema: JsonValue,
     value: JsonValue,
     code: str,
-    registry: Any,
+    registry: SchemaRegistry,
 ) -> None:
     try:
-        from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
-
-        errors = sorted(
-            Draft202012Validator(schema, registry=registry).iter_errors(value),
-            key=lambda item: list(item.path),
-        )
+        errors = schema_validation_errors(schema, value, registry)
     except Exception as error:
         raise SvcError(
             code,

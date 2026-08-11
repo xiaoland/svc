@@ -20,6 +20,8 @@ BASELINE_CASE_DIGEST = (
 POST_MIGRATION_CASES = {
     "test_tagged_ir_rejects_cross_variant_and_missing_fields",
     "test_tagged_ir_round_trip_preserves_the_serialized_contract",
+    "test_missing_local_openapi_pointer_is_rejected_by_registry",
+    "test_unselected_remote_openapi_reference_is_not_scenario_authority",
 }
 
 INTERFACE = {
@@ -73,6 +75,8 @@ LANGUAGE = {
     "test_yaml_reader_errors_and_symlink_loops_are_structured": "double/language/test_yaml_surface.py",
     "test_tagged_ir_rejects_cross_variant_and_missing_fields": "double/language/test_model.py",
     "test_tagged_ir_round_trip_preserves_the_serialized_contract": "double/language/test_model.py",
+    "test_missing_local_openapi_pointer_is_rejected_by_registry": "double/language/test_openapi.py",
+    "test_unselected_remote_openapi_reference_is_not_scenario_authority": "double/language/test_openapi.py",
 }
 
 RUNTIME = {

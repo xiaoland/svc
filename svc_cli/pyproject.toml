@@ -18,6 +18,7 @@ dependencies = [
 double = [
     "ruamel.yaml>=0.19.1,<0.20",
     "jsonschema>=4.26,<5",
+    "referencing>=0.37,<0.38",
     "cel-expr-python==0.1.3",
 ]
 

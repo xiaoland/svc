@@ -242,9 +242,17 @@
   preserving the representative serialized payload, scenario digest, carrier
   manifest round-trip, and historical 78-case identity. Two focused model
   cases raise the complete suite to 238 passed.
-- **Next Step**: Define the separate reference-authority Impact Handshake, then
-  replace compiler-owned `$ref` graph rewriting with one immutable,
-  no-retrieval registry shared by compiler checks and runtime validation.
+- **Completed reference-authority stage**: the shared registry adapter,
+  retained stable-URN compatibility projection, dependency boundary, digest
+  invariants, and verification evidence are recorded in
+  [`reference-authority-impact-handshake.md`](reference-authority-impact-handshake.md).
+  Pointer resolution, recursive graph checks, and runtime instance validation
+  now share one immutable no-retrieval authority; selected-operation scope and
+  scenario identity are unchanged. The complete suite is 240 passed and the
+  same wheel passes clean base/extra installation checks.
+- **Next Step**: Define the compiler-convergence Impact Handshake, then isolate
+  the admitted CEL profile and remaining compiler responsibilities behind deep
+  boundaries without changing BSL grammar or diagnostics.
 
 - **Standing exploration authority**: Sir explicitly authorizes research,
   exploration, and disposable spikes without asking for further approval. Work
@@ -274,6 +282,8 @@
   [`reuse-convergence-impact-handshake.md`](reuse-convergence-impact-handshake.md)
 - Authorized tagged-model Impact Handshake:
   [`tagged-model-impact-handshake.md`](tagged-model-impact-handshake.md)
+- Authorized reference-authority Impact Handshake:
+  [`reference-authority-impact-handshake.md`](reference-authority-impact-handshake.md)
 - Replacement MVP design:
   [`design-v2.md`](design-v2.md)
 - Concrete BSL v0 authoring contract:

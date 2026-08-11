@@ -2,11 +2,11 @@ from __future__ import annotations
 from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
-from referencing import Registry
-from referencing.jsonschema import DRAFT202012
+from referencing.exceptions import Unresolvable
 from svc_cli.double.compiler import (
     compile_scenario,
 )
+from svc_cli.double.schema_registry import build_schema_registry
 from svc_cli.errors import SvcError
 
 from ..support.scenarios import LANGUAGE_FIXTURES, one_interaction, write_module
@@ -83,6 +83,81 @@ components:
     assert compiled.contract.method == "POST"
 
 
+def test_missing_local_openapi_pointer_is_rejected_by_registry(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "openapi.yaml").write_text(
+        """\
+openapi: 3.1.0
+info: {title: fixture, version: 1.0.0}
+paths:
+  /call:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/$defs/Missing'}
+      responses:
+        '200': {description: ok}
+""",
+        encoding="utf-8",
+    )
+    scenario = one_interaction().replace(
+        "boundary: {name: provider, protocol: http}",
+        (
+            "boundary:\n"
+            "    name: provider\n"
+            "    protocol: http\n"
+            "    contract: {kind: openapi-3.1-operation, source: openapi.yaml, method: POST, path: /call}"
+        ),
+    )
+
+    with pytest.raises(SvcError) as caught:
+        compile_scenario(write_module(tmp_path, scenario))
+
+    assert caught.value.code == "invalid-double-contract"
+    assert caught.value.details["ref"] == "#/$defs/Missing"
+
+
+def test_unselected_remote_openapi_reference_is_not_scenario_authority(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "openapi.yaml").write_text(
+        """\
+openapi: 3.1.0
+info: {title: fixture, version: 1.0.0}
+paths:
+  /call:
+    post:
+      responses:
+        '200': {description: ok}
+  /unselected:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: 'https://provider.invalid/unselected.json'}
+      responses:
+        '200': {description: ok}
+""",
+        encoding="utf-8",
+    )
+    scenario = one_interaction().replace(
+        "boundary: {name: provider, protocol: http}",
+        (
+            "boundary:\n"
+            "    name: provider\n"
+            "    protocol: http\n"
+            "    contract: {kind: openapi-3.1-operation, source: openapi.yaml, method: POST, path: /call}"
+        ),
+    )
+
+    compiled = compile_scenario(write_module(tmp_path, scenario))
+
+    assert compiled.contract is not None
+    assert len(compiled.contract.schema_resources) == 1
+
+
 def test_cross_file_recursive_openapi_schema_uses_immutable_registry() -> None:
     scenario = compile_scenario(LANGUAGE_FIXTURES / "recursive.double.yaml")
 
@@ -99,17 +174,15 @@ def test_cross_file_recursive_openapi_schema_uses_immutable_registry() -> None:
     )
     assert "urn:svc:double:schema-resource:" in str(contract.request_schema)
 
-    registry = Registry()
-    for resource in contract.schema_resources:
-        registry = registry.with_resource(
-            resource.uri, DRAFT202012.create_resource(resource.document)
-        )
+    registry = build_schema_registry(contract.schema_resources)
     validator = Draft202012Validator(contract.request_schema, registry=registry)
 
     assert validator.is_valid(
         {"value": "root", "next": {"value": "child", "next": None}}
     )
     assert not validator.is_valid({"value": "root", "next": {"value": 1}})
+    with pytest.raises(Unresolvable):
+        registry.resolver().lookup("https://provider.invalid/absent-schema")
 
 
 @pytest.mark.parametrize(
