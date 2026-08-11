@@ -11,6 +11,13 @@ availability is the important exception: the selected Python binding does not
 expose a checked AST, so preserving the admitted `bindings.NAME` surface cannot
 currently eliminate source inspection without a grammar or dependency change.
 
+The implementation follow-up resolves that initial assessment more precisely:
+Pydantic is now the tagged IR authority, while a production probe rejects
+reusing that IR adapter as the authored YAML authority because doing so would
+require a duplicate authoring model and diagnostic grammar. JSON reference and
+CEL mechanics now each have one adapter, and YAML parser mechanics have one
+authoring-surface adapter.
+
 All 78 double-related pytest cases remain required characterization evidence.
 The implemented test topology assigns every collected case exactly once; it
 deletes, merges, or silently reclassifies none of them.
@@ -220,7 +227,8 @@ Implementation evidence:
 | Candidate | Decision | Why | Required compatibility evidence |
 | --- | --- | --- | --- |
 | `ruamel.yaml` parser plus event-level feature/resource guard | **Keep** | library owns YAML; SVC guard owns the admitted safe subset | current YAML corpus and source locations |
-| Pydantic discriminated authoring/IR variants | **Adopt** | existing dependency removes representable illegal tagged states | all language/runtime cases; stable diagnostic adapter |
+| Pydantic discriminated IR variants | **Adopted** | existing dependency removes representable illegal compiled states | all language/runtime cases; stable serialization/digest |
+| Pydantic directly or through duplicate authoring variants | **Rejected for v0 after production probe** | IR collections/fields differ from YAML, `JsonValue` is not the strict JSON boundary, and translation would reproduce phase/key diagnostics | executable authored-shape probe; current diagnostic corpus |
 | handwritten `_keys/_mapping/_string` as primary structural schema | **Replace incrementally** | duplicates model validation and expands every new variant | exact errors for missing/unknown/type cases |
 | current CEL compiler/evaluator | **Keep** | mature language semantics already delegated | current CEL and platform-wheel gates |
 | CEL regex/string source scanner | **Isolate and freeze** | required by v0 surface with current binding; public API cannot replace it | existing eight CEL cases; no CEL expansion |
@@ -240,10 +248,15 @@ vectors after version, semantic, and license review.
 1. **Test topology only — completed.** Move all existing cases and fixtures into the tree
    above, extract narrow support owners, prove the mapped 78 cases plus the full
    suite. Do not alter production behavior in this slice.
-2. **Tagged model authority — completed.** Introduce discriminated matcher/value/body
-   variants with unchanged serialized field names. First make current compiler
-   output those variants, then use TypeAdapters for authored structural shape.
-   Translate validation errors through one source-location diagnostic adapter.
+2. **Tagged model authority — completed, including authored-shape decision.**
+   Discriminated matcher/value/body IR variants preserve serialized field names
+   and make compiled illegal states unrepresentable. The production follow-up
+   probe rejects applying those strict IR TypeAdapters directly to authored
+   YAML: list/tuple representation, fixed-null compatibility fields, non-finite
+   JSON, phase-specific names, and compiled-only fields are materially
+   different. A separate Pydantic authoring model would add a third structural
+   authority plus the same source-diagnostic policy, so v0 retains the existing
+   host compiler boundary instead.
 3. **Reference authority — completed.** One no-retrieval registry adapter now
    owns JSON Pointer/reference resolution, recursive graph checks, registry
    construction, and runtime instance validation. SVC retains local containment,
@@ -252,7 +265,7 @@ vectors after version, semantic, and license review.
    change the persisted IR and scenario digest. Payment, recursive, missing
    pointer, remote fail-closed, base-wheel, extra-wheel, and full-suite evidence
    pass with unchanged public scenario identity.
-4. **Compiler convergence.** After duplicate authorities are removed, split the
+4. **Compiler convergence — completed.** After duplicate authorities are removed, split the
    remaining compiler by deep boundaries—YAML surface, BSL semantics, CEL
    profile, OpenAPI adapter—rather than mechanically slicing the existing file.
    The YAML-surface substage is complete: parser construction, event guards,

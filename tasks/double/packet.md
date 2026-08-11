@@ -274,6 +274,15 @@
   determine whether Pydantic can replace handwritten YAML object-shape checks
   without weakening stable, source-located diagnostics; adopt only where the
   adapter is deeper than the current compiler policy.
+- **Completed authoring-shape decision**: the production probe and decision are
+  recorded in [`authoring-shape-decision.md`](authoring-shape-decision.md).
+  Direct IR TypeAdapter reuse rejects valid authored collection representation
+  and loses BSL diagnostics; separate authoring variants would create a third
+  authority. Tagged IR plus the source-aware host compiler remains the v0
+  boundary.
+- **Next Step**: Evaluate the optional Pact matcher-vector follow-up as
+  supplemental conformance evidence only; do not import Pact runtime/provider
+  state semantics or add a production dependency.
 
 - **Standing exploration authority**: Sir explicitly authorizes research,
   exploration, and disposable spikes without asking for further approval. Work
@@ -311,6 +320,8 @@
   [`yaml-surface-impact-handshake.md`](yaml-surface-impact-handshake.md)
 - Authorized OpenAPI-profile Impact Handshake:
   [`openapi-profile-impact-handshake.md`](openapi-profile-impact-handshake.md)
+- Authored-shape reuse decision:
+  [`authoring-shape-decision.md`](authoring-shape-decision.md)
 - Replacement MVP design:
   [`design-v2.md`](design-v2.md)
 - Concrete BSL v0 authoring contract:
