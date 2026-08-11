@@ -216,6 +216,27 @@
     3.11/3.14 Linux double-wheel jobs, and the lock contains the pinned CEL
     Linux wheels for both versions; those hosted jobs remain execution evidence
     available only after a committed branch runs CI.
+- **Completed reuse/convergence spike and first implementation slice**: Sir
+  accepted a focused post-MVP spike on
+  2026-08-11 after the implementation audit found that test count alone did not
+  prove reinvention, but the 3,088-line compiler, broad optional-field IR, CEL
+  source scanning, and duplicate compiler/runtime reference handling were
+  credible reuse and maintenance risks. The spike preserved all existing
+  double cases while testing narrower Pydantic discriminated models, a
+  mechanically checked CEL binding surface, a single local-only immutable JSON
+  Schema reference authority, and a non-flat test topology. Its decision table
+  is recorded in [`spikes/reuse-convergence/result.md`](spikes/reuse-convergence/result.md).
+  Sir then reviewed the test-topology Impact Handshake and said “同意，开始”.
+  The implemented first slice replaces the four flat modules with explicit
+  interface/language/runtime owners plus scenario, HTTP, run-lifecycle, and
+  projection-fact support owners. The collection-derived case identity remains
+  78/78 with digest
+  `8c0b2e1b78328b5c4d46c5afecd578244d6e2b0bb1770650ca0348db27325231`;
+  all 15 fixtures are byte-identical after their move; the complete suite is
+  236 passed. No production implementation or behavior changed in this slice.
+- **Next Step**: Review this uncommitted test-topology slice. Any tagged-model
+  or reference-authority implementation is a separate production mutation and
+  requires its own Impact Handshake and Sir's explicit start.
 
 - **Standing exploration authority**: Sir explicitly authorizes research,
   exploration, and disposable spikes without asking for further approval. Work
@@ -239,6 +260,10 @@
   [`language-decision.md`](language-decision.md)
 - Completed BSL/runtime/OpenAPI spike:
   [`spikes/bsl-authoring-conformance/result.md`](spikes/bsl-authoring-conformance/result.md)
+- Completed compiler/test convergence spike:
+  [`spikes/reuse-convergence/README.md`](spikes/reuse-convergence/README.md)
+- Authorized test-topology Impact Handshake:
+  [`reuse-convergence-impact-handshake.md`](reuse-convergence-impact-handshake.md)
 - Replacement MVP design:
   [`design-v2.md`](design-v2.md)
 - Concrete BSL v0 authoring contract:
@@ -279,4 +304,6 @@ to an implementation decision:
   on 2026-08-10. The authorization covers the paths and state diff in
   [`impact-handshake-v2.md`](impact-handshake-v2.md); further commits,
   publishing, release, irreversible external mutation, and economically
-  material actions still require separate authority.
+  material actions still require separate authority. Sir separately authorized
+  the behavior-preserving test-topology slice on 2026-08-11 under
+  [`reuse-convergence-impact-handshake.md`](reuse-convergence-impact-handshake.md).
