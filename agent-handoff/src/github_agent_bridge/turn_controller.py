@@ -196,7 +196,12 @@ class BindingTurnController:
                     )
                     mirror_error = error or mirror_error
                     projection_dirty = error is not None
-                    next_mirror_at = current_time + self._mirror_interval_seconds
+                    # Schedule from publication completion. A sharded mirror can
+                    # take longer than the nominal interval; scheduling from the
+                    # pre-publication instant makes the next provider item
+                    # immediately overdue and turns GitHub latency into provider
+                    # backpressure.
+                    next_mirror_at = self._clock() + self._mirror_interval_seconds
         finally:
             # A provider transport exception deliberately leaves the active
             # handle intact: disconnect is not an Agent terminal result.

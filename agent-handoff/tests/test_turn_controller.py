@@ -99,6 +99,18 @@ class FakeMirror:
         return ()
 
 
+class SlowMirror(FakeMirror):
+    def __init__(self, clock: FakeClock, publish_seconds: float) -> None:
+        super().__init__()
+        self._clock = clock
+        self._publish_seconds = publish_seconds
+
+    async def publish(self, **arguments):
+        result = await super().publish(**arguments)
+        self._clock.now += self._publish_seconds
+        return result
+
+
 class TimedProvider(FakeProvider):
     def __init__(self, clock: FakeClock, messages) -> None:
         super().__init__(())
@@ -314,6 +326,65 @@ class TurnControllerTests(unittest.TestCase):
                 self.assertEqual(tick_items[0].payload["delta"], "正在核对关联。")
                 self.assertIsNone(
                     mirror.publications[1]["snapshot"].terminal_status
+                )
+            finally:
+                await store.close()
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory) / "state.sqlite3"))
+
+    def test_slow_mirror_does_not_create_an_overdue_feedback_loop(self) -> None:
+        async def scenario(path: Path) -> None:
+            clock = FakeClock()
+            store = await TransportStore.open(path, clock=clock)
+            try:
+                owner = await store.acquire_owner("owner-a", 1_000)
+                await store.put_binding(owner, binding())
+                stored, _ = await store.ingest_event(owner, envelope())
+                await store.schedule_event(
+                    owner,
+                    stored.event_id,
+                    quiet_window_seconds=30,
+                    received_at=0,
+                )
+                provider = TimedProvider(
+                    clock,
+                    (
+                        (38.0, reasoning_summary_delta()),
+                        (
+                            42.0,
+                            ServerMessage(
+                                method="thread/status/changed",
+                                params={"threadId": "thread-1"},
+                            ),
+                        ),
+                        (49.1, reasoning_summary_delta()),
+                        (60.0, terminal()),
+                    ),
+                )
+                mirror = SlowMirror(clock, publish_seconds=7)
+                controller = BindingTurnController(
+                    store,
+                    owner,
+                    provider,
+                    mirror,  # type: ignore[arg-type]
+                    mirror_interval_seconds=5,
+                    clock=clock,
+                    claim_factory=lambda: "claim-1",
+                )
+
+                result = await controller.run_one_ready_turn(binding(), now=30)
+
+                assert result is not None
+                self.assertEqual(result.terminal_status, "completed")
+                self.assertEqual(len(mirror.publications), 3)
+                self.assertEqual(
+                    len(mirror.publications[1]["snapshot"].items),
+                    1,
+                )
+                self.assertEqual(
+                    len(mirror.publications[2]["snapshot"].items),
+                    2,
                 )
             finally:
                 await store.close()
