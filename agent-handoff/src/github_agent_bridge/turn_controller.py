@@ -8,6 +8,7 @@ import time
 import uuid
 from typing import Protocol
 
+from github_agent_bridge.app_server import AppServerError
 from github_agent_bridge.github_api import GitHubApiError
 from github_agent_bridge.mirror_publisher import (
     MirrorConflict,
@@ -40,6 +41,8 @@ class ProviderBoundary(Protocol):
 
     async def next_message(self, *, timeout: float): ...
 
+    def persisted_turn_messages(self, turn_id: str): ...
+
 
 @dataclass(frozen=True, slots=True)
 class TurnRunResult:
@@ -52,6 +55,10 @@ class TurnRunResult:
 
 class UnroutableSurface(StateConflict):
     """A formerly associated PR surface no longer belongs to the binding."""
+
+
+class ProviderTurnRecoveryPending(StateConflict):
+    """The provider has not exposed an authoritative persisted terminal."""
 
 
 class BindingTurnController:
@@ -112,6 +119,12 @@ class BindingTurnController:
             return None
         try:
             provider_turn = await self._provider.start_turn(events)
+        except AppServerError:
+            # A mutating request may have reached app-server before transport
+            # loss. Preserve the local claim as delivery-unknown; reconnect
+            # must prove the result from provider-owned thread state before any
+            # retry can be considered.
+            raise
         except Exception:
             await self._store.finish_active_turn(
                 self._owner_token,
@@ -171,19 +184,34 @@ class BindingTurnController:
                     active_turn_handle=provider_turn.turn_id,
                     now=self._clock(),
                 )
-                if ready:
-                    participating.update(event.surface_node_id for event in ready)
                 if ready and not steer_rejected and not terminal:
+                    ready_ids = tuple(event.event_id for event in ready)
+                    await self._store.prepare_active_turn_delivery(
+                        self._owner_token,
+                        binding.binding_id,
+                        active_turn_handle=provider_turn.turn_id,
+                        event_ids=ready_ids,
+                    )
                     try:
                         await self._provider.steer_turn(
                             provider_turn.turn_id, ready
                         )
                     except ProviderNotSteerable:
+                        await self._store.reject_active_turn_delivery(
+                            self._owner_token,
+                            binding.binding_id,
+                            active_turn_handle=provider_turn.turn_id,
+                        )
                         steer_rejected = True
                     else:
-                        await self._store.mark_events_delivered(
+                        await self._store.confirm_active_turn_delivery(
                             self._owner_token,
-                            tuple(event.event_id for event in ready),
+                            binding.binding_id,
+                            active_turn_handle=provider_turn.turn_id,
+                            event_ids=ready_ids,
+                        )
+                        participating.update(
+                            event.surface_node_id for event in ready
                         )
 
                 current_time = self._clock()
@@ -236,6 +264,61 @@ class BindingTurnController:
             final_answer=snapshot.final_answer,
             mirror_error=mirror_error,
             participating_surface_node_ids=tuple(sorted(participating)),
+        )
+
+    async def resume_active_turn(
+        self,
+        binding: Binding,
+        *,
+        active_turn_handle: str,
+    ) -> TurnRunResult:
+        """Recover only from provider-owned persisted terminal evidence.
+
+        Transport loss is not a terminal signal. The active handle remains in
+        the scheduler until ``thread/resume`` exposes that exact turn and the
+        recovered final projection reaches its canonical GitHub comment.
+        """
+
+        projection = TurnProjection(self._provider.thread_address, active_turn_handle)
+        messages = self._provider.persisted_turn_messages(active_turn_handle)
+        if not messages:
+            raise ProviderTurnRecoveryPending(
+                "provider resume omitted the previously active turn"
+            )
+        for message in messages:
+            projection.consume(message)
+        snapshot = projection.snapshot()
+        if snapshot.terminal_status is None:
+            raise ProviderTurnRecoveryPending(
+                "provider resume did not expose an authoritative terminal state"
+            )
+
+        mirror_state = await self._store.mirror_state(active_turn_handle)
+        if mirror_state is None:
+            raise ProviderTurnRecoveryPending(
+                "active turn has no durable canonical mirror target"
+            )
+        target = await self._target_for_surface_node(
+            binding, mirror_state.target_node_id
+        )
+        error, _ = await self._publish_best_effort(
+            binding,
+            target,
+            projection,
+            mirror_state.revision + 1,
+        )
+        if error is None:
+            await self._store.finish_active_turn(
+                self._owner_token,
+                binding.binding_id,
+                active_turn_handle=active_turn_handle,
+            )
+        return TurnRunResult(
+            turn_id=active_turn_handle,
+            terminal_status=snapshot.terminal_status,
+            final_answer=snapshot.final_answer,
+            mirror_error=error,
+            participating_surface_node_ids=(target.surface_node_id,),
         )
 
     async def _target_for_events(

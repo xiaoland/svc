@@ -18,6 +18,10 @@ from urllib.parse import quote
 from aiohttp import ClientSession
 import jwt
 
+from github_agent_bridge.github_identity import (
+    canonical_github_login,
+    is_self_login,
+)
 from github_agent_bridge.store import TRUSTED_URGENT_PERMISSION_ROLES
 from github_agent_bridge.github_webhook import (
     digest_comment_body,
@@ -359,7 +363,9 @@ class GitHubAppClient:
     ) -> PullRequestCanonicalState:
         """Read one bounded, canonical PR surface without retaining prose."""
 
-        normalized_self_logins = {value.casefold() for value in self_logins}
+        normalized_self_logins = {
+            canonical_github_login(value) for value in self_logins
+        }
         pull_request = await self._pull_request_object(
             reference,
             query=_PULL_REQUEST_STATE_QUERY,
@@ -609,7 +615,9 @@ class GitHubAppClient:
             raise ValueError("issue_number must be positive")
         comments: list[IssueCommentSnapshot] = []
         cursor: str | None = None
-        normalized_self_logins = {value.casefold() for value in self_logins}
+        normalized_self_logins = {
+            canonical_github_login(value) for value in self_logins
+        }
         for _ in range(100):
             data = await self._graphql(
                 repository_full_name,
@@ -647,10 +655,7 @@ class GitHubAppClient:
                 last_edited_at = _nullable_string(
                     value, "lastEditedAt", "Issue comment"
                 )
-                self_origin = (
-                    author_login is not None
-                    and author_login.casefold() in normalized_self_logins
-                )
+                self_origin = is_self_login(author_login, normalized_self_logins)
                 comments.append(
                     IssueCommentSnapshot(
                         object_node_id=_string(value, "id", "Issue comment"),
@@ -1048,7 +1053,7 @@ def _actor_reference(
 
 
 def _is_self_login(actor_login: str | None, self_logins: set[str]) -> bool:
-    return actor_login is not None and actor_login.casefold() in self_logins
+    return is_self_login(actor_login, self_logins)
 
 
 def _known_value(value: str, known: frozenset[str], owner: str) -> str:

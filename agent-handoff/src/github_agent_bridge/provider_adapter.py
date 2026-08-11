@@ -11,6 +11,7 @@ from typing import Any
 
 from github_agent_bridge.app_server import (
     AppServerClient,
+    AppServerError,
     AppServerProtocolError,
     AppServerRemoteError,
     ServerMessage,
@@ -29,6 +30,7 @@ class ProviderTurn:
 class PersistedProviderTurn:
     turn_id: str
     status: str
+    items: tuple[Mapping[str, Any], ...] = ()
 
 
 class ProviderNotSteerable(RuntimeError):
@@ -64,10 +66,47 @@ class CodexProviderAdapter:
         self._persisted_turns = tuple(persisted_turns)
 
     def persisted_turn_status(self, turn_id: str) -> str | None:
+        turn = self.persisted_turn(turn_id)
+        return None if turn is None else turn.status
+
+    def persisted_turn(self, turn_id: str) -> PersistedProviderTurn | None:
         for turn in self._persisted_turns:
             if turn.turn_id == turn_id:
-                return turn.status
+                return turn
         return None
+
+    def persisted_turn_messages(self, turn_id: str) -> tuple[ServerMessage, ...]:
+        """Project provider-owned resume state back through the live allowlist."""
+
+        turn = self.persisted_turn(turn_id)
+        if turn is None:
+            return ()
+        messages = [
+            ServerMessage(
+                method="item/completed",
+                params={
+                    "threadId": self.thread_address,
+                    "turnId": turn.turn_id,
+                    "item": dict(item),
+                },
+            )
+            for item in turn.items
+        ]
+        if turn.status in {"completed", "failed", "interrupted"}:
+            messages.append(
+                ServerMessage(
+                    method="turn/completed",
+                    params={
+                        "threadId": self.thread_address,
+                        "turn": {
+                            "id": turn.turn_id,
+                            "items": [],
+                            "status": turn.status,
+                        },
+                    },
+                )
+            )
+        return tuple(messages)
 
     @classmethod
     async def start_new(
@@ -234,6 +273,9 @@ class CodexProviderAdapter:
     async def next_message(self, *, timeout: float) -> ServerMessage:
         return await self._client.next_message(timeout=timeout)
 
+    async def wait_terminated(self) -> AppServerError:
+        return await self._client.wait_terminated()
+
     async def close(self) -> None:
         await self._client.close()
 
@@ -322,7 +364,21 @@ def _persisted_turns(thread: Mapping[str, Any]) -> tuple[PersistedProviderTurn, 
             raise AppServerProtocolError(
                 "thread/resume.thread.turn.status is unknown"
             )
-        turns.append(PersistedProviderTurn(turn_id, status))
+        raw_items = item.get("items", [])
+        if not isinstance(raw_items, list):
+            raise AppServerProtocolError(
+                "thread/resume.thread.turn.items is not an array"
+            )
+        persisted_items: list[Mapping[str, Any]] = []
+        for persisted_item in raw_items:
+            if not isinstance(persisted_item, dict):
+                raise AppServerProtocolError(
+                    "thread/resume.thread.turn.item is not an object"
+                )
+            persisted_items.append(dict(persisted_item))
+        turns.append(
+            PersistedProviderTurn(turn_id, status, tuple(persisted_items))
+        )
     return tuple(turns)
 
 

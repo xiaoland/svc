@@ -113,7 +113,18 @@ class ProviderAdapterTests(unittest.TestCase):
                     "id": "opaque-provider-thread-1",
                     "turns": [
                         {"id": "turn-old", "status": "completed"},
-                        {"id": "turn-active", "status": "interrupted"},
+                        {
+                            "id": "turn-active",
+                            "status": "interrupted",
+                            "items": [
+                                {
+                                    "id": "answer-1",
+                                    "type": "agentMessage",
+                                    "phase": "final_answer",
+                                    "text": "Persisted final",
+                                }
+                            ],
+                        },
                     ],
                 }
             }
@@ -140,6 +151,17 @@ class ProviderAdapterTests(unittest.TestCase):
                 adapter.persisted_turn_status("turn-active"), "interrupted"
             )
             self.assertIsNone(adapter.persisted_turn_status("turn-missing"))
+            messages = adapter.persisted_turn_messages("turn-active")
+            self.assertEqual(
+                [message.method for message in messages],
+                ["item/completed", "turn/completed"],
+            )
+            self.assertEqual(
+                messages[0].params["item"]["text"], "Persisted final"
+            )
+            self.assertEqual(
+                messages[-1].params["turn"]["status"], "interrupted"
+            )
 
         asyncio.run(scenario())
 

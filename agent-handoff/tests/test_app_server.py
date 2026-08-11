@@ -76,6 +76,37 @@ print("{invalid", flush=True)
 
         asyncio.run(scenario())
 
+    def test_protocol_item_can_exceed_asyncio_default_line_limit(self) -> None:
+        script = r'''
+import json
+import sys
+
+initialize = json.loads(sys.stdin.readline())
+print(json.dumps({"id": initialize["id"], "result": {"userAgent": "fake"}}), flush=True)
+json.loads(sys.stdin.readline())
+print(json.dumps({"method": "probe/large", "params": {"text": "x" * 131072}}), flush=True)
+sys.stdin.read()
+'''
+
+        async def scenario() -> None:
+            client = await AppServerClient.start(
+                (sys.executable, "-u", "-c", script),
+                environment=provider_environment(),
+            )
+            try:
+                await client.initialize(
+                    client_name="wire-test",
+                    client_version="1",
+                    timeout=2,
+                )
+                message = await client.next_message(timeout=2)
+                self.assertEqual(message.method, "probe/large")
+                self.assertEqual(len(message.params["text"]), 131072)
+            finally:
+                await client.close()
+
+        asyncio.run(scenario())
+
     def test_eof_fails_pending_request(self) -> None:
         script = "import sys; sys.stdin.readline()"
 
@@ -91,6 +122,22 @@ print("{invalid", flush=True)
                         client_version="1",
                         timeout=2,
                     )
+            finally:
+                await client.close()
+
+        asyncio.run(scenario())
+
+    def test_eof_is_observable_between_requests(self) -> None:
+        async def scenario() -> None:
+            client = await AppServerClient.start(
+                (sys.executable, "-u", "-c", "pass"),
+                environment=provider_environment(),
+            )
+            try:
+                failure = await asyncio.wait_for(
+                    client.wait_terminated(), timeout=2
+                )
+                self.assertIsInstance(failure, AppServerExited)
             finally:
                 await client.close()
 

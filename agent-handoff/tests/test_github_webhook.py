@@ -326,7 +326,7 @@ class GitHubWebhookTests(unittest.TestCase):
         self_origin = self.parse(
             issue_comment_payload(body="@agent", sender_login="wrapper-bot"),
             permission_role="admin",
-            self_logins=frozenset({"WRAPPER-BOT"}),
+            self_logins=frozenset({"WRAPPER-BOT[bot]"}),
         )
 
         assert isinstance(ordinary, NormalizedGitHubEvent)

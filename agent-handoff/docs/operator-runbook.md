@@ -62,6 +62,26 @@ a Quick Tunnel URL is temporary. GitHub does not automatically redeliver a
 failed webhook; periodic canonical reconciliation is the normal convergence
 path.
 
+## Provider recovery
+
+Loopback health reports `provider_failures` and `provider_retry_at` while a
+transient local app-server transport is unavailable. Retries continue with a
+1/2/4/8/16/30-second capped cadence; GitHub ingress, reconciliation, lease, and
+health remain live during that wait. A clean 30-second connection resets the
+crash-loop count. Graceful shutdown interrupts the current wait.
+
+`authentication-required` and `operator-required` are deliberate stop states,
+not exhausted retries. Inspect provider authentication and the pinned protocol,
+then restart only after resolving the cause. Never delete the binding or create
+a replacement thread to clear either state. `starting` and
+`provider-delivery-unknown` mean a provider mutation may have been accepted
+before disconnect; leave the active handle and pending refs intact until real
+provider evidence supports a recovery procedure.
+
+Ordinary comments keep their durable quiet-window state while provider recovery
+is in progress. A trusted `@agent` mention can bypass quiet settling, but it
+cannot bypass a disconnect, active turn, or ambiguous-delivery boundary.
+
 ## Exclusive handoff and rollback
 
 - Stop bootstrap `B` and confirm its process and owner lease are gone before

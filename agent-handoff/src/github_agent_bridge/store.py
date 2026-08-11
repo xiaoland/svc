@@ -73,6 +73,7 @@ class OutboxState(StrEnum):
 TRUSTED_URGENT_PERMISSION_ROLES = frozenset(
     {"triage", "write", "maintain", "admin"}
 )
+PROVIDER_DELIVERY_UNKNOWN_STATUS = "provider-delivery-unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1035,7 +1036,14 @@ class TransportStore:
                     (
                         int(event["urgent"]),
                         deadline,
-                        "active-pending" if active else "pending",
+                        (
+                            PROVIDER_DELIVERY_UNKNOWN_STATUS
+                            if scheduler["transport_status"]
+                            == PROVIDER_DELIVERY_UNKNOWN_STATUS
+                            else "active-pending"
+                            if active
+                            else "pending"
+                        ),
                         self._clock(),
                         event["binding_id"],
                     ),
@@ -1242,6 +1250,174 @@ class TransportStore:
                         (now, event_id),
                     )
 
+    async def prepare_active_turn_delivery(
+        self,
+        token: LeaseToken,
+        binding_id: str,
+        *,
+        active_turn_handle: str,
+        event_ids: tuple[int, ...],
+    ) -> SchedulerSnapshot:
+        """Persist ambiguity before a same-turn provider mutation is sent."""
+
+        _require_text(binding_id, "binding_id")
+        _require_text(active_turn_handle, "active_turn_handle")
+        if not event_ids or any(value < 1 for value in event_ids):
+            raise ValueError("event_ids must be non-empty and positive")
+        async with self._lock:
+            now = self._clock()
+            with self._transaction(token, now=now):
+                scheduler = self._connection.execute(
+                    "SELECT * FROM schedulers WHERE binding_id = ?", (binding_id,)
+                ).fetchone()
+                if scheduler is None:
+                    raise KeyError(binding_id)
+                if scheduler["active_turn_handle"] != active_turn_handle:
+                    raise StateConflict("active turn does not own scheduler")
+                for event_id in event_ids:
+                    event = self._connection.execute(
+                        "SELECT binding_id, state FROM events WHERE event_id = ?",
+                        (event_id,),
+                    ).fetchone()
+                    if event is None:
+                        raise KeyError(event_id)
+                    if event["binding_id"] != binding_id:
+                        raise StateConflict("provider event belongs to another binding")
+                    if event["state"] != EventState.PENDING.value:
+                        raise InvalidTransition(
+                            "only pending events can enter provider delivery"
+                        )
+                self._connection.execute(
+                    "UPDATE schedulers SET transport_status = ?, updated_at = ? "
+                    "WHERE binding_id = ?",
+                    (PROVIDER_DELIVERY_UNKNOWN_STATUS, now, binding_id),
+                )
+                updated = self._connection.execute(
+                    "SELECT * FROM schedulers WHERE binding_id = ?", (binding_id,)
+                ).fetchone()
+                assert updated is not None
+                return _scheduler_snapshot(updated)
+
+    async def confirm_active_turn_delivery(
+        self,
+        token: LeaseToken,
+        binding_id: str,
+        *,
+        active_turn_handle: str,
+        event_ids: tuple[int, ...],
+    ) -> SchedulerSnapshot:
+        """Acknowledge one prepared provider mutation and its event refs."""
+
+        _require_text(binding_id, "binding_id")
+        _require_text(active_turn_handle, "active_turn_handle")
+        if not event_ids or any(value < 1 for value in event_ids):
+            raise ValueError("event_ids must be non-empty and positive")
+        async with self._lock:
+            now = self._clock()
+            with self._transaction(token, now=now):
+                scheduler = self._connection.execute(
+                    "SELECT * FROM schedulers WHERE binding_id = ?", (binding_id,)
+                ).fetchone()
+                if scheduler is None:
+                    raise KeyError(binding_id)
+                if scheduler["active_turn_handle"] != active_turn_handle:
+                    raise StateConflict("active turn does not own scheduler")
+                if (
+                    scheduler["transport_status"]
+                    != PROVIDER_DELIVERY_UNKNOWN_STATUS
+                ):
+                    raise InvalidTransition("provider delivery was not prepared")
+                for event_id in event_ids:
+                    event = self._connection.execute(
+                        "SELECT binding_id, state FROM events WHERE event_id = ?",
+                        (event_id,),
+                    ).fetchone()
+                    if event is None:
+                        raise KeyError(event_id)
+                    if event["binding_id"] != binding_id:
+                        raise StateConflict("provider event belongs to another binding")
+                    if event["state"] != EventState.PENDING.value:
+                        raise InvalidTransition(
+                            "prepared provider event is no longer pending"
+                        )
+                placeholders = ",".join("?" for _ in event_ids)
+                self._connection.execute(
+                    f"UPDATE events SET state = 'delivered', updated_at = ? "
+                    f"WHERE event_id IN ({placeholders})",
+                    (now, *event_ids),
+                )
+                remaining = self._connection.execute(
+                    "SELECT COUNT(*) FROM events WHERE binding_id = ? "
+                    "AND state = 'pending' AND wake_eligible = 1 "
+                    "AND scheduled_at IS NOT NULL",
+                    (binding_id,),
+                ).fetchone()[0]
+                self._connection.execute(
+                    "UPDATE schedulers SET transport_status = ?, "
+                    "quiet_deadline = CASE WHEN ? = 0 THEN NULL "
+                    "ELSE quiet_deadline END, updated_at = ? WHERE binding_id = ?",
+                    (
+                        "active-pending" if remaining else "active",
+                        remaining,
+                        now,
+                        binding_id,
+                    ),
+                )
+                updated = self._connection.execute(
+                    "SELECT * FROM schedulers WHERE binding_id = ?", (binding_id,)
+                ).fetchone()
+                assert updated is not None
+                return _scheduler_snapshot(updated)
+
+    async def reject_active_turn_delivery(
+        self,
+        token: LeaseToken,
+        binding_id: str,
+        *,
+        active_turn_handle: str,
+    ) -> SchedulerSnapshot:
+        """Restore pending state after an authoritative steer rejection."""
+
+        _require_text(binding_id, "binding_id")
+        _require_text(active_turn_handle, "active_turn_handle")
+        async with self._lock:
+            now = self._clock()
+            with self._transaction(token, now=now):
+                scheduler = self._connection.execute(
+                    "SELECT * FROM schedulers WHERE binding_id = ?", (binding_id,)
+                ).fetchone()
+                if scheduler is None:
+                    raise KeyError(binding_id)
+                if scheduler["active_turn_handle"] != active_turn_handle:
+                    raise StateConflict("active turn does not own scheduler")
+                if (
+                    scheduler["transport_status"]
+                    != PROVIDER_DELIVERY_UNKNOWN_STATUS
+                ):
+                    raise InvalidTransition("provider delivery was not prepared")
+                remaining = self._connection.execute(
+                    "SELECT COUNT(*) FROM events WHERE binding_id = ? "
+                    "AND state = 'pending' AND wake_eligible = 1 "
+                    "AND scheduled_at IS NOT NULL",
+                    (binding_id,),
+                ).fetchone()[0]
+                self._connection.execute(
+                    "UPDATE schedulers SET transport_status = ?, "
+                    "quiet_deadline = CASE WHEN ? = 0 THEN NULL "
+                    "ELSE quiet_deadline END, updated_at = ? WHERE binding_id = ?",
+                    (
+                        "active-pending" if remaining else "active",
+                        remaining,
+                        now,
+                        binding_id,
+                    ),
+                )
+                updated = self._connection.execute(
+                    "SELECT * FROM schedulers WHERE binding_id = ?", (binding_id,)
+                ).fetchone()
+                assert updated is not None
+                return _scheduler_snapshot(updated)
+
     async def mark_events_superseded(
         self, token: LeaseToken, event_ids: tuple[int, ...]
     ) -> None:
@@ -1292,7 +1468,8 @@ class TransportStore:
                     (now, binding_id, surface_node_id),
                 )
                 scheduler = self._connection.execute(
-                    "SELECT active_turn_handle FROM schedulers WHERE binding_id = ?",
+                    "SELECT active_turn_handle, transport_status FROM schedulers "
+                    "WHERE binding_id = ?",
                     (binding_id,),
                 ).fetchone()
                 if scheduler is None:
@@ -1305,7 +1482,11 @@ class TransportStore:
                 ).fetchone()[0]
                 active = scheduler["active_turn_handle"] is not None
                 status = (
-                    "active-pending"
+                    PROVIDER_DELIVERY_UNKNOWN_STATUS
+                    if active
+                    and scheduler["transport_status"]
+                    == PROVIDER_DELIVERY_UNKNOWN_STATUS
+                    else "active-pending"
                     if active and remaining
                     else "active"
                     if active
@@ -1652,7 +1833,7 @@ class TransportStore:
                     and row["scheduled_at"] is not None
                 ):
                     scheduler = self._connection.execute(
-                        "SELECT active_turn_handle FROM schedulers "
+                        "SELECT active_turn_handle, transport_status FROM schedulers "
                         "WHERE binding_id = ?",
                         (row["binding_id"],),
                     ).fetchone()
@@ -1662,7 +1843,10 @@ class TransportStore:
                         "urgent_generation + 1, transport_status = ?, "
                         "updated_at = ? WHERE binding_id = ?",
                         (
-                            "active-pending"
+                            PROVIDER_DELIVERY_UNKNOWN_STATUS
+                            if scheduler["transport_status"]
+                            == PROVIDER_DELIVERY_UNKNOWN_STATUS
+                            else "active-pending"
                             if scheduler["active_turn_handle"] is not None
                             else "pending",
                             now,

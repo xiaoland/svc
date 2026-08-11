@@ -17,6 +17,7 @@ from typing import Any
 
 
 JsonObject = dict[str, Any]
+DEFAULT_STREAM_LIMIT_BYTES = 16 * 1024 * 1024
 
 
 class AppServerError(RuntimeError):
@@ -105,6 +106,9 @@ class AppServerClient:
         self._next_request_id = 1
         self._pending: dict[int, asyncio.Future[Any]] = {}
         self._messages: asyncio.Queue[ServerMessage | BaseException] = asyncio.Queue()
+        self._termination: asyncio.Future[AppServerError] = (
+            asyncio.get_running_loop().create_future()
+        )
         self._stderr_tail: deque[str] = deque(maxlen=20)
         self._closed = False
         self._stdout_task = asyncio.create_task(self._read_stdout())
@@ -117,9 +121,12 @@ class AppServerClient:
         *,
         cwd: Path | None = None,
         environment: Mapping[str, str] | None = None,
+        stream_limit_bytes: int = DEFAULT_STREAM_LIMIT_BYTES,
     ) -> AppServerClient:
         if not command:
             raise ValueError("app-server command must not be empty")
+        if stream_limit_bytes < 64 * 1024:
+            raise ValueError("app-server stream limit is too small")
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=None if cwd is None else os.fspath(cwd),
@@ -127,6 +134,7 @@ class AppServerClient:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            limit=stream_limit_bytes,
         )
         return cls(process)
 
@@ -199,6 +207,11 @@ class AppServerClient:
         if isinstance(message, BaseException):
             raise message
         return message
+
+    async def wait_terminated(self) -> AppServerError:
+        """Wait for an unexpected transport or protocol termination."""
+
+        return await asyncio.shield(self._termination)
 
     async def close(self, *, timeout: float = 5.0) -> None:
         if self._closed:
@@ -285,11 +298,21 @@ class AppServerClient:
         except asyncio.CancelledError:
             raise
         except BaseException as error:
-            failure = error
+            if isinstance(error, AppServerError):
+                failure = error
+            elif isinstance(error, (ConnectionError, OSError)):
+                failure = AppServerExited("app-server stdout transport failed")
+            else:
+                failure = AppServerProtocolError(
+                    "app-server stdout exceeded or violated the NDJSON boundary"
+                )
         finally:
             if failure is None and not self._closed:
                 failure = AppServerExited("app-server stdout reached EOF")
             if failure is not None:
+                assert isinstance(failure, AppServerError)
+                if not self._termination.done():
+                    self._termination.set_result(failure)
                 for future in tuple(self._pending.values()):
                     if not future.done():
                         future.set_exception(failure)

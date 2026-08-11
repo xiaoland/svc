@@ -11,6 +11,7 @@ import json
 import re
 from typing import Any
 
+from github_agent_bridge.github_identity import is_self_login
 from github_agent_bridge.store import (
     EventEnvelope,
     TRUSTED_URGENT_PERMISSION_ROLES,
@@ -589,10 +590,7 @@ def _actor(sender: dict[str, Any] | None) -> tuple[str | None, str | None]:
 
 
 def _is_self_origin(actor_login: str | None, self_logins: Set[str]) -> bool:
-    if actor_login is None:
-        return False
-    normalized = {login.casefold() for login in self_logins}
-    return actor_login.casefold() in normalized
+    return is_self_login(actor_login, self_logins)
 
 
 def _is_urgent(mention_detected: bool, permission_role: str | None) -> bool:

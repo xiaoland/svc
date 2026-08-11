@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import json
 import unittest
 
 from aiohttp import ClientSession, web
@@ -482,11 +481,15 @@ class GitHubApiTests(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_comment_reconciliation_paginates_and_drops_raw_body(self) -> None:
-        comments = await self.client.issue_comments("owner/repository", 17)
+        comments = await self.client.issue_comments(
+            "owner/repository", 17, self_logins=frozenset({"human[bot]"})
+        )
 
         self.assertEqual([value.object_node_id for value in comments], ["IC_first", "IC_second"])
         self.assertFalse(comments[0].mention_detected)
         self.assertFalse(comments[1].mention_detected)
+        self.assertFalse(comments[0].wake_eligible)
+        self.assertFalse(comments[1].wake_eligible)
         self.assertTrue(comments[1].is_minimized)
         self.assertEqual(comments[1].object_version, "2026-08-10T12:01:00Z")
         self.assertNotIn("@agent please review", repr(comments))

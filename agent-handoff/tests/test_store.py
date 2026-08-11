@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 from github_agent_bridge.store import (
+    PROVIDER_DELIVERY_UNKNOWN_STATUS,
     SCHEMA_VERSION,
     Binding,
     EventEnvelope,
@@ -477,6 +478,132 @@ class TransportStoreTests(unittest.TestCase):
                 )
                 self.assertEqual(unchanged.generation, 3)
                 self.assertEqual(unchanged.transport_status, "idle")
+            finally:
+                await store.close()
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory) / "state.sqlite3"))
+
+    def test_same_turn_delivery_ambiguity_is_durable_until_acknowledged(self) -> None:
+        async def scenario(path: Path) -> None:
+            store = await TransportStore.open(path)
+            try:
+                token = await store.acquire_owner("owner-a", 1_000)
+                await store.put_binding(token, binding())
+                initial, _ = await store.ingest_event(token, event())
+                await store.schedule_event(
+                    token,
+                    initial.event_id,
+                    quiet_window_seconds=30,
+                    received_at=100.0,
+                )
+                claimed = await store.claim_ready_events(
+                    token,
+                    "binding-1",
+                    claim_handle="claim-1",
+                    now=130.0,
+                )
+                await store.activate_claimed_turn(
+                    token,
+                    "binding-1",
+                    expected_claim_handle="claim-1",
+                    active_turn_handle="turn-1",
+                    delivered_event_ids=tuple(
+                        value.event_id for value in claimed
+                    ),
+                )
+
+                steer_one, _ = await store.ingest_event(
+                    token,
+                    replace(
+                        event(),
+                        event_key="github-delivery:steer-1",
+                        delivery_id="steer-1",
+                        object_node_id="comment-node-steer-1",
+                        object_version="2026-08-10T12:01:00Z",
+                        observed_at=131.0,
+                        permission_role="write",
+                        urgent=True,
+                    ),
+                )
+                await store.schedule_event(
+                    token,
+                    steer_one.event_id,
+                    quiet_window_seconds=30,
+                    received_at=131.0,
+                )
+                prepared = await store.prepare_active_turn_delivery(
+                    token,
+                    "binding-1",
+                    active_turn_handle="turn-1",
+                    event_ids=(steer_one.event_id,),
+                )
+                self.assertEqual(
+                    prepared.transport_status,
+                    PROVIDER_DELIVERY_UNKNOWN_STATUS,
+                )
+
+                steer_two, _ = await store.ingest_event(
+                    token,
+                    replace(
+                        event(),
+                        event_key="github-delivery:steer-2",
+                        delivery_id="steer-2",
+                        object_node_id="comment-node-steer-2",
+                        object_version="2026-08-10T12:02:00Z",
+                        observed_at=132.0,
+                        permission_role="write",
+                        urgent=True,
+                    ),
+                )
+                still_unknown = await store.schedule_event(
+                    token,
+                    steer_two.event_id,
+                    quiet_window_seconds=30,
+                    received_at=132.0,
+                )
+                self.assertEqual(
+                    still_unknown.transport_status,
+                    PROVIDER_DELIVERY_UNKNOWN_STATUS,
+                )
+                pending = await store.pending_events(token, "binding-1")
+                self.assertEqual(
+                    {value.event_id for value in pending},
+                    {steer_one.event_id, steer_two.event_id},
+                )
+
+                acknowledged = await store.confirm_active_turn_delivery(
+                    token,
+                    "binding-1",
+                    active_turn_handle="turn-1",
+                    event_ids=(steer_one.event_id,),
+                )
+                self.assertEqual(
+                    acknowledged.transport_status, "active-pending"
+                )
+                first = await store.latest_event_for_object(
+                    token, "binding-1", "comment-node-steer-1"
+                )
+                assert first is not None
+                self.assertEqual(first.state, EventState.DELIVERED)
+
+                await store.prepare_active_turn_delivery(
+                    token,
+                    "binding-1",
+                    active_turn_handle="turn-1",
+                    event_ids=(steer_two.event_id,),
+                )
+                rejected = await store.reject_active_turn_delivery(
+                    token,
+                    "binding-1",
+                    active_turn_handle="turn-1",
+                )
+                self.assertEqual(rejected.transport_status, "active-pending")
+                second = await store.latest_event_for_object(
+                    token, "binding-1", "comment-node-steer-2"
+                )
+                assert second is not None
+                self.assertEqual(second.state, EventState.PENDING)
             finally:
                 await store.close()
 

@@ -6,13 +6,14 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from github_agent_bridge.app_server import ServerMessage
+from github_agent_bridge.app_server import AppServerExited, ServerMessage
 from github_agent_bridge.provider_adapter import ProviderTurn
 from github_agent_bridge.store import (
     Binding,
     EventEnvelope,
     EventState,
     InvalidTransition,
+    MirrorChunkIntent,
     TransportStore,
 )
 from github_agent_bridge.turn_controller import BindingTurnController
@@ -66,13 +67,23 @@ def envelope(*, sequence: int = 1, urgent: bool = False) -> EventEnvelope:
 class FakeProvider:
     thread_address = "thread-1"
 
-    def __init__(self, messages, *, on_first_message=None, on_start=None) -> None:
+    def __init__(
+        self,
+        messages,
+        *,
+        on_first_message=None,
+        on_start=None,
+        persisted_messages=(),
+        steer_error=None,
+    ) -> None:
         self.messages = list(messages)
         self.on_first_message = on_first_message
         self.on_start = on_start
         self.started_with = ()
         self.steered_with = []
         self.read_count = 0
+        self.persisted_messages = tuple(persisted_messages)
+        self.steer_error = steer_error
 
     async def start_turn(self, events):
         self.started_with = tuple(events)
@@ -82,12 +93,17 @@ class FakeProvider:
 
     async def steer_turn(self, turn_id, events):
         self.steered_with.append(tuple(events))
+        if self.steer_error is not None:
+            raise self.steer_error
 
     async def next_message(self, *, timeout):
         if self.read_count == 0 and self.on_first_message is not None:
             await self.on_first_message()
         self.read_count += 1
         return self.messages.pop(0)
+
+    def persisted_turn_messages(self, turn_id):
+        return self.persisted_messages if turn_id == "turn-1" else ()
 
 
 class FakeMirror:
@@ -162,6 +178,76 @@ def terminal(status: str = "completed") -> ServerMessage:
 
 
 class TurnControllerTests(unittest.TestCase):
+    def test_resume_uses_provider_terminal_and_final_before_releasing_turn(self) -> None:
+        async def scenario(path: Path) -> None:
+            clock = FakeClock()
+            store = await TransportStore.open(path, clock=clock)
+            try:
+                owner = await store.acquire_owner("owner-a", 1_000)
+                await store.put_binding(owner, binding())
+                stored, _ = await store.ingest_event(owner, envelope())
+                await store.schedule_event(
+                    owner,
+                    stored.event_id,
+                    quiet_window_seconds=30,
+                    received_at=0,
+                )
+                claimed = await store.claim_ready_events(
+                    owner,
+                    "binding-1",
+                    claim_handle="claim-1",
+                    now=30,
+                )
+                await store.activate_claimed_turn(
+                    owner,
+                    "binding-1",
+                    expected_claim_handle="claim-1",
+                    active_turn_handle="turn-1",
+                    delivered_event_ids=tuple(event.event_id for event in claimed),
+                )
+                await store.prepare_mirror_revision(
+                    owner,
+                    turn_id="turn-1",
+                    binding_id="binding-1",
+                    target_node_id="I_issue",
+                    terminal_state=None,
+                    revision=4,
+                    aggregate_digest="sha256:active",
+                    chunks=(
+                        MirrorChunkIntent(0, "sha256:active", "marker-0"),
+                    ),
+                )
+                provider = FakeProvider(
+                    (), persisted_messages=(final_item(), terminal())
+                )
+                mirror = FakeMirror()
+                controller = BindingTurnController(
+                    store,
+                    owner,
+                    provider,
+                    mirror,  # type: ignore[arg-type]
+                    clock=clock,
+                )
+
+                result = await controller.resume_active_turn(
+                    binding(), active_turn_handle="turn-1"
+                )
+
+                self.assertEqual(result.terminal_status, "completed")
+                self.assertEqual(result.final_answer, "Final answer")
+                self.assertEqual(mirror.publications[0]["revision"], 5)
+                self.assertEqual(
+                    mirror.publications[0]["snapshot"].final_answer,
+                    "Final answer",
+                )
+                scheduler = await store.scheduler_snapshot("binding-1")
+                self.assertIsNone(scheduler.active_turn_handle)
+            finally:
+                await store.close()
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory) / "state.sqlite3"))
+
     def test_ready_batch_runs_one_turn_and_edits_same_mirror_to_final(self) -> None:
         async def scenario(path: Path) -> None:
             clock = FakeClock()
@@ -275,6 +361,73 @@ class TurnControllerTests(unittest.TestCase):
                 self.assertEqual(
                     result.participating_surface_node_ids, ("I_issue",)
                 )
+            finally:
+                await store.close()
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory) / "state.sqlite3"))
+
+    def test_steer_transport_loss_preserves_unknown_delivery_boundary(self) -> None:
+        async def scenario(path: Path) -> None:
+            clock = FakeClock()
+            store = await TransportStore.open(path, clock=clock)
+            owner = await store.acquire_owner("owner-a", 1_000)
+            await store.put_binding(owner, binding())
+            initial, _ = await store.ingest_event(owner, envelope())
+            await store.schedule_event(
+                owner,
+                initial.event_id,
+                quiet_window_seconds=30,
+                received_at=0,
+            )
+
+            async def add_urgent() -> None:
+                clock.now = 31
+                urgent, _ = await store.ingest_event(
+                    owner, envelope(sequence=2, urgent=True)
+                )
+                await store.schedule_event(
+                    owner,
+                    urgent.event_id,
+                    quiet_window_seconds=30,
+                    received_at=31,
+                )
+
+            provider = FakeProvider(
+                (
+                    ServerMessage(
+                        method="turn/started",
+                        params={
+                            "threadId": "thread-1",
+                            "turn": {"id": "turn-1"},
+                        },
+                    ),
+                ),
+                on_first_message=add_urgent,
+                steer_error=AppServerExited("stdout reached EOF"),
+            )
+            controller = BindingTurnController(
+                store,
+                owner,
+                provider,
+                FakeMirror(),  # type: ignore[arg-type]
+                clock=clock,
+                claim_factory=lambda: "claim-1",
+            )
+            try:
+                with self.assertRaises(AppServerExited):
+                    await controller.run_one_ready_turn(binding(), now=30)
+                scheduler = await store.scheduler_snapshot("binding-1")
+                self.assertEqual(scheduler.active_turn_handle, "turn-1")
+                self.assertEqual(
+                    scheduler.transport_status, "provider-delivery-unknown"
+                )
+                latest = await store.latest_event_for_object(
+                    owner, "binding-1", "IC_2"
+                )
+                assert latest is not None
+                self.assertEqual(latest.state, EventState.PENDING)
+                self.assertEqual(len(provider.steered_with), 1)
             finally:
                 await store.close()
 

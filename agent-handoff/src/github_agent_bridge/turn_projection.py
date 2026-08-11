@@ -11,8 +11,11 @@ from github_agent_bridge.app_server import AppServerProtocolError, ServerMessage
 RAW_REASONING_METHODS = frozenset(
     {"item/reasoning/textDelta", "item/reasoning/rawContentDelta"}
 )
-TERMINAL_STATUSES = frozenset(
+KNOWN_TURN_STATUSES = frozenset(
     {"completed", "interrupted", "failed", "inProgress"}
+)
+AUTHORITATIVE_TERMINAL_STATUSES = frozenset(
+    {"completed", "interrupted", "failed"}
 )
 
 
@@ -78,12 +81,14 @@ class TurnProjection:
         if message.method == "turn/completed":
             turn = _object(message.params.get("turn"), "turn/completed.turn")
             status = turn.get("status")
-            if status not in TERMINAL_STATUSES:
+            if status not in KNOWN_TURN_STATUSES:
                 raise AppServerProtocolError(
-                    "turn/completed returned an unknown terminal status"
+                    "turn/completed returned an unknown turn status"
                 )
-            self._terminal_status = status
-            return True
+            if status in AUTHORITATIVE_TERMINAL_STATUSES:
+                self._terminal_status = status
+                return True
+            return False
 
         projected = _project_message(message)
         if projected is None:

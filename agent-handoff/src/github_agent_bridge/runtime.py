@@ -17,6 +17,8 @@ from github_agent_bridge.app_server import (
     DEFAULT_PROVIDER_ENVIRONMENT_NAMES,
     AppServerClient,
     AppServerError,
+    AppServerExited,
+    AppServerProtocolError,
     AppServerRemoteError,
     provider_environment,
 )
@@ -27,18 +29,21 @@ from github_agent_bridge.ingress import (
     create_health_app,
     create_ingress_app,
 )
-from github_agent_bridge.mirror_publisher import (
-    MirrorConflict,
-    MirrorTarget,
-    TurnMirrorPublisher,
-)
+from github_agent_bridge.mirror_publisher import TurnMirrorPublisher
 from github_agent_bridge.protocol_probe import inspect_protocol_identity
 from github_agent_bridge.provider_adapter import CodexProviderAdapter
 from github_agent_bridge.quick_tunnel import WranglerQuickTunnel
 from github_agent_bridge.reconciliation import GitHubReconciler
-from github_agent_bridge.store import Binding, StateConflict, TransportStore
-from github_agent_bridge.turn_controller import BindingTurnController
-from github_agent_bridge.turn_projection import TurnProjectionSnapshot
+from github_agent_bridge.store import (
+    PROVIDER_DELIVERY_UNKNOWN_STATUS,
+    Binding,
+    StateConflict,
+    TransportStore,
+)
+from github_agent_bridge.turn_controller import (
+    BindingTurnController,
+    ProviderTurnRecoveryPending,
+)
 
 
 class BridgeRuntimeError(RuntimeError):
@@ -58,6 +63,8 @@ class RuntimeHealth:
     tunnel: str = "disabled"
     scheduler: str = "unknown"
     active_turn: bool = False
+    provider_failures: int = 0
+    provider_retry_at: float | None = None
 
     def snapshot(self) -> dict[str, object]:
         return {
@@ -72,6 +79,67 @@ class RuntimeResult:
     binding_id: str
     thread_address: str
     public_webhook_url: str | None
+
+
+PROVIDER_STABLE_SECONDS = 30.0
+
+
+class ProviderConnectionSupervisor:
+    """Mutable transport connection for one immutable Issue/thread binding."""
+
+    def __init__(
+        self,
+        provider: CodexProviderAdapter,
+        *,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self._provider = provider
+        self._clock = clock
+        self._connected_at = clock()
+
+    @property
+    def thread_address(self) -> str:
+        return self._provider.thread_address
+
+    async def start_turn(self, events):
+        return await self._provider.start_turn(events)
+
+    async def steer_turn(self, turn_id, events) -> None:
+        await self._provider.steer_turn(turn_id, events)
+
+    async def next_message(self, *, timeout: float):
+        return await self._provider.next_message(timeout=timeout)
+
+    def persisted_turn_messages(self, turn_id: str):
+        return self._provider.persisted_turn_messages(turn_id)
+
+    def connected_seconds(self) -> float:
+        return max(0.0, self._clock() - self._connected_at)
+
+    async def next_transport_failure(self, *, timeout: float) -> AppServerError:
+        return await asyncio.wait_for(
+            self._provider.wait_terminated(), timeout=timeout
+        )
+
+    async def replace(self, provider: CodexProviderAdapter) -> None:
+        previous = self._provider
+        if provider.thread_address != previous.thread_address:
+            try:
+                await provider.close()
+            except (AppServerError, OSError):
+                pass
+            raise AppServerProtocolError(
+                "provider reconnect changed the opaque thread address"
+            )
+        self._provider = provider
+        self._connected_at = self._clock()
+        try:
+            await previous.close()
+        except (AppServerError, OSError):
+            pass
+
+    async def close(self) -> None:
+        await self._provider.close()
 
 
 async def serve_bridge(
@@ -116,6 +184,7 @@ async def serve_bridge(
     owner = await store.acquire_owner(owner_id, 30.0)
     app_server: AppServerClient | None = None
     provider: CodexProviderAdapter | None = None
+    supervised_provider: ProviderConnectionSupervisor | None = None
     ingress_runner: web.AppRunner | None = None
     health_runner: web.AppRunner | None = None
     tunnel: WranglerQuickTunnel | None = None
@@ -125,7 +194,6 @@ async def serve_bridge(
         issue_number=issue_number,
     )
     public_webhook_url: str | None = None
-    resumed_terminal: tuple[str, str] | None = None
     stopping = stop_event if stop_event is not None else asyncio.Event()
 
     try:
@@ -181,46 +249,13 @@ async def serve_bridge(
                     agent_identity=config.github.agent_login,
                     wrapper_identity=config.github.wrapper_login,
                 )
-                try:
-                    provider = await CodexProviderAdapter.connect(
-                        app_server,
-                        binding=binding,
-                        provider_cwd=config.paths.provider_cwd,
-                        writable_roots=config.paths.provider_writable_roots,
-                    )
-                except AppServerRemoteError as error:
-                    if error.code != -32600 or "no rollout found" not in error.message:
-                        raise
-                    await store.require_unmaterialized_thread_address(
-                        owner,
-                        binding.binding_id,
-                        expected_thread_address=binding.thread_address,
-                    )
-                    replacement = await CodexProviderAdapter.start_new(
-                        app_server,
-                        issue_url=binding.issue_url,
-                        provider_cwd=config.paths.provider_cwd,
-                        writable_roots=config.paths.provider_writable_roots,
-                        initialize_client=False,
-                    )
-                    binding = await store.replace_unmaterialized_thread_address(
-                        owner,
-                        binding.binding_id,
-                        expected_thread_address=binding.thread_address,
-                        replacement_thread_address=replacement.thread_address,
-                    )
-                    provider = replacement
-                scheduler = await store.scheduler_snapshot(binding.binding_id)
-                if scheduler.active_turn_handle is not None:
-                    status = provider.persisted_turn_status(
-                        scheduler.active_turn_handle
-                    )
-                    if status not in {"completed", "failed", "interrupted"}:
-                        raise BridgeRuntimeError(
-                            "provider did not expose an authoritative terminal "
-                            "state for the previously active turn"
-                        )
-                    resumed_terminal = (scheduler.active_turn_handle, status)
+                provider = await CodexProviderAdapter.connect(
+                    app_server,
+                    binding=binding,
+                    provider_cwd=config.paths.provider_cwd,
+                    writable_roots=config.paths.provider_writable_roots,
+                )
+            supervised_provider = ProviderConnectionSupervisor(provider)
             health.binding_id = binding.binding_id
             health.provider = "connected"
 
@@ -242,46 +277,18 @@ async def serve_bridge(
                 owner,
                 max_comment_bytes=config.timing.mirror_comment_bytes,
             )
-            if resumed_terminal is not None:
-                turn_id, terminal_status = resumed_terminal
-                mirror_state = await store.mirror_state(turn_id)
-                if mirror_state is not None:
-                    target = await _mirror_target_for_node(
-                        store, binding, mirror_state.target_node_id
-                    )
-                    if target is not None:
-                        try:
-                            await mirror.publish(
-                                binding=binding,
-                                target=target,
-                                snapshot=TurnProjectionSnapshot(
-                                    thread_id=binding.thread_address,
-                                    turn_id=turn_id,
-                                    items=(),
-                                    terminal_status=terminal_status,
-                                    final_answer=None,
-                                    raw_reasoning_items_excluded=0,
-                                ),
-                                revision=mirror_state.revision + 1,
-                            )
-                        except (GitHubApiError, MirrorConflict, StateConflict):
-                            health.last_mirror_error = "resume-terminal-publication"
-                await store.finish_active_turn(
+            startup_scheduler = await store.scheduler_snapshot(binding.binding_id)
+            if startup_scheduler.active_turn_handle is None:
+                await store.restart_pending_quiet_window(
                     owner,
                     binding.binding_id,
-                    active_turn_handle=turn_id,
+                    observed_at=time.time(),
+                    quiet_window_seconds=config.timing.quiet_window_seconds,
                 )
-                health.last_turn_status = terminal_status
-            await store.restart_pending_quiet_window(
-                owner,
-                binding.binding_id,
-                observed_at=time.time(),
-                quiet_window_seconds=config.timing.quiet_window_seconds,
-            )
             controller = BindingTurnController(
                 store,
                 owner,
-                provider,
+                supervised_provider,
                 mirror,
                 mirror_interval_seconds=config.timing.mirror_interval_seconds,
             )
@@ -366,9 +373,11 @@ async def serve_bridge(
                 asyncio.create_task(
                     _controller_loop(
                         controller,
+                        supervised_provider,
                         reconciler,
                         store,
                         binding,
+                        config,
                         stopping,
                         health,
                     ),
@@ -414,7 +423,9 @@ async def serve_bridge(
             await ingress_runner.cleanup()
         if health_runner is not None:
             await health_runner.cleanup()
-        if provider is not None:
+        if supervised_provider is not None:
+            await supervised_provider.close()
+        elif provider is not None:
             await provider.close()
         elif app_server is not None:
             await app_server.close()
@@ -461,35 +472,174 @@ async def _reconciliation_loop(
 
 async def _controller_loop(
     controller: BindingTurnController,
+    provider: ProviderConnectionSupervisor,
     reconciler: GitHubReconciler,
     store: TransportStore,
     binding: Binding,
+    config: BridgeConfig,
     stop_event: asyncio.Event,
     health: RuntimeHealth,
 ) -> None:
     while not stop_event.is_set():
         await reconciler.resolve_pending_permissions(binding)
-        try:
-            result = await controller.run_one_ready_turn(binding)
-        except AppServerError:
+        scheduler = await store.scheduler_snapshot(binding.binding_id)
+        if scheduler.transport_status in {
+            "starting",
+            PROVIDER_DELIVERY_UNKNOWN_STATUS,
+        }:
             health.status = "degraded"
-            health.provider = "unavailable"
-            scheduler = await store.scheduler_snapshot(binding.binding_id)
+            health.provider = "operator-required"
             health.scheduler = scheduler.transport_status
             health.active_turn = scheduler.active_turn_handle is not None
             await stop_event.wait()
             return
+        try:
+            if scheduler.active_turn_handle is None:
+                result = await controller.run_one_ready_turn(binding)
+            else:
+                result = await controller.resume_active_turn(
+                    binding,
+                    active_turn_handle=scheduler.active_turn_handle,
+                )
+            if result is None:
+                try:
+                    failure = await provider.next_transport_failure(timeout=0.25)
+                except TimeoutError:
+                    failure = None
+                if failure is not None:
+                    raise failure
+        except ProviderTurnRecoveryPending:
+            scheduler = await store.scheduler_snapshot(binding.binding_id)
+            health.status = "degraded"
+            health.provider = "operator-required"
+            health.scheduler = scheduler.transport_status
+            health.active_turn = scheduler.active_turn_handle is not None
+            await stop_event.wait()
+            return
+        except AppServerError as error:
+            scheduler = await store.scheduler_snapshot(binding.binding_id)
+            health.status = "degraded"
+            health.provider = "unavailable"
+            health.scheduler = scheduler.transport_status
+            health.active_turn = scheduler.active_turn_handle is not None
+            if _provider_error_requires_operator(error):
+                health.provider = _provider_operator_status(error)
+                await stop_event.wait()
+                return
+            if provider.connected_seconds() >= PROVIDER_STABLE_SECONDS:
+                health.provider_failures = 0
+            if not await _reconnect_provider(
+                provider,
+                config=config,
+                binding=binding,
+                stop_event=stop_event,
+                health=health,
+            ):
+                if not stop_event.is_set():
+                    await stop_event.wait()
+                return
+            continue
         scheduler = await store.scheduler_snapshot(binding.binding_id)
         health.scheduler = scheduler.transport_status
         health.active_turn = scheduler.active_turn_handle is not None
         if result is not None:
             health.last_turn_status = result.terminal_status
             health.last_mirror_error = result.mirror_error
+            if result.mirror_error is not None and health.active_turn:
+                try:
+                    await asyncio.wait_for(
+                        stop_event.wait(), config.timing.mirror_interval_seconds
+                    )
+                except TimeoutError:
+                    pass
             continue
+        continue
+
+
+async def _reconnect_provider(
+    supervisor: ProviderConnectionSupervisor,
+    *,
+    config: BridgeConfig,
+    binding: Binding,
+    stop_event: asyncio.Event,
+    health: RuntimeHealth,
+) -> bool:
+    while not stop_event.is_set():
+        delay = _provider_retry_delay(health.provider_failures)
+        health.provider_failures += 1
+        health.provider_retry_at = time.time() + delay
         try:
-            await asyncio.wait_for(stop_event.wait(), 0.25)
+            await asyncio.wait_for(stop_event.wait(), delay)
+            return False
         except TimeoutError:
             pass
+        try:
+            replacement = await _connect_existing_provider(config, binding)
+        except (AppServerError, OSError) as error:
+            if _provider_error_requires_operator(error):
+                health.provider = _provider_operator_status(error)
+                health.provider_retry_at = None
+                return False
+            continue
+        await supervisor.replace(replacement)
+        health.status = "running"
+        health.provider = "connected"
+        health.provider_retry_at = None
+        return True
+    return False
+
+
+async def _connect_existing_provider(
+    config: BridgeConfig,
+    binding: Binding,
+) -> CodexProviderAdapter:
+    provider_names = DEFAULT_PROVIDER_ENVIRONMENT_NAMES.union(
+        config.app_server.environment_allowlist
+    )
+    client = await AppServerClient.start(
+        (
+            str(config.app_server.executable),
+            "app-server",
+            "--stdio",
+        ),
+        environment=provider_environment(names=frozenset(provider_names)),
+    )
+    try:
+        return await CodexProviderAdapter.connect(
+            client,
+            binding=binding,
+            provider_cwd=config.paths.provider_cwd,
+            writable_roots=config.paths.provider_writable_roots,
+        )
+    except BaseException:
+        await client.close()
+        raise
+
+
+def _provider_error_requires_operator(error: BaseException) -> bool:
+    if isinstance(error, AppServerProtocolError):
+        return True
+    if isinstance(error, AppServerRemoteError):
+        return True
+    return not isinstance(error, (AppServerExited, OSError))
+
+
+def _provider_operator_status(error: BaseException) -> str:
+    if isinstance(error, AppServerRemoteError) and isinstance(error.data, dict):
+        candidates = (error.data, error.data.get("error"))
+        if any(
+            isinstance(candidate, dict)
+            and candidate.get("codexErrorInfo") == "unauthorized"
+            for candidate in candidates
+        ):
+            return "authentication-required"
+    return "operator-required"
+
+
+def _provider_retry_delay(consecutive_failures: int) -> float:
+    if consecutive_failures < 0:
+        raise ValueError("consecutive_failures must not be negative")
+    return min(float(2 ** min(consecutive_failures, 5)), 30.0)
 
 
 async def _tunnel_watch(
@@ -576,16 +726,3 @@ def _require_runtime_binding(
         raise BridgeRuntimeError(
             "configured GitHub identities do not match durable binding"
         )
-
-
-async def _mirror_target_for_node(
-    store: TransportStore,
-    binding: Binding,
-    target_node_id: str,
-) -> MirrorTarget | None:
-    if target_node_id == binding.issue_node_id:
-        return MirrorTarget(binding.issue_node_id, binding.issue_number)
-    route = await store.current_pr_route(binding.binding_id)
-    if route is None or route.surface_node_id != target_node_id:
-        return None
-    return MirrorTarget(route.surface_node_id, route.surface_number)

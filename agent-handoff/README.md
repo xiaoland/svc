@@ -54,6 +54,14 @@ pdm run github-agent-bridge serve \
 The Quick Tunnel exposes only the webhook app. Bounded runtime health remains
 loopback-only at `http://127.0.0.1:<health_port>/healthz`.
 
+If the local app-server transport exits after startup, `serve` keeps GitHub
+ingress and reconciliation alive and resumes the same opaque provider thread
+with a continuous 1/2/4/8/16/30-second capped backoff. It never creates a
+replacement thread for an existing binding. An ambiguous `turn/start` or
+`turn/steer`, authentication failure, protocol fault, or missing authoritative
+active-turn terminal stops provider delivery as operator-required instead of
+guessing a retry.
+
 `serve` fails closed when the installed Codex version or either generated
 schema digest differs from the configured protocol pin. The collaboration
 instructions path is only an integrity pin: the persistent workflow lives in
@@ -71,6 +79,6 @@ resource, external instruction, or external comment has been created by the
 implementation work. The real Issue-to-Draft-PR black-box campaign remains the
 only acceptance path.
 
-See [the protocol contract](docs/app-server-protocol.md) and the live
-[implementation packet](tasks/bootstrap-implementation.md). External setup and
-exclusive handoff are specified in the [operator runbook](docs/operator-runbook.md).
+See [the protocol contract](docs/app-server-protocol.md) and the live task
+packets under [`tasks/`](tasks/). External setup and exclusive handoff are
+specified in the [operator runbook](docs/operator-runbook.md).

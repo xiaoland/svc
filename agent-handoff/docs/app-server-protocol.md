@@ -11,7 +11,9 @@ The executable schemas remain the authority when a later binary changes.
 ## Wire and Lifecycle
 
 - stdio carries one JSON object per line. The Codex protocol deliberately omits
-  the JSON-RPC `jsonrpc` member on the wire.
+  the JSON-RPC `jsonrpc` member on the wire. The client raises asyncio's reader
+  boundary from 64 KiB to a bounded 16 MiB so real item snapshots are not
+  mistaken for disconnects; a larger or malformed line is a protocol fault.
 - A connection sends `initialize`, waits for its response, then sends the
   one-way `initialized` notification. Thread methods before initialization fail.
   This adapter explicitly opts into `capabilities.experimentalApi`; absence or
@@ -20,9 +22,10 @@ The executable schemas remain the authority when a later binary changes.
   same provider thread after transport restart; an empty thread may not yet have
   a materialized rollout, so the bootstrap probe always completes a turn first.
 - `turn/start` returns an in-progress turn handle. Live items arrive through
-  notifications, and only `turn/completed` is terminal. Its status is one of
-  `completed`, `interrupted`, `failed`, or `inProgress`; an `error` notification
-  may be retryable and is not itself a terminal event.
+  notifications. A matching `turn/completed` is authoritative only when its
+  status is `completed`, `interrupted`, or `failed`; `inProgress` is known but
+  non-terminal. An `error` notification may be retryable and is not itself a
+  terminal event.
 - `turn/steer` has an `expectedTurnId` precondition. `turn/interrupt` must target
   the active turn; no active turn is a protocol error.
 - Wrapper-origin wake references use experimental `additionalContext` entries
@@ -59,6 +62,28 @@ live projections only.
 Provider thread history is intentionally lossy for some live item detail. The
 Wrapper therefore observes live items for mirroring but never persists or
 reconstructs the provider transcript and never owns compaction or resume.
+
+## Reconnect and Delivery Boundary
+
+The app-server process is replaceable; the Issue/thread binding is not. stdout
+EOF, process exit, broken pipes, and OS transport failures permit a fresh
+app-server process followed by `initialize` and `thread/resume` for the exact
+stored opaque thread address. Protocol drift, structured remote errors, a
+different thread ID, or a materialized thread that cannot be resumed require
+operator action and never fall back to `thread/start`.
+
+Reconnect attempts continue at 1, 2, 4, 8, 16, then 30-second intervals. A
+connection must remain healthy for 30 seconds before the failure count resets,
+which keeps a crash loop at the capped cadence. Stopping the Wrapper interrupts
+the wait without changing pending events or an active-turn handle.
+
+Provider mutations have a stricter boundary. A claimed `turn/start` remains in
+`starting` if transport fails before its response. A same-turn `turn/steer`
+first persists `provider-delivery-unknown`; only a successful response marks its
+event refs delivered, while an authoritative not-steerable response restores
+ordinary pending state. Without protocol evidence that proves the result of an
+ambiguous write, both states are `operator-required`: the Wrapper does not
+redeliver refs, create a parallel turn, or infer a terminal result.
 
 ## Executable Probe
 

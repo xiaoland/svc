@@ -100,6 +100,21 @@ class TurnProjectionTests(unittest.TestCase):
 
     def test_active_and_non_success_terminal_visible_text_are_distinct(self) -> None:
         active = TurnProjection(THREAD_ID, TURN_ID)
+        changed = active.consume(
+            ServerMessage(
+                method="turn/completed",
+                params={
+                    "threadId": THREAD_ID,
+                    "turn": {
+                        "id": TURN_ID,
+                        "status": "inProgress",
+                        "items": [],
+                    },
+                },
+            )
+        )
+        self.assertFalse(changed)
+        self.assertIsNone(active.snapshot().terminal_status)
         active_body = render_mirror_chunks(active.snapshot(), revision=0)[0].body
         self.assertTrue(active_body.startswith(ACTIVE_VISIBLE_TEXT))
 
