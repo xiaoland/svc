@@ -257,8 +257,12 @@ vectors after version, semantic, and license review.
    profile, OpenAPI adapter—rather than mechanically slicing the existing file.
    The YAML-surface substage is complete: parser construction, event guards,
    parser diagnostics, and source coordinates now form one adapter over
-   `ruamel.yaml`; BSL semantics remain in the compiler. OpenAPI profile
-   extraction remains the next independently bounded substage.
+   `ruamel.yaml`; BSL semantics remain in the compiler. The OpenAPI substage is
+   also complete: selected-operation/reference/schema-profile
+   semantics live in one adapter over the immutable registry, while compiler
+   callbacks retain contained artifact loading and snapshots. `compiler.py` is
+   consequently the BSL semantic/diagnostic orchestrator rather than the owner
+   of YAML, CEL, and OpenAPI library mechanics.
 5. **CEL remains bounded — completed.** One CEL-profile adapter now owns the
    environment, JSON type admission, compilation/evaluation, RE2, expression
    bound, and the isolated scanner. The scanner limitation is explicit and

@@ -81,6 +81,7 @@ files = [
     "svc_cli/src/svc_cli/double/compiler.py",
     "svc_cli/src/svc_cli/double/materialization.py",
     "svc_cli/src/svc_cli/double/model.py",
+    "svc_cli/src/svc_cli/double/openapi_profile.py",
     "svc_cli/src/svc_cli/double/runtime.py",
     "svc_cli/src/svc_cli/double/schema_registry.py",
     "svc_cli/src/svc_cli/double/service.py",

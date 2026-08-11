@@ -14,11 +14,9 @@ from collections.abc import Iterable, Mapping, MutableSet, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, NoReturn, TypeAlias, cast
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 
-from jsonschema.exceptions import SchemaError  # type: ignore[import-untyped]
 from pydantic import JsonValue
-from referencing.exceptions import Unresolvable
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from ..errors import SvcError
@@ -56,18 +54,13 @@ from .model import (
     Request,
     Response,
     Scenario,
-    SchemaResource,
     SemanticMatcher,
     Snapshot,
     SourceLocation,
     StructuredBody,
     ValueNode,
 )
-from .schema_registry import (
-    build_schema_registry,
-    check_schema_graph,
-    resolve_document_reference,
-)
+from .openapi_profile import OpenApiProfileError, compile_openapi_profile
 from .yaml_surface import (
     MAX_YAML_DEPTH,
     MAX_YAML_NODES,
@@ -86,7 +79,6 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9.-]*$")
 _BINDING_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _METHOD_RE = re.compile(r"^[A-Z][A-Z0-9!#$%&'*+.^_`|~-]*$")
 _HEADER_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
-_OPENAPI_VERSION_RE = re.compile(r"^3\.1\.\d+$")
 _REQUEST_NODE_KINDS = frozenset({"literal", "match", "capture", "managed"})
 _OUTPUT_NODE_KINDS = frozenset(
     {"literal", "example", "derived", "generated", "managed"}
@@ -104,12 +96,6 @@ _SEMANTIC_VALIDATORS = {
     ("rfc.uuid", "svc.rfc-uuid/v1"),
     ("rfc3339", "svc.rfc3339/v1"),
 }
-_ADMITTED_SCHEMA_DIALECTS = frozenset(
-    {
-        "https://json-schema.org/draft/2020-12/schema",
-        "https://spec.openapis.org/oas/3.1/dialect/base",
-    }
-)
 _OPAQUE_TOKEN_ALPHABETS = frozenset({"lower-alphanumeric", "alphanumeric", "hex-lower"})
 
 _Phase: TypeAlias = Literal["request", "response", "event"]
@@ -1598,22 +1584,6 @@ class _Compiler:
             is_module=False,
         )
         source_path = source_path.resolve()
-        documents: dict[Path, object] = {source_path: document}
-        openapi = self._mapping(document, (), "OpenAPI source must be a mapping.")
-        version = openapi.get("openapi")
-        if not isinstance(version, str) or not _OPENAPI_VERSION_RE.fullmatch(version):
-            self._contract_fail(
-                "OpenAPI source must declare a 3.1.x version.",
-                source_text,
-                details={"openapi": version},
-            )
-        dialect = openapi.get("jsonSchemaDialect")
-        if dialect is not None and dialect not in _ADMITTED_SCHEMA_DIALECTS:
-            self._contract_fail(
-                "Custom OpenAPI JSON Schema dialects are not admitted in v0.",
-                source_text,
-                details={"jsonSchemaDialect": dialect},
-            )
         method = self._method(value["method"], value, (*path, "method"))
         operation_path = self._http_path(value["path"], value, (*path, "path"))
         if "{" in operation_path or "}" in operation_path:
@@ -1624,424 +1594,48 @@ class _Compiler:
                 (*path, "path"),
                 key="path",
             )
-        paths = openapi.get("paths")
-        if not isinstance(paths, Mapping) or operation_path not in paths:
-            self._contract_fail(
-                "The selected OpenAPI path does not exist.",
-                source_text,
-                details={"path": operation_path},
-            )
-        path_item = self._resolve_openapi_object(
-            paths[operation_path], source_path, document, documents
-        )
-        if not isinstance(path_item, Mapping) or method.lower() not in path_item:
-            self._contract_fail(
-                "The selected OpenAPI method does not exist at the static path.",
-                source_text,
-                details={"method": method, "path": operation_path},
-            )
-        operation = self._resolve_openapi_object(
-            path_item[method.lower()], source_path, document, documents
-        )
-        if not isinstance(operation, Mapping):
-            self._contract_fail(
-                "The selected OpenAPI operation is not an object.", source_text
-            )
+        loaded_documents: dict[Path, object] = {source_path: document}
 
-        self._walk_local_refs(operation, source_path, document, documents, set())
-        resource_uris = self._schema_resource_uris(documents)
-        request_schema = self._extract_request_schema(
-            operation, source_path, document, documents, resource_uris
-        )
-        response_schemas = self._extract_response_schemas(
-            operation, source_path, document, documents, resource_uris
-        )
-        schema_resources = self._compile_schema_resources(documents, resource_uris)
-        registry = build_schema_registry(schema_resources)
-        for schema_name, schema in [
-            ("request", request_schema),
-            *(
-                (f"response:{status}", item)
-                for status, item in response_schemas.items()
-            ),
-        ]:
-            if schema is None:
-                continue
-            try:
-                checked_schemas = check_schema_graph(schema, registry)
-                for checked_schema in checked_schemas:
-                    self._reject_custom_schema_dialects(checked_schema, source_text)
-            except (SchemaError, Unresolvable) as error:
-                self._contract_fail(
-                    "Selected OpenAPI Schema Object is invalid for JSON Schema 2020-12.",
-                    source_text,
-                    details={
-                        "schema": schema_name,
-                        "diagnostic": _bounded_diagnostic(error),
-                    },
+        def load_document(relative: str, base: Path) -> tuple[Path, object]:
+            target = self._resolve_contained_path_from(
+                relative,
+                base,
+                ("$ref",),
+                kind="file",
+                error_code="invalid-double-contract-ref",
+            )
+            if target not in loaded_documents:
+                snapshot = self._snapshot_path(target)
+                loaded_documents[target] = load_yaml(
+                    base64.b64decode(snapshot.content_base64),
+                    target,
+                    self.module,
+                    is_module=False,
                 )
-        return Contract(
-            source=source,
-            method=method,
-            path=operation_path,
-            request_schema=cast(JsonValue | None, request_schema),
-            response_schemas={
-                key: cast(JsonValue, item) for key, item in response_schemas.items()
-            },
-            schema_resources=schema_resources,
-        )
+            return target, loaded_documents[target]
 
-    def _walk_local_refs(
-        self,
-        value: object,
-        document_path: Path,
-        document: object,
-        documents: dict[Path, object],
-        visiting: set[tuple[Path, str]],
-    ) -> None:
-        if isinstance(value, Mapping):
-            reference = value.get("$ref")
-            if reference is not None:
-                if not isinstance(reference, str) or not reference:
-                    self._contract_fail(
-                        "OpenAPI $ref must be a non-empty string.", str(document_path)
-                    )
-                target_path, fragment, target_document = self._resolve_ref(
-                    reference, document_path, document, documents
-                )
-                identity = (target_path, fragment)
-                if identity not in visiting:
-                    visiting.add(identity)
-                    try:
-                        target = resolve_document_reference(
-                            documents, document_path, reference
-                        )
-                    except Unresolvable:
-                        self._contract_fail(
-                            "OpenAPI $ref fragment does not resolve.",
-                            str(document_path),
-                            details={"ref": reference},
-                        )
-                    self._walk_local_refs(
-                        target, target_path, target_document, documents, visiting
-                    )
-                    visiting.remove(identity)
-            for key, item in value.items():
-                if key != "$ref":
-                    self._walk_local_refs(
-                        item, document_path, document, documents, visiting
-                    )
-        elif isinstance(value, Sequence) and not isinstance(
-            value, (str, bytes, bytearray)
-        ):
-            for item in value:
-                self._walk_local_refs(
-                    item, document_path, document, documents, visiting
-                )
-
-    def _resolve_ref(
-        self,
-        reference: str,
-        document_path: Path,
-        document: object,
-        documents: dict[Path, object],
-    ) -> tuple[Path, str, object]:
-        parsed = urlsplit(reference)
-        if parsed.scheme or parsed.netloc or parsed.query:
-            self._contract_fail(
-                "Only local OpenAPI references are admitted.",
-                str(document_path),
-                details={"ref": reference},
-            )
-        fragment = unquote(parsed.fragment)
-        if fragment and not fragment.startswith("/"):
-            self._contract_fail(
-                "OpenAPI references must use JSON Pointer fragments.",
-                str(document_path),
-                details={"ref": reference},
-            )
-        if not parsed.path:
-            return document_path, fragment, document
-        relative = unquote(parsed.path)
-        target = self._resolve_contained_path_from(
-            relative,
-            document_path.parent,
-            ("$ref",),
-            kind="file",
-            error_code="invalid-double-contract-ref",
-        )
-        if target not in documents:
-            snapshot = self._snapshot_path(target)
-            documents[target] = load_yaml(
-                base64.b64decode(snapshot.content_base64),
-                target,
-                self.module,
-                is_module=False,
-            )
-        return target, fragment, documents[target]
-
-    def _extract_request_schema(
-        self,
-        operation: Mapping[object, object],
-        document_path: Path,
-        document: object,
-        documents: dict[Path, object],
-        resource_uris: Mapping[Path, str],
-    ) -> dict[str, JsonValue] | None:
-        request_body = operation.get("requestBody")
-        if request_body is None:
-            return None
-        resolved = self._resolve_openapi_object(
-            request_body, document_path, document, documents
-        )
-        content = resolved.get("content") if isinstance(resolved, Mapping) else None
-        media = (
-            content.get("application/json") if isinstance(content, Mapping) else None
-        )
-        schema = media.get("schema") if isinstance(media, Mapping) else None
-        if schema is None:
-            return None
-        normalized = self._rewrite_schema_refs(
-            schema,
-            document_path,
-            document,
-            documents,
-            resource_uris,
-            strict=True,
-        )
-        if not isinstance(normalized, dict):
-            self._contract_fail(
-                "OpenAPI request schema must be an object.", str(document_path)
-            )
-        return cast(dict[str, JsonValue], normalized)
-
-    def _extract_response_schemas(
-        self,
-        operation: Mapping[object, object],
-        document_path: Path,
-        document: object,
-        documents: dict[Path, object],
-        resource_uris: Mapping[Path, str],
-    ) -> dict[str, dict[str, JsonValue]]:
-        responses_value = operation.get("responses")
-        if not isinstance(responses_value, Mapping) or not responses_value:
-            self._contract_fail(
-                "Selected OpenAPI operation requires responses.", str(document_path)
-            )
-        result: dict[str, dict[str, JsonValue]] = {}
-        for status, authored in responses_value.items():
-            status_text = str(status)
-            if status_text != "default" and not re.fullmatch(
-                r"[1-5][0-9]{2}", status_text
-            ):
-                self._contract_fail(
-                    "OpenAPI response keys must be exact status codes or default in v0.",
-                    str(document_path),
-                    details={"status": status_text},
-                )
-            resolved = self._resolve_openapi_object(
-                authored, document_path, document, documents
-            )
-            content = resolved.get("content") if isinstance(resolved, Mapping) else None
-            media = (
-                content.get("application/json")
-                if isinstance(content, Mapping)
-                else None
-            )
-            schema = media.get("schema") if isinstance(media, Mapping) else None
-            if schema is None:
-                continue
-            normalized = self._rewrite_schema_refs(
-                schema,
-                document_path,
-                document,
-                documents,
-                resource_uris,
-                strict=True,
-            )
-            if not isinstance(normalized, dict):
-                self._contract_fail(
-                    "OpenAPI response schema must be an object.", str(document_path)
-                )
-            result[status_text] = cast(dict[str, JsonValue], normalized)
-        return result
-
-    def _rewrite_schema_refs(
-        self,
-        value: object,
-        document_path: Path,
-        document: object,
-        documents: dict[Path, object],
-        resource_uris: Mapping[Path, str],
-        *,
-        strict: bool,
-    ) -> JsonValue:
-        if isinstance(value, Mapping):
-            result: dict[str, JsonValue] = {}
-            for key, item in value.items():
-                if not isinstance(key, str):
-                    self._contract_fail(
-                        "JSON Schema object keys must be strings.", str(document_path)
-                    )
-                if key == "$ref":
-                    if not isinstance(item, str):
-                        self._contract_fail(
-                            "OpenAPI $ref must be a string.", str(document_path)
-                        )
-                    result[key] = self._registry_reference(
-                        item,
-                        document_path,
-                        document,
-                        documents,
-                        resource_uris,
-                        strict=strict,
-                    )
-                else:
-                    result[key] = self._rewrite_schema_refs(
-                        item,
-                        document_path,
-                        document,
-                        documents,
-                        resource_uris,
-                        strict=strict,
-                    )
-            return result
-        if isinstance(value, Sequence) and not isinstance(
-            value, (str, bytes, bytearray)
-        ):
-            return [
-                self._rewrite_schema_refs(
-                    item,
-                    document_path,
-                    document,
-                    documents,
-                    resource_uris,
-                    strict=strict,
-                )
-                for item in value
-            ]
-        return _json_value(value, self, ("contract", "schema"))
-
-    def _schema_resource_uris(
-        self, documents: Mapping[Path, object]
-    ) -> dict[Path, str]:
-        result: dict[Path, str] = {}
-        for path in sorted(documents, key=lambda item: item.as_posix()):
-            snapshot = self._snapshot_path(path)
-            identity = hashlib.sha256(
-                f"{snapshot.logical_path}\0{snapshot.sha256}".encode("utf-8")
-            ).hexdigest()
-            result[path] = f"urn:svc:double:schema-resource:{identity}"
-        return result
-
-    def _compile_schema_resources(
-        self,
-        documents: Mapping[Path, object],
-        resource_uris: Mapping[Path, str],
-    ) -> tuple[SchemaResource, ...]:
-        resources: list[SchemaResource] = []
-        for path in sorted(documents, key=lambda item: resource_uris[item]):
-            snapshot = self._snapshot_path(path)
-            document = documents[path]
-            normalized = self._rewrite_schema_refs(
-                document,
-                path,
-                document,
-                dict(documents),
-                resource_uris,
-                strict=False,
-            )
-            resources.append(
-                SchemaResource(
-                    uri=resource_uris[path],
-                    document=normalized,
-                    snapshot_sha256=snapshot.sha256,
-                )
-            )
-        return tuple(resources)
-
-    def _registry_reference(
-        self,
-        reference: str,
-        document_path: Path,
-        document: object,
-        documents: dict[Path, object],
-        resource_uris: Mapping[Path, str],
-        *,
-        strict: bool,
-    ) -> str:
-        parsed = urlsplit(reference)
-        if parsed.scheme or parsed.netloc or parsed.query:
-            if not strict:
-                return reference
-            self._contract_fail(
-                "Only local OpenAPI references are admitted.",
-                str(document_path),
-                details={"ref": reference},
-            )
-        if strict:
-            target_path, _, _ = self._resolve_ref(
-                reference, document_path, document, documents
-            )
-        elif not parsed.path:
-            target_path = document_path
-        else:
-            try:
-                target_path = (document_path.parent / unquote(parsed.path)).resolve(
-                    strict=True
-                )
-            except (OSError, RuntimeError):
-                return reference
-            if target_path not in resource_uris:
-                return reference
-        uri = resource_uris.get(target_path)
-        if uri is None:
-            self._contract_fail(
-                "Local OpenAPI reference is absent from the immutable schema registry.",
-                str(document_path),
-                details={"ref": reference},
-            )
-        return uri + (f"#{parsed.fragment}" if parsed.fragment else "")
-
-    def _resolve_openapi_object(
-        self,
-        value: object,
-        document_path: Path,
-        document: object,
-        documents: dict[Path, object],
-    ) -> object:
-        if not isinstance(value, Mapping) or "$ref" not in value:
-            return value
-        reference = value["$ref"]
-        if not isinstance(reference, str):
-            self._contract_fail("OpenAPI $ref must be a string.", str(document_path))
-        self._resolve_ref(reference, document_path, document, documents)
         try:
-            target = resolve_document_reference(documents, document_path, reference)
-        except Unresolvable:
-            self._contract_fail(
-                "OpenAPI $ref fragment does not resolve.",
-                str(document_path),
-                details={"ref": reference},
+            return compile_openapi_profile(
+                source=source,
+                source_name=source_text,
+                source_path=source_path,
+                document=document,
+                method=method,
+                operation_path=operation_path,
+                load_document=load_document,
+                snapshot_for_path=self._snapshot_path,
             )
-        return target
-
-    def _reject_custom_schema_dialects(self, value: object, source: str) -> None:
-        if isinstance(value, Mapping):
-            dialect = value.get("$schema")
-            if dialect is not None and dialect not in _ADMITTED_SCHEMA_DIALECTS:
-                self._contract_fail(
-                    "Custom JSON Schema dialects are not admitted in v0.",
-                    source,
-                    details={"$schema": dialect},
+        except OpenApiProfileError as error:
+            payload: dict[str, Any] = {
+                "module": str(self.module),
+                "source": error.source,
+                **error.details,
+            }
+            if error.code == "invalid-double-json-value":
+                payload.update(
+                    {"path": ["contract", "schema"], "line": 1, "column": 1}
                 )
-            for item in value.values():
-                self._reject_custom_schema_dialects(item, source)
-        elif isinstance(value, Sequence) and not isinstance(
-            value, (str, bytes, bytearray)
-        ):
-            for item in value:
-                self._reject_custom_schema_dialects(item, source)
+            raise SvcError(error.code, error.message, payload) from error
 
     def _check_contract_coverage(
         self, contract: Contract, interactions: tuple[Interaction, ...]

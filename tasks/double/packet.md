@@ -266,6 +266,14 @@
 - **Next Step**: Define an OpenAPI-profile Impact Handshake that separates
   selected-operation and schema-profile semantics from local artifact loading;
   retain the existing immutable registry and scenario identity.
+- **Completed OpenAPI-profile convergence stage**: selected-operation
+  semantics, reachable references, schema selection/projection, artifact
+  callbacks, and compatibility evidence are recorded in
+  [`openapi-profile-impact-handshake.md`](openapi-profile-impact-handshake.md).
+- **Next Step**: Close the remaining authoring-shape decision explicitly:
+  determine whether Pydantic can replace handwritten YAML object-shape checks
+  without weakening stable, source-located diagnostics; adopt only where the
+  adapter is deeper than the current compiler policy.
 
 - **Standing exploration authority**: Sir explicitly authorizes research,
   exploration, and disposable spikes without asking for further approval. Work
@@ -301,6 +309,8 @@
   [`cel-profile-impact-handshake.md`](cel-profile-impact-handshake.md)
 - Authorized YAML-surface Impact Handshake:
   [`yaml-surface-impact-handshake.md`](yaml-surface-impact-handshake.md)
+- Authorized OpenAPI-profile Impact Handshake:
+  [`openapi-profile-impact-handshake.md`](openapi-profile-impact-handshake.md)
 - Replacement MVP design:
   [`design-v2.md`](design-v2.md)
 - Concrete BSL v0 authoring contract:
