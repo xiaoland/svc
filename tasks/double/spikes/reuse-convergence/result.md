@@ -240,7 +240,7 @@ vectors after version, semantic, and license review.
 1. **Test topology only — completed.** Move all existing cases and fixtures into the tree
    above, extract narrow support owners, prove the mapped 78 cases plus the full
    suite. Do not alter production behavior in this slice.
-2. **Tagged model authority.** Introduce discriminated matcher/value/body
+2. **Tagged model authority — completed.** Introduce discriminated matcher/value/body
    variants with unchanged serialized field names. First make current compiler
    output those variants, then use TypeAdapters for authored structural shape.
    Translate validation errors through one source-location diagnostic adapter.

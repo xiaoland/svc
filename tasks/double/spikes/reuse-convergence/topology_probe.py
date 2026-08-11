@@ -17,6 +17,10 @@ CURRENT_TARGETS = (
 BASELINE_CASE_DIGEST = (
     "8c0b2e1b78328b5c4d46c5afecd578244d6e2b0bb1770650ca0348db27325231"
 )
+POST_MIGRATION_CASES = {
+    "test_tagged_ir_rejects_cross_variant_and_missing_fields",
+    "test_tagged_ir_round_trip_preserves_the_serialized_contract",
+}
 
 INTERFACE = {
     "test_double_validate_json_human_and_exit_contract": "double/interface/test_cli.py",
@@ -67,6 +71,8 @@ LANGUAGE = {
     "test_cross_file_recursive_openapi_schema_uses_immutable_registry": "double/language/test_openapi.py",
     "test_openapi_profile_rejects_unsupported_versions_templates_and_dialects": "double/language/test_openapi.py",
     "test_yaml_reader_errors_and_symlink_loops_are_structured": "double/language/test_yaml_surface.py",
+    "test_tagged_ir_rejects_cross_variant_and_missing_fields": "double/language/test_model.py",
+    "test_tagged_ir_round_trip_preserves_the_serialized_contract": "double/language/test_model.py",
 }
 
 RUNTIME = {
@@ -117,7 +123,7 @@ def main() -> None:
         text=True,
     )
     node_ids = [line for line in completed.stdout.splitlines() if "::" in line]
-    assert len(node_ids) == 78, len(node_ids)
+    assert len(node_ids) == 78 + len(POST_MIGRATION_CASES), len(node_ids)
     assert len(node_ids) == len(set(node_ids))
     assignments = [(node_id, proposed_owner(node_id)) for node_id in node_ids]
     assert len(assignments) == len(node_ids)
@@ -125,8 +131,10 @@ def main() -> None:
         actual_owner = node_id.split("svc_cli/tests/", 1)[1].split("::", 1)[0]
         assert actual_owner == owner, (node_id, owner)
 
-    normalized = sorted(node_id.split("::", 1)[1] for node_id in node_ids)
-    case_digest = sha256("\n".join(normalized).encode()).hexdigest()
+    normalized = {node_id.split("::", 1)[1] for node_id in node_ids}
+    assert normalized >= POST_MIGRATION_CASES
+    baseline = sorted(normalized - POST_MIGRATION_CASES)
+    case_digest = sha256("\n".join(baseline).encode()).hexdigest()
     assert case_digest == BASELINE_CASE_DIGEST, case_digest
 
     counts = Counter(owner for _, owner in assignments)

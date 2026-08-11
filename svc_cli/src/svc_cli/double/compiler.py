@@ -36,19 +36,34 @@ from ruamel.yaml.events import (
 from ..errors import SvcError
 from .model import (
     Body,
+    CaptureValueNode,
     Contract,
+    DerivedValueNode,
+    EnumMatcher,
     Event,
+    ExactMatcher,
+    ExampleValueNode,
+    FormUrlencodedBody,
+    GeneratedValueNode,
     Interaction,
+    LiteralValueNode,
+    ManagedValueNode,
+    MatchValueNode,
     Matcher,
     Materializer,
     PathPart,
     Provenance,
+    RangeMatcher,
+    RawBody,
+    RegexMatcher,
     Request,
     Response,
     Scenario,
     SchemaResource,
+    SemanticMatcher,
     Snapshot,
     SourceLocation,
+    StructuredBody,
     ValueNode,
 )
 
@@ -635,7 +650,7 @@ class _Compiler:
                 declared,
                 available,
             )
-            return Body(kind="structured", template=template, nodes=nodes)
+            return StructuredBody(template=template, nodes=nodes)
 
         if "form-urlencoded" in body:
             if phase != "request":
@@ -681,8 +696,7 @@ class _Compiler:
                     )
                 form_template[key] = compiled
                 form_nodes.extend(field_nodes)
-            return Body(
-                kind="form-urlencoded",
+            return FormUrlencodedBody(
                 template=form_template,
                 nodes=tuple(form_nodes),
             )
@@ -717,8 +731,7 @@ class _Compiler:
                 raw,
                 (*path, "raw"),
             )
-        return Body(
-            kind="raw",
+        return RawBody(
             raw=node.managed_snapshot,
             media_type=node.media_type,
         )
@@ -833,8 +846,8 @@ class _Compiler:
                 if phase != "request"
                 else None
             )
-            return ValueNode(
-                path=ir_path, kind="literal", value=value, bind=bind, location=location
+            return LiteralValueNode(
+                path=ir_path, value=value, bind=bind, location=location
             )
         if kind in {"match", "capture"}:
             required = {"kind", "match"}
@@ -856,18 +869,22 @@ class _Compiler:
                 self._check_example(
                     matcher, example, spec, (*source_path, "$bsl", "example")
                 )
-            name = None
             if kind == "capture":
                 name = self._binding_name(spec["name"], (*source_path, "$bsl", "name"))
                 self._declare_binding(
                     name, declared, available, spec, (*source_path, "$bsl", "name")
                 )
-            return ValueNode(
+                return CaptureValueNode(
+                    path=ir_path,
+                    value=example,
+                    matcher=matcher,
+                    name=name,
+                    location=location,
+                )
+            return MatchValueNode(
                 path=ir_path,
-                kind=cast(Literal["match", "capture"], kind),
                 value=example,
                 matcher=matcher,
-                name=name,
                 location=location,
             )
         if kind == "example":
@@ -890,9 +907,8 @@ class _Compiler:
                     validator, value, spec, (*source_path, "$bsl", "value")
                 )
             bind = self._optional_output_binding(spec, source_path, declared, available)
-            return ValueNode(
+            return ExampleValueNode(
                 path=ir_path,
-                kind="example",
                 value=value,
                 bind=bind,
                 validator=validator,
@@ -919,9 +935,8 @@ class _Compiler:
                 spec["validate"], (*source_path, "$bsl", "validate")
             )
             bind = self._optional_output_binding(spec, source_path, declared, available)
-            return ValueNode(
+            return DerivedValueNode(
                 path=ir_path,
-                kind="derived",
                 expression=expression,
                 bind=bind,
                 validator=validator,
@@ -950,9 +965,8 @@ class _Compiler:
                 semantic, using, options, validator, spec, source_path
             )
             bind = self._optional_output_binding(spec, source_path, declared, available)
-            return ValueNode(
+            return GeneratedValueNode(
                 path=ir_path,
-                kind="generated",
                 semantic=semantic,
                 using=using,
                 options=options,
@@ -1003,9 +1017,8 @@ class _Compiler:
                 if not raw and phase != "request"
                 else None
             )
-            return ValueNode(
+            return ManagedValueNode(
                 path=ir_path,
-                kind="managed",
                 value=managed_value,
                 bind=bind,
                 validator=validator,
@@ -1039,8 +1052,7 @@ class _Compiler:
         kind = self._string(matcher["kind"], (*path, "kind"))
         if kind == "exact":
             self._keys(matcher, path, required={"kind", "value"})
-            return Matcher(
-                kind="exact",
+            return ExactMatcher(
                 value=_json_value(matcher["value"], self, (*path, "value")),
             )
         if kind == "enum":
@@ -1067,7 +1079,7 @@ class _Compiler:
                     matcher,
                     path,
                 )
-            return Matcher(kind="enum", values=normalized)
+            return EnumMatcher(values=normalized)
         if kind == "range":
             self._keys(
                 matcher, path, required={"kind"}, optional={"minimum", "maximum"}
@@ -1097,12 +1109,17 @@ class _Compiler:
                     matcher,
                     path,
                 )
-            return Matcher(kind="range", minimum=minimum, maximum=maximum)
+            if minimum is None:
+                assert maximum is not None
+                return RangeMatcher(maximum=maximum)
+            if maximum is None:
+                return RangeMatcher(minimum=minimum)
+            return RangeMatcher(minimum=minimum, maximum=maximum)
         if kind == "regex":
             self._keys(matcher, path, required={"kind", "pattern"})
             pattern = self._nonempty_string(matcher["pattern"], (*path, "pattern"))
             self._compile_regex(pattern, matcher, (*path, "pattern"))
-            return Matcher(kind="regex", pattern=pattern)
+            return RegexMatcher(pattern=pattern)
         if kind == "semantic":
             self._keys(matcher, path, required={"kind", "semantic", "using"})
             semantic = self._nonempty_string(matcher["semantic"], (*path, "semantic"))
@@ -1115,7 +1132,7 @@ class _Compiler:
                     path,
                     details={"semantic": semantic, "using": using},
                 )
-            return Matcher(kind="semantic", semantic=semantic, using=using)
+            return SemanticMatcher(semantic=semantic, using=using)
         self._fail(
             "unsupported-double-matcher",
             "Matcher kind is not in the BSL v0 algebra.",

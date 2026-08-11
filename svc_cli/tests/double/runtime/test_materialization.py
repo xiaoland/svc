@@ -7,8 +7,8 @@ from svc_cli.double.materialization import (
     run_materializer,
 )
 from svc_cli.double.model import (
-    Matcher,
     Materializer,
+    SemanticMatcher,
 )
 from svc_cli.errors import SvcError
 
@@ -28,8 +28,7 @@ def test_response_derived_value_receives_the_normalized_matched_request() -> Non
     body_node = interaction.response.body.nodes[0].model_copy(
         update={
             "expression": "request.body.value.externalId",
-            "validator": Matcher(
-                kind="semantic",
+            "validator": SemanticMatcher(
                 semantic="rfc.uuid",
                 using="svc.rfc-uuid/v1",
             ),

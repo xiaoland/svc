@@ -6,10 +6,10 @@ from svc_cli.double.materialization import (
     compact_json,
 )
 from svc_cli.double.model import (
-    Body,
-    Matcher,
+    CaptureValueNode,
+    EnumMatcher,
     Replay,
-    ValueNode,
+    StructuredBody,
 )
 from svc_cli.double.runtime import BoundaryEngine
 
@@ -26,15 +26,13 @@ def test_recursive_local_openapi_registry_is_runtime_authority() -> None:
     interaction = scenario.interactions[0]
     request = interaction.request.model_copy(
         update={
-            "body": Body(
-                kind="structured",
+            "body": StructuredBody(
                 template=None,
                 nodes=(
-                    ValueNode(
+                    CaptureValueNode(
                         path=(),
-                        kind="capture",
                         name="payload",
-                        matcher=Matcher(kind="enum", values=(valid, invalid)),
+                        matcher=EnumMatcher(values=(valid, invalid)),
                     ),
                 ),
             )

@@ -234,9 +234,17 @@
   `8c0b2e1b78328b5c4d46c5afecd578244d6e2b0bb1770650ca0348db27325231`;
   all 15 fixtures are byte-identical after their move; the complete suite is
   236 passed. No production implementation or behavior changed in this slice.
-- **Next Step**: Review this uncommitted test-topology slice. Any tagged-model
-  or reference-authority implementation is a separate production mutation and
-  requires its own Impact Handshake and Sir's explicit start.
+- **Completed tagged-model stage**: the exact model/compiler/runtime impact and
+  serialization invariants are recorded in
+  [`tagged-model-impact-handshake.md`](tagged-model-impact-handshake.md).
+  Sir authorized continued implementation and one commit per stage on
+  2026-08-11. Exact tagged variants now reject contradictory shapes while
+  preserving the representative serialized payload, scenario digest, carrier
+  manifest round-trip, and historical 78-case identity. Two focused model
+  cases raise the complete suite to 238 passed.
+- **Next Step**: Define the separate reference-authority Impact Handshake, then
+  replace compiler-owned `$ref` graph rewriting with one immutable,
+  no-retrieval registry shared by compiler checks and runtime validation.
 
 - **Standing exploration authority**: Sir explicitly authorizes research,
   exploration, and disposable spikes without asking for further approval. Work
@@ -264,6 +272,8 @@
   [`spikes/reuse-convergence/README.md`](spikes/reuse-convergence/README.md)
 - Authorized test-topology Impact Handshake:
   [`reuse-convergence-impact-handshake.md`](reuse-convergence-impact-handshake.md)
+- Authorized tagged-model Impact Handshake:
+  [`tagged-model-impact-handshake.md`](tagged-model-impact-handshake.md)
 - Replacement MVP design:
   [`design-v2.md`](design-v2.md)
 - Concrete BSL v0 authoring contract:

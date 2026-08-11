@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, Self, TypeAlias
 
-from pydantic import JsonValue
+from pydantic import Field, JsonValue, model_validator
 
 from ..model import ValueModel
 
 
 PathPart: TypeAlias = str | int
-NodeKind: TypeAlias = Literal[
-    "literal", "match", "capture", "example", "derived", "generated", "managed"
-]
 
 
 class SourceLocation(ValueModel):
@@ -42,7 +39,7 @@ class Provenance(ValueModel):
     snapshot_sha256: str | None = None
 
 
-class Matcher(ValueModel):
+class _MatcherBase(ValueModel):
     kind: Literal["exact", "enum", "range", "regex", "semantic"]
     value: JsonValue | None = None
     values: tuple[JsonValue, ...] | None = None
@@ -53,9 +50,86 @@ class Matcher(ValueModel):
     using: str | None = None
 
 
-class ValueNode(ValueModel):
+class ExactMatcher(_MatcherBase):
+    kind: Literal["exact"] = "exact"
+    value: JsonValue
+    values: None = None
+    minimum: None = None
+    maximum: None = None
+    pattern: None = None
+    semantic: None = None
+    using: None = None
+
+
+class EnumMatcher(_MatcherBase):
+    kind: Literal["enum"] = "enum"
+    value: None = None
+    values: tuple[JsonValue, ...]
+    minimum: None = None
+    maximum: None = None
+    pattern: None = None
+    semantic: None = None
+    using: None = None
+
+
+class RangeMatcher(_MatcherBase):
+    kind: Literal["range"] = "range"
+    value: None = None
+    values: None = None
+    pattern: None = None
+    semantic: None = None
+    using: None = None
+
+    @model_validator(mode="after")
+    def require_ordered_bound(self) -> Self:
+        if self.minimum is None and self.maximum is None:
+            raise ValueError("range requires minimum or maximum")
+        if "minimum" in self.model_fields_set and self.minimum is None:
+            raise ValueError("range minimum cannot be null")
+        if "maximum" in self.model_fields_set and self.maximum is None:
+            raise ValueError("range maximum cannot be null")
+        if (
+            self.minimum is not None
+            and self.maximum is not None
+            and self.minimum > self.maximum
+        ):
+            raise ValueError("range minimum cannot exceed maximum")
+        return self
+
+
+class RegexMatcher(_MatcherBase):
+    kind: Literal["regex"] = "regex"
+    value: None = None
+    values: None = None
+    minimum: None = None
+    maximum: None = None
+    pattern: str
+    semantic: None = None
+    using: None = None
+
+
+class SemanticMatcher(_MatcherBase):
+    kind: Literal["semantic"] = "semantic"
+    value: None = None
+    values: None = None
+    minimum: None = None
+    maximum: None = None
+    pattern: None = None
+    semantic: str
+    using: str
+
+
+Matcher: TypeAlias = Annotated[
+    ExactMatcher | EnumMatcher | RangeMatcher | RegexMatcher | SemanticMatcher,
+    Field(discriminator="kind"),
+]
+
+
+class _ValueNodeBase(ValueModel):
     path: tuple[PathPart, ...]
-    kind: NodeKind
+    kind: Literal[
+        "literal", "match", "capture", "example", "derived", "generated", "managed"
+    ]
     value: JsonValue | None = None
     matcher: Matcher | None = None
     name: str | None = None
@@ -70,12 +144,147 @@ class ValueNode(ValueModel):
     location: SourceLocation | None = None
 
 
-class Body(ValueModel):
+class LiteralValueNode(_ValueNodeBase):
+    kind: Literal["literal"] = "literal"
+    value: JsonValue
+    matcher: None = None
+    name: None = None
+    expression: None = None
+    semantic: None = None
+    using: None = None
+    options: None = None
+    validator: None = None
+    managed_snapshot: None = None
+    media_type: None = None
+
+
+class MatchValueNode(_ValueNodeBase):
+    kind: Literal["match"] = "match"
+    matcher: Matcher
+    name: None = None
+    expression: None = None
+    semantic: None = None
+    using: None = None
+    options: None = None
+    bind: None = None
+    validator: None = None
+    managed_snapshot: None = None
+    media_type: None = None
+
+
+class CaptureValueNode(_ValueNodeBase):
+    kind: Literal["capture"] = "capture"
+    matcher: Matcher
+    name: str
+    expression: None = None
+    semantic: None = None
+    using: None = None
+    options: None = None
+    bind: None = None
+    validator: None = None
+    managed_snapshot: None = None
+    media_type: None = None
+
+
+class ExampleValueNode(_ValueNodeBase):
+    kind: Literal["example"] = "example"
+    value: JsonValue
+    matcher: None = None
+    name: None = None
+    expression: None = None
+    semantic: None = None
+    using: None = None
+    options: None = None
+    managed_snapshot: None = None
+    media_type: None = None
+
+
+class DerivedValueNode(_ValueNodeBase):
+    kind: Literal["derived"] = "derived"
+    value: None = None
+    matcher: None = None
+    name: None = None
+    expression: str
+    semantic: None = None
+    using: None = None
+    options: None = None
+    validator: Matcher
+    managed_snapshot: None = None
+    media_type: None = None
+
+
+class GeneratedValueNode(_ValueNodeBase):
+    kind: Literal["generated"] = "generated"
+    value: None = None
+    matcher: None = None
+    name: None = None
+    expression: None = None
+    semantic: str
+    using: str
+    options: dict[str, JsonValue]
+    validator: Matcher
+    managed_snapshot: None = None
+    media_type: None = None
+
+
+class ManagedValueNode(_ValueNodeBase):
+    kind: Literal["managed"] = "managed"
+    matcher: None = None
+    name: None = None
+    expression: None = None
+    semantic: None = None
+    using: None = None
+    options: None = None
+    managed_snapshot: Snapshot
+    media_type: str
+
+
+ValueNode: TypeAlias = Annotated[
+    LiteralValueNode
+    | MatchValueNode
+    | CaptureValueNode
+    | ExampleValueNode
+    | DerivedValueNode
+    | GeneratedValueNode
+    | ManagedValueNode,
+    Field(discriminator="kind"),
+]
+
+
+class _BodyBase(ValueModel):
     kind: Literal["structured", "form-urlencoded", "raw"]
     template: JsonValue | None = None
     nodes: tuple[ValueNode, ...] = ()
     raw: Snapshot | None = None
     media_type: str | None = None
+
+
+class StructuredBody(_BodyBase):
+    kind: Literal["structured"] = "structured"
+    template: JsonValue
+    raw: None = None
+    media_type: None = None
+
+
+class FormUrlencodedBody(_BodyBase):
+    kind: Literal["form-urlencoded"] = "form-urlencoded"
+    template: dict[str, JsonValue]
+    raw: None = None
+    media_type: None = None
+
+
+class RawBody(_BodyBase):
+    kind: Literal["raw"] = "raw"
+    template: None = None
+    nodes: tuple[()] = ()
+    raw: Snapshot
+    media_type: str
+
+
+Body: TypeAlias = Annotated[
+    StructuredBody | FormUrlencodedBody | RawBody,
+    Field(discriminator="kind"),
+]
 
 
 class Materializer(ValueModel):

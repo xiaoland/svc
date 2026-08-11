@@ -7,9 +7,12 @@ from svc_cli.double.materialization import (
     matcher_accepts,
 )
 from svc_cli.double.model import (
-    Body,
-    Matcher,
-    ValueNode,
+    CaptureValueNode,
+    EnumMatcher,
+    ExactMatcher,
+    LiteralValueNode,
+    SemanticMatcher,
+    StructuredBody,
 )
 from svc_cli.double.runtime import ResponderServer
 
@@ -56,15 +59,13 @@ def test_in_process_matching_capture_and_seed_replay() -> None:
 def test_json_null_capture_and_boolean_number_equality_are_type_safe() -> None:
     engine = build_engine(123)
     interaction = engine.scenario.interactions[0]
-    nullable = Body(
-        kind="structured",
+    nullable = StructuredBody(
         template=None,
         nodes=(
-            ValueNode(
+            CaptureValueNode(
                 path=(),
-                kind="capture",
                 name="nullable",
-                matcher=Matcher(kind="enum", values=(None, 1)),
+                matcher=EnumMatcher(values=(None, 1)),
             ),
         ),
     )
@@ -83,13 +84,12 @@ def test_json_null_capture_and_boolean_number_equality_are_type_safe() -> None:
     assert engine.context.bindings["nullable"] is None
     assert conflict[0] == 409
     assert json.loads(conflict[2])["error"]["code"] == "double-capture-conflict"
-    exact_true = Matcher(kind="exact", value=True)
+    exact_true = ExactMatcher(value=True)
     assert matcher_accepts(exact_true, True)
     assert not matcher_accepts(exact_true, 1)
-    literal_true = Body(
-        kind="structured",
+    literal_true = StructuredBody(
         template=True,
-        nodes=(ValueNode(path=(), kind="literal", value=True),),
+        nodes=(LiteralValueNode(path=(), value=True),),
     )
     matched, _reasons, _captures, _actual = match_body(
         literal_true,
@@ -98,7 +98,7 @@ def test_json_null_capture_and_boolean_number_equality_are_type_safe() -> None:
         namespace="literal-type-safety",
     )
     assert matched is False
-    rfc3339 = Matcher(kind="semantic", semantic="rfc3339", using="svc.rfc3339/v1")
+    rfc3339 = SemanticMatcher(semantic="rfc3339", using="svc.rfc3339/v1")
     assert matcher_accepts(rfc3339, "2026-08-10T10:00:00+08:00")
     assert not matcher_accepts(rfc3339, "2026-08-10 10:00:00+08:00")
 
