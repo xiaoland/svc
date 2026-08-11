@@ -259,6 +259,13 @@
 - **Next Step**: Bound the remaining compiler-convergence stage around deep
   authoring, BSL semantic, and OpenAPI adapter interfaces; do not mechanically
   split the compiler merely to reduce its line count.
+- **Completed YAML-surface convergence stage**: strict parser construction,
+  admitted feature/resource guards, parser diagnostics, source-coordinate
+  ownership, and compatibility evidence are recorded in
+  [`yaml-surface-impact-handshake.md`](yaml-surface-impact-handshake.md).
+- **Next Step**: Define an OpenAPI-profile Impact Handshake that separates
+  selected-operation and schema-profile semantics from local artifact loading;
+  retain the existing immutable registry and scenario identity.
 
 - **Standing exploration authority**: Sir explicitly authorizes research,
   exploration, and disposable spikes without asking for further approval. Work
@@ -292,6 +299,8 @@
   [`reference-authority-impact-handshake.md`](reference-authority-impact-handshake.md)
 - Authorized CEL-profile Impact Handshake:
   [`cel-profile-impact-handshake.md`](cel-profile-impact-handshake.md)
+- Authorized YAML-surface Impact Handshake:
+  [`yaml-surface-impact-handshake.md`](yaml-surface-impact-handshake.md)
 - Replacement MVP design:
   [`design-v2.md`](design-v2.md)
 - Concrete BSL v0 authoring contract:

@@ -19,18 +19,7 @@ from urllib.parse import unquote, urlsplit
 from jsonschema.exceptions import SchemaError  # type: ignore[import-untyped]
 from pydantic import JsonValue
 from referencing.exceptions import Unresolvable
-from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
-from ruamel.yaml.error import YAMLError
-from ruamel.yaml.events import (
-    AliasEvent,
-    DocumentStartEvent,
-    MappingEndEvent,
-    MappingStartEvent,
-    ScalarEvent,
-    SequenceEndEvent,
-    SequenceStartEvent,
-)
 
 from ..errors import SvcError
 from .cel_profile import (
@@ -79,12 +68,16 @@ from .schema_registry import (
     check_schema_graph,
     resolve_document_reference,
 )
+from .yaml_surface import (
+    MAX_YAML_DEPTH,
+    MAX_YAML_NODES,
+    load_yaml,
+    source_location,
+)
 
 
 MAX_MODULE_BYTES = 1_048_576
 MAX_LOCAL_FILE_BYTES = 4_194_304
-MAX_YAML_NODES = 50_000
-MAX_YAML_DEPTH = 64
 MAX_MATERIALIZER_ARGUMENTS = 64
 MAX_MATERIALIZER_TIMEOUT_MS = 30_000
 MAX_MATERIALIZER_OUTPUT_BYTES = 8_388_608
@@ -128,11 +121,10 @@ class _Compiler:
         self.module_dir = self.module.parent
         self.workspace = _workspace_for_module(self.module)
         self.snapshots: dict[str, Snapshot] = {}
-        self._yaml = _new_yaml()
 
     def compile(self) -> Scenario:
         raw = self._read_bounded(self.module, MAX_MODULE_BYTES, "module-too-large")
-        document = self._load_yaml(raw, self.module, is_module=True)
+        document = load_yaml(raw, self.module, self.module, is_module=True)
         root = self._mapping(document, (), "Module must be a mapping.")
         self._keys(root, (), required={"language", "scenario"})
 
@@ -1599,8 +1591,11 @@ class _Compiler:
             )
         source = self._snapshot_local(source_text, (*path, "source"))
         source_path = self.workspace / source.logical_path
-        document = self._load_yaml(
-            base64.b64decode(source.content_base64), source_path, is_module=False
+        document = load_yaml(
+            base64.b64decode(source.content_base64),
+            source_path,
+            self.module,
+            is_module=False,
         )
         source_path = source_path.resolve()
         documents: dict[Path, object] = {source_path: document}
@@ -1777,8 +1772,11 @@ class _Compiler:
         )
         if target not in documents:
             snapshot = self._snapshot_path(target)
-            documents[target] = self._load_yaml(
-                base64.b64decode(snapshot.content_base64), target, is_module=False
+            documents[target] = load_yaml(
+                base64.b64decode(snapshot.content_base64),
+                target,
+                self.module,
+                is_module=False,
             )
         return target, fragment, documents[target]
 
@@ -2208,56 +2206,6 @@ class _Compiler:
             )
         return resolved
 
-    def _load_yaml(self, raw: bytes, source: Path, *, is_module: bool) -> object:
-        try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError as error:
-            raise SvcError(
-                "invalid-double-yaml",
-                "YAML source must be UTF-8.",
-                {"module": str(self.module), "source": str(source)},
-            ) from error
-        if text.startswith("\ufeff"):
-            raise SvcError(
-                "invalid-double-yaml",
-                "YAML source must not contain a UTF-8 BOM.",
-                {
-                    "module": str(self.module),
-                    "source": str(source),
-                    "line": 1,
-                    "column": 1,
-                },
-            )
-        try:
-            _inspect_yaml_events(self._yaml, text, source, self.module)
-            result = self._yaml.load(text)
-        except SvcError:
-            raise
-        except YAMLError as error:
-            mark = getattr(error, "problem_mark", None) or getattr(
-                error, "context_mark", None
-            )
-            details: dict[str, Any] = {
-                "module": str(self.module),
-                "source": str(source),
-            }
-            if mark is not None:
-                details.update({"line": mark.line + 1, "column": mark.column + 1})
-            raise SvcError(
-                "invalid-double-yaml",
-                "YAML source is not a valid strict BSL document."
-                if is_module
-                else "Local contract is not valid strict YAML/JSON.",
-                {**details, "diagnostic": _bounded_diagnostic(error)},
-            ) from error
-        if result is None:
-            raise SvcError(
-                "invalid-double-yaml",
-                "YAML source must contain one non-empty document.",
-                {"module": str(self.module), "source": str(source)},
-            )
-        return result
-
     def _read_bounded(self, path: Path, maximum: int, code: str) -> bytes:
         try:
             size = path.stat().st_size
@@ -2475,7 +2423,7 @@ class _Compiler:
         *,
         key: str | None = None,
     ) -> SourceLocation:
-        line, column = _location_of(owner, key)
+        line, column = source_location(owner, key)
         return SourceLocation(line=line, column=column, path=path)
 
     def _fail(
@@ -2488,7 +2436,7 @@ class _Compiler:
         key: str | None = None,
         details: Mapping[str, Any] | None = None,
     ) -> NoReturn:
-        line, column = _location_of(owner, key)
+        line, column = source_location(owner, key)
         payload: dict[str, Any] = {
             "module": str(self.module),
             "path": list(path),
@@ -2514,17 +2462,6 @@ def compile_scenario(module: Path) -> Scenario:
     return _Compiler(module).compile()
 
 
-def _new_yaml() -> YAML:
-    parser = YAML(typ="rt", pure=True)
-    parser.version = (1, 2)
-    parser.allow_duplicate_keys = False
-    parser.constructor.add_constructor(
-        "tag:yaml.org,2002:timestamp",
-        lambda loader, node: loader.construct_scalar(node),
-    )
-    return parser
-
-
 def _resolve_module(module: Path) -> Path:
     try:
         resolved = module.resolve(strict=True)
@@ -2548,127 +2485,6 @@ def _workspace_for_module(module: Path) -> Path:
         if (parent / ".git").exists():
             return parent.resolve()
     return module.parent.resolve()
-
-
-def _inspect_yaml_events(yaml: YAML, text: str, source: Path, module: Path) -> None:
-    documents = 0
-    nodes = 0
-    stack: list[tuple[str, bool]] = []
-
-    def complete_node() -> None:
-        if stack and stack[-1][0] == "mapping":
-            kind, expecting_key = stack[-1]
-            stack[-1] = (kind, not expecting_key)
-
-    for event in yaml.parse(text):
-        if isinstance(event, DocumentStartEvent):
-            documents += 1
-            if documents > 1:
-                raise SvcError(
-                    "multiple-double-yaml-documents",
-                    "BSL v0 admits exactly one YAML document.",
-                    {
-                        "module": str(module),
-                        "source": str(source),
-                        "line": event.start_mark.line + 1,
-                        "column": event.start_mark.column + 1,
-                    },
-                )
-        if isinstance(event, AliasEvent) or getattr(event, "anchor", None) is not None:
-            raise SvcError(
-                "unsupported-double-yaml-feature",
-                "YAML anchors and aliases are not admitted in BSL v0.",
-                {
-                    "module": str(module),
-                    "source": str(source),
-                    "line": event.start_mark.line + 1,
-                    "column": event.start_mark.column + 1,
-                    "feature": "anchor-or-alias",
-                },
-            )
-        if getattr(event, "tag", None) is not None:
-            raise SvcError(
-                "unsupported-double-yaml-feature",
-                "Explicit YAML tags are not admitted in BSL v0.",
-                {
-                    "module": str(module),
-                    "source": str(source),
-                    "line": event.start_mark.line + 1,
-                    "column": event.start_mark.column + 1,
-                    "feature": "tag",
-                },
-            )
-        if isinstance(event, ScalarEvent):
-            is_mapping_key = bool(stack and stack[-1] == ("mapping", True))
-            if is_mapping_key and event.value == "<<":
-                raise SvcError(
-                    "unsupported-double-yaml-feature",
-                    "YAML merge keys are not admitted in BSL v0.",
-                    {
-                        "module": str(module),
-                        "source": str(source),
-                        "line": event.start_mark.line + 1,
-                        "column": event.start_mark.column + 1,
-                        "feature": "merge-key",
-                    },
-                )
-            nodes += 1
-            complete_node()
-        elif isinstance(event, (MappingStartEvent, SequenceStartEvent)):
-            nodes += 1
-            depth = len(stack) + 1
-            if depth > MAX_YAML_DEPTH:
-                raise SvcError(
-                    "double-yaml-too-deep",
-                    "YAML source exceeds the BSL v0 nesting bound.",
-                    {
-                        "module": str(module),
-                        "source": str(source),
-                        "line": event.start_mark.line + 1,
-                        "column": event.start_mark.column + 1,
-                        "max_depth": MAX_YAML_DEPTH,
-                    },
-                )
-            stack.append(
-                ("mapping", True)
-                if isinstance(event, MappingStartEvent)
-                else ("sequence", False)
-            )
-        elif isinstance(event, (MappingEndEvent, SequenceEndEvent)):
-            if stack:
-                stack.pop()
-            complete_node()
-        if nodes > MAX_YAML_NODES:
-            raise SvcError(
-                "double-yaml-too-many-nodes",
-                "YAML source exceeds the BSL v0 node bound.",
-                {
-                    "module": str(module),
-                    "source": str(source),
-                    "line": event.start_mark.line + 1,
-                    "column": event.start_mark.column + 1,
-                    "max_nodes": MAX_YAML_NODES,
-                },
-            )
-    if documents != 1:
-        raise SvcError(
-            "invalid-double-yaml",
-            "BSL v0 admits exactly one YAML document.",
-            {"module": str(module), "source": str(source)},
-        )
-
-
-def _location_of(owner: object, key: str | None = None) -> tuple[int, int]:
-    try:
-        if key is not None and isinstance(owner, CommentedMap):
-            position = owner.lc.key(key)
-            if position is not None:
-                return position[0] + 1, position[1] + 1
-        line = owner.lc.line  # type: ignore[attr-defined]
-        column = owner.lc.col  # type: ignore[attr-defined]
-        return line + 1, column + 1
-    except (AttributeError, KeyError, TypeError):
-        return 1, 1
 
 
 def _json_value(

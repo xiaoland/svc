@@ -255,6 +255,10 @@ vectors after version, semantic, and license review.
 4. **Compiler convergence.** After duplicate authorities are removed, split the
    remaining compiler by deep boundaries—YAML surface, BSL semantics, CEL
    profile, OpenAPI adapter—rather than mechanically slicing the existing file.
+   The YAML-surface substage is complete: parser construction, event guards,
+   parser diagnostics, and source coordinates now form one adapter over
+   `ruamel.yaml`; BSL semantics remain in the compiler. OpenAPI profile
+   extraction remains the next independently bounded substage.
 5. **CEL remains bounded — completed.** One CEL-profile adapter now owns the
    environment, JSON type admission, compilation/evaluation, RE2, expression
    bound, and the isolated scanner. The scanner limitation is explicit and
