@@ -1,15 +1,12 @@
 [project]
-name = "sustainable-vibe-coding"
-dynamic = ["version"]
-description = "Packaged SVC corpus and local development-collaboration CLI."
-readme = "README.md"
+name = "svc-workspace"
+version = "0.0.0"
+description = "Repository workspace for the SVC Corpus, tooling, and CLI."
 requires-python = ">=3.11"
-dependencies = [
-    "pydantic<3,>=2.13",
-    "platformdirs<5,>=4",
-    "filelock<4,>=3.29",
-    "textual>=8.2.8,<9",
-]
+dependencies = []
+
+[project.optional-dependencies]
+double = ["sustainable-vibe-coding[double]"]
 
 [dependency-groups]
 quality = [
@@ -20,47 +17,92 @@ quality = [
 test = [
     "pytest>=9,<10",
     "pytest-asyncio>=1.4,<2",
+    "PyYAML<7,>=6.0",
     "ruff>=0.15,<0.16",
 ]
 
-[project.scripts]
-svc = "svc_cli.cli:main"
-
-[build-system]
-requires = ["pdm-backend==2.4.9"]
-build-backend = "pdm.backend"
-
 [tool.pdm]
-distribution = true
+distribution = false
 
-[tool.pdm.version]
-source = "scm"
-tag_filter = "v[0-9]*.[0-9]*.[0-9]*"
-tag_regex = '^v(?P<version>(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$'
-version_format = "pdm_build:format_scm_version"
-fallback_version = "0.0.0"
+[tool.pdm.workspace]
+members = ["svc_cli"]
 
 [tool.pdm.scripts]
 build-monolith = "python -m tools.build_monolith"
+check-documents = "python -m tools.build_monolith --check"
+build-release-projections = "python -m tools.build_release_projections"
+check-release-projections = "python -m tools.build_release_projections --check"
+build-cli-output-schemas = "python -m tools.build_cli_output_schemas"
+check-cli-output-schemas = "python -m tools.build_cli_output_schemas --check"
 svc = "python -m svc_cli.cli"
-test = "pytest tests"
-lint-tests = "ruff check tests"
+test-root = "pytest tests"
+test-cli = "pytest svc_cli/tests"
+test = "pytest tests svc_cli/tests"
+lint-tests = "ruff check tests svc_cli/tests --select E4,E7,E9,F,B,SIM,PT,TID251 --ignore PT007,PT018"
 lint-imports = "lint-imports"
 lint-workflows = "zizmor --offline .github/workflows"
-release = "python -m tools.release"
 typecheck = "mypy"
-
-[tool.pdm.build]
-includes = ["svc_cli"]
-source-includes = ["src", "tools", "tests", "pdm_build.py"]
 
 [tool.mypy]
 python_version = "3.11"
 files = [
-    "svc_cli/config.py",
-    "svc_cli/telemetry/agent_threads.py",
-    "svc_cli/telemetry/navigation.py",
-    "svc_cli/telemetry/tui.py",
+    "svc_cli/pdm_build.py",
+    "svc_cli/src/svc_cli/catalog.py",
+    "svc_cli/src/svc_cli/cli.py",
+    "svc_cli/src/svc_cli/cli_delivery.py",
+    "svc_cli/src/svc_cli/config.py",
+    "svc_cli/src/svc_cli/config_migration.py",
+    "svc_cli/src/svc_cli/errors.py",
+    "svc_cli/src/svc_cli/_execution.py",
+    "svc_cli/src/svc_cli/cli_output/lookup.py",
+    "svc_cli/src/svc_cli/cli_output/common.py",
+    "svc_cli/src/svc_cli/cli_output/dev.py",
+    "svc_cli/src/svc_cli/cli_output/double.py",
+    "svc_cli/src/svc_cli/cli_output/model.py",
+    "svc_cli/src/svc_cli/cli_output/project.py",
+    "svc_cli/src/svc_cli/cli_output/run.py",
+    "svc_cli/src/svc_cli/cli_output/upgrade.py",
+    "svc_cli/src/svc_cli/integration.py",
+    "svc_cli/src/svc_cli/lookup.py",
+    "svc_cli/src/svc_cli/model.py",
+    "svc_cli/src/svc_cli/output_schema.py",
+    "svc_cli/src/svc_cli/plans.py",
+    "svc_cli/src/svc_cli/project.py",
+    "svc_cli/src/svc_cli/release.py",
+    "svc_cli/src/svc_cli/resources.py",
+    "svc_cli/src/svc_cli/upgrade.py",
+    "svc_cli/src/svc_cli/workspace.py",
+    "svc_cli/src/svc_cli/dev/identity.py",
+    "svc_cli/src/svc_cli/dev/readiness.py",
+    "svc_cli/src/svc_cli/dev/runtime.py",
+    "svc_cli/src/svc_cli/double/__init__.py",
+    "svc_cli/src/svc_cli/double/carrier.py",
+    "svc_cli/src/svc_cli/double/cel_profile.py",
+    "svc_cli/src/svc_cli/double/compiler.py",
+    "svc_cli/src/svc_cli/double/materialization.py",
+    "svc_cli/src/svc_cli/double/model.py",
+    "svc_cli/src/svc_cli/double/openapi_profile.py",
+    "svc_cli/src/svc_cli/double/runtime.py",
+    "svc_cli/src/svc_cli/double/schema_registry.py",
+    "svc_cli/src/svc_cli/double/service.py",
+    "svc_cli/src/svc_cli/double/yaml_surface.py",
+    "svc_cli/src/svc_cli/run/__init__.py",
+    "svc_cli/src/svc_cli/run/runtime.py",
+    "svc_cli/src/svc_cli/analysis/__init__.py",
+    "svc_cli/src/svc_cli/analysis/protocol.py",
+    "svc_cli/src/svc_cli/analysis/query.py",
+    "svc_cli/src/svc_cli/analysis/read.py",
+    "svc_cli/src/svc_cli/analysis/service.py",
+    "svc_cli/src/svc_cli/telemetry/agent_threads.py",
+    "svc_cli/src/svc_cli/telemetry/archive.py",
+    "svc_cli/src/svc_cli/telemetry/evidence.py",
+    "svc_cli/src/svc_cli/telemetry/service.py",
+    "svc_cli/src/svc_cli/telemetry/trajectory.py",
+    "svc_cli/src/svc_cli/telemetry/providers/codex_rollout.py",
+    "svc_cli/src/svc_cli/telemetry/providers/codex_trajectory.py",
+    "svc_cli/tests/svc_cli_test_support/agent_thread_contract.py",
+    "svc_cli/tests/svc_cli_test_support/project_contract.py",
+    "tools/build_cli_output_schemas.py",
 ]
 plugins = ["pydantic.mypy"]
 check_untyped_defs = true
@@ -77,22 +119,113 @@ root_package = "svc_cli"
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Navigation remains render and provider neutral"
+name = "Analysis core remains provider UI and network neutral"
 type = "forbidden"
-source_modules = ["svc_cli.telemetry.navigation"]
+source_modules = [
+    "svc_cli.analysis.protocol",
+    "svc_cli.analysis.query",
+    "svc_cli.analysis.read",
+]
 forbidden_modules = [
     "svc_cli.telemetry.providers",
     "textual",
     "rich",
-    "os",
-    "pathlib",
+    "urllib",
+    "http",
+    "socket",
+    "requests",
+    "httpx",
 ]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Shared workspace identity remains public-domain neutral"
+type = "forbidden"
+source_modules = ["svc_cli.workspace"]
+forbidden_modules = ["svc_cli.dev", "svc_cli.double", "svc_cli.run"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Shared execution mechanics remain public-domain neutral"
+type = "forbidden"
+source_modules = ["svc_cli._execution"]
+forbidden_modules = ["svc_cli.dev", "svc_cli.double", "svc_cli.run"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Shared file transactions remain controller neutral"
+type = "forbidden"
+source_modules = ["svc_cli.plans"]
+forbidden_modules = [
+    "svc_cli.dev",
+    "svc_cli.double",
+    "svc_cli.integration",
+    "svc_cli.project",
+    "svc_cli.run",
+    "svc_cli.upgrade",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Release authority remains project-domain neutral"
+type = "forbidden"
+source_modules = ["svc_cli.release"]
+forbidden_modules = [
+    "svc_cli.dev",
+    "svc_cli.double",
+    "svc_cli.project",
+    "svc_cli.run",
+    "svc_cli.upgrade",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Application services remain CLI interface neutral"
+type = "forbidden"
+source_modules = [
+    "svc_cli._execution",
+    "svc_cli.catalog",
+    "svc_cli.config",
+    "svc_cli.config_migration",
+    "svc_cli.dev",
+    "svc_cli.double",
+    "svc_cli.errors",
+    "svc_cli.integration",
+    "svc_cli.lookup",
+    "svc_cli.model",
+    "svc_cli.plans",
+    "svc_cli.project",
+    "svc_cli.release",
+    "svc_cli.resources",
+    "svc_cli.run",
+    "svc_cli.upgrade",
+    "svc_cli.workspace",
+]
+forbidden_modules = [
+    "svc_cli.cli",
+    "svc_cli.cli_output",
+    "svc_cli.output_schema",
+]
+
+[[tool.importlinter.contracts]]
+name = "Command domains do not depend on the output schema registry"
+type = "forbidden"
+source_modules = [
+    "svc_cli.dev",
+    "svc_cli.double",
+    "svc_cli.lookup",
+    "svc_cli.project",
+    "svc_cli.run",
+    "svc_cli.upgrade",
+]
+forbidden_modules = ["svc_cli.output_schema"]
 allow_indirect_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
+pythonpath = [".", "svc_cli/tests"]
 
 [tool.ruff]
 target-version = "py311"

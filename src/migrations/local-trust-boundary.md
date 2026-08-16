@@ -1,0 +1,30 @@
+# Adopt the explicit same-user trust boundary for local Agent evidence
+
+Corpus release: 12.0.0.
+
+### Applies when
+A project treats SVC Agent-thread inventory, bundle metadata, cursors, or
+filesystem behavior as a confidentiality or authorization boundary.
+
+### Required change
+Stop using inventory fields `source_availability`, `source_warning_code`, or
+`omitted_sources`; export is the authority for collecting one exact source.
+Stop inferring confidentiality from projection omissions or removed manifest
+sensitivity/redaction fields. Native evidence may contain every selected
+provider byte. Treat query/read cursors as unsigned local continuation state,
+never as authenticated capabilities.
+
+Export still keeps its source read-only, requires an absent destination,
+refuses overwrite and source/output aliasing, and validates success. It does
+not promise atomic visibility or hostile same-user/path-race defense. After
+interruption, validate the target and remove an invalid partial artifact
+under the caller's normal ownership policy before retrying.
+
+### Verify
+Exercise the project's inventory parser without the removed fields, validate
+one successful export before use, and confirm access/retention decisions come
+from the project and operating system rather than cursor or projection shape.
+
+### Reference
+`sections/prd.md` and `sections/deployment.md` own the complete local trust,
+exposure, and recovery boundary.

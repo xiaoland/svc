@@ -6,6 +6,7 @@
 # Build
 build
 dist/
+.pdm-build/
 
 # Filesystem
 .DS_Store

@@ -1,11 +1,36 @@
 # Changelog
 
-This historical record is frozen through v11.0.0. Future release notes are
-derived from append-only tag-range fragments and published in GitHub Releases.
-Releases use SVC Behavioral SemVer: MAJOR changes required obligations,
-defaults, authority, task semantics, required layout, or stable machine
-contracts; MINOR adds backward-compatible optional capability; PATCH restores
-or clarifies the existing protocol without changing those contracts.
+This release record is assembled by Changie from versioned release files.
+SVC uses Behavioral SemVer: MAJOR changes required obligations, defaults,
+authority, task semantics, required layout, or stable machine contracts; MINOR
+adds backward-compatible optional capability; PATCH restores or clarifies the
+existing protocol without changing those contracts.
+
+## [12.0.0] - 2026-08-16
+
+### Behavioral breaking changes
+
+- Migrate legacy Agent-thread evidence to the schema-v3 native authority.
+- Adopt the explicit same-user trust boundary for local Agent evidence.
+- Replace the repository-owned tag-range planner and recovery transaction with Changie release-preparation PRs and standard release tooling.
+- Replace normalized-only `analyze` and its TUI with schema-v3 native evidence plus machine-first `analysis query|read`.
+- Replace normalized Agent-thread analysis with Agent-owned query and native read.
+- Flatten project configuration into schema v3 and separate the Corpus baseline.
+- Remove obsolete local evidence privacy controls and enforce the narrower same-user runtime boundary.
+- Reshape the core CLI around independent upgrade targets, Agent-readable output, shared bounded runs, declared dev lifecycle actions, and discoverable versioned schemas for typed machine output.
+### Backward-compatible capabilities
+
+- Add progressive `svc lookup --list`, exact `--path`, bounded relevance `--keyword`, and exact full-text/path `--regex`; make layered CLI help self-sufficient and retire the generated SVC CLI Skill.
+- Add `svc run` for one project-declared bounded command, allowing local Human and Agent callers to converge on one foreground execution, follow captured native output, and inspect a compact execution receipt without transferring project-tool semantics into SVC.
+- Add `svc double validate|start|emit|observe|stop` for strict, replayable HTTP boundary scenarios with explicit callbacks, carrier-owned active state, and a sealed graceful-stop observation.
+- Define the boundary scenario language, Consumer-owned test oracle, explicit callback model, deterministic replay facts, and honest egress non-claims for managed external-system doubles.
+### Protocol fixes
+
+- Make `svc status` a read-only project preflight with independent CLI, config, Corpus baseline, integration, workspace, and declaration facts plus one primary continuation; keep settled JSON compact without a false JSONL stream.
+
+## [11.0.1] - 2026-07-30
+
+_No consumer-facing Behavioral SemVer changes._
 
 ## [11.0.0] - 2026-07-29
 
@@ -13,13 +38,11 @@ or clarifies the existing protocol without changing those contracts.
 
 - Replace raw agent-thread export with a bounded normalized trajectory, directly cut off schema-v1 archives, and add deterministic Agent analysis plus an explicitly sensitive Textual workspace/thread navigator. (`v11-agent-observability`)
 
-
 ## [10.0.2] - 2026-07-20
 
 ### Protocol fixes
 
 - Restore safe Codex thread metadata listings when unrelated state rows have unsafe rollout paths. (`v10-windows-thread-list-isolation`)
-
 
 ## [10.0.1] - 2026-07-16
 
@@ -30,7 +53,6 @@ or clarifies the existing protocol without changing those contracts.
 ### Backward-compatible capabilities
 
 - Add explicit local `svc telemetry agent-thread list|export` evidence capture with a Codex rollout adapter, sensitive-export acknowledgement, and a provider-neutral extension seam. (`v10-agent-thread`)
-
 
 ## [10.0.0] - 2026-07-15
 
@@ -134,3 +156,4 @@ This is the first unreleased v10 release shape. No v10 package, tag, or GitHub R
 [10.0.1]: https://github.com/xiaoland/svc/releases/tag/v10.0.1
 [10.0.2]: https://github.com/xiaoland/svc/releases/tag/v10.0.2
 [11.0.0]: https://github.com/xiaoland/svc/releases/tag/v11.0.0
+[11.0.1]: https://github.com/xiaoland/svc/releases/tag/v11.0.1

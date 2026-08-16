@@ -1,0 +1,12 @@
+kind: patch
+component: cli
+body: >-
+  Make `svc status` a read-only project preflight with independent CLI, config,
+  Corpus baseline, integration, workspace, and declaration facts plus one
+  primary continuation; keep settled JSON compact without a false JSONL stream.
+custom:
+  Migration: not-applicable
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
+time: 2026-08-03T21:49:23+08:00

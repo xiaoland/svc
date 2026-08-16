@@ -1,0 +1,10 @@
+kind: patch
+component: corpus
+body: >-
+  Preserve the SVC 11 Corpus contract without a project-document migration.
+custom:
+  Migration: not-required
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
+time: 2026-07-30T00:00:00Z

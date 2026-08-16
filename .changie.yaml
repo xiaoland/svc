@@ -1,0 +1,46 @@
+changesDir: changes
+unreleasedDir: unreleased
+headerPath: header.tpl.md
+changelogPath: CHANGELOG.md
+versionExt: md
+versionFileFormat: 'v{{.VersionNoPrefix}}.md'
+versionFormat: '## [{{.VersionNoPrefix}}] - {{.Time.Format "2006-01-02"}}'
+componentFormat: ''
+kindFormat: '### {{.Kind}}'
+changeFormat: '- {{.Body}}'
+components:
+  - cli
+  - config
+  - corpus
+custom:
+  - key: Migration
+    type: enum
+    enumOptions:
+      - not-applicable
+      - not-required
+      - guide
+  - key: FromSchema
+    type: string
+    optional: true
+  - key: ToSchema
+    type: string
+    optional: true
+  - key: Guidance
+    type: block
+    optional: true
+kinds:
+  - key: major
+    label: Behavioral breaking changes
+    auto: major
+  - key: minor
+    label: Backward-compatible capabilities
+    auto: minor
+  - key: patch
+    label: Protocol fixes
+    auto: patch
+newlines:
+  afterVersion: 1
+  afterKind: 1
+  beforeChangelogVersion: 1
+  endOfVersion: 1
+envPrefix: CHANGIE_

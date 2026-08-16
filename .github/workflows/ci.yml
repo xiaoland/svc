@@ -24,9 +24,9 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install pdm==2.27.0
+      - run: python -m pip install pdm==2.28.0
       - run: pdm lock --check
-      - run: pdm install --frozen-lockfile -d -G test
+      - run: pdm install --frozen-lockfile -d -G test -G double
       - run: pdm run test
 
   quality:
@@ -40,9 +40,30 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
-      - run: python -m pip install pdm==2.27.0
+      - name: Validate Changie release input
+        if: ${{ hashFiles('changes/unreleased/*.yaml') != '' }}
+        uses: miniscruff/changie-action@11bcad388e7973948cbcecb10863baf024d5f607 # v3.0.0
+        with:
+          version: v1.25.1
+          args: batch auto --dry-run
+      - name: Validate prepared Changie release
+        if: ${{ hashFiles('changes/unreleased/*.yaml') == '' }}
+        uses: miniscruff/changie-action@11bcad388e7973948cbcecb10863baf024d5f607 # v3.0.0
+        with:
+          version: v1.25.1
+          args: latest
+      - run: python -m pip install pdm==2.28.0
       - run: pdm lock --check
-      - run: pdm install --frozen-lockfile -d -G quality -G test
+      - run: pdm install --frozen-lockfile -d -G quality -G test -G double
+      - name: Validate release projections and Corpus advancement
+        env:
+          SVC_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: pdm run check-release-projections --compare-ref "$SVC_BASE_REF"
+      - name: Validate CLI output schema projections and compatibility
+        env:
+          SVC_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: pdm run check-cli-output-schemas --compare-ref "$SVC_BASE_REF"
+      - run: pdm run check-documents
       - run: pdm run lint-tests
       - run: pdm run typecheck
       - run: pdm run lint-imports
@@ -59,41 +80,41 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
-      - run: python -m pip install pdm==2.27.0
+      - run: python -m pip install pdm==2.28.0
       - run: pdm lock --check
       - run: pdm install --frozen-lockfile -d -G test
-      - name: Project the qualified rehearsal version
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          args=(--commit "$GITHUB_SHA")
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            args+=(--base "origin/$BASE_REF")
-            if grep -Fq 'release:none' <<<"$PR_BODY"; then
-              args+=(--release-none)
-            fi
-          fi
-          qualification=$(pdm run release target-qualify "${args[@]}" --json)
-          version=$(python -c 'import json,sys; print(json.load(sys.stdin)["pdm_build_scm_version"])' <<<"$qualification")
-          echo "PDM_BUILD_SCM_VERSION=$version" >> "$GITHUB_ENV"
-      - run: pdm build
+      - run: pdm build -p svc_cli
       - run: pdm run build-monolith
       - name: Smoke-test the installed wheel
         run: |
+          wheel=(svc_cli/dist/*.whl)
+          test "${#wheel[@]}" -eq 1
+          mkdir -p /tmp/svc-wheelhouse
+          python -m pip download --dest /tmp/svc-wheelhouse "${wheel[0]}"
+          sha=$(python -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "${wheel[0]}")
+          python tools/accept_agent_thread.py \
+            --slice all \
+            --wheel "${wheel[0]}" \
+            --expected-sha256 "$sha" \
+            --wheelhouse /tmp/svc-wheelhouse
           python -m venv /tmp/svc-wheel
-          /tmp/svc-wheel/bin/pip install dist/*.whl
+          /tmp/svc-wheel/bin/pip install svc_cli/dist/*.whl
           /tmp/svc-wheel/bin/svc --help
-          /tmp/svc-wheel/bin/svc lookup --name 'sections/working-protocol\.md' --json
+          /tmp/svc-wheel/bin/svc run --json-schema
+          /tmp/svc-wheel/bin/svc lookup --path sections/working-protocol.md --json
           repo=$(mktemp -d)
           plan=$(/tmp/svc-wheel/bin/svc init "$repo" --json)
           digest=$(python -c 'import json,sys; print(json.load(sys.stdin)["plan_digest"])' <<<"$plan")
           /tmp/svc-wheel/bin/svc init "$repo" --apply "$digest"
           /tmp/svc-wheel/bin/svc status "$repo"
 
-  release-policy:
-    name: Release policy
+  double-distribution:
+    name: Double wheel Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -101,20 +122,94 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: "3.11"
-      - run: python -m pip install pdm==2.27.0
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install pdm==2.28.0
       - run: pdm lock --check
-      - run: pdm install --frozen-lockfile -d -G test
-      - name: Qualify the exact source
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-          BASE_REF: ${{ github.base_ref }}
+      - run: pdm build -p svc_cli
+      - name: Smoke-test the same wheel without and with the double extra
         run: |
-          args=(--commit "$GITHUB_SHA")
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            args+=(--base "origin/$BASE_REF")
-            if grep -Fq 'release:none' <<<"$PR_BODY"; then
-              args+=(--release-none)
-            fi
-          fi
-          pdm run release target-qualify "${args[@]}" --json
+          wheel=(svc_cli/dist/*.whl)
+          test "${#wheel[@]}" -eq 1
+
+          python -m venv /tmp/svc-double-base
+          /tmp/svc-double-base/bin/pip install "${wheel[0]}"
+          /tmp/svc-double-base/bin/svc --help
+          for operation in validate start emit observe stop; do
+            /tmp/svc-double-base/bin/svc double "$operation" --json-schema >/dev/null
+          done
+          /tmp/svc-double-base/bin/python -c \
+            'import importlib.util; assert all(importlib.util.find_spec(name) is None for name in ("cel_expr_python", "jsonschema", "referencing", "ruamel"))'
+          set +e
+          unavailable=$(/tmp/svc-double-base/bin/svc double validate /dev/null --json)
+          unavailable_status=$?
+          set -e
+          test "$unavailable_status" -eq 3
+          /tmp/svc-double-base/bin/python -c \
+            'import json,sys; value=json.load(sys.stdin); assert value == {"schema_version":1,"command":"double validate","status":"double-runtime-unavailable","continuation":"pip install '\''sustainable-vibe-coding[double]'\''"}' \
+            <<<"$unavailable"
+
+          python -m venv /tmp/svc-double-extra
+          double_wheel="${wheel[0]}[double]"
+          /tmp/svc-double-extra/bin/pip install "$double_wheel"
+          fixture="$GITHUB_WORKSPACE/svc_cli/tests/double/fixtures/language/payment.double.yaml"
+          smoke=$(mktemp -d)
+          cat >"$smoke/callback.py" <<'PY'
+          import http.server
+          import pathlib
+          import sys
+
+          class Callback(http.server.BaseHTTPRequestHandler):
+              def do_POST(self):
+                  self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                  self.send_response(204)
+                  self.end_headers()
+
+              def log_message(self, format, *args):
+                  pass
+
+          server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Callback)
+          pathlib.Path(sys.argv[1]).write_text(str(server.server_address[1]))
+          server.serve_forever()
+          PY
+          /tmp/svc-double-extra/bin/python "$smoke/callback.py" "$smoke/port" &
+          callback_pid=$!
+          trap 'kill "$callback_pid" 2>/dev/null || true' EXIT
+          for _ in {1..100}; do
+            test -s "$smoke/port" && break
+            sleep 0.05
+          done
+          test -s "$smoke/port"
+          callback_origin="http://127.0.0.1:$(cat "$smoke/port")"
+
+          cd "$smoke"
+          /tmp/svc-double-extra/bin/svc double validate "$fixture" --json >/dev/null
+          start=$(/tmp/svc-double-extra/bin/svc double start "$fixture" \
+            --seed 7 \
+            --clock 2026-08-10T02:00:00Z \
+            --target "consumer.payment-events=$callback_origin" \
+            --json)
+          run_id=$(/tmp/svc-double-extra/bin/python -c \
+            'import json,sys; print(json.load(sys.stdin)["run_id"])' <<<"$start")
+          responder=$(/tmp/svc-double-extra/bin/python -c \
+            'import json,sys; print(json.load(sys.stdin)["responder_url"])' <<<"$start")
+          /tmp/svc-double-extra/bin/python - "$responder" <<'PY'
+          import json
+          import sys
+          import urllib.request
+
+          request = urllib.request.Request(
+              sys.argv[1] + "/v1/payments?observed-at=2026-08-10T02%3A00%3A00Z&trace=trace-001",
+              data=json.dumps({"externalId": "00000000-0000-4000-8000-000000000001"}).encode(),
+              headers={
+                  "Content-Type": "application/json",
+                  "X-Request-Id": "00000000-0000-4000-8000-000000000002",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(request) as response:
+              assert response.status == 201
+          PY
+          /tmp/svc-double-extra/bin/svc double emit "$run_id" payment.succeeded --json >/dev/null
+          /tmp/svc-double-extra/bin/svc double observe "$run_id" --json >/dev/null
+          /tmp/svc-double-extra/bin/svc double stop "$run_id" --json >/dev/null
+          /tmp/svc-double-extra/bin/svc double stop "$run_id" --json >/dev/null

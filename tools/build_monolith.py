@@ -392,7 +392,10 @@ def strip_trailing_heading_hashes(text: str) -> str:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build a monolithic markdown file by recursively following local markdown links.",
+        description=(
+            "Build a monolithic markdown file or validate every canonical "
+            "markdown document."
+        ),
     )
     parser.add_argument(
         "--entry",
@@ -409,13 +412,54 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Root directory allowed for recursive traversal (default: entry parent).",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate links and fragments in every markdown file under the root.",
+    )
     return parser.parse_args(argv)
+
+
+def canonical_markdown_files(root: Path) -> list[Path]:
+    """Return every canonical markdown source in deterministic order."""
+
+    return sorted(path for path in root.rglob("*.md") if path.is_file())
+
+
+def validate_markdown_corpus(root: Path) -> tuple[Path, ...]:
+    """Validate links and fragments for the complete canonical corpus.
+
+    ``MonolithBuilder.build`` intentionally follows only the reachable graph
+    from its entry document.  The repository quality gate needs a stronger
+    invariant: an orphan document must be valid too.  Build each document as
+    an entry point so this check remains independent of the generated
+    monolith's traversal order.
+    """
+
+    root = root.resolve()
+    if not root.is_dir():
+        raise NotADirectoryError(f"Markdown corpus root does not exist: {root}")
+
+    documents = tuple(canonical_markdown_files(root))
+    for path in documents:
+        try:
+            MonolithBuilder(root).build(path)
+        except (FileNotFoundError, ValueError) as error:
+            relative = path.relative_to(root).as_posix()
+            raise type(error)(f"{relative}: {error}") from error
+    return documents
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     entry = Path(args.entry).resolve()
     root = Path(args.root).resolve() if args.root else entry.parent.resolve()
+
+    if args.check:
+        documents = validate_markdown_corpus(root)
+        print(f"Validated {len(documents)} markdown documents under {root}")
+        return 0
+
     output = Path(args.output).resolve()
 
     builder = MonolithBuilder(root=root)
