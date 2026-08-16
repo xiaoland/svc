@@ -101,7 +101,7 @@ jobs:
           /tmp/svc-wheel/bin/pip install svc_cli/dist/*.whl
           /tmp/svc-wheel/bin/svc --help
           /tmp/svc-wheel/bin/svc run --json-schema
-          /tmp/svc-wheel/bin/svc lookup --path sections/working-protocol.md --json
+          /tmp/svc-wheel/bin/svc lookup --path working-protocol/ --json
           repo=$(mktemp -d)
           plan=$(/tmp/svc-wheel/bin/svc init "$repo" --json)
           digest=$(python -c 'import json,sys; print(json.load(sys.stdin)["plan_digest"])' <<<"$plan")

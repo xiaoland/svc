@@ -58,7 +58,15 @@ def _git_show(ref: str, relative: str) -> bytes | None:
 
 def _changed_major_fragment(ref: str) -> bool:
     completed = subprocess.run(
-        ("git", "diff", "--name-only", ref, "--", "changes/unreleased"),
+        (
+            "git",
+            "diff",
+            "--name-only",
+            ref,
+            "--",
+            "changes/unreleased",
+            "changes/fragments",
+        ),
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -101,7 +109,7 @@ def compare_ref(ref: str) -> list[str]:
     if not _changed_major_fragment(ref):
         failures.append(
             "output schema changed without a changed component=cli, kind=major "
-            "fragment under changes/unreleased"
+            "fragment"
         )
     for key, previous, current in changed_existing:
         before = previous.get("x-svc-result-schema-version")

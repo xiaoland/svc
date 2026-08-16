@@ -520,7 +520,7 @@ def _method_valid(value: object) -> bool:
     return (
         isinstance(value, Mapping)
         and value.get("id") == "svc.agent-task-analysis"
-        and value.get("path") == "sections/working-protocol.md"
+        and value.get("path") == "methods/explore/agent-task-analysis.md"
         and value.get("section") == "Agent Task Analysis"
         and isinstance(value.get("sha256"), str)
         and _SHA256_RE.fullmatch(value["sha256"]) is not None
@@ -603,14 +603,14 @@ def _run_query_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
         raise _CaseFailure("query-match")
     lookup = _run_cli(
         child,
-        ("lookup", "--path", "sections/working-protocol.md", "--json"),
+        ("lookup", "--path", "methods/explore/agent-task-analysis.md", "--json"),
         root,
         env,
     )
     document = lookup.get("document")
     if (
         not isinstance(document, Mapping)
-        or document.get("path") != "sections/working-protocol.md"
+        or document.get("path") != "methods/explore/agent-task-analysis.md"
         or document.get("sha256") != overview.get("method", {}).get("sha256")
     ):
         raise _CaseFailure("method-lookup")

@@ -108,6 +108,13 @@ from .telemetry.service import (
     export_agent_thread,
     list_agent_threads,
 )
+from .task_packet import (
+    TASK_PACKET_GUIDANCE_PATH,
+    TASK_PACKET_TEMPLATE_PATH,
+    TaskPacket,
+    grow_task_packet,
+    init_task_packet,
+)
 
 
 EXIT_OK = 0
@@ -244,7 +251,8 @@ def _parser() -> argparse.ArgumentParser:
         epilog=(
             "--list browses one logical directory level. --keyword ranks concept "
             "candidates; --regex returns exact path/content matches. --path prints one "
-            "exact document as raw Markdown. Search can validly return no matches. "
+            "exact document or a concept directory's index as raw Markdown. Search can "
+            "validly return no matches. "
             "Default text is for Agent/Human reading; --json is compact scripts/CI output."
         ),
     )
@@ -259,7 +267,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     lookup_group.add_argument(
         "--path",
-        help="Read one exact normalized source-relative Markdown path from --list",
+        help=(
+            "Read one canonical Markdown path or concept directory "
+            "(a/b or a/b/ resolves to a/b/index.md)"
+        ),
     )
     lookup_group.add_argument(
         "--keyword",
@@ -630,6 +641,42 @@ reports the last unsealed projection and does not invent terminal state."""
         schema_first=True,
     )
 
+    task = subparsers.add_parser(
+        "task",
+        help="Create a task packet or inspect its bounded local growth shape",
+        description=(
+            "Create the smallest task control surface or inspect an existing packet "
+            "without making semantic decisions or changing files."
+        ),
+    )
+    task_commands = task.add_subparsers(dest="task_command", required=True)
+    task_init = task_commands.add_parser(
+        "init",
+        help="Create one absent tasks/<task-id>/packet.md from the packet template",
+        description=(
+            "Create only an absent packet.md. Existing packets are never merged or "
+            "overwritten. After creation, perform shape preflight from the Task Packet "
+            "guidance before adding topology or supporting modules."
+        ),
+    )
+    task_init.add_argument("task_id", metavar="TASK_ID")
+    task_init.add_argument(
+        "--repo", default=".", help="Project directory (default: current directory)"
+    )
+    task_grow = task_commands.add_parser(
+        "grow",
+        help="Inspect one existing packet with a bounded read-only growth brief",
+        description=(
+            "Inventory the existing packet package to two directory levels and 100 "
+            "entries, report recognized and unknown paths, and ask work/information "
+            "topology questions. This command never edits files or decides shape."
+        ),
+    )
+    task_grow.add_argument("task_id", metavar="TASK_ID")
+    task_grow.add_argument(
+        "--repo", default=".", help="Project directory (default: current directory)"
+    )
+
     telemetry = subparsers.add_parser(
         "telemetry", help="Collect explicit local observability evidence"
     )
@@ -844,6 +891,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if args.command == "analysis":
             return _run_analysis_tool(args)
+
+        if args.command == "task":
+            if args.task_command == "init":
+                task_packet = init_task_packet(Path(args.repo), args.task_id)
+                _render_task_packet_init(task_packet, sys.stdout)
+                return EXIT_OK
+            _binary_output(sys.stdout).write(
+                grow_task_packet(Path(args.repo), args.task_id)
+            )
+            return EXIT_OK
 
         if args.command == "telemetry":
             if (
@@ -1898,6 +1955,11 @@ def _init_operation_text(path: str) -> tuple[str, str, str]:
             "SVC local-config ignore block",
             "maintain local overlay privacy",
         ),
+        "AGENTS.local.md": (
+            "local-agent-instructions",
+            "whole file",
+            "create Consumer-owned local Agent guidance",
+        ),
         "AGENTS.md": ("agent-router", "SVC navigation block", "update Agent router"),
         "docs/index.md": (
             "docs-navigation",
@@ -1999,7 +2061,7 @@ def _render_lookup(response: LookupResponse, stream: TextIO) -> None:
             else:
                 write(f"{entry.path:<40} {entry.title}")
         write("\nExpand: svc lookup --list <directory>")
-        write("Read:   svc lookup --path <document>")
+        write("Read:   svc lookup --path <document-or-directory>")
         return
     if response.query.mode == "keyword":
         if not response.candidates:
@@ -2024,7 +2086,7 @@ def _render_lookup(response: LookupResponse, stream: TextIO) -> None:
                 )
     if response.truncated:
         write(f"Results truncated at --limit {response.query.limit}.")
-    write("\nRead one: svc lookup --path <path>")
+    write("\nRead one: svc lookup --path <document-or-directory>")
 
 
 def _emit_blockers(blockers: Sequence[Any], stream: TextIO) -> None:
@@ -2038,6 +2100,21 @@ def _emit_blockers(blockers: Sequence[Any], stream: TextIO) -> None:
         write(f"  {blocker.code}:{location} {blocker.message}")
 
 
+def _render_task_packet_init(packet: TaskPacket, stream: TextIO) -> None:
+    print(f"Created task packet: {packet.path}", file=stream)
+    print(f"Guidance: {TASK_PACKET_GUIDANCE_PATH}", file=stream)
+    print(f"Template: {TASK_PACKET_TEMPLATE_PATH}", file=stream)
+    print(
+        "Immediate shape-preflight obligation: decide the smallest credible "
+        "work/information topology before adding supporting entries.",
+        file=stream,
+    )
+    print(
+        f"Continue: svc task grow {packet.task_id} --repo {packet.root}",
+        file=stream,
+    )
+
+
 def _render_error(error: SvcError, stream: TextIO) -> None:
     write = partial(print, file=stream)
     write(f"svc: {error.code}: {error.message}")
@@ -2047,6 +2124,7 @@ def _render_error(error: SvcError, stream: TextIO) -> None:
         "reason": "Reason",
         "path": "Path",
         "repo": "Repository",
+        "task_id": "Task ID",
         "target": "Target",
         "entry": "Entry",
         "expected": "Expected",
@@ -2093,6 +2171,7 @@ def _exit_code(error: SvcError) -> int:
         "invalid-directory-prefix",
         "invalid-lookup-options",
         "invalid-lookup-regex",
+        "invalid-task-id",
     }:
         return EXIT_USAGE
     if error.code == "apply-interrupted":
@@ -2133,6 +2212,12 @@ def _exit_code(error: SvcError) -> int:
         "staging-failed",
         "output-write-failed",
         "execution-storage-failed",
+        "task-packet-inventory-failed",
+        "task-packet-parent-unavailable",
+        "task-packet-parent-unsafe",
+        "task-packet-template-invalid",
+        "task-packet-template-unavailable",
+        "task-packet-write-failed",
     }:
         return EXIT_FAILURE
     return EXIT_CONFLICT

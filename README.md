@@ -15,31 +15,36 @@ pdm build -p svc_cli
 ```
 
 Edit canonical framework content under `src/`, never `build/monolith.md`. `src/`
-contains only SVC corpus content; the installable runtime and its tests live under
+contains SVC Corpus content plus an exact maintainer-only `AGENTS.md`; the installable runtime and its tests live under
 the `svc_cli/` workspace member, while repository-only release and monolith tools
 remain under `tools/`.
 
-## Use a Released Corpus
+## Inspect the Corpus in This Source Tree
 
-Install the CLI, then query the guidance you need. The wheel contains the read-only corpus and a deterministic catalog, so ordinary lookup writes nothing and contacts no service.
+Query the guidance you need through the workspace CLI. Ordinary lookup writes
+nothing and contacts no service.
 
 ```bash
-python -m pip install sustainable-vibe-coding==11.0.0
-
-svc lookup --list --json
-svc lookup --list sections
-svc lookup --path sections/working-protocol.md
-svc lookup --keyword "task packet mutation gate"
-svc lookup --regex 'mutation gate' --scope both --limit 10
+pdm run svc lookup --list --json
+pdm run svc lookup --list methods
+pdm run svc lookup --path working-protocol/
+pdm run svc lookup --keyword "task packet mutation gate"
+pdm run svc lookup --regex 'mutation gate' --scope both --limit 10
 ```
 
+For an installed release, use `python -m pip install sustainable-vibe-coding`,
+then start with `svc lookup --list`. CLI package and Corpus versions are
+independent, so use paths returned by the installed wheel rather than assuming
+that they match the current source tree.
+
 `--list [prefix]` expands one Corpus directory level at a time. Use a returned
-normalized source-relative path with `--path` to read and integrity-check one
-canonical document. `--keyword` returns a bounded relevance-ordered candidate
-set; `--regex` returns bounded exact path/content occurrences. A valid search
-with no matches succeeds with an empty collection. Lookup reads the SVC Corpus,
-not the CLI manual; use `svc lookup --help` and `svc <command> --help` for the
-current grammar.
+canonical Markdown path with `--path`, or pass a directory such as
+`working-protocol` or `working-protocol/` to read its `index.md`. The response
+always reports the canonical Markdown identity. `--keyword` returns a bounded
+relevance-ordered candidate set; `--regex` returns bounded exact path/content
+occurrences. A valid search with no matches succeeds with an empty collection.
+Lookup reads the SVC Corpus, not the CLI manual; use `svc lookup --help` and
+`svc <command> --help` for the current grammar.
 
 ## Initialize a Consumer Project
 
@@ -57,6 +62,7 @@ The exact-plan apply may create:
 svc.json
 .gitignore                 (a bounded generated ignore block for svc.local.json)
 AGENTS.md                  (a bounded generated SVC navigation block)
+AGENTS.local.md            (ignored, Consumer-owned local Agent guidance)
 docs/index.md              (created when absent, with a bounded generated navigation block)
 ```
 
@@ -67,7 +73,7 @@ optionally declare development capabilities and bounded runs:
 ```json
 {
   "schema_version": 3,
-  "corpus_version": "12.0.0"
+  "corpus_version": "13.0.0"
 }
 ```
 
@@ -75,7 +81,8 @@ optionally declare development capabilities and bounded runs:
 `run` declarations. It must declare schema 3, cannot change the Corpus baseline, create a
 local-only run name, or produce an invalid effective configuration. `init`
 maintains just its marked ignore block; it never writes a local configuration
-file. Supported older configuration is migrated through a plan-first
+file. It creates a missing `AGENTS.local.md` as ignored, Consumer-owned local
+Agent guidance and never rewrites it. Supported older configuration is migrated through a plan-first
 `svc upgrade --target config`; `init` does not hide configuration migration.
 
 Start with `svc status --json` in any repository. It is read-only and returns a
@@ -91,6 +98,25 @@ CLI help is self-sufficient; there is no installed SVC CLI Skill. A clean
 legacy generated Skill is retired by an exact init plan, while a modified or
 unproven file is never silently deleted. Modified generated navigation or
 local-config-ignore blocks stop repair for review.
+
+## Task Packets
+
+Create the standard task-local control surface without overwriting an existing
+packet:
+
+```bash
+svc task init <task-id> --repo /path/to/project
+```
+
+Inspect the packet shape and obtain a bounded growth brief:
+
+```bash
+svc task grow <task-id> --repo /path/to/project
+```
+
+The command inventories at most two directory levels, reports recognized and
+unknown entries, and changes no file. The Agent uses the packaged Task Packet
+guidance to make any semantic growth decision.
 
 ## Declare and Ensure Development Capabilities
 
@@ -129,7 +155,7 @@ Agents, editor carriers, or CI should invoke through the same project name:
 ```json
 {
   "schema_version": 3,
-  "corpus_version": "12.0.0",
+  "corpus_version": "13.0.0",
   "run": {
     "check": {
       "argv": ["pdm", "run", "test"],
@@ -231,7 +257,7 @@ native read. Query/read are JSON-first and expose their compact packaged method
 reference. To load the reasoning method and its owner boundary, use:
 
 ```bash
-svc lookup --path sections/working-protocol.md --json
+svc lookup --path methods/explore/agent-task-analysis.md --json
 ```
 
 The old `telemetry agent-thread analyze` command and Textual navigator are

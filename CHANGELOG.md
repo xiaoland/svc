@@ -6,6 +6,16 @@ authority, task semantics, required layout, or stable machine contracts; MINOR
 adds backward-compatible optional capability; PATCH restores or clarifies the
 existing protocol without changing those contracts.
 
+## [13.0.0] - 2026-08-16
+
+### Behavioral breaking changes
+
+- Add local Agent-instruction bootstrap and task-packet init/growth guidance, advancing the stable `svc init` result schema.
+- Reorganize the SVC Corpus around symmetric capability owners and replace the monolithic Task Packet model with progressive task-local packages.
+### Backward-compatible capabilities
+
+- Let lookup path reads use a Corpus concept directory, with or without a trailing slash, while returning its canonical index.md document identity.
+
 ## [12.0.0] - 2026-08-16
 
 ### Behavioral breaking changes

@@ -14,6 +14,7 @@ from semantic_version import Version  # type: ignore[import-untyped]
 
 CATALOG_SCHEMA_VERSION = 2
 CORPUS_VERSION_SCHEMA_VERSION = 1
+AUTHORING_ONLY_DOCUMENT = "AGENTS.md"
 TITLE_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
 
@@ -341,11 +342,24 @@ def parse_catalog(content: bytes) -> Catalog:
 
 
 def canonical_documents(source_root: Path) -> list[tuple[str, Path]]:
-    """Return every canonical Markdown document without following source escapes."""
+    """Return canonical Markdown, excluding only root authoring instructions."""
 
     root = source_root.resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"Canonical SVC source does not exist: {source_root}")
+
+    authoring_document = root / AUTHORING_ONLY_DOCUMENT
+    if authoring_document.is_symlink():
+        raise ValueError(
+            "Canonical source authoring instructions may not be a symlink: "
+            f"{authoring_document}"
+        )
+    if authoring_document.exists() and not authoring_document.is_file():
+        raise ValueError(
+            "Canonical source authoring instructions must be a regular file: "
+            f"{authoring_document}"
+        )
+
     documents: list[tuple[str, Path]] = []
     for path in sorted(root.rglob("*.md")):
         if path.is_symlink():
@@ -359,6 +373,8 @@ def canonical_documents(source_root: Path) -> list[tuple[str, Path]]:
             relative = resolved.relative_to(root).as_posix()
         except ValueError as error:
             raise ValueError(f"Canonical source escapes src/: {path}") from error
+        if relative == AUTHORING_ONLY_DOCUMENT:
+            continue
         documents.append((normalized_document_path(relative), resolved))
     if not documents:
         raise ValueError("Canonical SVC source contains no Markdown documents")

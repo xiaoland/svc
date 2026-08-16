@@ -22,7 +22,7 @@ pdm run lint-workflows
 pdm run test
 pdm run build-monolith
 pdm build -p svc_cli
-pdm run svc lookup --path sections/working-protocol.md
+pdm run svc lookup --path working-protocol/index.md
 ```
 
 Canonical framework sources live under `src/`. The installable package uses the

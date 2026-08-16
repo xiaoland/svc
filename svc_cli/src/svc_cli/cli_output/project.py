@@ -55,7 +55,7 @@ class InitVerificationOutput(MachineModel):
 
 
 class InitPlanOutput(MachineModel):
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     command: Literal["init"] = "init"
     mode: Literal["plan"] = "plan"
     status: Literal["blocked", "ready", "noop"]
@@ -71,7 +71,7 @@ class InitPlanOutput(MachineModel):
 
 
 class InitApplyOutput(MachineModel):
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     command: Literal["init"] = "init"
     mode: Literal["apply"] = "apply"
     status: Literal["noop", "applied"]

@@ -14,7 +14,7 @@ from ..release import catalog
 
 ANALYSIS_CONTRACT_VERSION = 1
 METHOD_ID = "svc.agent-task-analysis"
-METHOD_PATH = "sections/working-protocol.md"
+METHOD_PATH = "methods/explore/agent-task-analysis.md"
 METHOD_SECTION = "Agent Task Analysis"
 
 

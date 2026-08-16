@@ -14,7 +14,7 @@ from .resources import read_document
 
 TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 LIST_GUIDANCE_COMMAND = "svc lookup --list"
-READ_GUIDANCE_COMMAND = "svc lookup --path <path>"
+READ_GUIDANCE_COMMAND = "svc lookup --path <document-or-directory>"
 LOOKUP_DISCOVERY_HINT = (
     "Use `svc lookup --help` to browse, search, or read the SVC Corpus."
 )
@@ -144,9 +144,7 @@ class CorpusLookup:
     def _lookup_path(self, query: LookupQuery) -> LookupResponse:
         assert query.value is not None
         try:
-            if "\\" in query.value:
-                raise ValueError("--path must use normalized POSIX separators")
-            path = normalized_document_path(query.value, "--path")
+            path = _resolve_document_path(query.value)
         except ValueError as error:
             raise SvcError(
                 "invalid-document-path", str(error), {"path": query.value}
@@ -155,8 +153,8 @@ class CorpusLookup:
         if entry is None:
             raise SvcError(
                 "lookup-not-found",
-                "No packaged SVC document has that exact path.",
-                {"path": query.value},
+                "No packaged SVC document resolves from that path.",
+                {"path": query.value, "resolved_path": path},
             )
         return LookupResponse(
             self.catalog.corpus_version,
@@ -253,6 +251,32 @@ class CorpusLookup:
                 {"path": entry.path},
             ) from error
         return CorpusDocument(entry, text)
+
+
+def _resolve_document_path(value: str) -> str:
+    """Resolve one CLI document reference to its canonical catalog identity."""
+
+    if "\\" in value:
+        raise ValueError("--path must use normalized POSIX separators")
+    if value.endswith(".md"):
+        return normalized_document_path(value, "--path")
+
+    directory = value.removesuffix("/")
+    path = PurePosixPath(directory)
+    if (
+        not directory
+        or value.endswith("//")
+        or path.is_absolute()
+        or "." in path.parts
+        or ".." in path.parts
+        or any(part.startswith(".") for part in path.parts)
+        or path.as_posix() != directory
+        or path.suffix == ".md"
+    ):
+        raise ValueError(
+            "--path must be a visible normalized Markdown path or Corpus directory"
+        )
+    return f"{directory}/index.md"
 
 
 def _normalize_prefix(value: str | None) -> str | None:

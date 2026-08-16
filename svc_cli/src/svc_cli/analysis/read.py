@@ -335,7 +335,7 @@ def read_schema() -> dict[str, object]:
                 "svc",
                 "lookup",
                 "--path",
-                "sections/working-protocol.md",
+                "methods/explore/agent-task-analysis.md",
                 "--json",
             ],
             "read_section": "Agent Task Analysis",

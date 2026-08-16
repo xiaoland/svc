@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from svc_cli.catalog import parse_version_index
 from tools.build_release_projections import (
+    apply_projection,
     build_release_projections,
     read_fragment,
     validate_corpus_change,
@@ -29,6 +30,23 @@ custom:
 {chr(10).join(f"    {line}" for line in guidance.splitlines())}
 time: 2026-08-08T00:00:00Z
 """
+
+
+def test_release_projection_preserves_static_migration_index(tmp_path: Path) -> None:
+    unreleased = tmp_path / "changes/unreleased"
+    unreleased.mkdir(parents=True)
+    (unreleased / "corpus.yaml").write_text(
+        _fragment("corpus", "not-required"),
+        encoding="utf-8",
+    )
+    migration_index = tmp_path / "src/migrations/index.md"
+    migration_index.parent.mkdir(parents=True)
+    migration_index.write_text("# Migration Index\n", encoding="utf-8")
+
+    apply_projection(tmp_path, check=False)
+    apply_projection(tmp_path, check=True)
+
+    assert migration_index.read_text(encoding="utf-8") == "# Migration Index\n"
 
 
 def test_cli_only_package_release_does_not_advance_corpus_version(

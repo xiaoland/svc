@@ -52,9 +52,20 @@ def test_machine_json_is_compact_for_results_and_errors() -> None:
     assert assert_compact_json(stderr)["error"]["code"] == "invalid-document-path"
 
 
+def test_lookup_directory_alias_returns_the_canonical_document_identity() -> None:
+    code, stdout, stderr = invoke_text(
+        ["lookup", "--path", "working-protocol/", "--json"]
+    )
+
+    payload = assert_compact_json(stdout)
+    assert (code, stderr) == (EXIT_OK, "")
+    assert payload["document"]["path"] == "working-protocol/index.md"
+
+
 def test_output_schema_discovery_is_compact_and_bypasses_command_selection() -> None:
     for arguments in (
         ["lookup", "--json-schema"],
+        ["init", "--json-schema"],
         ["dev", "ensure", "--json-schema"],
         ["run", "--json-schema"],
     ):
@@ -64,6 +75,8 @@ def test_output_schema_discovery_is_compact_and_bypasses_command_selection() -> 
         assert (code, stderr) == (EXIT_OK, "")
         assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert schema["x-svc-result-schema-version"] >= 1
+        if arguments[0] == "init":
+            assert schema["x-svc-result-schema-version"] == 3
 
 
 def test_help_is_self_sufficient_and_removed_commands_are_absent() -> None:
@@ -80,11 +93,12 @@ def test_help_is_self_sufficient_and_removed_commands_are_absent() -> None:
     assert "--path" in stdout
     assert "--regex" in stdout
     assert "SVC CLI usage" in stdout
+    assert "concept directory" in stdout
 
     code, stdout, stderr = invoke_text(["lookup", "--list"])
     assert code == EXIT_OK
     assert stderr == ""
-    assert "sections/" in stdout
+    assert "working-protocol/" in stdout
     assert "Expand: svc lookup --list <directory>" in stdout
 
     code, stdout, stderr = invoke_text(["upgrade", "--help"])
@@ -154,6 +168,21 @@ def test_root_status_text_exposes_its_primary_gate() -> None:
         assert "SVC unadopted" in stdout
         assert "plan-integration-establishment" in stdout
         assert "svc init" in stdout
+
+
+def test_init_apply_text_renders_every_planned_surface() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        code, stdout, stderr = invoke_text(["init", tmp, "--json"])
+        plan = assert_compact_json(stdout)
+
+        assert (code, stderr) == (EXIT_OK, "")
+        code, stdout, stderr = invoke_text(
+            ["init", tmp, "--apply", str(plan["plan_digest"])]
+        )
+
+        assert (code, stderr) == (EXIT_OK, "")
+        assert "created   AGENTS.local.md (whole file)" in stdout
+        assert "Verification: all planned path postconditions passed" in stdout
 
 
 def test_run_json_is_one_receipt_and_suppresses_native_output() -> None:

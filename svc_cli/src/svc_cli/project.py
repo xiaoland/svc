@@ -27,6 +27,7 @@ from .integration import (
     IntegrationInspection,
     IntegrationInspectionStatus,
     IntegrationProblem,
+    desired_local_agent_instructions,
     desired_local_config_ignore,
     desired_navigation,
     inspect_local_config_ignore,
@@ -53,6 +54,7 @@ PROJECT_SCHEMA_VERSION = CONFIG_SCHEMA_VERSION
 PROJECT_FILE = "svc.json"
 CODEX_SKILL_FILE = ".agents/skills/svc/SKILL.md"
 AGENTS_FILE = "AGENTS.md"
+LOCAL_AGENTS_FILE = "AGENTS.local.md"
 DOCS_INDEX_FILE = "docs/index.md"
 GuidanceKind: TypeAlias = Literal[
     "agent-router", "docs-navigation", "legacy-cli-skill", "local-config-ignore"
@@ -69,6 +71,7 @@ NextActionKind: TypeAlias = Literal[
 InitSurface: TypeAlias = Literal[
     "project-state",
     "local-config-ignore",
+    "local-agent-instructions",
     "agent-router",
     "docs-navigation",
     "legacy-cli-skill",
@@ -277,7 +280,7 @@ class InitPlan:
 
     def signature(self) -> dict[str, object]:
         return {
-            "schema_version": 2,
+            "schema_version": 3,
             "command": "init",
             "repo": str(self.repo),
             "intent": self.intent,
@@ -403,6 +406,14 @@ def plan_init(repo: Path) -> InitPlan:
 
     writes.extend(
         _plan_surface(root, ".gitignore", desired_local_config_ignore, blockers)
+    )
+    writes.extend(
+        _plan_surface(
+            root,
+            LOCAL_AGENTS_FILE,
+            desired_local_agent_instructions,
+            blockers,
+        )
     )
 
     writes.extend(_plan_retired_skill(root, blockers))
@@ -639,6 +650,7 @@ def _init_operation(mutation: PlannedFileMutation) -> InitOperation:
     surfaces: dict[str, tuple[InitSurface, InitExtent]] = {
         PROJECT_FILE: ("project-state", "whole-file"),
         ".gitignore": ("local-config-ignore", "svc-managed-block"),
+        LOCAL_AGENTS_FILE: ("local-agent-instructions", "whole-file"),
         AGENTS_FILE: ("agent-router", "svc-managed-block"),
         DOCS_INDEX_FILE: ("docs-navigation", "svc-managed-block"),
         CODEX_SKILL_FILE: ("legacy-cli-skill", "whole-file"),
