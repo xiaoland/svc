@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import runpy
 import tempfile
 from pathlib import Path
@@ -40,7 +41,7 @@ def test_catalog_is_deterministic_and_covers_every_canonical_markdown_document()
         assert "content" not in entry.as_dict()
 
     index = read_version_index(source)
-    assert catalog.corpus_version == index.corpus_version == "12.0.0"
+    assert catalog.corpus_version == index.corpus_version == "13.0.0"
     assert catalog.releases == index.releases
     assert index.supported_anchor == "10.0.1"
 
@@ -50,7 +51,7 @@ def test_wheel_projection_contains_catalog_and_one_copy_of_each_document() -> No
         files = build_projection(ROOT / "src", Path(tmp))
         assert "svc_cli/data/catalog.json" in files
         catalog = parse_catalog(files["svc_cli/data/catalog.json"].read_bytes())
-        assert catalog.corpus_version == "12.0.0"
+        assert catalog.corpus_version == "13.0.0"
         expected_corpus = {
             f"svc_cli/data/corpus/{entry.path}" for entry in catalog.entries
         }
@@ -59,6 +60,67 @@ def test_wheel_projection_contains_catalog_and_one_copy_of_each_document() -> No
             *expected_corpus,
         }
         assert all(path.is_file() for path in files.values())
+
+
+def test_catalog_and_wheel_exclude_only_root_agents_document(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "src"
+    (source / "nested").mkdir(parents=True)
+    (source / "index.md").write_text("# Source corpus\n", encoding="utf-8")
+    (source / "AGENTS.md").write_text("# Authoring instructions\n", encoding="utf-8")
+    (source / "nested" / "AGENTS.md").write_text(
+        "# Nested corpus document\n", encoding="utf-8"
+    )
+    (source / "nested" / "other.md").write_text(
+        "# Other corpus document\n", encoding="utf-8"
+    )
+    (source / "version.json").write_text(
+        '{"schema_version":1,"releases":[{"version":"7.1.0",'
+        '"previous_version":"7.0.0","migration":{"status":"not-required"}}]}',
+        encoding="utf-8",
+    )
+
+    documents = canonical_documents(source)
+    assert [path for path, _ in documents] == [
+        "index.md",
+        "nested/AGENTS.md",
+        "nested/other.md",
+    ]
+
+    with tempfile.TemporaryDirectory() as output:
+        files = build_projection(source, Path(output))
+        assert "svc_cli/data/corpus/AGENTS.md" not in files
+        assert "svc_cli/data/corpus/nested/AGENTS.md" in files
+        catalog = parse_catalog(files["svc_cli/data/catalog.json"].read_bytes())
+        assert [entry.path for entry in catalog.entries] == [
+            "index.md",
+            "nested/AGENTS.md",
+            "nested/other.md",
+        ]
+
+
+@pytest.mark.parametrize("kind", ("symlink", "directory"))
+def test_catalog_rejects_non_regular_root_agents_document(
+    tmp_path: Path,
+    kind: str,
+) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "index.md").write_text("# Source corpus\n", encoding="utf-8")
+    agents = source / "AGENTS.md"
+    if kind == "symlink":
+        target = tmp_path / "authoring.md"
+        target.write_text("# Authoring instructions\n", encoding="utf-8")
+        try:
+            os.symlink(target, agents)
+        except OSError as error:
+            pytest.skip(f"symlinks unavailable: {error}")
+    else:
+        agents.mkdir()
+
+    with pytest.raises(ValueError, match="authoring instructions"):
+        canonical_documents(source)
 
 
 def test_wheel_projection_reads_corpus_version_from_source_index(
@@ -107,7 +169,7 @@ def test_pdm_hook_ignores_distribution_version_for_corpus_projection() -> None:
             PDM_BUILD_UPDATE_FILES(context, files)
             catalog_path = files["svc_cli/data/catalog.json"]
             assert catalog_path == context.build_dir / "svc_cli/data/catalog.json"
-            assert parse_catalog(catalog_path.read_bytes()).corpus_version == "12.0.0"
+            assert parse_catalog(catalog_path.read_bytes()).corpus_version == "13.0.0"
             assert all(name.startswith("svc_cli/data/") for name in files)
 
         sdist_files: dict[str, Path] = {}

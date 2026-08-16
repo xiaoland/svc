@@ -14,6 +14,7 @@ INLINE_LINK_RE = re.compile(r"(?<!\!)\[([^\]]+)\]\(([^)]+)\)")
 REFERENCE_LINK_RE = re.compile(r"(?<!\!)\[([^\]]+)\]\[([^\]]*)\]")
 REFERENCE_DEF_RE = re.compile(r"^\s{0,3}\[([^\]]+)\]:\s*(.+?)\s*$")
 FENCE_RE = re.compile(r"^[ \t]*([`~]{3,})")
+AUTHORING_ONLY_DOCUMENT = "AGENTS.md"
 
 
 @dataclass(frozen=True)
@@ -49,11 +50,17 @@ class MonolithBuilder:
         self.depth_by_path: dict[Path, int] = {}
 
     def build(self, entry: Path) -> str:
+        self._validate_authoring_document()
         entry = entry.resolve()
         if not entry.exists():
             raise FileNotFoundError(f"Entry markdown does not exist: {entry}")
         if not self._is_within_root(entry):
             raise ValueError(f"Entry markdown must be inside root {self.root}: {entry}")
+        if self._is_authoring_document(entry):
+            raise ValueError(
+                "Authoring-only Markdown document is excluded from the Corpus: "
+                f"{entry}"
+            )
         self._walk(entry, depth=0)
 
         chunks = [self._build_header(entry)]
@@ -91,6 +98,11 @@ class MonolithBuilder:
     def _load_document(self, path: Path) -> Document:
         if path in self.documents:
             return self.documents[path]
+        if self._is_authoring_document(path):
+            raise ValueError(
+                "Authoring-only Markdown document is excluded from the Corpus: "
+                f"{path}"
+            )
 
         text = path.read_text(encoding="utf-8")
         relpath = path.relative_to(self.root)
@@ -302,6 +314,22 @@ class MonolithBuilder:
             return False
         return True
 
+    def _is_authoring_document(self, path: Path) -> bool:
+        return path == self.root / AUTHORING_ONLY_DOCUMENT
+
+    def _validate_authoring_document(self) -> None:
+        path = self.root / AUTHORING_ONLY_DOCUMENT
+        if path.is_symlink():
+            raise ValueError(
+                "Canonical source authoring instructions may not be a symlink: "
+                f"{path}"
+            )
+        if path.exists() and not path.is_file():
+            raise ValueError(
+                "Canonical source authoring instructions must be a regular file: "
+                f"{path}"
+            )
+
 
 def bump_heading_depth(line: str, depth: int) -> str:
     match = ATX_HEADING_RE.match(line.rstrip("\n"))
@@ -421,9 +449,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def canonical_markdown_files(root: Path) -> list[Path]:
-    """Return every canonical markdown source in deterministic order."""
+    """Return canonical Markdown, excluding only root authoring instructions."""
 
-    return sorted(path for path in root.rglob("*.md") if path.is_file())
+    root = root.resolve()
+    if not root.is_dir():
+        raise NotADirectoryError(f"Markdown corpus root does not exist: {root}")
+
+    authoring_document = root / AUTHORING_ONLY_DOCUMENT
+    if authoring_document.is_symlink():
+        raise ValueError(
+            "Canonical source authoring instructions may not be a symlink: "
+            f"{authoring_document}"
+        )
+    if authoring_document.exists() and not authoring_document.is_file():
+        raise ValueError(
+            "Canonical source authoring instructions must be a regular file: "
+            f"{authoring_document}"
+        )
+
+    documents: list[Path] = []
+    for path in sorted(root.rglob("*.md")):
+        if not path.is_file():
+            continue
+        if path.relative_to(root).as_posix() == AUTHORING_ONLY_DOCUMENT:
+            continue
+        documents.append(path)
+    return documents
 
 
 def validate_markdown_corpus(root: Path) -> tuple[Path, ...]:

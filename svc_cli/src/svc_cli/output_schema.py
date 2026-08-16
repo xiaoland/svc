@@ -113,7 +113,7 @@ class OutputSchemaSpec:
 
 OUTPUT_SCHEMA_SPECS = {
     "lookup": OutputSchemaSpec(2, TypeAdapter(LookupMachineOutput)),
-    "init": OutputSchemaSpec(2, TypeAdapter(InitMachineOutput)),
+    "init": OutputSchemaSpec(3, TypeAdapter(InitMachineOutput)),
     "status": OutputSchemaSpec(2, TypeAdapter(StatusMachineOutput)),
     "upgrade": OutputSchemaSpec(1, TypeAdapter(UpgradeMachineOutput)),
     "dev-identity": OutputSchemaSpec(2, TypeAdapter(DevIdentityMachineOutput)),

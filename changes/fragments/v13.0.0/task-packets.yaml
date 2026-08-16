@@ -1,0 +1,11 @@
+kind: major
+component: cli
+body: >-
+  Add local Agent-instruction bootstrap and task-packet init/growth guidance,
+  advancing the stable `svc init` result schema.
+custom:
+  Migration: not-applicable
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
+time: 2026-08-11T00:00:00+08:00

@@ -83,7 +83,7 @@ def test_targetless_upgrade_selects_config_then_hands_off_to_corpus(
     assert remaining.target == "corpus"
     assert remaining.status == "pending"
     assert remaining.from_version == "10.0.1"
-    assert remaining.to_version == "12.0.0"
+    assert remaining.to_version == "13.0.0"
     assert plan.digest is not None
 
     receipt = apply_upgrade(plan, plan.digest)
@@ -103,14 +103,14 @@ def test_targetless_upgrade_selects_config_then_hands_off_to_corpus(
     assert corpus.details.corpus is not None
     assert corpus.details.corpus.from_version == "10.0.1"
     assert corpus.details.corpus.releases is not None
-    assert len(corpus.details.corpus.releases) == 4
+    assert len(corpus.details.corpus.releases) == 5
     assert corpus.digest is not None
 
     corpus_receipt = apply_upgrade(corpus, corpus.digest)
     assert corpus_receipt.remaining_targets == ()
     assert (
         parse_project_config((tmp_path / "svc.json").read_bytes()).corpus_version
-        == "12.0.0"
+        == "13.0.0"
     )
     assert plan_upgrade(tmp_path).target is None
     assert plan_upgrade(tmp_path).status == "noop"
@@ -132,7 +132,7 @@ def test_config_upgrade_blocks_lossy_profile_selection_but_corpus_is_independent
     assert corpus.digest is not None
     apply_upgrade(corpus, corpus.digest)
     after = (tmp_path / "svc.json").read_bytes()
-    assert after == before.replace(b'"10.0.1"', b'"12.0.0"', 1)
+    assert after == before.replace(b'"10.0.1"', b'"13.0.0"', 1)
     assert json.loads(after)["dev"]["profiles"]["shared"]
 
 

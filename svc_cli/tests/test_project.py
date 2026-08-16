@@ -51,7 +51,6 @@ def test_generated_guidance_separates_cli_discovery_from_corpus_navigation() -> 
 
     assert "svc --help" in agent
     assert "svc <command> --help" in agent
-    assert "not CLI help" in agent
     assert "svc lookup --help" in docs
     assert "svc lookup --list" not in docs
     assert "Human authorization" not in agent + docs
@@ -97,7 +96,7 @@ def test_init_preserves_unmarked_consumer_content_and_creates_docs_index() -> No
         apply_init(plan, plan.digest)
         assert (root / AGENTS_FILE).read_bytes().startswith(agents)
         assert (root / DOCS_INDEX_FILE).read_bytes().startswith(docs)
-        assert b"svc:begin navigation" in (root / AGENTS_FILE).read_bytes()
+        assert b"svc:begin -->" in (root / AGENTS_FILE).read_bytes()
         assert b"svc:begin navigation" in (root / DOCS_INDEX_FILE).read_bytes()
 
 
@@ -108,8 +107,8 @@ def test_modified_generated_surface_blocks_without_overwrite(
     apply_init(initial, initial.digest)
     surface = tmp_path / AGENTS_FILE
     content = surface.read_bytes()
-    old = b"Use the installed"
-    new = b"Secretly use the installed"
+    old = b"svc --help"
+    new = b"secret svc --help"
     assert old in content
     surface.write_bytes(content.replace(old, new, 1))
     before = tree_bytes(tmp_path)
@@ -298,8 +297,8 @@ def test_init_manages_only_a_clean_local_config_ignore_section() -> None:
         assert b"\r\n" in ignored
 
         drifted = ignored.replace(
-            b"svc.local.json\r\n# svc:end local-config",
-            b"private-svc.local.json\r\n# svc:end local-config",
+            b"AGENTS.local.md\r\n# svc:end local-config",
+            b"private-AGENTS.local.md\r\n# svc:end local-config",
         )
         (root / ".gitignore").write_bytes(drifted)
         blocked = plan_init(root)
@@ -317,7 +316,7 @@ def test_unsupported_schema_and_corpus_ahead_block_init_writes() -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        (root / PROJECT_FILE).write_bytes(render_project_state("13.0.0"))
+        (root / PROJECT_FILE).write_bytes(render_project_state("14.0.0"))
         blocked = plan_init(root)
         assert "corpus-baseline-ahead" in {item.code for item in blocked.blockers}
 

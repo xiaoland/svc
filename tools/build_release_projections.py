@@ -331,12 +331,13 @@ def apply_projection(root: Path, *, check: bool) -> None:
         root / "svc_cli/src/svc_cli/data/migrations",
     )
     expected_paths = set(expected)
+    static_migration_entry = root / "src/migrations/index.md"
     extras = {
         path
         for directory in generated_roots
         if directory.is_dir()
         for path in directory.glob("*.md" if directory.name == "migrations" and directory.parent.name == "src" else "*.json")
-        if path not in expected_paths
+        if path not in expected_paths and path != static_migration_entry
     }
     # The published pre-fragment 11.0.0 guide is imported as a retained
     # fragment and therefore also appears in expected when the projection is complete.

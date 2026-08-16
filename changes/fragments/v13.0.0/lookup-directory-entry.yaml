@@ -1,0 +1,11 @@
+kind: minor
+component: cli
+body: >-
+  Let lookup path reads use a Corpus concept directory, with or without a
+  trailing slash, while returning its canonical index.md document identity.
+custom:
+  Migration: not-applicable
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
+time: 2026-08-16T00:00:00+08:00

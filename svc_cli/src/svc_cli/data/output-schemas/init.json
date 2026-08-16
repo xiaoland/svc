@@ -162,8 +162,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 2,
-          "default": 2,
+          "const": 3,
+          "default": 3,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -228,6 +228,7 @@
           "enum": [
             "project-state",
             "local-config-ignore",
+            "local-agent-instructions",
             "agent-router",
             "docs-navigation",
             "legacy-cli-skill"
@@ -308,8 +309,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 2,
-          "default": 2,
+          "const": 3,
+          "default": 3,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -402,7 +403,7 @@
       "type": "object"
     }
   },
-  "$id": "urn:svc:cli-output:init:v2",
+  "$id": "urn:svc:cli-output:init:v3",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "anyOf": [
     {
@@ -419,5 +420,5 @@
     }
   ],
   "title": "SVC init machine output",
-  "x-svc-result-schema-version": 2
+  "x-svc-result-schema-version": 3
 }

@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 
-CORPUS_VERSION = "12.0.0"
+CORPUS_VERSION = "13.0.0"
 
 
 def write_project_config(
