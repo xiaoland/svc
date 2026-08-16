@@ -41,10 +41,17 @@ jobs:
         with:
           python-version: "3.11"
       - name: Validate Changie release input
+        if: ${{ hashFiles('changes/unreleased/*.yaml') != '' }}
         uses: miniscruff/changie-action@11bcad388e7973948cbcecb10863baf024d5f607 # v3.0.0
         with:
           version: v1.25.1
           args: batch auto --dry-run
+      - name: Validate prepared Changie release
+        if: ${{ hashFiles('changes/unreleased/*.yaml') == '' }}
+        uses: miniscruff/changie-action@11bcad388e7973948cbcecb10863baf024d5f607 # v3.0.0
+        with:
+          version: v1.25.1
+          args: latest
       - run: python -m pip install pdm==2.28.0
       - run: pdm lock --check
       - run: pdm install --frozen-lockfile -d -G quality -G test -G double

@@ -12,12 +12,12 @@ double = ["sustainable-vibe-coding[double]"]
 quality = [
     "mypy>=2.3,<2.4",
     "import-linter>=2.13,<3",
-    "PyYAML<7,>=6.0",
     "zizmor>=1.28,<2",
 ]
 test = [
     "pytest>=9,<10",
     "pytest-asyncio>=1.4,<2",
+    "PyYAML<7,>=6.0",
     "ruff>=0.15,<0.16",
 ]
 

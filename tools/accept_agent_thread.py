@@ -61,6 +61,11 @@ _ALLOWED_DISTRIBUTIONS = {
     "typing-inspection",
     "platformdirs",
     "filelock",
+    "jsonpatch",
+    "jsonpointer",
+    "python-dotenv",
+    "semantic-version",
+    "urllib3",
     "pip",
     "setuptools",
 }
