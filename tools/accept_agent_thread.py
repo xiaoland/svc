@@ -516,17 +516,6 @@ def _validate_evidence_zip(path: Path) -> tuple[dict[str, Any], list[dict[str, A
     return dict(manifest), entries, native
 
 
-def _method_valid(value: object) -> bool:
-    return (
-        isinstance(value, Mapping)
-        and value.get("id") == "svc.agent-task-analysis"
-        and value.get("path") == "methods/explore/agent-task-analysis.md"
-        and value.get("section") == "Agent Task Analysis"
-        and isinstance(value.get("sha256"), str)
-        and _SHA256_RE.fullmatch(value["sha256"]) is not None
-    )
-
-
 def _run_inventory_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
     home = _create_inventory_fixture(root)
     payload = _run_cli(child, ("telemetry", "agent-thread", "list", "--codex-home", home, "--archive-state", "all", "--limit", "100", "--json"), root, env)
@@ -582,7 +571,9 @@ def _run_evidence_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
 def _run_query_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
     bundle, _export = _export_fixture(child, root, env)
     schema = _run_cli(child, ("analysis", "query", "--schema"), root, env)
-    if not _method_valid(schema.get("method")) or schema.get("schema_version") != 1:
+    if schema.get("schema_version") != 2 or schema.get("guidance") != {
+        "command": ["svc", "analysis", "--help"]
+    }:
         raise _CaseFailure("query-schema")
     overview_request = root / "overview.json"
     overview_request.write_bytes(_canonical({"intent": "overview"}))
@@ -592,7 +583,7 @@ def _run_query_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
         overview.get("status") != "partial"
         or not isinstance(native_range, Mapping)
         or native_range.get("records") != 5
-        or not _method_valid(overview.get("method"))
+        or "method" in overview
     ):
         raise _CaseFailure("query-overview")
     match_request = root / "match.json"
@@ -601,19 +592,6 @@ def _run_query_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
     items = match.get("items")
     if match.get("status") != "complete" or not isinstance(items, list) or len(items) != 1 or items[0].get("ref", {}).get("record_kind") != "native" or items[0].get("matched_terms") != ["parser"]:
         raise _CaseFailure("query-match")
-    lookup = _run_cli(
-        child,
-        ("lookup", "--path", "methods/explore/agent-task-analysis.md", "--json"),
-        root,
-        env,
-    )
-    document = lookup.get("document")
-    if (
-        not isinstance(document, Mapping)
-        or document.get("path") != "methods/explore/agent-task-analysis.md"
-        or document.get("sha256") != overview.get("method", {}).get("sha256")
-    ):
-        raise _CaseFailure("method-lookup")
     malformed = root / "malformed.json"
     malformed.write_bytes(b"{")
     error = _run_cli(child, ("analysis", "query", "--input", bundle, "--request", malformed), root, env, expect=2)
@@ -624,7 +602,9 @@ def _run_query_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
 def _run_read_case(child: Path, root: Path, env: Mapping[str, str]) -> None:
     bundle, _export = _export_fixture(child, root, env)
     schema = _run_cli(child, ("analysis", "read", "--schema"), root, env)
-    if not _method_valid(schema.get("method")) or schema.get("schema_version") != 1:
+    if schema.get("schema_version") != 2 or schema.get("guidance") != {
+        "command": ["svc", "analysis", "--help"]
+    }:
         raise _CaseFailure("read-schema")
     first_request = root / "read-first.json"
     first_request.write_bytes(_canonical({"max_items": 1, "max_bytes": 1_048_576}))

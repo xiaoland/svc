@@ -54,12 +54,12 @@ def test_machine_json_is_compact_for_results_and_errors() -> None:
 
 def test_lookup_directory_alias_returns_the_canonical_document_identity() -> None:
     code, stdout, stderr = invoke_text(
-        ["lookup", "--path", "working-protocol/", "--json"]
+        ["lookup", "--path", "task-packet/", "--json"]
     )
 
     payload = assert_compact_json(stdout)
     assert (code, stderr) == (EXIT_OK, "")
-    assert payload["document"]["path"] == "working-protocol/index.md"
+    assert payload["document"]["path"] == "task-packet/index.md"
 
 
 def test_output_schema_discovery_is_compact_and_bypasses_command_selection() -> None:
@@ -98,8 +98,19 @@ def test_help_is_self_sufficient_and_removed_commands_are_absent() -> None:
     code, stdout, stderr = invoke_text(["lookup", "--list"])
     assert code == EXIT_OK
     assert stderr == ""
-    assert "working-protocol/" in stdout
+    assert "task-packet/" in stdout
     assert "Expand: svc lookup --list <directory>" in stdout
+
+    code, stdout, stderr = invoke_text(["analysis", "--help"])
+    assert (code, stderr) == (EXIT_OK, "")
+    assert "Analysis method:" in stdout
+    assert "performance conclusion" in stdout
+    assert "calling Agent owns task intent" in stdout
+
+    code, stdout, stderr = invoke_text(["telemetry", "--help"])
+    assert (code, stderr) == (EXIT_OK, "")
+    assert "does not interpret task" in stdout
+    assert "performance" in stdout
 
     code, stdout, stderr = invoke_text(["upgrade", "--help"])
     assert (code, stderr) == (EXIT_OK, "")

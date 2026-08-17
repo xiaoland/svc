@@ -678,13 +678,26 @@ reports the last unsealed projection and does not invent terminal state."""
     )
 
     telemetry = subparsers.add_parser(
-        "telemetry", help="Collect explicit local observability evidence"
+        "telemetry",
+        help="Collect explicit local observability evidence",
+        description=(
+            "Inventory one supported local provider or capture one explicitly selected "
+            "Agent thread as immutable evidence. Telemetry does not interpret task "
+            "performance, upload content, mutate the provider source, or imply that a "
+            "listed source will remain readable."
+        ),
     )
     telemetry_resources = telemetry.add_subparsers(
         dest="telemetry_resource", required=True
     )
     agent_thread = telemetry_resources.add_parser(
-        "agent-thread", help="List or capture provider-obtainable Agent-thread evidence"
+        "agent-thread",
+        help="List or capture provider-obtainable Agent-thread evidence",
+        description=(
+            "List bounded provider metadata or export one exact local Agent thread. "
+            "The caller owns source selection, destination privacy, retention, and "
+            "subsequent interpretation."
+        ),
     )
     agent_thread_commands = agent_thread.add_subparsers(
         dest="agent_thread_command", required=True
@@ -726,7 +739,23 @@ reports the last unsealed projection and does not invent terminal state."""
 
     analysis = subparsers.add_parser(
         "analysis",
-        help="Query or read immutable Agent-thread evidence; read the packaged Agent Task Analysis method first",
+        help="Navigate immutable Agent-thread evidence without interpreting it",
+        description=(
+            "Query structural projections or read exact native records from one immutable "
+            "Agent-thread evidence bundle. The CLI owns bounded navigation, references, "
+            "coverage status, and byte fidelity; the calling Agent owns task intent, "
+            "semantic interpretation, conclusions, and acceptance."
+        ),
+        epilog=(
+            "Analysis method: establish the task objective and authority; use overview "
+            "and match only to locate evidence; read contiguous opening, relevant, and "
+            "terminal or handoff context before concluding; distinguish observations, "
+            "within-case inference, candidate mechanisms, and recurring patterns; search "
+            "for competing explanations and counterexamples; report the supported claim, "
+            "evidence horizon, material unknowns, and task-visible cost. A match, completion "
+            "marker, Agent statement, command result, or missing record is not by itself a "
+            "task-performance conclusion. Use query/read --schema for machine contracts."
+        ),
     )
     analysis_tools = analysis.add_subparsers(dest="analysis_tool", required=True)
     for name, help_text in (
@@ -737,7 +766,7 @@ reports the last unsealed projection and does not invent terminal state."""
         tool.add_argument(
             "--schema",
             action="store_true",
-            help="Return the tool contract and Agent method reference",
+            help="Return the machine contract; use svc analysis --help for interpretation guidance",
         )
         tool.add_argument("--input", type=Path, help="Exact schema-v3 evidence ZIP")
         tool.add_argument("--request", help="JSON request file or - for stdin")

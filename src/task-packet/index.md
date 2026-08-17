@@ -32,7 +32,7 @@ than waiting for a monolith to fail. Use:
 - [Information modules](information.md) for Inquiry, Design, Decision, and
   cross-return Verification state
 - [Growth guidance](growth.md) to inspect pressure and migrate in place
-- [Task Packet templates](../templates/task-packet/index.md) as opt-in starting
+- [Task Packet templates](./templates/index.md) as opt-in starting
   shapes, never mandatory scaffolding
 
 Task scale, Task nature, and collaboration pressure influence the shape, but

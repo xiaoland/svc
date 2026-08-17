@@ -14,21 +14,19 @@ Use Python 3.11 or newer and PDM 2.28 or newer:
 ```console
 pdm install -d -G test -G quality
 changie batch auto --dry-run
-pdm run check-documents
 pdm run lint-tests
 pdm run typecheck
 pdm run lint-imports
 pdm run lint-workflows
 pdm run test
-pdm run build-monolith
 pdm build -p svc_cli
-pdm run svc lookup --path working-protocol/index.md
+pdm run svc lookup --path task-packet/
 ```
 
 Canonical framework sources live under `src/`. The installable package uses the
 workspace member layout `svc_cli/src/svc_cli`, and its tests live under
-`svc_cli/tests`. Do not edit `build/monolith.md`; regenerate it with
-`pdm run build-monolith`.
+`svc_cli/tests`. SVC's own durable Product, technical, and runtime truth lives
+under `docs/`; it is not packaged as Agent guidance.
 
 ## Commit Messages
 

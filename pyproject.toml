@@ -28,8 +28,6 @@ distribution = false
 members = ["svc_cli"]
 
 [tool.pdm.scripts]
-build-monolith = "python -m tools.build_monolith"
-check-documents = "python -m tools.build_monolith --check"
 build-release-projections = "python -m tools.build_release_projections"
 check-release-projections = "python -m tools.build_release_projections --check"
 build-cli-output-schemas = "python -m tools.build_cli_output_schemas"

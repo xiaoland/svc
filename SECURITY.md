@@ -30,9 +30,9 @@ modification, disclosure, or release-integrity impact. Examples include:
   an absent-target contract
 - compromising the integrity of a distributed package or release artifact
 
-The canonical product boundaries remain in [Product Truth](src/project/prd/agent-analysis.md#local-trust-and-exposure-boundary),
-[Product TDD](src/project/product-tdd/agent-analysis.md#authority-and-topology), and
-[Deployment](src/project/deployment/agent-analysis.md). In particular,
+The canonical product boundaries remain in [Product Truth](docs/prd/agent-analysis.md#local-trust-and-exposure-boundary),
+[Product TDD](docs/product-tdd/agent-analysis.md#authority-and-topology), and
+[Deployment](docs/deployment/agent-analysis.md). In particular,
 SVC's Agent-evidence features use a same-user local trust boundary. They do not
 promise protection from root, a hostile process under the same account,
 adversarial path replacement, or path races. Selected native evidence may

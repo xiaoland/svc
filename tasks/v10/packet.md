@@ -23,15 +23,23 @@
   - The embedded-runtime foundation in [`20-embedded-runtime-cli/packet.md`](20-embedded-runtime-cli/packet.md) is implemented and released as SVC 10.0.0: pure canonical `src/`, root-level `svc_cli/` runtime and `tools/` tooling, deterministic catalog/corpus lookup, minimal `svc.json`, Codex-only operational skill, non-destructive anchors with default `docs/index.md`, separate self-update and adoption, and no automatic consumer-file migration engine.
   - Its release planner now distinguishes a predeclared MAJOR's migration declaration from a pending MAJOR's staging policy, so an old non-applicability rationale cannot silently carry into a later release.
   - Semantic lookup and task helpers remain deliberately deferred until each has a separate protocol and Impact Handshake. Dev-server assurance is implemented in [`30-ensure-dev-server/packet.md`](30-ensure-dev-server/packet.md). The Codex thread-export contract is implemented in [`40-export-agent-thread/packet.md`](40-export-agent-thread/packet.md), with fresh-wheel fixture acceptance on macOS, Windows, and Linux; it works from direct local rollout data without requiring Codex CLI.
+  - The field-study packet in [`50-agent-thread-field-study/packet.md`](50-agent-thread-field-study/packet.md) has collected a deliberately small, three-host corpus for product-owner analysis. It records collection method and sampling bias only; sensitive archives remain outside the repository.
+  - [`70-agent-thread-audit/packet.md`](70-agent-thread-audit/packet.md) now
+    governs the evidence-led audit of that corpus. It begins with archive
+    anatomy, segmentation validation, and multi-scale coding design; no
+    collaboration pattern or SVC gap is yet asserted.
+  - A Windows Codex metadata-list isolation defect found during that study is corrected by the release-pending PATCH fragment `v10-windows-thread-list-isolation`: unsafe state rows are redacted from the inventory while containment and export's independent validation remain intact.
   - SVC 10.0.0 is published on PyPI and GitHub Releases. The Release PR workflow uses a built-in, short-lived `GITHUB_TOKEN` with job-scoped Contents and Pull requests write permissions; the repository Actions setting must allow token-created PRs, and a maintainer explicitly approves their CI runs. Protected publication and recovery remain documented in `CONTRIBUTING.md`.
   - Release preparation changes the source catalog, project metadata, and lockfile together. Its candidate job must re-sync PDM after `release prepare` before testing, so editable distribution metadata represents the prepared version rather than a stale prior release. Project integration fixtures bind their expected adoption version to the plan's target, not a historical release number.
   - Candidate staging is deletion-aware and allowlisted: it stages Towncrier's removed fragments along with the prepared release outputs, then refuses any unexpected path. `release/svc` reuses only an open candidate PR; a merged historical PR on the same branch is not a mutable candidate. An isolated 10.0.1 rehearsal confirmed the resynced installed/catalog versions, all 131 tests, build, six expected staged paths, and no open candidate despite historical PR #2.
-  - All remaining changes in this v10 task are assigned to 10.0.1 under a one-time version exception authorized by the product owner. Their real Behavioral SemVer impact remains declared; release metadata must say `zero known adopted consumers`, because a published public package cannot mechanically prove that no unknown consumer exists.
+  - The one-time 10.0.1 exception is consumed. Follow-on fixes declare their ordinary Behavioral SemVer impact; the Windows list-isolation correction is planned as 10.0.2 PATCH.
   - Sub-agents are available again for bounded parallel research and review; the primary agent retains packet and implementation authority.
-- **Next Step**: Push the verified workflow correction to `main`, wait for the new Release PR, then complete publication through its reviewed candidate and protected environment.
+- **Next Step**: Push the verified PATCH correction to `main`, then review and publish its Release PR through the protected environment.
 
 ## Supporting Material
 
 - First sub-task: [`10-versioned-consumption/packet.md`](10-versioned-consumption/packet.md)
 - Third sub-task: [`30-ensure-dev-server/packet.md`](30-ensure-dev-server/packet.md)
 - Fourth sub-task: [`40-export-agent-thread/packet.md`](40-export-agent-thread/packet.md)
+- Fifth sub-task: [`50-agent-thread-field-study/packet.md`](50-agent-thread-field-study/packet.md)
+- Sixth sub-task: [`70-agent-thread-audit/packet.md`](70-agent-thread-audit/packet.md)

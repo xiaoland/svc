@@ -30,11 +30,10 @@ from .protocol import (
     decode_cursor,
     encode_cursor,
     evidence_ref,
-    method_reference,
 )
 
 
-QUERY_FORMAT = "svc.analysis.query/v1"
+QUERY_FORMAT = "svc.analysis.query/v2"
 DEFAULT_MAX_ITEMS = 50
 MAX_ITEMS = 100
 MAX_TERMS = 8
@@ -189,7 +188,7 @@ _QUERY_REQUEST_ADAPTER: TypeAdapter[QueryRequest] = TypeAdapter(QueryRequest)
 
 
 class MatchCursor(AnalysisModel):
-    version: Literal[1]
+    version: Literal[2]
     tool: Literal["query-match"]
     evidence_id: str
     scope: MatchPredicates
@@ -434,7 +433,6 @@ def _overview(evidence: ValidatedEvidence) -> dict[str, Any]:
             "intent": "overview",
             "status": "unavailable",
             "evidence_id": evidence.evidence_id,
-            "method": method_reference(),
             "source": evidence.manifest.source.model_dump(mode="json"),
             "capture": capture,
             "projection": {
@@ -491,7 +489,6 @@ def _overview(evidence: ValidatedEvidence) -> dict[str, Any]:
         "intent": "overview",
         "status": status,
         "evidence_id": evidence.evidence_id,
-        "method": method_reference(),
         "source": evidence.manifest.source.model_dump(mode="json"),
         "capture": capture,
         "projection": {
@@ -543,7 +540,6 @@ def _projection_unavailable_match(
         "intent": "match",
         "status": "unavailable",
         "evidence_id": evidence.evidence_id,
-        "method": method_reference(),
         "ordering": "native-forward",
         "items": [],
         "next_cursor": None,
@@ -622,7 +618,7 @@ def _match(evidence: ValidatedEvidence, request: MatchRequest) -> dict[str, Any]
     next_cursor = None
     if more:
         cursor = MatchCursor(
-            version=1,
+            version=2,
             tool="query-match",
             evidence_id=evidence.evidence_id,
             scope=predicates,
@@ -652,7 +648,6 @@ def _match(evidence: ValidatedEvidence, request: MatchRequest) -> dict[str, Any]
         "intent": "match",
         "status": status,
         "evidence_id": evidence.evidence_id,
-        "method": method_reference(),
         "ordering": "native-forward",
         "items": items,
         "next_cursor": next_cursor,
@@ -698,19 +693,9 @@ def query_schema() -> dict[str, Any]:
         "additional_properties": False,
     }
     return {
-        "format": "svc.analysis.query.schema/v1",
+        "format": "svc.analysis.query.schema/v2",
         "schema_version": ANALYSIS_CONTRACT_VERSION,
-        "method": method_reference(),
-        "method_lookup": {
-            "command": [
-                "svc",
-                "lookup",
-                "--path",
-                "methods/explore/agent-task-analysis.md",
-                "--json",
-            ],
-            "read_section": "Agent Task Analysis",
-        },
+        "guidance": {"command": ["svc", "analysis", "--help"]},
         "composition": [
             "overview",
             "match to obtain native refs",

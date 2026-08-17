@@ -94,7 +94,9 @@ def test_cli_export_query_and_read_contract(tmp_path: Path) -> None:
 
     code, stdout, stderr = _invoke(["analysis", "query", "--schema"])
     assert (code, stderr) == (0, "")
-    assert json.loads(stdout)["method"]["section"] == "Agent Task Analysis"
+    schema = json.loads(stdout)
+    assert schema["schema_version"] == 2
+    assert schema["guidance"]["command"] == ["svc", "analysis", "--help"]
 
     overview = _request(tmp_path, bundle, "query", {"intent": "overview"})
     assert (overview["intent"], overview["status"]) == ("overview", "complete")

@@ -76,6 +76,3 @@ consumer, plus material residual. Evidence volume, search logs, and subjective
 confidence are not substitutes. When evidence is unavailable or continued
 search is uneconomic, return the supported partial result, unmet condition,
 consequence, and viable continuation as bounded-incomplete.
-
-Use [Agent Task Analysis](agent-task-analysis.md) when the information target
-is an Agent's behavior in recorded task evidence.

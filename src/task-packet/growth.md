@@ -49,7 +49,7 @@ entire matrix into directories.
 ## Migrate in Place
 
 1. Select the owner or topology pressure before selecting filenames.
-2. Create the stable entry from the applicable [template](../templates/task-packet/index.md)
+2. Create the stable entry from the applicable [template](templates/index.md)
    only when it helps.
 3. Move the current semantic content before adding new analysis.
 4. Replace the old location with a compact projection or route; do not keep

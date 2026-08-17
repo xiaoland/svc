@@ -113,7 +113,7 @@ jobs:
             'import json,sys; value=json.load(sys.stdin); assert value == {"schema_version":1,"command":"double validate","status":"double-runtime-unavailable","continuation":"pip install '\''sustainable-vibe-coding[double]'\''"}' \
             <<<"$unavailable"
           /tmp/svc-release/bin/svc run --json-schema
-          /tmp/svc-release/bin/svc lookup --path working-protocol/ --json
+          /tmp/svc-release/bin/svc lookup --path task-packet/ --json
           repo=$(mktemp -d)
           plan=$(/tmp/svc-release/bin/svc init "$repo" --json)
           digest=$(python -c 'import json,sys; print(json.load(sys.stdin)["plan_digest"])' <<<"$plan")

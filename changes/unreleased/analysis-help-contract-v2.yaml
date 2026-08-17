@@ -1,0 +1,11 @@
+kind: major
+component: cli
+body: >-
+  Move Agent-thread analysis guidance into CLI help and advance query/read
+  machine responses from v1 to v2 without packaged method references.
+custom:
+  Migration: not-applicable
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: ""
+time: 2026-08-17T00:00:00+08:00
