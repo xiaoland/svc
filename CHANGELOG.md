@@ -6,6 +6,13 @@ authority, task semantics, required layout, or stable machine contracts; MINOR
 adds backward-compatible optional capability; PATCH restores or clarifies the
 existing protocol without changing those contracts.
 
+## [14.0.0] - 2026-08-17
+
+### Behavioral breaking changes
+
+- Move Agent-thread analysis guidance into CLI help and advance query/read machine responses from v1 to v2 without packaged method references.
+- Separate Agent guidance, project specifications, and SVC's own durable project truth while simplifying the top-level Corpus navigation.
+
 ## [13.0.0] - 2026-08-16
 
 ### Behavioral breaking changes
