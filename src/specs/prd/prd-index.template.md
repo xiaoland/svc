@@ -1,4 +1,4 @@
-# Product Truth
+# Product Requirement Documents of <Project-Name>
 
 ## Purpose and Pressure
 
@@ -8,8 +8,8 @@
 ## Claims and Evaluation
 
 | Product Claim | Rationale | Observable Success | Expected Evidence |
-| --- | --- | --- | --- |
-| | | | |
+| ------------- | --------- | ------------------ | ----------------- |
+|               |           |                    |                   |
 
 ## Capabilities and Workflows
 

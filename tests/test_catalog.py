@@ -41,7 +41,7 @@ def test_catalog_is_deterministic_and_covers_every_canonical_markdown_document()
         assert "content" not in entry.as_dict()
 
     index = read_version_index(source)
-    assert catalog.corpus_version == index.corpus_version == "13.0.0"
+    assert catalog.corpus_version == index.corpus_version == "14.0.0"
     assert catalog.releases == index.releases
     assert index.supported_anchor == "10.0.1"
 
@@ -51,7 +51,7 @@ def test_wheel_projection_contains_catalog_and_one_copy_of_each_document() -> No
         files = build_projection(ROOT / "src", Path(tmp))
         assert "svc_cli/data/catalog.json" in files
         catalog = parse_catalog(files["svc_cli/data/catalog.json"].read_bytes())
-        assert catalog.corpus_version == "13.0.0"
+        assert catalog.corpus_version == "14.0.0"
         expected_corpus = {
             f"svc_cli/data/corpus/{entry.path}" for entry in catalog.entries
         }
@@ -169,7 +169,7 @@ def test_pdm_hook_ignores_distribution_version_for_corpus_projection() -> None:
             PDM_BUILD_UPDATE_FILES(context, files)
             catalog_path = files["svc_cli/data/catalog.json"]
             assert catalog_path == context.build_dir / "svc_cli/data/catalog.json"
-            assert parse_catalog(catalog_path.read_bytes()).corpus_version == "13.0.0"
+            assert parse_catalog(catalog_path.read_bytes()).corpus_version == "14.0.0"
             assert all(name.startswith("svc_cli/data/") for name in files)
 
         sdist_files: dict[str, Path] = {}

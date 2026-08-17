@@ -18,6 +18,7 @@ Current guides:
 - [schema-v3 Agent evidence authority](agent-task-performance-analysis.md)
 - [same-user local evidence boundary](local-trust-boundary.md)
 - [13.0.0 symmetric Corpus and progressive Task Packets](core-mechanism-evolution.md)
+- [14.0.0 Corpus ownership and CLI-help migration](corpus-layout-v14.md)
 
 Version classification follows Consumer behavior:
 

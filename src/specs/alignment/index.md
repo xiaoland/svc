@@ -23,7 +23,9 @@ Alignment may own:
 - controlled operation vocabulary tied to verification meaning
 - request shapes that expose boundary, state, evidence, and protocol
 
-It does not own product rules, technical invariants, runtime topology, evidence sources, or the working protocol. Those remain with their normal owners.
+It does not own product rules, technical invariants, runtime topology, evidence
+sources, mutation authority, or acceptance. Those remain with their normal
+owners.
 
 ## Coordination Shape
 
@@ -39,4 +41,7 @@ For alignment-heavy work, make these explicit enough to verify:
 
 Prefer semantic identifiers, route names, typed handles, and symbols that can be derived from current code over positional prose, screenshots, or static maps. Express mutations as an objective current-to-desired state diff. Give an operation name durable meaning only when it implies a verification boundary.
 
-The [Working Protocol](../../working-protocol/index.md) owns mutation permission and the Impact Handshake. Use [the alignment request template](../../templates/alignment-change-request.template.md) only after this extension's admission rule is satisfied.
+Use [the alignment request template](alignment-change-request.template.md) only
+after this extension's admission rule is satisfied. The current task and Human
+authority still govern mutation; Alignment only makes the proposed object,
+operation, boundary, state, and evidence precise.

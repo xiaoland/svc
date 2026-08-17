@@ -1,4 +1,4 @@
-# Product TDD: <Contract Surface>
+# Product TDD of <Project-Name>
 
 ## Admission
 
@@ -17,6 +17,9 @@
 - Inputs and outputs: <schema or semantic contract>
 - Compatibility invariants: <rules>
 - Failure semantics: <observable behavior>
+
+Cross-Unit contract documents:
+- [Name-A](<name-a>.md)
 
 ## Verification
 

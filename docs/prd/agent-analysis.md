@@ -93,11 +93,11 @@ Responses distinguish `complete`, `partial`, and `unavailable`; pagination is
 not evidence loss. An incomplete acquisition frame remains readable but cannot
 produce a projection record. A missing or invalid cache is rebuilt from native
 evidence; failed rebuild makes structural query unavailable without preventing
-native read. Query/read are JSON-first and expose their compact packaged method
-reference. To load the reasoning method and its owner boundary, use:
+native read. Query/read are JSON-first. Their machine contracts come from
+`--schema`; interpretation guidance and its authority boundary come from:
 
 ```bash
-svc lookup --path methods/explore/agent-task-analysis.md --json
+svc analysis --help
 ```
 
 The old `telemetry agent-thread analyze` command and Textual navigator are

@@ -1,9 +1,6 @@
 # Local Instructions: <Subtree>
 
-## Scope
-
-- Applies to: `<path or pattern>`
-- Does not apply to: `<boundary if needed>`
+> Applies to: `<path or pattern>`; Does not apply to: `<boundary if needed>`
 
 ## Invariants and Authority
 

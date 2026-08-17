@@ -12,12 +12,6 @@ diagnosed cause selects the durable owner. Keep Product promises in Product
 Truth, cross-unit wire rules in Product TDD, and repeated code-local tripwires
 in the nearest local `AGENTS.md`.
 
-Current operational projections are:
-
-- [local shared execution](execution.md)
-- [Double runtime](double.md)
-- [Agent evidence runtime](agent-analysis.md)
-
-Use the [deployment runbook template](../../templates/deployment-runbook.template.md)
+Use the [deployment runbook template](./deployment-runbook.template.md)
 only when an operational response needs a repeatable observation, mitigation,
 rollback, and recovery path.

@@ -22,4 +22,6 @@ reports loss or fails.
 
 Operational verification covers malformed and changing sources, minimal-core validation and cache rebuild, absent-target/no-overwrite behavior, migration and recollection smoke checks, recovery status, and installed-wheel access to the packaged method and evidence contract. Deployment does not own task intent, semantic findings, or query field schemas.
 
-Use [the deployment runbook template](../../templates/deployment-runbook.template.md) when an operational response needs a repeatable evidence, mitigation, and recovery path.
+Use the [deployment runbook template](../../src/specs/deployment/deployment-runbook.template.md)
+when an operational response needs repeatable evidence, mitigation, and
+recovery.

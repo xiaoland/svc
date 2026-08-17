@@ -5,7 +5,12 @@ validation, query, read, provider adapters, and Agent callers must share one
 evidence identity and wire contract. Product meaning and runtime capture remain
 with Product Truth and Deployment.
 
-This contract is admitted because telemetry acquisition, bundle validation, query, read, provider adapters, and Agent callers must share one authority and compatibility boundary. Product TDD owns the cross-unit wire and authority rules; executable schemas, tests, and runtime code own field-level enforcement. Product rationale remains in Product Truth, and the Agent's semantic method remains in [Explore](../../methods/explore/agent-task-analysis.md).
+This contract is admitted because telemetry acquisition, bundle validation,
+query, read, provider adapters, and Agent callers must share one authority and
+compatibility boundary. Product TDD owns the cross-unit wire and authority
+rules; executable schemas, tests, and runtime code own field-level enforcement.
+Product rationale remains in Product Truth, and `svc analysis --help` owns the
+calling Agent's interpretation guidance.
 
 ### Authority and topology
 
@@ -29,8 +34,19 @@ race contract.
 - Opaque cursors carry contract version, evidence digest, typed request scope, ordering, and the next record or fragment position. They are unsigned local continuation state, not authenticated capabilities. Continuation may change only the page budget; selector, snapshot, intent, or anchor changes fail with a scope error.
 - A response may carry source metadata, stable evidence references, position, coverage, and continuation without rewriting the native payload. Oversized native records remain exactly reassemblable; response pagination does not turn complete evidence into partial evidence.
 - Successful export leaves one strictly validated absent-target bundle without overwriting an existing path. Interrupted publication may leave an invalid partial target; every consumer validates before use, and the caller removes that target before retry.
-- Every schema and query/read response carries the exact packaged Agent Task Analysis method reference (identifier, canonical path, section, and document digest). Machine success is emitted on stdout and structured errors on stderr; human text is not part of this contract.
+- Query/read schema and response format v2 carry no packaged method reference.
+  Each schema points to `svc analysis --help`; machine success is emitted on
+  stdout and structured errors on stderr, while help text is not part of the
+  machine response.
 
-Verification is owned jointly by executable models/tests and the affected runtime units: contract fixtures prove the three-member authority core, single-digest identity, optional-cache rebuild, strict intent unions, deterministic order, reference/cursor scope binding, native fidelity, structured status/errors, and the distinction between empty-complete, partial, unavailable, and pagination. The installed wheel must resolve the method reference through `svc lookup`.
+Verification is owned jointly by executable models/tests and the affected
+runtime units: contract fixtures prove the three-member authority core,
+single-digest identity, optional-cache rebuild, strict intent unions,
+deterministic order, reference/cursor scope binding, native fidelity, structured
+status/errors, and the distinction between empty-complete, partial,
+unavailable, and pagination. The installed wheel must expose self-sufficient
+analysis help and v2 query/read schemas.
 
-If the [multi-repo extension](../../extensions/multi-repo/index.md) is active, shared Product TDD remains owned in the shared source rather than copied independently into each repository.
+If the [multi-repo extension](../../src/specs/multi-repo/index.md) is active,
+shared Product TDD remains owned in the shared source rather than copied
+independently into each repository.

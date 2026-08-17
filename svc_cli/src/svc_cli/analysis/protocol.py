@@ -9,13 +9,7 @@ from typing import Any, Mapping, Never
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from ..release import catalog
-
-
-ANALYSIS_CONTRACT_VERSION = 1
-METHOD_ID = "svc.agent-task-analysis"
-METHOD_PATH = "methods/explore/agent-task-analysis.md"
-METHOD_SECTION = "Agent Task Analysis"
+ANALYSIS_CONTRACT_VERSION = 2
 
 
 class AnalysisProtocolError(ValueError):
@@ -82,27 +76,6 @@ def adapt_validation_error(
     """Hide Pydantic diagnostics behind the stable analysis error family."""
 
     raise AnalysisProtocolError(code, message) from error
-
-
-def method_reference() -> dict[str, str]:
-    """Resolve the analysis method to the exact packaged/source catalog digest."""
-
-    entry = next(
-        (item for item in catalog().entries if item.path == METHOD_PATH),
-        None,
-    )
-    if entry is None:
-        raise AnalysisProtocolError(
-            "analysis-method-unavailable",
-            "The packaged Agent Task Analysis method is unavailable.",
-            {"path": METHOD_PATH},
-        )
-    return {
-        "id": METHOD_ID,
-        "path": METHOD_PATH,
-        "section": METHOD_SECTION,
-        "sha256": entry.sha256,
-    }
 
 
 def evidence_ref(
@@ -191,5 +164,4 @@ __all__ = [
     "decode_cursor",
     "encode_cursor",
     "evidence_ref",
-    "method_reference",
 ]

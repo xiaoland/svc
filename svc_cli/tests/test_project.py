@@ -316,7 +316,7 @@ def test_unsupported_schema_and_corpus_ahead_block_init_writes() -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        (root / PROJECT_FILE).write_bytes(render_project_state("14.0.0"))
+        (root / PROJECT_FILE).write_bytes(render_project_state("15.0.0"))
         blocked = plan_init(root)
         assert "corpus-baseline-ahead" in {item.code for item in blocked.blockers}
 

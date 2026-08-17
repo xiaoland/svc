@@ -38,7 +38,8 @@ def test_schema_and_cursor_pages_preserve_exact_utf8_and_binary_bytes(
     while True:
         response = execute_read(bundle.path, request)
         assert response["status"] == "complete"
-        assert response["method"] == schema["method"]
+        assert response["schema_version"] == schema["schema_version"] == 2
+        assert "method" not in response
         for item in response["items"]:
             payload = item["payload"]
             fragment = _payload_bytes(item)
@@ -59,11 +60,11 @@ def test_schema_and_cursor_pages_preserve_exact_utf8_and_binary_bytes(
             break
         request = {"cursor": cursor, "max_items": 3, "max_bytes": 300}
 
-    assert schema["format"] == "svc.analysis.read.schema/v1"
+    assert schema["format"] == "svc.analysis.read.schema/v2"
     assert schema["request"]["initial"]["additional_properties"] is False
     assert schema["request"]["continuation"]["required"] == ["cursor"]
     assert set(schema["response"]["payload_encoding"]) == {"utf-8", "base64"}
-    assert schema["method_lookup"]["read_section"] == "Agent Task Analysis"
+    assert schema["guidance"]["command"] == ["svc", "analysis", "--help"]
     assert first_cursor is not None
     cursor_payload = decode_cursor(first_cursor)
     assert set(cursor_payload) == {

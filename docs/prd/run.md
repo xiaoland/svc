@@ -31,7 +31,7 @@ Agents, editor carriers, or CI should invoke through the same project name:
 ```json
 {
   "schema_version": 3,
-  "corpus_version": "13.0.0",
+  "corpus_version": "14.0.0",
   "run": {
     "check": {
       "argv": ["pdm", "run", "test"],

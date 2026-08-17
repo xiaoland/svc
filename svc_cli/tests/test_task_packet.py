@@ -32,7 +32,7 @@ def test_init_creates_only_an_absent_packet_and_reports_canonical_routes(
     original = packet.read_bytes()
     assert "# small" in original.decode("utf-8")
     assert "task-packet/index.md" in output
-    assert "templates/task-packet/packet.template.md" in output
+    assert "task-packet/templates/packet.template.md" in output
     assert "shape-preflight" in output
     assert "svc task grow small" in output
 
@@ -71,7 +71,7 @@ def test_grow_sorts_observed_bounded_entries_and_reports_unknown_entries(
     assert "No semantic decision was made" in output
     assert "No file was changed" in output
     assert "task-packet/growth.md" in output
-    assert "templates/task-packet/index.md" in output
+    assert "task-packet/templates/index.md" in output
 
     inventory = output.split("Observed inventory (", 1)[1].split(
         "Inventory truncated:", 1

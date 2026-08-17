@@ -25,11 +25,10 @@ from .protocol import (
     decode_cursor,
     encode_cursor,
     evidence_ref,
-    method_reference,
 )
 
 
-READ_FORMAT = "svc.analysis.read/v1"
+READ_FORMAT = "svc.analysis.read/v2"
 DEFAULT_MAX_ITEMS = 20
 DEFAULT_MAX_BYTES = 65_536
 MAX_ITEMS = 100
@@ -88,7 +87,7 @@ class ReadScope(AnalysisModel):
 
 
 class ReadCursor(AnalysisModel):
-    version: Literal[1]
+    version: Literal[2]
     tool: Literal["read"]
     evidence_id: str
     scope: ReadScope
@@ -284,7 +283,7 @@ def read_evidence(
     if more:
         next_cursor = encode_cursor(
             ReadCursor(
-                version=1,
+                version=2,
                 tool="read",
                 evidence_id=evidence.evidence_id,
                 scope=scope,
@@ -302,7 +301,6 @@ def read_evidence(
         "schema_version": ANALYSIS_CONTRACT_VERSION,
         "status": status,
         "evidence_id": evidence.evidence_id,
-        "method": method_reference(),
         "ordering": "native-forward",
         "items": items,
         "next_cursor": next_cursor,
@@ -327,19 +325,9 @@ def read_schema() -> dict[str, object]:
         "additional_properties": False,
     }
     return {
-        "format": "svc.analysis.read.schema/v1",
+        "format": "svc.analysis.read.schema/v2",
         "schema_version": ANALYSIS_CONTRACT_VERSION,
-        "method": method_reference(),
-        "method_lookup": {
-            "command": [
-                "svc",
-                "lookup",
-                "--path",
-                "methods/explore/agent-task-analysis.md",
-                "--json",
-            ],
-            "read_section": "Agent Task Analysis",
-        },
+        "guidance": {"command": ["svc", "analysis", "--help"]},
         "purpose": "Read contiguous provider-native evidence in forward order; never use an isolated match as a conclusion.",
         "request": {
             "initial": {

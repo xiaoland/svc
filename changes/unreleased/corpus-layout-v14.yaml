@@ -1,0 +1,55 @@
+kind: major
+component: corpus
+body: >-
+  Separate Agent guidance, project specifications, and SVC's own durable
+  project truth while simplifying the top-level Corpus navigation.
+custom:
+  Migration: guide
+  FromSchema: ""
+  ToSchema: ""
+  Guidance: |-
+    ### Applies when
+    A Consumer or automation resolves SVC 13.0.0 Corpus paths under
+    `working-protocol/`, `project/`, `extensions/`, or the former shared
+    `templates/` tree.
+
+    ### Required change
+    Replace stable guidance addresses with this map:
+
+    | 13.0.0 | 14.0.0 |
+    | --- | --- |
+    | `working-protocol/index.md` | `index.md` |
+    | `project/prd/index.md` | `specs/prd/index.md` |
+    | `project/product-tdd/index.md` | `specs/product-tdd/index.md` |
+    | `project/unit-tdd/index.md` | `specs/unit-tdd/index.md` |
+    | `project/deployment/index.md` | `specs/deployment/index.md` |
+    | `extensions/alignment/index.md` | `specs/alignment/index.md` |
+    | `extensions/multi-repo/index.md` | `specs/multi-repo/index.md` |
+    | `templates/task-packet/*` | `task-packet/templates/*` |
+    | `templates/product-truth.template.md` | `specs/prd/prd-index.template.md` |
+    | `templates/product-tdd.template.md` | `specs/product-tdd/product-tdd-index.template.md` |
+    | `templates/deployment-runbook.template.md` | `specs/deployment/deployment-runbook.template.md` |
+    | `templates/alignment-change-request.template.md` | `specs/alignment/alignment-change-request.template.md` |
+    | `templates/edit-shared-docs.template.md` | `specs/multi-repo/edit-shared-docs.template.md` |
+
+    `templates/AGENTS.root.template.md` and
+    `templates/AGENTS.local.template.md` remain stable. SVC's own Product,
+    Product TDD, and Deployment documents are repository documentation and are
+    no longer packaged as Consumer guidance. Agent Task Analysis is now owned
+    by `svc analysis --help`; remove stored references to
+    `methods/explore/agent-task-analysis.md`.
+
+    ### Verify
+    Run `svc lookup --list`, resolve every Corpus address used by the Consumer,
+    and read `index.md`, `specs/`, and `task-packet/templates/`. Run
+    `svc analysis --help` and both `svc analysis query --schema` and
+    `svc analysis read --schema` if the Consumer analyzes Agent-thread evidence.
+    Record the 14.0.0 Corpus baseline only after project-owned references are
+    updated.
+
+    ### Reference
+    `index.md` owns universal daily guidance and Corpus navigation;
+    `specs/index.md` owns durable project-document organization;
+    `task-packet/index.md` owns Task Packet semantics. CLI help owns CLI command
+    methods and contracts.
+time: 2026-08-17T00:00:00+08:00

@@ -6,15 +6,14 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 
 - Framework purpose and Corpus navigation: `src/index.md`
 - Corpus authoring and layout rules: `src/AGENTS.md` (maintainer-only; excluded from the packaged Corpus)
-- Working protocol and mutation authority: `src/working-protocol/index.md`
 - Working Methods: `src/methods/`
 - Task Packet semantics and growth: `src/task-packet/`
 - Sub-agent work placement: `src/sub-agents/`
 - Claim qualification: `src/verification/`
 - Design judgment and implementation taste: `src/taste/`
-- Product, technical, unit, and runtime truth: `src/project/`
-- Optional topology and coordination guidance: `src/extensions/`
-- Consumer shapes: `src/templates/`
+- Product, technical, unit, runtime, and coordination specifications: `src/specs/`
+- Consumer Agent-instruction shapes: `src/templates/`
+- SVC's own durable Product, technical, and runtime truth: `docs/`
 - Corpus migration selection and guides: `src/migrations/`
 - Release configuration, version, Behavioral SemVer evidence, and notes:
   `.changie.yaml`, Changie data under `changes/`, generated `CHANGELOG.md`,
@@ -23,10 +22,9 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
   `svc_cli/src/svc_cli/`; its tests live under `svc_cli/tests/`
 - Catalog/wheel projection: `svc_cli/src/svc_cli/catalog.py`,
   `tools/build_catalog.py`, and `svc_cli/pdm_build.py`
-- Monolith and root repository-tool behavior: `tools/` and root `tests/`
-- Volatile work: `tasks/`; delete packets when their task closes, with no archive or deletion-time promotion review.
-
-`build/monolith.md` is generated output, never an editing source.
+- Root repository-tool behavior: `tools/` and root `tests/`
+- Task work and retained task evidence: `tasks/`; retention is task-specific and
+  task material is never part of the packaged Corpus.
 
 ## Development Workflow
 
@@ -36,14 +34,13 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - Test: `pdm run test`
 - Consumer CLI smoke test: `pdm run svc --help`
 - Build the installable distribution: `pdm build -p svc_cli`
-- Build the ignored reference artifact: `pdm run build-monolith`
-- Inspect the packaged corpus locally: `pdm run svc lookup --path working-protocol/index.md`
+- Inspect the packaged corpus locally: `pdm run svc lookup --path task-packet/`
 - Search source with `rg`; exclude `tasks/`, `.venv/`, and `build/` unless they are the target.
 - Diagnose builder failures from the reported source file and Markdown target; missing local paths and fragments are contract failures.
 
 ## Execution Rules
 
-- For non-trivial work, read `src/working-protocol/index.md` before mutation.
+- For non-trivial work, read `src/index.md` and the governing Corpus owner before mutation.
 - Before materially editing the Corpus, read the nearest `src/AGENTS.md` authoring contract.
 - Load `src/taste/implementation/index.md` only when a change shapes code structure, boundaries, data, authority, naming, abstraction, or complexity.
 - Apply the nearest local `AGENTS.md` as an additive constraint when one exists.

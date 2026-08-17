@@ -20,8 +20,8 @@ TASKS_DIRECTORY = "tasks"
 TASK_PACKET_FILENAME = "packet.md"
 TASK_PACKET_GUIDANCE_PATH = "task-packet/index.md"
 TASK_PACKET_GROWTH_PATH = "task-packet/growth.md"
-TASK_PACKET_TEMPLATE_INDEX_PATH = "templates/task-packet/index.md"
-TASK_PACKET_TEMPLATE_PATH = "templates/task-packet/packet.template.md"
+TASK_PACKET_TEMPLATE_INDEX_PATH = "task-packet/templates/index.md"
+TASK_PACKET_TEMPLATE_PATH = "task-packet/templates/packet.template.md"
 
 _MAX_INVENTORY_ENTRIES = 100
 _MAX_INVENTORY_DIRECTORY_LEVELS = 2

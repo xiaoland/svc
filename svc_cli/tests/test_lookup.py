@@ -12,20 +12,18 @@ from svc_cli.lookup import CorpusLookup, LookupQuery
 def fixture_lookup() -> CorpusLookup:
     documents = {
         "index.md": b"# Sustainable Vibe Coding\n\nSource-first framework.\n",
+        "methods/explore/index.md": b"# Explore\n\nFind key information.\n",
         "templates/AGENTS.local.template.md": (
             b"# Local Instructions\n\nA task packet local template.\n"
         ),
-        "extensions/alignment/index.md": (
-            b"# Alignment\n\nKeep one mutation gate.\n"
+        "specs/alignment/index.md": (
+            b"# Alignment\n\nKeep one alignment boundary.\n"
         ),
         "taste/implementation/index.md": (
             b"# Implementation Taste\n\nUse measured design judgment.\n"
         ),
-        "working-protocol/index.md": (
-            b"# Working Protocol\n\nUse a task packet and mutation gate.\n"
-        ),
-        "methods/explore/agent-task-analysis.md": (
-            b"# Agent Task Analysis\n\nRead task evidence in context.\n"
+        "task-packet/index.md": (
+            b"# Task Packet\n\nUse a task packet as the task control surface.\n"
         ),
     }
     entries = tuple(
@@ -51,12 +49,12 @@ def test_list_browses_one_logical_level_without_reading_documents() -> None:
     nested = lookup.lookup(LookupQuery("list", "methods/"))
 
     assert [(entry.kind, entry.path) for entry in root.entries] == [
-        ("directory", "extensions/"),
         ("document", "index.md"),
         ("directory", "methods/"),
+        ("directory", "specs/"),
+        ("directory", "task-packet/"),
         ("directory", "taste/"),
         ("directory", "templates/"),
-        ("directory", "working-protocol/"),
     ]
     assert [entry.path for entry in nested.entries] == ["methods/explore/"]
     assert nested.prefix == "methods/"
@@ -74,33 +72,33 @@ def test_missing_or_invalid_directory_is_an_exact_selection_failure() -> None:
 
 def test_path_reads_one_exact_normalized_document() -> None:
     response = fixture_lookup().lookup(
-        LookupQuery("path", "working-protocol/index.md")
+        LookupQuery("path", "task-packet/index.md")
     )
 
     assert response.document is not None
-    assert response.document.entry.path == "working-protocol/index.md"
-    assert "mutation gate" in response.document.content
+    assert response.document.entry.path == "task-packet/index.md"
+    assert "task control surface" in response.document.content
 
 
-@pytest.mark.parametrize("path", ("working-protocol", "working-protocol/"))
+@pytest.mark.parametrize("path", ("task-packet", "task-packet/"))
 def test_path_resolves_a_directory_to_its_canonical_index(path: str) -> None:
     response = fixture_lookup().lookup(LookupQuery("path", path))
 
     assert response.document is not None
-    assert response.document.entry.path == "working-protocol/index.md"
-    assert "mutation gate" in response.document.content
+    assert response.document.entry.path == "task-packet/index.md"
+    assert "task control surface" in response.document.content
 
 
 @pytest.mark.parametrize(
     "path",
     (
         "",
-        "../working-protocol/index.md",
-        "/working-protocol/index.md",
-        "working-protocol//",
-        "working-protocol//index",
-        "working-protocol/index.md/",
-        r"working-protocol\index.md",
+        "../task-packet/index.md",
+        "/task-packet/index.md",
+        "task-packet//",
+        "task-packet//index",
+        "task-packet/index.md/",
+        r"task-packet\index.md",
     ),
 )
 def test_path_rejects_non_normalized_non_markdown_identity(path: str) -> None:
@@ -112,23 +110,23 @@ def test_path_rejects_non_normalized_non_markdown_identity(path: str) -> None:
 
 def test_missing_directory_alias_reports_its_canonical_candidate() -> None:
     with pytest.raises(SvcError) as raised:
-        fixture_lookup().lookup(LookupQuery("path", "working-protocol/index"))
+        fixture_lookup().lookup(LookupQuery("path", "task-packet/index"))
 
     assert raised.value.code == "lookup-not-found"
     assert raised.value.details == {
-        "path": "working-protocol/index",
-        "resolved_path": "working-protocol/index/index.md",
+        "path": "task-packet/index",
+        "resolved_path": "task-packet/index/index.md",
     }
 
 
 def test_keyword_ranking_obeys_search_scope() -> None:
     lookup = fixture_lookup()
     both = lookup.lookup(
-        LookupQuery("keyword", "task packet mutation gate", "both", 10)
+        LookupQuery("keyword", "task packet control surface", "both", 10)
     )
-    path_only = lookup.lookup(LookupQuery("keyword", "working protocol", "path", 10))
+    path_only = lookup.lookup(LookupQuery("keyword", "task packet", "path", 10))
 
-    assert both.candidates[0].entry.path == "working-protocol/index.md"
+    assert both.candidates[0].entry.path == "task-packet/index.md"
     assert both.candidates[0].matched_in == ("content",)
     assert both.candidates[0].excerpt is not None
     assert path_only.candidates[0].matched_in == ("path",)
@@ -137,17 +135,16 @@ def test_keyword_ranking_obeys_search_scope() -> None:
 
 def test_regex_returns_stable_path_and_one_based_content_locations() -> None:
     response = fixture_lookup().lookup(
-        LookupQuery("regex", r"mutation gate|working-protocol", "both", 10)
+        LookupQuery("regex", r"alignment boundary|task-packet", "both", 10)
     )
 
     assert [(item.entry.path, item.surface) for item in response.matches] == [
-        ("extensions/alignment/index.md", "content"),
-        ("working-protocol/index.md", "path"),
-        ("working-protocol/index.md", "content"),
+        ("specs/alignment/index.md", "content"),
+        ("task-packet/index.md", "path"),
     ]
     content = response.matches[0]
     assert (content.line, content.column) == (3, 10)
-    assert "mutation gate" in (content.excerpt or "")
+    assert "alignment boundary" in (content.excerpt or "")
 
 
 def test_regex_limit_is_flat_and_reports_truncation() -> None:

@@ -60,13 +60,14 @@ def _bundle(
     ).path
 
 
-def test_schema_method_and_overview_form_one_navigation_contract(
+def test_schema_and_overview_form_one_navigation_contract(
     tmp_path: Path,
 ) -> None:
     schema = query_schema()
     overview = execute_query(_bundle(tmp_path, "overview"), {"intent": "overview"})
 
-    assert schema["format"] == "svc.analysis.query.schema/v1"
+    assert schema["format"] == "svc.analysis.query.schema/v2"
+    assert schema["schema_version"] == overview["schema_version"] == 2
     assert set(schema["intents"]) == {"overview", "match"}
     assert schema["intents"]["match"]["predicates"]["combination"] == (
         "intersection across supplied predicates"
@@ -74,8 +75,8 @@ def test_schema_method_and_overview_form_one_navigation_contract(
     assert schema["intents"]["match"]["continuation"]["additional_properties"] is False
     assert schema["intents"]["match"]["initial"]["optional"] == ["max_items"]
     assert schema["intents"]["match"]["bounds"] == {"max_items": [1, 100]}
-    assert schema["method_lookup"]["read_section"] == "Agent Task Analysis"
-    assert overview["method"] == schema["method"]
+    assert schema["guidance"]["command"] == ["svc", "analysis", "--help"]
+    assert "method" not in overview
     assert overview["status"] == "complete"
     assert overview["native_range"]["records"] == 3
     assert [item["record_type"] for item in overview["structural_ranges"]] == [

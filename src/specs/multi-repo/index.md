@@ -28,4 +28,4 @@ Do not mix Hub edits, Spoke reference bumps, and Spoke-local code changes in one
 
 Shared versus local ownership follows the core registry. A cross-unit payload or authority contract may belong in Product TDD; one service's private storage design does not become shared merely because repositories are separate.
 
-Use [the shared-doc edit template](../../templates/edit-shared-docs.template.md) when this extension is active.
+Use [the shared-doc edit template](./edit-shared-docs.template.md) when this extension is active.
