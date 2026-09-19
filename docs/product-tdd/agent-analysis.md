@@ -1,52 +1,23 @@
-# Agent Evidence Query Contract
+# Coding Agent Evidence and Analysis Contract
 
-Use this [Product TDD](index.md) depth when telemetry acquisition, bundle
-validation, query, read, provider adapters, and Agent callers must share one
-evidence identity and wire contract. Product meaning and runtime capture remain
-with Product Truth and Deployment.
+Use this [Product TDD](index.md) depth when telemetry, bundle validation, analysis, provider adapters, and Agent callers must share one evidence identity and compatibility boundary. Product meaning remains in Product Truth; runtime capture and recovery remain in Deployment.
 
-This contract is admitted because telemetry acquisition, bundle validation,
-query, read, provider adapters, and Agent callers must share one authority and
-compatibility boundary. Product TDD owns the cross-unit wire and authority
-rules; executable schemas, tests, and runtime code own field-level enforcement.
-Product rationale remains in Product Truth, and `svc analysis --help` owns the
-calling Agent's interpretation guidance.
+Evidence bundle v4 contains a minimal manifest, required `trajectory.jsonl`, and one or more declared `native/` or `blob/` materials. Its identity binds provider/source identity, selected roots, exact trajectory bytes, and every material byte. The manifest records only material location, format, integrity, collection gaps, and the information required to interpret the trajectory; it is not a second event inventory.
 
-### Authority and topology
+Trajectory v2 is an ordered JSONL contract with one header, execution declarations, and typed semantic events. Event order is deterministic export order, not inferred causality. Each event has a stable ID, execution ownership when known, non-empty source references, mapping confidence, actual normalized payload, optional timestamp/turn/predecessors, and versioned extensions. The common event kinds are message, reasoning, tool call, tool result, lifecycle, context change, relation, usage, and provider event. Public payloads are discriminated models; provider-specific JSON cannot redefine common fields.
 
-An explicitly selected provider source is captured read-only into an immutable schema-v3 evidence bundle. Minimal manifest facts, native captured content, and validated framing are authoritative for source order and recovery. One evidence digest binds the stored native and framing bytes. A trajectory is an optional rebuildable cache; its counts, capabilities, loss summary, and structural records are derived projection, not identity or native authority. The calling Agent owns semantic findings and task-quality judgments.
+Relations distinguish `delegation` from `history_inheritance`. Coverage separately reports relation mapping and descendant closure, so a known parent/child edge can be complete while missing child material leaves closure and usage partial. Pi `parentSession` is history inheritance, not delegation.
 
-Acquisition remains under telemetry. Query and read accept one immutable schema-v3 bundle and never read a live thread, guess a latest thread, or substitute a normalized projection for unavailable native evidence. Query is set-oriented with one closed typed intent (`overview` or `match`) and deterministic descriptors/references. Read is sequence-oriented: it returns captured native content in source order from the beginning, an exact reference, or an opaque continuation; it does not filter, reorder, summarize, score, or interpret records.
+Usage events preserve owner, scope, temporality, measurements, sample/counter identity, reset/baseline facts, and reported/estimated source. Aggregation sums only compatible independent deltas; cumulative counters are differenced by counter identity, gauges are not summed, duplicate conflicts are ambiguous, self and subtree are not added, and currency/source groups remain separate. Missing metrics remain missing.
 
-The acquisition boundary trusts the calling user, selected local provider
-location, local account, and operating system. Inventory reports provider
-lifecycle and recognition metadata but does not claim live source
-availability; export resolves the exact source when it runs. The native member
-may contain all selected content, so projection allowlists and omissions are
-structural/resource rules rather than privacy enforcement. SVC does not expose
-a confidentiality, redaction, sandbox, hostile same-user, or adversarial path-
-race contract.
+Analysis API v3 uses generated JSON Schema 2020-12 models. Query is the closed union `overview | trace | profile | match`; read is exact-ref or native-forward with opaque continuation. Cursors bind evidence, version, intent, selector/order, and position. Pagination never changes coverage, and byte budgets apply to the complete encoded response. Validation errors identify bounded field paths; success is one JSON value on stdout and errors are one structured JSON value on stderr.
 
-### Wire invariants
+Compatibility is explicit:
 
-- Query predicates are closed and typed. The contract does not grow an SQL, JSONPath, GraphQL, regex-program, join, aggregation, scoring, or natural-language DSL.
-- `complete`, `partial`, and `unavailable` describe source/frame facts and answerability from the current derived view. Pagination is separate: an empty `complete` result is a trustworthy negative for that exact request, while `unavailable` is not a negative finding.
-- Opaque cursors carry contract version, evidence digest, typed request scope, ordering, and the next record or fragment position. They are unsigned local continuation state, not authenticated capabilities. Continuation may change only the page budget; selector, snapshot, intent, or anchor changes fail with a scope error.
-- A response may carry source metadata, stable evidence references, position, coverage, and continuation without rewriting the native payload. Oversized native records remain exactly reassemblable; response pagination does not turn complete evidence into partial evidence.
-- Successful export leaves one strictly validated absent-target bundle without overwriting an existing path. Interrupted publication may leave an invalid partial target; every consumer validates before use, and the caller removes that target before retry.
-- Query/read schema and response format v2 carry no packaged method reference.
-  Each schema points to `svc analysis --help`; machine success is emitted on
-  stdout and structured errors on stderr, while help text is not part of the
-  machine response.
+| Analysis request | Evidence v3 | Evidence v4 |
+| --- | --- | --- |
+| v2 or omitted | Existing v2 query/read | Rejected |
+| v3 query | `re-export-required` capability limit | Full query |
+| v3 read | Exact/forward native recovery | Full material read |
 
-Verification is owned jointly by executable models/tests and the affected
-runtime units: contract fixtures prove the three-member authority core,
-single-digest identity, optional-cache rebuild, strict intent unions,
-deterministic order, reference/cursor scope binding, native fidelity, structured
-status/errors, and the distinction between empty-complete, partial,
-unavailable, and pagination. The installed wheel must expose self-sufficient
-analysis help and v2 query/read schemas.
-
-If the [multi-repo extension](../../src/specs/multi-repo/index.md) is active,
-shared Product TDD remains owned in the shared source rather than copied
-independently into each repository.
+Evidence v1/v2 remains a historical cutoff. Analysis never imports a provider normalizer to repair an old bundle.

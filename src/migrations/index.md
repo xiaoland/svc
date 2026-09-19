@@ -19,6 +19,7 @@ Current guides:
 - [same-user local evidence boundary](local-trust-boundary.md)
 - [13.0.0 symmetric Corpus and progressive Task Packets](core-mechanism-evolution.md)
 - [14.0.0 Corpus ownership and CLI-help migration](corpus-layout-v14.md)
+- [Coding Agent debugger and profiler evidence](analysis-debugger-corpus.md)
 
 Version classification follows Consumer behavior:
 

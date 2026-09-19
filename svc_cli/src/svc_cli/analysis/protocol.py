@@ -26,11 +26,13 @@ class AnalysisProtocolError(ValueError):
         self.message = message
         self.details = MappingProxyType(dict(details or {}))
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self, *, version: int | None = None) -> dict[str, object]:
         value: dict[str, object] = {
             "code": self.code,
             "message": self.message,
         }
+        if version == 3:
+            value = {"format": "svc.analysis.error/v3", "version": 3, **value}
         if self.details:
             value["details"] = dict(self.details)
         return value
