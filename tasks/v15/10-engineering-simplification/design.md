@@ -150,3 +150,17 @@ CD 不假设 CI artifact 可跨 workflow 复用，因为合并提交与 PR 提�
 7. 发布：在不上传的 dry-run 中完成 release PR 准备、版本绑定、artifact 构建与 release notes 提取。
 
 不以删除行数、测试数或 CI job 数作为验收；以权威减少、旧成功路径消失、失败可定位和发布产物只构建一次作为验收。
+## CLI 模块边界复查
+
+advisor 的 shift-left 调查结论为 `NEEDS_ARCHITECTURE_CHANGE`。`cli.py` 同时拥有
+所有命令语法、分派、领域调用、机器投影和文本/流式呈现，是跨领域 monolith；
+`upgrade.py` 与 `integration.py` 当前职责内聚，不因文件体量机械拆分。
+
+拆分以命令所有权为边界：命令模块同时拥有参数注册、执行和呈现，根 CLI 只保留
+组合、全局错误交付和退出策略。analysis 与 telemetry 先形成完整纵向切片；double、
+dev、run 与 project 命令依同一规则迁移。禁止只创建总 `parser.py` 或总
+`renderers.py`，也不引入插件注册框架、handler 基类或依赖注入容器。
+
+后续边界按证据推进：double compiler 仅先抽出路径 containment、bounded read 与
+snapshot cache 的资源所有者；provider 分离本地 source discovery/capture 与纯
+trajectory normalization，但不统一 Codex delegation 与 Pi history inheritance。

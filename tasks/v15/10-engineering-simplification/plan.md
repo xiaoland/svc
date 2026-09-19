@@ -8,3 +8,10 @@
 
 当前状态：设计已由 Human 确认并通过 advisor 复审。实现、生成物、wheel
 黑盒验收和本地全套检查均已完成；等待代码审阅与是否提交的指示。
+
+## CLI 架构复查
+
+1. [完成] 由 advisor 在方案形成前调查 monolith 候选与真实切缝。
+2. [进行中] 按命令所有权从根 `cli.py` 迁移纵向切片；analysis 与 telemetry 已迁移。
+3. [待处理] 迁移 double、dev、run 与 project 命令，保持根入口、退出码和延迟可选依赖合同。
+4. [待处理] 抽出 double compiler 的资源所有者，并分离 provider source/capture 与 normalization。

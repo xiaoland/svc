@@ -13,15 +13,9 @@ from pathlib import Path
 from typing import Any, Literal, Never, Sequence, TextIO, cast
 
 from ._execution import ExecutionStore
+from .analysis.cli import register as register_analysis
+from .analysis.cli import run as run_analysis
 from .analysis.protocol import AnalysisProtocolError
-from .analysis.models_v3 import (
-    query_request_schema_v3,
-    query_response_schema_v3,
-    read_request_schema_v3,
-    read_response_schema_v3,
-    error_schema_v3,
-)
-from .analysis.service import execute_query, execute_read
 from .cli_output.lookup import project_lookup
 from .cli_output.double import (
     DoubleDiagnosticOutput,
@@ -106,12 +100,8 @@ from .upgrade import (
     apply_upgrade,
     plan_upgrade,
 )
-from .telemetry.agent_threads import ArchiveFilter
-from .telemetry.service import (
-    export_agent_thread_v4,
-    list_agent_threads,
-    list_pi_agent_threads,
-)
+from .telemetry.cli import register as register_telemetry
+from .telemetry.cli import run as run_telemetry
 from .task_packet import (
     TASK_PACKET_GUIDANCE_PATH,
     TASK_PACKET_TEMPLATE_PATH,
@@ -677,103 +667,8 @@ reports the last unsealed projection and does not invent terminal state."""
         "--repo", default=".", help="Project directory (default: current directory)"
     )
 
-    telemetry = subparsers.add_parser(
-        "telemetry",
-        help="Collect explicit local observability evidence",
-        description=(
-            "Inventory one supported local provider or capture one explicitly selected "
-            "Agent thread as immutable evidence. Telemetry does not interpret task "
-            "performance, upload content, mutate the provider source, or imply that a "
-            "listed source will remain readable."
-        ),
-    )
-    telemetry_resources = telemetry.add_subparsers(
-        dest="telemetry_resource", required=True
-    )
-    agent_thread = telemetry_resources.add_parser(
-        "agent-thread",
-        help="List or capture provider-obtainable Agent-thread evidence",
-        description=(
-            "List bounded provider metadata or export one exact local Agent thread. "
-            "The caller owns source selection, destination privacy, retention, and "
-            "subsequent interpretation."
-        ),
-    )
-    agent_thread_commands = agent_thread.add_subparsers(
-        dest="agent_thread_command", required=True
-    )
-    thread_list = agent_thread_commands.add_parser(
-        "list", help="List bounded Codex thread selection context"
-    )
-    thread_list.add_argument("--provider", choices=("codex", "pi"))
-    thread_list.add_argument("--home", type=Path)
-    thread_list.add_argument("--codex-home", type=Path)
-    thread_list.add_argument(
-        "--archive-state",
-        choices=tuple(state.value for state in ArchiveFilter),
-        default=ArchiveFilter.ALL.value,
-        help="Filter by provider-reported lifecycle (default: all)",
-    )
-    thread_list.add_argument(
-        "--limit",
-        type=_telemetry_limit,
-        default=20,
-        help="Maximum threads to list (1-100)",
-    )
-    thread_list.add_argument("--json", action="store_true", dest="json_output")
-    thread_export = agent_thread_commands.add_parser(
-        "export", help="Capture one exact local thread into an evidence ZIP"
-    )
-    thread_export.add_argument("--provider", choices=("codex", "pi"))
-    selector = thread_export.add_mutually_exclusive_group(required=True)
-    selector.add_argument("--id", "--thread-id", dest="thread_id")
-    selector.add_argument(
-        "--source", type=Path, help="Exact Codex rollout JSONL source"
-    )
-    thread_export.add_argument(
-        "--output",
-        required=True,
-        type=Path,
-        help="Absent .zip destination distinct from the source",
-    )
-    thread_export.add_argument("--codex-home", type=Path)
-    thread_export.add_argument("--home", type=Path)
-    thread_export.add_argument("--json", action="store_true", dest="json_output")
-
-    analysis = subparsers.add_parser(
-        "analysis",
-        help="Navigate immutable Agent-thread evidence without interpreting it",
-        description=(
-            "Query structural projections or read exact native records from one immutable "
-            "Agent-thread evidence bundle. The CLI owns bounded navigation, references, "
-            "coverage status, and byte fidelity; the calling Agent owns task intent, "
-            "semantic interpretation, conclusions, and acceptance."
-        ),
-        epilog=(
-            "Analysis method: establish the task objective and authority; use overview "
-            "and match only to locate evidence; read contiguous opening, relevant, and "
-            "terminal or handoff context before concluding; distinguish observations, "
-            "within-case inference, candidate mechanisms, and recurring patterns; search "
-            "for competing explanations and counterexamples; report the supported claim, "
-            "evidence horizon, material unknowns, and task-visible cost. A match, completion "
-            "marker, Agent statement, command result, or missing record is not by itself a "
-            "task-performance conclusion. Use query/read --schema for machine contracts."
-        ),
-    )
-    analysis.add_argument("--schema", action="store_true", dest="analysis_schema")
-    analysis_tools = analysis.add_subparsers(dest="analysis_tool")
-    for name, help_text in (
-        ("query", "Inspect boundaries or match deterministic navigation predicates"),
-        ("read", "Read ordered native evidence from start, exact ref, or cursor"),
-    ):
-        tool = analysis_tools.add_parser(name, help=help_text)
-        tool.add_argument(
-            "--schema",
-            action="store_true",
-            help="Return the machine contract; use svc analysis --help for interpretation guidance",
-        )
-        tool.add_argument("--input", type=Path, help="Exact schema-v4 evidence ZIP")
-        tool.add_argument("--request", help="JSON request file or - for stdin")
+    register_telemetry(subparsers)
+    register_analysis(subparsers)
     return parser
 
 
@@ -922,7 +817,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_declared(args, json_output)
 
         if args.command == "analysis":
-            return _run_analysis_tool(args)
+            return run_analysis(args)
 
         if args.command == "task":
             if args.task_command == "init":
@@ -935,36 +830,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return EXIT_OK
 
         if args.command == "telemetry":
-            if (
-                args.telemetry_resource == "agent-thread"
-                and args.agent_thread_command == "list"
-            ):
-                if args.home is not None and args.codex_home is not None:
-                    raise SvcError(
-                        "invalid-cli-usage", "Use only one of --home and --codex-home."
-                    )
-                telemetry_payload = (
-                    list_pi_agent_threads(args.home, args.limit)
-                    if args.provider == "pi"
-                    else list_agent_threads(
-                        args.home or args.codex_home, args.limit, args.archive_state
-                    )
-                )
-                _emit_telemetry_list(telemetry_payload, json_output)
-                return EXIT_OK
-            if args.home is not None and args.codex_home is not None:
-                raise SvcError(
-                    "invalid-cli-usage", "Use only one of --home and --codex-home."
-                )
-            telemetry_payload = export_agent_thread_v4(
-                provider_id=args.provider or "codex",
-                home=args.home or args.codex_home,
-                thread_id=args.thread_id,
-                source=args.source,
-                output=args.output,
-            )
-            _emit_telemetry_export(telemetry_payload, json_output)
-            return EXIT_OK
+            return run_telemetry(args, json_output)
 
         local_plan = plan_init(Path(args.repo))
         if args.apply:
@@ -1359,49 +1225,6 @@ def _render_double_stop(output: DoubleStopOutput, stream: TextIO) -> None:
     print(f"Idempotent replay: {str(output.idempotent).lower()}", file=stream)
 
 
-def _analysis_request(source: str) -> object:
-    if source == "-":
-        text = sys.stdin.read(1_048_577)
-    else:
-        try:
-            with Path(source).open("r", encoding="utf-8") as stream:
-                text = stream.read(1_048_577)
-        except (OSError, UnicodeDecodeError) as error:
-            raise AnalysisProtocolError(
-                "analysis-request-unreadable",
-                "Analysis request could not be read as UTF-8 JSON.",
-                {"path": source, "reason": str(error)},
-            ) from error
-    if len(text.encode("utf-8")) > 1_048_576:
-        raise AnalysisProtocolError(
-            "analysis-request-too-large",
-            "Analysis request exceeds its byte bound.",
-        )
-
-    def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
-        value: dict[str, object] = {}
-        for key, item in items:
-            if key in value:
-                raise ValueError(f"duplicate JSON key: {key}")
-            value[key] = item
-        return value
-
-    try:
-        return json.loads(
-            text,
-            object_pairs_hook=pairs,
-            parse_constant=lambda token: (_ for _ in ()).throw(
-                ValueError(f"non-finite number: {token}")
-            ),
-        )
-    except (json.JSONDecodeError, ValueError) as error:
-        raise AnalysisProtocolError(
-            "invalid-analysis-request-json",
-            "Analysis request is not strict JSON.",
-            {"reason": str(error)},
-        ) from error
-
-
 def _run_declared(args: argparse.Namespace, json_output: bool) -> int:
     callback = None if json_output else _emit_run_selected
     stdout_sink = None if json_output else _binary_output(sys.stdout)
@@ -1737,82 +1560,6 @@ def _binary_output(stream: Any) -> Any:
     return getattr(stream, "buffer", None) or _TextBinaryAdapter(stream)
 
 
-def _run_analysis_tool(args: argparse.Namespace) -> int:
-    if args.analysis_schema:
-        if args.analysis_tool is not None:
-            raise AnalysisProtocolError(
-                "invalid-cli-usage",
-                "Top-level --schema cannot be combined with a tool.",
-            )
-        _emit_unscoped_json(
-            {
-                "format": "svc.analysis.schema/v3",
-                "versions": {"analysis": [3], "evidence": [4]},
-                "tools": {
-                    "query": {
-                        "request": query_request_schema_v3(),
-                        "response": query_response_schema_v3(),
-                    },
-                    "read": {
-                        "request": read_request_schema_v3(),
-                        "response": read_response_schema_v3(),
-                    },
-                },
-                "error": error_schema_v3(),
-                "ref_consumers": {
-                    "execution": ["query.trace", "query.profile", "query.match"],
-                    "turn": ["query.trace"],
-                    "event": ["query.trace"],
-                    "content": ["read"],
-                    "blob": ["read"],
-                    "native": ["read"],
-                },
-            }
-        )
-        return EXIT_OK
-    if args.analysis_tool is None:
-        raise AnalysisProtocolError(
-            "invalid-cli-usage", "Analysis requires --schema, query, or read."
-        )
-    if args.schema:
-        if args.input is not None or args.request is not None:
-            raise AnalysisProtocolError(
-                "invalid-cli-usage",
-                "--schema cannot be combined with --input or --request.",
-            )
-        if args.analysis_tool == "query":
-            payload = {
-                "format": "svc.analysis.query.schema/v3",
-                "version": 3,
-                "request": query_request_schema_v3(),
-                "response": query_response_schema_v3(),
-                "error": error_schema_v3(),
-            }
-        else:
-            payload = {
-                "format": "svc.analysis.read.schema/v3",
-                "version": 3,
-                "request": read_request_schema_v3(),
-                "response": read_response_schema_v3(),
-                "error": error_schema_v3(),
-            }
-        _emit_unscoped_json(payload)
-        return EXIT_OK
-    if args.input is None or args.request is None:
-        raise AnalysisProtocolError(
-            "invalid-cli-usage",
-            "Analysis execution requires --input and --request.",
-        )
-    request = _analysis_request(args.request)
-    args.analysis_version = 3
-    if args.analysis_tool == "query":
-        payload = execute_query(args.input, request)
-    else:
-        payload = execute_read(args.input, request)
-    _emit_unscoped_json(payload)
-    return EXIT_OK
-
-
 def _lookup_limit(value: str) -> int:
     try:
         limit = int(value)
@@ -1820,16 +1567,6 @@ def _lookup_limit(value: str) -> int:
         raise argparse.ArgumentTypeError("--limit must be an integer") from error
     if not 1 <= limit <= 50:
         raise argparse.ArgumentTypeError("--limit must be between 1 and 50")
-    return limit
-
-
-def _telemetry_limit(value: str) -> int:
-    try:
-        limit = int(value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("--limit must be an integer") from error
-    if not 1 <= limit <= 100:
-        raise argparse.ArgumentTypeError("--limit must be between 1 and 100")
     return limit
 
 
@@ -2030,32 +1767,6 @@ def _render_status(payload: ProjectStatusInspection, stream: TextIO) -> None:
         write("Dev: " + ", ".join(payload.dev.targets))
     if payload.run.entries:
         write("Run: " + ", ".join(payload.run.entries))
-
-
-def _emit_telemetry_list(payload: dict[str, Any], json_output: bool) -> None:
-    if json_output:
-        _emit_unscoped_json(payload)
-        return
-    threads = payload["threads"]
-    print(f"SVC telemetry agent-thread list: {len(threads)} thread(s)")
-    for descriptor in threads:
-        if not isinstance(descriptor, dict):
-            continue
-        updated = descriptor.get("updated_at") or "unknown-time"
-        print(
-            f"  {descriptor.get('thread_id')}  {descriptor.get('archive_state')}  {updated}"
-        )
-
-
-def _emit_telemetry_export(payload: dict[str, Any], json_output: bool) -> None:
-    if json_output:
-        _emit_unscoped_json(payload)
-        return
-    evidence = payload["evidence"]
-    if isinstance(evidence, dict):
-        print(f"SVC telemetry agent-thread export: exported {evidence.get('path')}")
-    else:
-        print("SVC telemetry agent-thread export: exported")
 
 
 def _render_lookup(response: LookupResponse, stream: TextIO) -> None:
