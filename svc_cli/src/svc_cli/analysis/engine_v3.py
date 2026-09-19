@@ -9,7 +9,6 @@ from typing import Iterable
 from ..telemetry.trajectory_v2 import (
     ExecutionRecord,
     RelationEvent,
-    SemanticEvent,
     UsageEvent,
     UsageMeasurement,
     ValidatedTrajectoryV2,
@@ -39,8 +38,7 @@ def delegation_edges(trajectory: ValidatedTrajectoryV2) -> tuple[RelationEvent, 
     return tuple(
         event
         for event in trajectory.events
-        if isinstance(event, RelationEvent)
-        and event.payload.relation == "delegation"
+        if isinstance(event, RelationEvent) and event.payload.relation == "delegation"
     )
 
 
@@ -84,12 +82,17 @@ def path_event_ids(trajectory: ValidatedTrajectoryV2, leaf_event_id: str) -> set
     result.update(
         event.event_id
         for event in trajectory.events
-        if any((ref.material, ref.record_id, ref.line) in coordinates for ref in event.source_refs)
+        if any(
+            (ref.material, ref.record_id, ref.line) in coordinates
+            for ref in event.source_refs
+        )
     )
     return result
 
 
-def _measurement_key(event: UsageEvent, measurement: UsageMeasurement) -> tuple[str, str, str | None, str, str]:
+def _measurement_key(
+    event: UsageEvent, measurement: UsageMeasurement
+) -> tuple[str, str, str | None, str, str]:
     return (
         measurement.metric,
         measurement.unit,
@@ -116,7 +119,9 @@ def _aggregate_events(events: Iterable[UsageEvent]) -> UsageAggregate:
             deduped.append(first)
         else:
             ambiguous += len(grouped)
-    groups: dict[tuple[str, str, str | None, str, str], list[tuple[UsageEvent, UsageMeasurement]]] = defaultdict(list)
+    groups: dict[
+        tuple[str, str, str | None, str, str], list[tuple[UsageEvent, UsageMeasurement]]
+    ] = defaultdict(list)
     for event in deduped:
         for measurement in event.payload.measurements:
             groups[_measurement_key(event, measurement)].append((event, measurement))
@@ -124,10 +129,16 @@ def _aggregate_events(events: Iterable[UsageEvent]) -> UsageAggregate:
     unknown = 0
     conflicting_deltas: set[str] = set()
     for observations in groups.values():
-        deltas = [item for item in observations if item[0].payload.temporality == "delta"]
-        cumulative = [item for item in observations if item[0].payload.temporality == "cumulative"]
+        deltas = [
+            item for item in observations if item[0].payload.temporality == "delta"
+        ]
+        cumulative = [
+            item for item in observations if item[0].payload.temporality == "cumulative"
+        ]
         delta_by_source = {
-            tuple((ref.material, ref.record_id, ref.line) for ref in event.source_refs): (event, measurement)
+            tuple(
+                (ref.material, ref.record_id, ref.line) for ref in event.source_refs
+            ): (event, measurement)
             for event, measurement in deltas
         }
         previous_by_counter: dict[str, float] = {}
@@ -136,7 +147,9 @@ def _aggregate_events(events: Iterable[UsageEvent]) -> UsageAggregate:
                 continue
             current = float(measurement.value)
             previous = previous_by_counter.get(event.payload.counter_id)
-            coordinate = tuple((ref.material, ref.record_id, ref.line) for ref in event.source_refs)
+            coordinate = tuple(
+                (ref.material, ref.record_id, ref.line) for ref in event.source_refs
+            )
             paired = delta_by_source.get(coordinate)
             if previous is not None and paired is not None:
                 expected = current if event.payload.reset else current - previous
@@ -147,7 +160,8 @@ def _aggregate_events(events: Iterable[UsageEvent]) -> UsageAggregate:
         deltas = [
             item
             for item in observations
-            if item[0].payload.temporality == "delta" and item[0].event_id not in conflicting_deltas
+            if item[0].payload.temporality == "delta"
+            and item[0].event_id not in conflicting_deltas
         ]
         value = 0.0
         inclusion = observations[0][1].inclusion
@@ -155,19 +169,28 @@ def _aggregate_events(events: Iterable[UsageEvent]) -> UsageAggregate:
         if deltas:
             value = sum(float(item[1].value) for item in deltas)
             delta_coordinates = {
-                tuple((ref.material, ref.record_id, ref.line) for ref in event.source_refs)
+                tuple(
+                    (ref.material, ref.record_id, ref.line) for ref in event.source_refs
+                )
                 for event, _ in deltas
             }
             unknown += sum(
                 event.payload.temporality == "cumulative"
-                and tuple((ref.material, ref.record_id, ref.line) for ref in event.source_refs)
+                and tuple(
+                    (ref.material, ref.record_id, ref.line) for ref in event.source_refs
+                )
                 not in delta_coordinates
                 for event, _ in observations
             )
         else:
-            counters: dict[str, list[tuple[UsageEvent, UsageMeasurement]]] = defaultdict(list)
+            counters: dict[str, list[tuple[UsageEvent, UsageMeasurement]]] = (
+                defaultdict(list)
+            )
             for item in observations:
-                if item[0].payload.temporality == "cumulative" and item[0].payload.counter_id:
+                if (
+                    item[0].payload.temporality == "cumulative"
+                    and item[0].payload.counter_id
+                ):
                     counters[item[0].payload.counter_id].append(item)
                 elif item[0].payload.temporality in {"gauge", "unknown"}:
                     unknown += 1

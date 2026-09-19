@@ -40,7 +40,11 @@ class MaterialDescriptor(EvidenceV4Model):
     @classmethod
     def validate_name(cls, value: str) -> str:
         path = PurePosixPath(value)
-        if path.is_absolute() or ".." in path.parts or not value.startswith(("native/", "blob/")):
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or not value.startswith(("native/", "blob/"))
+        ):
             raise ValueError("material name must be a safe native/ or blob/ path")
         return value
 
@@ -84,7 +88,12 @@ def _sha256(value: bytes) -> str:
 
 def _frame(name: str, value: bytes) -> bytes:
     encoded = name.encode("utf-8")
-    return len(encoded).to_bytes(4, "big") + encoded + len(value).to_bytes(8, "big") + value
+    return (
+        len(encoded).to_bytes(4, "big")
+        + encoded
+        + len(value).to_bytes(8, "big")
+        + value
+    )
 
 
 def build_evidence_v4_id(
@@ -123,7 +132,9 @@ def build_evidence_v4_manifest(
 ) -> EvidenceV4Manifest:
     validate_trajectory_v2(trajectory)
     if not materials:
-        raise EvidenceError("invalid-evidence-manifest", "Evidence v4 requires native material.")
+        raise EvidenceError(
+            "invalid-evidence-manifest", "Evidence v4 requires native material."
+        )
     kinds = material_kinds or {}
     media_types = material_media_types or {}
     descriptors = tuple(
@@ -165,7 +176,11 @@ def validate_evidence_v4_members(
     materials: Mapping[str, bytes],
 ) -> ValidatedEvidenceV4:
     try:
-        typed = manifest if isinstance(manifest, EvidenceV4Manifest) else EvidenceV4Manifest.model_validate(manifest)
+        typed = (
+            manifest
+            if isinstance(manifest, EvidenceV4Manifest)
+            else EvidenceV4Manifest.model_validate(manifest)
+        )
     except ValidationError as error:
         raise EvidenceError(
             "invalid-evidence-manifest",
@@ -174,15 +189,27 @@ def validate_evidence_v4_members(
         ) from error
     trajectory_model = validate_trajectory_v2(trajectory)
     expected_names = [item.name for item in typed.materials]
-    if len(expected_names) != len(set(expected_names)) or set(expected_names) != set(materials):
-        raise EvidenceError("bundle-invalid", "Evidence v4 material set disagrees with its manifest.")
-    if typed.trajectory.bytes != len(trajectory) or typed.trajectory.sha256 != _sha256(trajectory):
-        raise EvidenceError("integrity-failed", "Evidence v4 trajectory integrity check failed.")
+    if len(expected_names) != len(set(expected_names)) or set(expected_names) != set(
+        materials
+    ):
+        raise EvidenceError(
+            "bundle-invalid", "Evidence v4 material set disagrees with its manifest."
+        )
+    if typed.trajectory.bytes != len(trajectory) or typed.trajectory.sha256 != _sha256(
+        trajectory
+    ):
+        raise EvidenceError(
+            "integrity-failed", "Evidence v4 trajectory integrity check failed."
+        )
     descriptors = {item.name: item for item in typed.materials}
     for name, value in materials.items():
         descriptor = descriptors[name]
         if descriptor.bytes != len(value) or descriptor.sha256 != _sha256(value):
-            raise EvidenceError("integrity-failed", "Evidence v4 material integrity check failed.", {"material": name})
+            raise EvidenceError(
+                "integrity-failed",
+                "Evidence v4 material integrity check failed.",
+                {"material": name},
+            )
     calculated = build_evidence_v4_id(
         provider_id=typed.provider_id,
         source_format=typed.source_format,
@@ -196,12 +223,19 @@ def validate_evidence_v4_members(
     for execution in trajectory_model.executions:
         for source_ref in execution.source_refs:
             if source_ref.material not in known_materials:
-                raise EvidenceError("native-reference-unresolved", "Execution source ref does not resolve.")
+                raise EvidenceError(
+                    "native-reference-unresolved",
+                    "Execution source ref does not resolve.",
+                )
     for event in trajectory_model.events:
         for source_ref in event.source_refs:
             if source_ref.material not in known_materials:
-                raise EvidenceError("native-reference-unresolved", "Event source ref does not resolve.")
-    return ValidatedEvidenceV4(typed, trajectory_model, dict(materials), typed.evidence_id)
+                raise EvidenceError(
+                    "native-reference-unresolved", "Event source ref does not resolve."
+                )
+    return ValidatedEvidenceV4(
+        typed, trajectory_model, dict(materials), typed.evidence_id
+    )
 
 
 def _zip_info(name: str) -> zipfile.ZipInfo:
@@ -221,8 +255,13 @@ def write_evidence_v4_stream(
     validated = validate_evidence_v4_members(manifest, trajectory, materials)
     output.seek(0)
     output.truncate(0)
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
-        archive.writestr(_zip_info("manifest.json"), canonical_json_bytes(validated.manifest, newline=True))
+    with zipfile.ZipFile(
+        output, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True
+    ) as archive:
+        archive.writestr(
+            _zip_info("manifest.json"),
+            canonical_json_bytes(validated.manifest, newline=True),
+        )
         archive.writestr(_zip_info(TRAJECTORY_MEMBER), trajectory)
         for name in sorted(materials):
             archive.writestr(_zip_info(name), materials[name])
@@ -245,17 +284,36 @@ def validate_evidence_v4(path: Path) -> ValidatedEvidenceV4:
         with zipfile.ZipFile(path, "r") as archive:
             infos = archive.infolist()
             names = [item.filename for item in infos]
-            if len(names) != len(set(names)) or "manifest.json" not in names or TRAJECTORY_MEMBER not in names:
-                raise EvidenceError("bundle-invalid", "Evidence v4 ZIP members are invalid.")
+            if (
+                len(names) != len(set(names))
+                or "manifest.json" not in names
+                or TRAJECTORY_MEMBER not in names
+            ):
+                raise EvidenceError(
+                    "bundle-invalid", "Evidence v4 ZIP members are invalid."
+                )
             by_name = {item.filename: item for item in infos}
             if any(item.file_size > MAX_SOURCE_BYTES for item in infos):
-                raise EvidenceError("member-limit-reached", "Evidence v4 member is too large.")
-            manifest = EvidenceV4Manifest.model_validate_json(archive.read("manifest.json"))
-            allowed = {"manifest.json", TRAJECTORY_MEMBER, *(item.name for item in manifest.materials)}
+                raise EvidenceError(
+                    "member-limit-reached", "Evidence v4 member is too large."
+                )
+            manifest = EvidenceV4Manifest.model_validate_json(
+                archive.read("manifest.json")
+            )
+            allowed = {
+                "manifest.json",
+                TRAJECTORY_MEMBER,
+                *(item.name for item in manifest.materials),
+            }
             if set(names) != allowed:
-                raise EvidenceError("bundle-invalid", "Evidence v4 ZIP contains undeclared members.")
+                raise EvidenceError(
+                    "bundle-invalid", "Evidence v4 ZIP contains undeclared members."
+                )
             trajectory = archive.read(TRAJECTORY_MEMBER)
-            materials = {item.name: archive.read(by_name[item.name]) for item in manifest.materials}
+            materials = {
+                item.name: archive.read(by_name[item.name])
+                for item in manifest.materials
+            }
         validated = validate_evidence_v4_members(manifest, trajectory, materials)
         return ValidatedEvidenceV4(
             validated.manifest,
@@ -266,7 +324,13 @@ def validate_evidence_v4(path: Path) -> ValidatedEvidenceV4:
         )
     except EvidenceError:
         raise
-    except (OSError, ValueError, ValidationError, zipfile.BadZipFile, json.JSONDecodeError) as error:
+    except (
+        OSError,
+        ValueError,
+        ValidationError,
+        zipfile.BadZipFile,
+        json.JSONDecodeError,
+    ) as error:
         raise EvidenceError("bundle-invalid", "Evidence v4 ZIP is invalid.") from error
 
 

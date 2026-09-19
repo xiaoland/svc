@@ -53,7 +53,11 @@ def _header(path: Path) -> dict[str, Any] | None:
                 if not raw.strip():
                     continue
                 value = json.loads(raw)
-                return value if isinstance(value, dict) and value.get("type") == "session" else None
+                return (
+                    value
+                    if isinstance(value, dict) and value.get("type") == "session"
+                    else None
+                )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
     return None
@@ -63,11 +67,21 @@ def _resolve(context: ProviderContext, selection: ThreadSelection) -> Path:
     if selection.source is not None:
         path = Path(selection.source).expanduser()
         if _header(path) is None:
-            raise SvcError("thread-source-incompatible", "Source is not a Pi session JSONL file.")
+            raise SvcError(
+                "thread-source-incompatible", "Source is not a Pi session JSONL file."
+            )
         return path
     assert selection.thread_id is not None
-    home = Path(context.home).expanduser() if context.home is not None else Path.home() / ".pi" / "agent"
-    matches = [path for path in home.glob("sessions/**/*.jsonl") if (_header(path) or {}).get("id") == selection.thread_id]
+    home = (
+        Path(context.home).expanduser()
+        if context.home is not None
+        else Path.home() / ".pi" / "agent"
+    )
+    matches = [
+        path
+        for path in home.glob("sessions/**/*.jsonl")
+        if (_header(path) or {}).get("id") == selection.thread_id
+    ]
     if len(matches) != 1:
         raise SvcError("thread-not-found", "Pi session ID did not resolve uniquely.")
     return matches[0]
@@ -94,16 +108,25 @@ def _text_content(value: str, materials: dict[str, bytes]) -> TextContent | Blob
     return BlobContent(type="blob", ref=name, media_type="text/plain; charset=utf-8")
 
 
-def _content(value: object, materials: dict[str, bytes]) -> tuple[TextContent | BlobContent | OpaqueContent, ...]:
+def _content(
+    value: object, materials: dict[str, bytes]
+) -> tuple[TextContent | BlobContent | OpaqueContent, ...]:
     if isinstance(value, str):
         return (_text_content(value, materials),)
     if not isinstance(value, list):
         return (OpaqueContent(type="opaque", reason="content-unavailable"),)
     result: list[TextContent | OpaqueContent] = []
     for block in value:
-        if isinstance(block, Mapping) and block.get("type") == "text" and isinstance(block.get("text"), str):
+        if (
+            isinstance(block, Mapping)
+            and block.get("type") == "text"
+            and isinstance(block.get("text"), str)
+        ):
             result.append(_text_content(block["text"], materials))
-        elif isinstance(block, Mapping) and block.get("type") in {"thinking", "toolCall"}:
+        elif isinstance(block, Mapping) and block.get("type") in {
+            "thinking",
+            "toolCall",
+        }:
             continue
         else:
             result.append(OpaqueContent(type="opaque", reason="unsupported-content"))
@@ -136,7 +159,11 @@ def _usage_measurements(value: Mapping[str, Any]) -> tuple[UsageMeasurement, ...
 
 def _cost_measurement(value: Mapping[str, Any]) -> tuple[UsageMeasurement, ...]:
     cost = value.get("cost")
-    if not isinstance(cost, Mapping) or type(cost.get("total")) not in {int, float} or cost["total"] < 0:
+    if (
+        not isinstance(cost, Mapping)
+        or type(cost.get("total")) not in {int, float}
+        or cost["total"] < 0
+    ):
         return ()
     return (
         UsageMeasurement(
@@ -184,7 +211,9 @@ def collect_pi_v4(
     if not paths or any(header is None for header in headers):
         raise SvcError("thread-source-incompatible", "Pi session lineage is invalid.")
     typed_headers = [header for header in headers if header is not None]
-    execution_ids = {header["id"]: _stable_id("exec", header["id"]) for header in typed_headers}
+    execution_ids = {
+        header["id"]: _stable_id("exec", header["id"]) for header in typed_headers
+    }
     materials: dict[str, bytes] = {}
     executions: list[ExecutionRecord] = []
     events: list[Any] = []
@@ -196,12 +225,18 @@ def collect_pi_v4(
         session_id = header["id"]
         value = path.read_bytes()
         if len(value) > MAX_SOURCE_BYTES:
-            raise SvcError("source-limit-reached", "Pi session exceeds the source bound.")
+            raise SvcError(
+                "source-limit-reached", "Pi session exceeds the source bound."
+            )
         material = f"native/{hashlib.sha256(session_id.encode()).hexdigest()}.jsonl"
         materials[material] = value
         model: str | None = None
         for _, _, _, entry in _line_records(value):
-            if entry and entry.get("type") == "message" and isinstance(entry.get("message"), Mapping):
+            if (
+                entry
+                and entry.get("type") == "message"
+                and isinstance(entry.get("message"), Mapping)
+            ):
                 candidate = entry["message"].get("model")
                 if isinstance(candidate, str):
                     model = candidate
@@ -227,8 +262,12 @@ def collect_pi_v4(
                     mapping="explicit",
                     payload=RelationPayload(
                         relation="history_inheritance",
-                        source=RelationEndpoint(type="execution", id=execution_ids[previous_session]),
-                        target=RelationEndpoint(type="execution", id=execution_ids[session_id]),
+                        source=RelationEndpoint(
+                            type="execution", id=execution_ids[previous_session]
+                        ),
+                        target=RelationEndpoint(
+                            type="execution", id=execution_ids[session_id]
+                        ),
                     ),
                 )
             )
@@ -240,7 +279,13 @@ def collect_pi_v4(
                 continue
             if entry is None:
                 issue_id = f"invalid-{len(issues)}"
-                issues.append(CoverageIssue(issue_id=issue_id, code="invalid-native-record", message="A Pi session line is not valid JSON."))
+                issues.append(
+                    CoverageIssue(
+                        issue_id=issue_id,
+                        code="invalid-native-record",
+                        message="A Pi session line is not valid JSON.",
+                    )
+                )
                 continue
             entry_id = entry.get("id")
             if not isinstance(entry_id, str):
@@ -250,9 +295,25 @@ def collect_pi_v4(
                 continue
             primary_id = _stable_id("evt", material, entry_id, "primary")
             parent_id = entry.get("parentId")
-            predecessor_ids = (entry_event_ids[parent_id],) if isinstance(parent_id, str) and parent_id in entry_event_ids else ()
-            source = (SourceRef(material=material, record_id=entry_id, line=line, byte_start=start, byte_end=end),)
-            timestamp = entry.get("timestamp") if isinstance(entry.get("timestamp"), str) else None
+            predecessor_ids = (
+                (entry_event_ids[parent_id],)
+                if isinstance(parent_id, str) and parent_id in entry_event_ids
+                else ()
+            )
+            source = (
+                SourceRef(
+                    material=material,
+                    record_id=entry_id,
+                    line=line,
+                    byte_start=start,
+                    byte_end=end,
+                ),
+            )
+            timestamp = (
+                entry.get("timestamp")
+                if isinstance(entry.get("timestamp"), str)
+                else None
+            )
             generated: list[Any] = []
             entry_type = entry.get("type")
             message = entry.get("message")
@@ -272,7 +333,10 @@ def collect_pi_v4(
                         MessageEvent(
                             event_id=primary_id,
                             kind="message",
-                            payload=MessagePayload(role=role, content=_content(message.get("content"), materials)),
+                            payload=MessagePayload(
+                                role=role,
+                                content=_content(message.get("content"), materials),
+                            ),
                             **common,
                         )
                     )
@@ -282,9 +346,15 @@ def collect_pi_v4(
                             event_id=primary_id,
                             kind="tool_result",
                             payload=ToolResultPayload(
-                                call_id=str(message["toolCallId"]) if message.get("toolCallId") is not None else None,
-                                linkage="linked" if message.get("toolCallId") is not None else "unresolved",
-                                outcome="error" if message.get("isError") else "success",
+                                call_id=str(message["toolCallId"])
+                                if message.get("toolCallId") is not None
+                                else None,
+                                linkage="linked"
+                                if message.get("toolCallId") is not None
+                                else "unresolved",
+                                outcome="error"
+                                if message.get("isError")
+                                else "success",
                                 content=_content(message.get("content"), materials),
                             ),
                             **common,
@@ -294,15 +364,27 @@ def collect_pi_v4(
                     for index, block in enumerate(message["content"]):
                         if not isinstance(block, Mapping):
                             continue
-                        extra = {**common, "seq": seq + len(generated), "predecessor_ids": ()}
-                        if block.get("type") == "thinking" and isinstance(block.get("thinking"), str):
+                        extra = {
+                            **common,
+                            "seq": seq + len(generated),
+                            "predecessor_ids": (),
+                        }
+                        if block.get("type") == "thinking" and isinstance(
+                            block.get("thinking"), str
+                        ):
                             generated.append(
                                 ReasoningEvent(
-                                    event_id=_stable_id("evt", material, entry_id, "thinking", index),
+                                    event_id=_stable_id(
+                                        "evt", material, entry_id, "thinking", index
+                                    ),
                                     kind="reasoning",
                                     payload=ReasoningPayload(
                                         visibility="full",
-                                        content=(TextContent(type="text", text=block["thinking"]),),
+                                        content=(
+                                            TextContent(
+                                                type="text", text=block["thinking"]
+                                            ),
+                                        ),
                                     ),
                                     **extra,
                                 )
@@ -310,13 +392,24 @@ def collect_pi_v4(
                         elif block.get("type") == "toolCall":
                             generated.append(
                                 ToolCallEvent(
-                                    event_id=_stable_id("evt", material, entry_id, "tool", index),
+                                    event_id=_stable_id(
+                                        "evt", material, entry_id, "tool", index
+                                    ),
                                     kind="tool_call",
                                     payload=ToolCallPayload(
-                                        call_id=str(block.get("id") or _stable_id("call", material, entry_id, index)),
+                                        call_id=str(
+                                            block.get("id")
+                                            or _stable_id(
+                                                "call", material, entry_id, index
+                                            )
+                                        ),
                                         name=str(block.get("name") or "unknown"),
-                                        arguments_state="available" if "arguments" in block else "unknown",
-                                        arguments=block.get("arguments") if "arguments" in block else None,
+                                        arguments_state="available"
+                                        if "arguments" in block
+                                        else "unknown",
+                                        arguments=block.get("arguments")
+                                        if "arguments" in block
+                                        else None,
                                     ),
                                     **extra,
                                 )
@@ -329,14 +422,20 @@ def collect_pi_v4(
                             kind="usage",
                             payload=UsagePayload(
                                 owner=UsageOwner(type="event", id=primary_id),
-                                model=message.get("model") if isinstance(message.get("model"), str) else None,
+                                model=message.get("model")
+                                if isinstance(message.get("model"), str)
+                                else None,
                                 scope="self",
                                 temporality="delta",
                                 measurements=_usage_measurements(usage),
                                 sample_id=str(message.get("responseId") or entry_id),
                                 source="provider_reported",
                             ),
-                            **{**common, "seq": seq + len(generated), "predecessor_ids": ()},
+                            **{
+                                **common,
+                                "seq": seq + len(generated),
+                                "predecessor_ids": (),
+                            },
                         )
                     )
                 if isinstance(usage, Mapping) and _cost_measurement(usage):
@@ -346,19 +445,42 @@ def collect_pi_v4(
                             kind="usage",
                             payload=UsagePayload(
                                 owner=UsageOwner(type="event", id=primary_id),
-                                model=message.get("model") if isinstance(message.get("model"), str) else None,
+                                model=message.get("model")
+                                if isinstance(message.get("model"), str)
+                                else None,
                                 scope="self",
                                 temporality="delta",
                                 measurements=_cost_measurement(usage),
                                 sample_id=f"cost:{message.get('responseId') or entry_id}",
                                 source="client_estimated",
                             ),
-                            **{**common, "seq": seq + len(generated), "predecessor_ids": ()},
+                            **{
+                                **common,
+                                "seq": seq + len(generated),
+                                "predecessor_ids": (),
+                            },
                         )
                     )
-            elif entry_type in {"model_change", "thinking_level_change", "compaction", "branch_summary"}:
-                operation = "compact" if entry_type == "compaction" else ("replace" if entry_type in {"model_change", "thinking_level_change"} else "append")
-                subject = "history" if entry_type in {"compaction", "branch_summary"} else ("model" if entry_type == "model_change" else "configuration")
+            elif entry_type in {
+                "model_change",
+                "thinking_level_change",
+                "compaction",
+                "branch_summary",
+            }:
+                operation = (
+                    "compact"
+                    if entry_type == "compaction"
+                    else (
+                        "replace"
+                        if entry_type in {"model_change", "thinking_level_change"}
+                        else "append"
+                    )
+                )
+                subject = (
+                    "history"
+                    if entry_type in {"compaction", "branch_summary"}
+                    else ("model" if entry_type == "model_change" else "configuration")
+                )
                 text = entry.get("summary")
                 generated.append(
                     ContextChangeEvent(
@@ -367,8 +489,17 @@ def collect_pi_v4(
                         payload=ContextChangePayload(
                             operation=operation,
                             subject=subject,
-                            content=((TextContent(type="text", text=text),) if isinstance(text, str) else ()),
-                            affected_event_ids=((entry_event_ids[entry["fromId"]],) if entry_type == "branch_summary" and entry.get("fromId") in entry_event_ids else ()),
+                            content=(
+                                (TextContent(type="text", text=text),)
+                                if isinstance(text, str)
+                                else ()
+                            ),
+                            affected_event_ids=(
+                                (entry_event_ids[entry["fromId"]],)
+                                if entry_type == "branch_summary"
+                                and entry.get("fromId") in entry_event_ids
+                                else ()
+                            ),
                         ),
                         **common,
                     )
@@ -403,7 +534,11 @@ def collect_pi_v4(
                                 sample_id=f"cost:{entry_id}",
                                 source="client_estimated",
                             ),
-                            **{**common, "seq": seq + len(generated), "predecessor_ids": ()},
+                            **{
+                                **common,
+                                "seq": seq + len(generated),
+                                "predecessor_ids": (),
+                            },
                         )
                     )
             else:
@@ -411,7 +546,11 @@ def collect_pi_v4(
                     ProviderEvent(
                         event_id=primary_id,
                         kind="provider_event",
-                        payload=ProviderEventPayload(namespace="pi.session/v3", event_type=str(entry_type), value=entry),
+                        payload=ProviderEventPayload(
+                            namespace="pi.session/v3",
+                            event_type=str(entry_type),
+                            value=entry,
+                        ),
                         **common,
                     )
                 )
@@ -428,7 +567,11 @@ def collect_pi_v4(
             message="Standard Pi session persistence does not declare an execution terminal state.",
         )
     )
-    issue_ids = tuple(item.issue_id for item in issues if item.issue_id != "terminal-state-unavailable")
+    issue_ids = tuple(
+        item.issue_id
+        for item in issues
+        if item.issue_id != "terminal-state-unavailable"
+    )
     coverage = tuple(
         (
             Coverage(
@@ -439,8 +582,16 @@ def collect_pi_v4(
             if domain == "terminal_state"
             else Coverage(
                 domain=domain,
-                status=("partial" if issue_ids and domain in {"content", "history_branch", "usage"} else "complete"),
-                issue_ids=(issue_ids if issue_ids and domain in {"content", "history_branch", "usage"} else ()),
+                status=(
+                    "partial"
+                    if issue_ids and domain in {"content", "history_branch", "usage"}
+                    else "complete"
+                ),
+                issue_ids=(
+                    issue_ids
+                    if issue_ids and domain in {"content", "history_branch", "usage"}
+                    else ()
+                ),
             )
         )
         for domain in (
@@ -472,17 +623,28 @@ def collect_pi_v4(
         selected_roots=(selected_header["id"],),
         trajectory=trajectory,
         materials=materials,
-        material_kinds={name: ("blob" if name.startswith("blob/") else "native") for name in materials},
+        material_kinds={
+            name: ("blob" if name.startswith("blob/") else "native")
+            for name in materials
+        },
         material_media_types={
-            name: ("text/plain; charset=utf-8" if name.startswith("blob/") else "application/x-ndjson")
+            name: (
+                "text/plain; charset=utf-8"
+                if name.startswith("blob/")
+                else "application/x-ndjson"
+            )
             for name in materials
         },
     )
     return manifest, trajectory, materials
 
 
-def list_pi_sessions(home: Path | None, limit: int) -> tuple[list[dict[str, object]], bool]:
-    root = Path(home).expanduser() if home is not None else Path.home() / ".pi" / "agent"
+def list_pi_sessions(
+    home: Path | None, limit: int
+) -> tuple[list[dict[str, object]], bool]:
+    root = (
+        Path(home).expanduser() if home is not None else Path.home() / ".pi" / "agent"
+    )
     rows: list[dict[str, object]] = []
     for path in root.glob("sessions/**/*.jsonl"):
         header = _header(path)
@@ -493,13 +655,17 @@ def list_pi_sessions(home: Path | None, limit: int) -> tuple[list[dict[str, obje
                 "provider_id": "pi",
                 "thread_id": header["id"],
                 "archive_state": "unknown",
-                "workspace": header.get("cwd") if isinstance(header.get("cwd"), str) else None,
+                "workspace": header.get("cwd")
+                if isinstance(header.get("cwd"), str)
+                else None,
                 "title": None,
                 "first_user_message": None,
                 "workspace_truncated": False,
                 "title_truncated": False,
                 "first_user_message_truncated": False,
-                "created_at": header.get("timestamp") if isinstance(header.get("timestamp"), str) else None,
+                "created_at": header.get("timestamp")
+                if isinstance(header.get("timestamp"), str)
+                else None,
                 "updated_at": None,
                 "recency_at_ms": int(path.stat().st_mtime_ns / 1_000_000),
             }

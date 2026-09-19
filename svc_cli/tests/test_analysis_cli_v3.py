@@ -28,7 +28,16 @@ def test_v3_cli_discovers_exports_and_analyzes_standard_pi(tmp_path: Path) -> No
     shutil.copyfile(FIXTURES / "pi" / "session.jsonl", source)
 
     code, stdout, stderr = _invoke(
-        ["telemetry", "agent-thread", "list", "--provider", "pi", "--home", str(home), "--json"]
+        [
+            "telemetry",
+            "agent-thread",
+            "list",
+            "--provider",
+            "pi",
+            "--home",
+            str(home),
+            "--json",
+        ]
     )
     assert (code, stderr) == (0, "")
     assert json.loads(stdout)["threads"][0]["thread_id"] == "pi-root"

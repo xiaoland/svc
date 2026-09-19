@@ -1,62 +1,24 @@
-"""Public upgrade output and projections from upgrade services."""
+"""Public Corpus-upgrade output projections."""
 
 from __future__ import annotations
 
-from typing import Literal, TypeAlias
+from typing import Literal
 
 from pydantic import Field
 
-from .model import MachineModel
 from ..plans import PlanAction
-from ..upgrade import (
-    ConfigGuideReference as ServiceConfigGuideReference,
-    ConfigRemainingTarget as ServiceConfigRemainingTarget,
-    CorpusGuideReference as ServiceCorpusGuideReference,
-    CorpusRelease as ServiceCorpusRelease,
-    CorpusRemainingTarget as ServiceCorpusRemainingTarget,
-    RemainingTarget as ServiceRemainingTarget,
-    UpgradeApplyResult,
-    UpgradeConfigurationDetails as ServiceUpgradeConfigurationDetails,
-    UpgradeCorpusDetails as ServiceUpgradeCorpusDetails,
-    UpgradeMigration as ServiceUpgradeMigration,
-    UpgradeOperation,
-    UpgradePlan,
-    UpgradeTarget,
-    UpgradeVerification as ServiceUpgradeVerification,
-)
+from ..upgrade import CorpusGuideReference as ServiceCorpusGuideReference
+from ..upgrade import CorpusRelease as ServiceCorpusRelease
+from ..upgrade import UpgradeApplyResult, UpgradeCorpusDetails as ServiceDetails
+from ..upgrade import UpgradeMigration as ServiceMigration
+from ..upgrade import UpgradeOperation, UpgradePlan
 from .common import BlockerOutput, FileStateOutput, project_blocker, project_file_state
-
-
-class ConfigGuideReference(MachineModel):
-    id: str
-    sha256: str
+from .model import MachineModel
 
 
 class CorpusGuideReference(MachineModel):
     path: str
     sha256: str
-
-
-MigrationGuideReference: TypeAlias = ConfigGuideReference | CorpusGuideReference
-
-
-class UpgradeConfigurationDetails(MachineModel):
-    config_schema: int | None = Field(
-        default=None,
-        alias="schema",
-        serialization_alias="schema",
-        exclude_if=lambda value: value is None,
-    )
-    status: Literal["current"] | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-    from_schema: int | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-    to_schema: int | None = Field(default=None, exclude_if=lambda value: value is None)
-    guidance: tuple[ConfigGuideReference, ...] | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
 
 
 class CorpusReleaseOutput(MachineModel):
@@ -86,58 +48,24 @@ class UpgradeCorpusDetails(MachineModel):
     )
 
 
-class UpgradeDetails(MachineModel):
-    configuration: UpgradeConfigurationDetails | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-    corpus: UpgradeCorpusDetails | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-
-
-class CorpusRemainingTarget(MachineModel):
-    target: Literal["corpus"] = "corpus"
-    status: Literal["pending", "blocked"]
-    from_version: str
-    to_version: str
-    code: str | None = Field(default=None, exclude_if=lambda value: value is None)
-
-
-class ConfigRemainingTarget(MachineModel):
-    target: Literal["config"] = "config"
-    status: Literal["pending", "blocked"]
-    from_schema: int
-    to_schema: int
-
-
-RemainingTarget: TypeAlias = CorpusRemainingTarget | ConfigRemainingTarget
-
-
 class UpgradeOperationOutput(MachineModel):
     path: str
     action: PlanAction
     reason: str
     before: FileStateOutput
     after: FileStateOutput
-    surface: Literal["configuration", "project-corpus-baseline"]
-    extent: Literal["whole-file", "json-field"]
+    surface: Literal["project-corpus-baseline"]
+    extent: Literal["json-field"]
 
 
 class UpgradePlanOutput(MachineModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     command: Literal["upgrade"] = "upgrade"
     mode: Literal["plan"] = "plan"
     status: Literal["noop", "blocked", "ready", "migration-required"]
     repo: str
-    target: UpgradeTarget | None
     operations: tuple[UpgradeOperationOutput, ...]
-    remaining_targets: tuple[RemainingTarget, ...]
-    configuration: UpgradeConfigurationDetails | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-    corpus: UpgradeCorpusDetails | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
+    corpus: UpgradeCorpusDetails
     blockers: tuple[BlockerOutput, ...] | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -148,49 +76,30 @@ class UpgradePlanOutput(MachineModel):
 
 class UpgradeMigrationOutput(MachineModel):
     disposition: Literal["caller-asserted", "not-required"]
-    guidance: tuple[MigrationGuideReference, ...]
-
-
-class UpgradeVerificationOutput(MachineModel):
-    scope: Literal["effective-schema-3-configuration", "project-corpus-baseline"]
-    status: Literal["passed"] = "passed"
+    guidance: tuple[CorpusGuideReference, ...]
 
 
 class UpgradeApplyOutput(MachineModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     command: Literal["upgrade"] = "upgrade"
     mode: Literal["apply"] = "apply"
     status: Literal["applied"] = "applied"
     repo: str
-    target: UpgradeTarget
     plan_digest: str
     changed: int
     operations: tuple[UpgradeOperationOutput, ...]
-    configuration: UpgradeConfigurationDetails | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-    corpus: UpgradeCorpusDetails | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
+    corpus: UpgradeCorpusDetails
     migration: UpgradeMigrationOutput
-    verification: UpgradeVerificationOutput
-    remaining_targets: tuple[RemainingTarget, ...]
+    verification: Literal["passed"] = "passed"
 
 
 def project_upgrade_plan(plan: UpgradePlan) -> UpgradePlanOutput:
     return UpgradePlanOutput(
         status=plan.status,
         repo=str(plan.repo),
-        target=plan.target,
         operations=tuple(_operation(value) for value in plan.operations()),
-        remaining_targets=tuple(_remaining(value) for value in plan.remaining_targets),
-        configuration=_configuration(plan.details.configuration),
-        corpus=_corpus(plan.details.corpus),
-        blockers=(
-            tuple(project_blocker(value) for value in plan.blockers)
-            if plan.blockers
-            else None
-        ),
+        corpus=_corpus(plan.corpus),
+        blockers=tuple(project_blocker(value) for value in plan.blockers) or None,
         plan_digest=plan.digest,
     )
 
@@ -198,44 +107,15 @@ def project_upgrade_plan(plan: UpgradePlan) -> UpgradePlanOutput:
 def project_upgrade_apply(result: UpgradeApplyResult) -> UpgradeApplyOutput:
     return UpgradeApplyOutput(
         repo=result.repo,
-        target=result.target,
         plan_digest=result.plan_digest,
         changed=result.changed,
         operations=tuple(_operation(value) for value in result.operations),
-        configuration=_configuration(result.configuration),
         corpus=_corpus(result.corpus),
         migration=_migration(result.migration),
-        verification=UpgradeVerificationOutput(
-            scope=result.verification.scope,
-            status=result.verification.status,
-        ),
-        remaining_targets=tuple(
-            _remaining(value) for value in result.remaining_targets
-        ),
     )
 
 
-def _configuration(
-    value: ServiceUpgradeConfigurationDetails | None,
-) -> UpgradeConfigurationDetails | None:
-    if value is None:
-        return None
-    return UpgradeConfigurationDetails(
-        config_schema=value.config_schema,
-        status=value.status,
-        from_schema=value.from_schema,
-        to_schema=value.to_schema,
-        guidance=(
-            None
-            if value.guidance is None
-            else tuple(_config_guide(guide) for guide in value.guidance)
-        ),
-    )
-
-
-def _corpus(value: ServiceUpgradeCorpusDetails | None) -> UpgradeCorpusDetails | None:
-    if value is None:
-        return None
+def _corpus(value: ServiceDetails) -> UpgradeCorpusDetails:
     return UpgradeCorpusDetails(
         project_version=value.project_version,
         available_version=value.available_version,
@@ -245,7 +125,7 @@ def _corpus(value: ServiceUpgradeCorpusDetails | None) -> UpgradeCorpusDetails |
         releases=(
             None
             if value.releases is None
-            else tuple(_release(release) for release in value.releases)
+            else tuple(_release(item) for item in value.releases)
         ),
     )
 
@@ -257,7 +137,7 @@ def _release(value: ServiceCorpusRelease) -> CorpusReleaseOutput:
         guides=(
             None
             if value.guides is None
-            else tuple(_corpus_guide(guide) for guide in value.guides)
+            else tuple(_guide(item) for item in value.guides)
         ),
     )
 
@@ -274,40 +154,12 @@ def _operation(value: UpgradeOperation) -> UpgradeOperationOutput:
     )
 
 
-def _remaining(value: ServiceRemainingTarget) -> RemainingTarget:
-    if isinstance(value, ServiceConfigRemainingTarget):
-        return ConfigRemainingTarget(
-            status=value.status,
-            from_schema=value.from_schema,
-            to_schema=value.to_schema,
-        )
-    assert isinstance(value, ServiceCorpusRemainingTarget)
-    return CorpusRemainingTarget(
-        status=value.status,
-        from_version=value.from_version,
-        to_version=value.to_version,
-        code=value.code,
-    )
-
-
-def _migration(value: ServiceUpgradeMigration) -> UpgradeMigrationOutput:
+def _migration(value: ServiceMigration) -> UpgradeMigrationOutput:
     return UpgradeMigrationOutput(
         disposition=value.disposition,
-        guidance=tuple(_guide(guide) for guide in value.guidance),
+        guidance=tuple(_guide(item) for item in value.guidance),
     )
 
 
-def _guide(
-    value: ServiceConfigGuideReference | ServiceCorpusGuideReference,
-) -> MigrationGuideReference:
-    if isinstance(value, ServiceConfigGuideReference):
-        return _config_guide(value)
-    return _corpus_guide(value)
-
-
-def _config_guide(value: ServiceConfigGuideReference) -> ConfigGuideReference:
-    return ConfigGuideReference(id=value.id, sha256=value.sha256)
-
-
-def _corpus_guide(value: ServiceCorpusGuideReference) -> CorpusGuideReference:
+def _guide(value: ServiceCorpusGuideReference) -> CorpusGuideReference:
     return CorpusGuideReference(path=value.path, sha256=value.sha256)

@@ -14,11 +14,9 @@ from .config import (
     CONFIG_SCHEMA_VERSION,
     LOCAL_CONFIG_FILE,
     ConfigError,
-    LegacyProjectConfig,
     ProjectConfig,
     ResolvedConfig,
     load_config,
-    parse_legacy_project_config,
     parse_project_config,
 )
 from .errors import SvcError
@@ -313,9 +311,7 @@ def render_project_state(corpus_version: str) -> bytes:
     ).encode("utf-8")
 
 
-def parse_project_state(
-    content: bytes,
-) -> LegacyProjectConfig | ProjectConfig:
+def parse_project_state(content: bytes) -> ProjectConfig:
     try:
         raw = json.loads(content)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -323,11 +319,6 @@ def parse_project_state(
     if not isinstance(raw, dict):
         raise ValueError("svc.json must contain a JSON object")
     schema = raw.get("schema_version")
-    if schema == 2:
-        try:
-            return parse_legacy_project_config(content)
-        except ConfigError as error:
-            raise ValueError(str(error)) from error
     if schema != PROJECT_SCHEMA_VERSION:
         raise ValueError(f"Unsupported svc.json schema: {schema!r}")
     try:
@@ -808,18 +799,9 @@ def _status_decision(
             "Project configuration is invalid; repair the Consumer-owned file before continuing.",
         )
     if project_status == "schema-write-blocked":
-        if (
-            isinstance(project, ProjectSchemaBlockedStatus)
-            and project.schema_version == 2
-        ):
-            return "actionable", _next_action(
-                "plan-project-upgrade",
-                "Project configuration schema has a supported exact migration.",
-                command=("svc", "upgrade", str(root), "--target", "config"),
-            )
         return "actionable", _next_action(
             "migrate-project-configuration",
-            "Project configuration schema is outside the automatic migration range.",
+            "Project configuration schema is unsupported by this CLI.",
         )
     integration = _integration_status(guidance, managed_ignore, retired_skill)
     if integration.status != "current":
@@ -832,7 +814,7 @@ def _status_decision(
         return "actionable", _next_action(
             "plan-project-upgrade",
             "The project Corpus baseline is behind the installed Corpus.",
-            command=("svc", "upgrade", str(root), "--target", "corpus"),
+            command=("svc", "upgrade", str(root)),
         )
     if project_status == "corpus-ahead":
         return "actionable", _next_action(
@@ -908,10 +890,7 @@ def _integration_status(
     )
 
 
-def _block_noncurrent_schema(
-    state: LegacyProjectConfig | ProjectConfig,
-    blockers: list[Blocker],
-) -> None:
+def _block_noncurrent_schema(state: ProjectConfig, blockers: list[Blocker]) -> None:
     if state.schema_version == PROJECT_SCHEMA_VERSION:
         return
     blockers.append(
@@ -923,14 +902,8 @@ def _block_noncurrent_schema(
     )
 
 
-def _state_corpus_version(
-    state: LegacyProjectConfig | ProjectConfig,
-) -> str:
-    if isinstance(state, ProjectConfig):
-        return state.corpus_version
-    if isinstance(state, LegacyProjectConfig):
-        return state.svc_version
-    raise AssertionError("unreachable project configuration type")
+def _state_corpus_version(state: ProjectConfig) -> str:
+    return state.corpus_version
 
 
 def replace_corpus_baseline(content: bytes, version: str, field: str) -> bytes:

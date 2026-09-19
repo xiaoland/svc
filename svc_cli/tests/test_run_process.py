@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import selectors
 import signal
 import subprocess
 import sys
@@ -51,6 +52,12 @@ def start_owner(root: Path) -> tuple[subprocess.Popen[bytes], str]:
         stderr=subprocess.PIPE,
     )
     assert process.stderr is not None
+    selector = selectors.DefaultSelector()
+    selector.register(process.stderr, selectors.EVENT_READ)
+    if not selector.select(timeout=5):
+        process.kill()
+        stdout, stderr = process.communicate(timeout=5)
+        pytest.fail(f"owner startup timed out\nstdout={stdout!r}\nstderr={stderr!r}")
     header = process.stderr.readline()
     match = EXECUTION_ID.search(header)
     assert match, header
@@ -94,13 +101,14 @@ def test_owner_sigint_settles_shared_execution_and_preserves_foreground_group(
             cwd=tmp_path,
             capture_output=True,
             check=False,
+            timeout=5,
         )
         assert inspected.returncode == 0
         assert json.loads(inspected.stdout)["state"] == "interrupted"
     finally:
         if owner.poll() is None:
             owner.kill()
-            owner.wait()
+            owner.wait(timeout=5)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX signal projection")
@@ -145,7 +153,7 @@ def test_follower_sigint_detaches_without_interrupting_owner(tmp_path: Path) -> 
         for process in (follower, owner):
             if process.poll() is None:
                 process.kill()
-                process.wait()
+                process.wait(timeout=5)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX uncatchable owner loss")
@@ -204,6 +212,7 @@ def test_owner_loss_is_reconciled_without_same_invocation_replacement(
             cwd=tmp_path,
             capture_output=True,
             check=False,
+            timeout=5,
         )
         assert inspected.returncode == 0
         assert json.loads(inspected.stdout)["state"] == "owner-lost"
@@ -222,10 +231,10 @@ def test_owner_loss_is_reconciled_without_same_invocation_replacement(
     finally:
         if owner.poll() is None:
             owner.kill()
-            owner.wait()
+            owner.wait(timeout=5)
         if follower is not None and follower.poll() is None:
             follower.kill()
-            follower.wait()
+            follower.wait(timeout=5)
         if orphan is not None:
             with suppress(ProcessLookupError):
                 os.kill(orphan, signal.SIGTERM)

@@ -47,7 +47,9 @@ from .codex_rollout import CodexRolloutProvider
 
 
 def _stable_id(prefix: str, *parts: object) -> str:
-    digest = hashlib.sha256("\x00".join(str(part) for part in parts).encode()).hexdigest()
+    digest = hashlib.sha256(
+        "\x00".join(str(part) for part in parts).encode()
+    ).hexdigest()
     return f"{prefix}_{digest}"
 
 
@@ -59,7 +61,9 @@ def _session_meta(path: Path) -> dict[str, Any] | None:
                     value = json.loads(raw)
                 except (UnicodeDecodeError, json.JSONDecodeError):
                     continue
-                if value.get("type") == "session_meta" and isinstance(value.get("payload"), dict):
+                if value.get("type") == "session_meta" and isinstance(
+                    value.get("payload"), dict
+                ):
                     return value["payload"]
     except OSError:
         return None
@@ -76,9 +80,30 @@ def _state_sources(home: Path) -> tuple[dict[str, Path], dict[str, str]]:
         connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
         connection.row_factory = sqlite3.Row
         columns = {row[1] for row in connection.execute("PRAGMA table_info(threads)")}
-        id_name = next((name for name in ("id", "thread_id", "threadId", "uuid") if name in columns), None)
-        path_name = next((name for name in ("rollout_path", "rolloutPath", "source_path", "path") if name in columns), None)
-        parent_name = next((name for name in ("parent_thread_id", "parentThreadId", "parent_id") if name in columns), None)
+        id_name = next(
+            (
+                name
+                for name in ("id", "thread_id", "threadId", "uuid")
+                if name in columns
+            ),
+            None,
+        )
+        path_name = next(
+            (
+                name
+                for name in ("rollout_path", "rolloutPath", "source_path", "path")
+                if name in columns
+            ),
+            None,
+        )
+        parent_name = next(
+            (
+                name
+                for name in ("parent_thread_id", "parentThreadId", "parent_id")
+                if name in columns
+            ),
+            None,
+        )
         if id_name is None or path_name is None:
             return {}, {}
         selected = [id_name, path_name, *([parent_name] if parent_name else [])]
@@ -94,7 +119,9 @@ def _state_sources(home: Path) -> tuple[dict[str, Path], dict[str, str]]:
             if parent_name and isinstance(row[parent_name], str):
                 parents[thread_id] = row[parent_name]
     except sqlite3.DatabaseError as error:
-        raise SvcError("thread-source-incompatible", "Codex state database cannot be read.") from error
+        raise SvcError(
+            "thread-source-incompatible", "Codex state database cannot be read."
+        ) from error
     finally:
         if "connection" in locals():
             connection.close()
@@ -104,14 +131,24 @@ def _state_sources(home: Path) -> tuple[dict[str, Path], dict[str, str]]:
 def _collect_sources(
     context: ProviderContext,
     selection: ThreadSelection,
-) -> tuple[str, list[tuple[str, Path, str | None]], tuple[CollectionGap, ...], dict[str, str]]:
+) -> tuple[
+    str, list[tuple[str, Path, str | None]], tuple[CollectionGap, ...], dict[str, str]
+]:
     provider = CodexRolloutProvider()
     root = provider.resolve(context, selection)
-    home = Path(context.home).expanduser() if context.home is not None else Path.home() / ".codex"
+    home = (
+        Path(context.home).expanduser()
+        if context.home is not None
+        else Path.home() / ".codex"
+    )
     sources, database_parents = _state_sources(home)
     sources[root.thread_id] = root.source_path
     candidates = {root.source_path.parent}
-    candidates.update(path for path in (home / "sessions", home / "archived_sessions") if path.is_dir())
+    candidates.update(
+        path
+        for path in (home / "sessions", home / "archived_sessions")
+        if path.is_dir()
+    )
     for directory in candidates:
         for path in directory.glob("**/*.jsonl"):
             meta = _session_meta(path)
@@ -138,9 +175,15 @@ def _collect_sources(
             records = _native_lines(path.read_bytes())
             for _, _, _, value in records:
                 payload = value.get("payload") if value else None
-                if not isinstance(payload, Mapping) or value.get("type") != "response_item":
+                if (
+                    not isinstance(payload, Mapping)
+                    or value.get("type") != "response_item"
+                ):
                     continue
-                if payload.get("type") == "function_call" and payload.get("name") == "spawn_agent":
+                if (
+                    payload.get("type") == "function_call"
+                    and payload.get("name") == "spawn_agent"
+                ):
                     calls[str(payload.get("call_id") or len(calls))] = None
                 elif payload.get("type") == "function_call_output":
                     call_id = str(payload.get("call_id") or "")
@@ -186,7 +229,9 @@ def _collect_sources(
         for thread_id in seen
         if thread_id in sources and not sources[thread_id].is_file()
     }
-    gap_parents.update({child: parent for child, parent in missing.items() if parent is not None})
+    gap_parents.update(
+        {child: parent for child, parent in missing.items() if parent is not None}
+    )
     gaps = tuple(
         CollectionGap(
             code="missing-execution-material",
@@ -207,7 +252,9 @@ def _text_content(value: str, materials: dict[str, bytes]) -> TextContent | Blob
     return BlobContent(type="blob", ref=name, media_type="text/plain; charset=utf-8")
 
 
-def _content(value: object, materials: dict[str, bytes]) -> tuple[TextContent | BlobContent | OpaqueContent, ...]:
+def _content(
+    value: object, materials: dict[str, bytes]
+) -> tuple[TextContent | BlobContent | OpaqueContent, ...]:
     if isinstance(value, str):
         return (_text_content(value, materials),)
     if not isinstance(value, list):
@@ -218,10 +265,18 @@ def _content(value: object, materials: dict[str, bytes]) -> tuple[TextContent | 
             result.append(OpaqueContent(type="opaque", reason="unsupported-content"))
             continue
         text = block.get("text")
-        if isinstance(text, str) and block.get("type") in {"text", "input_text", "output_text"}:
+        if isinstance(text, str) and block.get("type") in {
+            "text",
+            "input_text",
+            "output_text",
+        }:
             result.append(_text_content(text, materials))
         else:
-            result.append(OpaqueContent(type="opaque", reason=f"unsupported-{block.get('type', 'content')}"))
+            result.append(
+                OpaqueContent(
+                    type="opaque", reason=f"unsupported-{block.get('type', 'content')}"
+                )
+            )
     return tuple(result)
 
 
@@ -251,7 +306,9 @@ def _measurements(value: Mapping[str, Any]) -> tuple[UsageMeasurement, ...]:
     return tuple(result)
 
 
-def _native_lines(value: bytes) -> Iterable[tuple[int, int, int, dict[str, Any] | None]]:
+def _native_lines(
+    value: bytes,
+) -> Iterable[tuple[int, int, int, dict[str, Any] | None]]:
     offset = 0
     for line, raw in enumerate(value.splitlines(keepends=True)):
         end = offset + len(raw)
@@ -269,12 +326,18 @@ def collect_codex_v4(
 ) -> tuple[EvidenceV4Manifest, bytes, dict[str, bytes]]:
     root_id, sources, gaps, gap_parents = _collect_sources(context, selection)
     if not sources:
-        raise SvcError("thread-source-not-found", "No Codex rollout material was collected.")
+        raise SvcError(
+            "thread-source-not-found", "No Codex rollout material was collected."
+        )
     executions: list[ExecutionRecord] = []
     events: list[Any] = []
     materials: dict[str, bytes] = {}
-    execution_by_thread = {thread_id: _stable_id("exec", thread_id) for thread_id, _, _ in sources}
-    execution_by_thread.update({gap.object_id: _stable_id("exec", gap.object_id) for gap in gaps})
+    execution_by_thread = {
+        thread_id: _stable_id("exec", thread_id) for thread_id, _, _ in sources
+    }
+    execution_by_thread.update(
+        {gap.object_id: _stable_id("exec", gap.object_id) for gap in gaps}
+    )
     issues: list[CoverageIssue] = [
         CoverageIssue(
             issue_id=f"gap-{index}",
@@ -288,7 +351,9 @@ def collect_codex_v4(
     for thread_id, path, parent in sources:
         value = path.read_bytes()
         if len(value) > MAX_SOURCE_BYTES:
-            raise SvcError("source-limit-reached", "Codex rollout exceeds the source bound.")
+            raise SvcError(
+                "source-limit-reached", "Codex rollout exceeds the source bound."
+            )
         material = f"native/{hashlib.sha256(thread_id.encode()).hexdigest()}.jsonl"
         materials[material] = value
         execution_id = execution_by_thread[thread_id]
@@ -316,7 +381,9 @@ def collect_codex_v4(
                     mapping="explicit",
                     payload=RelationPayload(
                         relation="delegation",
-                        source=RelationEndpoint(type="execution", id=execution_by_thread[parent]),
+                        source=RelationEndpoint(
+                            type="execution", id=execution_by_thread[parent]
+                        ),
                         target=RelationEndpoint(type="execution", id=execution_id),
                     ),
                 )
@@ -336,11 +403,19 @@ def collect_codex_v4(
             payload = envelope.get("payload")
             if not isinstance(payload, Mapping) or native_type == "session_meta":
                 continue
-            timestamp = envelope.get("timestamp") if isinstance(envelope.get("timestamp"), str) else None
-            source = (SourceRef(material=material, line=line, byte_start=start, byte_end=end),)
+            timestamp = (
+                envelope.get("timestamp")
+                if isinstance(envelope.get("timestamp"), str)
+                else None
+            )
+            source = (
+                SourceRef(material=material, line=line, byte_start=start, byte_end=end),
+            )
             base = {
                 "type": "event",
-                "event_id": _stable_id("evt", material, line, native_type, payload.get("type")),
+                "event_id": _stable_id(
+                    "evt", material, line, native_type, payload.get("type")
+                ),
                 "seq": seq,
                 "execution_id": execution_id,
                 "source_refs": source,
@@ -349,8 +424,13 @@ def collect_codex_v4(
                     payload.get("turn_id")
                     if isinstance(payload.get("turn_id"), str)
                     else (
-                        payload.get("internal_chat_message_metadata_passthrough", {}).get("turn_id")
-                        if isinstance(payload.get("internal_chat_message_metadata_passthrough"), Mapping)
+                        payload.get(
+                            "internal_chat_message_metadata_passthrough", {}
+                        ).get("turn_id")
+                        if isinstance(
+                            payload.get("internal_chat_message_metadata_passthrough"),
+                            Mapping,
+                        )
                         else None
                     )
                 ),
@@ -363,16 +443,28 @@ def collect_codex_v4(
                 event = MessageEvent(
                     kind="message",
                     payload=MessagePayload(
-                        role=role if role in {"system", "developer", "user", "assistant", "tool"} else "unknown",
+                        role=role
+                        if role in {"system", "developer", "user", "assistant", "tool"}
+                        else "unknown",
                         content=_content(payload.get("content"), materials),
                     ),
                     **base,
                 )
             elif native_type == "response_item" and record_type == "reasoning":
                 summary = payload.get("summary")
-                content = _content(summary if summary else payload.get("content"), materials)
-                visibility = "summary" if summary else ("full" if payload.get("content") else "opaque")
-                event = ReasoningEvent(kind="reasoning", payload=ReasoningPayload(visibility=visibility, content=content), **base)
+                content = _content(
+                    summary if summary else payload.get("content"), materials
+                )
+                visibility = (
+                    "summary"
+                    if summary
+                    else ("full" if payload.get("content") else "opaque")
+                )
+                event = ReasoningEvent(
+                    kind="reasoning",
+                    payload=ReasoningPayload(visibility=visibility, content=content),
+                    **base,
+                )
             elif native_type == "response_item" and record_type == "function_call":
                 arguments = payload.get("arguments")
                 if isinstance(arguments, str):
@@ -383,31 +475,57 @@ def collect_codex_v4(
                 event = ToolCallEvent(
                     kind="tool_call",
                     payload=ToolCallPayload(
-                        call_id=str(payload.get("call_id") or _stable_id("call", material, line)),
+                        call_id=str(
+                            payload.get("call_id") or _stable_id("call", material, line)
+                        ),
                         name=str(payload.get("name") or "unknown"),
-                        arguments_state="available" if "arguments" in payload else "unknown",
+                        arguments_state="available"
+                        if "arguments" in payload
+                        else "unknown",
                         arguments=arguments if "arguments" in payload else None,
                     ),
                     **base,
                 )
-            elif native_type == "response_item" and record_type == "function_call_output":
+            elif (
+                native_type == "response_item" and record_type == "function_call_output"
+            ):
                 event = ToolResultEvent(
                     kind="tool_result",
                     payload=ToolResultPayload(
-                        call_id=str(payload["call_id"]) if payload.get("call_id") is not None else None,
-                        linkage="linked" if payload.get("call_id") is not None else "unresolved",
-                        outcome="error" if payload.get("status") == "error" else "success",
+                        call_id=str(payload["call_id"])
+                        if payload.get("call_id") is not None
+                        else None,
+                        linkage="linked"
+                        if payload.get("call_id") is not None
+                        else "unresolved",
+                        outcome="error"
+                        if payload.get("status") == "error"
+                        else "success",
                         content=_content(payload.get("output"), materials),
                     ),
                     **base,
                 )
-            elif native_type == "event_msg" and record_type in {"task_started", "task_complete", "task_aborted"}:
-                transition = {"task_started": "start", "task_complete": "complete", "task_aborted": "cancel"}[record_type]
-                event = LifecycleEvent(kind="lifecycle", payload=LifecyclePayload(subject="turn", transition=transition), **base)
+            elif native_type == "event_msg" and record_type in {
+                "task_started",
+                "task_complete",
+                "task_aborted",
+            }:
+                transition = {
+                    "task_started": "start",
+                    "task_complete": "complete",
+                    "task_aborted": "cancel",
+                }[record_type]
+                event = LifecycleEvent(
+                    kind="lifecycle",
+                    payload=LifecyclePayload(subject="turn", transition=transition),
+                    **base,
+                )
             elif native_type == "event_msg" and record_type == "context_compacted":
                 event = ContextChangeEvent(
                     kind="context_change",
-                    payload=ContextChangePayload(operation="compact", subject="history"),
+                    payload=ContextChangePayload(
+                        operation="compact", subject="history"
+                    ),
                     **base,
                 )
             elif native_type == "event_msg" and record_type == "token_count":
@@ -415,11 +533,16 @@ def collect_codex_v4(
                 if isinstance(info, Mapping):
                     total = info.get("total_token_usage")
                     last = info.get("last_token_usage")
-                    for label, usage, temporality in (("total", total, "cumulative"), ("last", last, "delta")):
+                    for label, usage, temporality in (
+                        ("total", total, "cumulative"),
+                        ("last", last, "delta"),
+                    ):
                         if not isinstance(usage, Mapping) or not _measurements(usage):
                             continue
                         usage_base = dict(base)
-                        usage_base["event_id"] = _stable_id("evt", material, line, "usage", label)
+                        usage_base["event_id"] = _stable_id(
+                            "evt", material, line, "usage", label
+                        )
                         usage_base["seq"] = seq
                         event = UsageEvent(
                             kind="usage",
@@ -434,7 +557,11 @@ def collect_codex_v4(
                                     if label == "total"
                                     else None
                                 ),
-                                counter_id=(f"codex-total:{execution_id}" if label == "total" else None),
+                                counter_id=(
+                                    f"codex-total:{execution_id}"
+                                    if label == "total"
+                                    else None
+                                ),
                                 zero_baseline=(label == "total" and line == 0),
                                 source="provider_reported",
                             ),
@@ -462,7 +589,9 @@ def collect_codex_v4(
             continue
         parent_execution = execution_by_thread[gap_parents[gap.object_id]]
         parent_material = next(
-            item.source_refs[0].material for item in executions if item.execution_id == parent_execution
+            item.source_refs[0].material
+            for item in executions
+            if item.execution_id == parent_execution
         )
         executions.append(
             ExecutionRecord(
@@ -494,8 +623,16 @@ def collect_codex_v4(
     coverage = tuple(
         Coverage(
             domain=domain,
-            status=("partial" if issue_ids and domain in {"content", "descendant_closure", "usage"} else "complete"),
-            issue_ids=(issue_ids if issue_ids and domain in {"content", "descendant_closure", "usage"} else ()),
+            status=(
+                "partial"
+                if issue_ids and domain in {"content", "descendant_closure", "usage"}
+                else "complete"
+            ),
+            issue_ids=(
+                issue_ids
+                if issue_ids and domain in {"content", "descendant_closure", "usage"}
+                else ()
+            ),
         )
         for domain in (
             "content",
@@ -525,9 +662,16 @@ def collect_codex_v4(
         selected_roots=(root_id,),
         trajectory=trajectory,
         materials=materials,
-        material_kinds={name: ("blob" if name.startswith("blob/") else "native") for name in materials},
+        material_kinds={
+            name: ("blob" if name.startswith("blob/") else "native")
+            for name in materials
+        },
         material_media_types={
-            name: ("text/plain; charset=utf-8" if name.startswith("blob/") else "application/x-ndjson")
+            name: (
+                "text/plain; charset=utf-8"
+                if name.startswith("blob/")
+                else "application/x-ndjson"
+            )
             for name in materials
         },
         gaps=gaps,

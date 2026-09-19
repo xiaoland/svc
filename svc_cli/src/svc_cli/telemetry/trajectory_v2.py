@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 import re
 from typing import Annotated, Any, Literal, Mapping, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 from .trajectory import TrajectoryError, canonical_json_bytes
 
@@ -92,7 +99,9 @@ class HeaderRecord(TrajectoryV2Model):
         if len(issue_ids) != len(set(issue_ids)):
             raise ValueError("coverage issue IDs must be unique")
         known = set(issue_ids)
-        if any(issue not in known for item in self.coverage for issue in item.issue_ids):
+        if any(
+            issue not in known for item in self.coverage for issue in item.issue_ids
+        ):
             raise ValueError("coverage cites an unknown issue")
         _validate_extensions(self.extensions)
         return self
@@ -130,7 +139,9 @@ class OpaqueContent(TrajectoryV2Model):
     reason: str = Field(min_length=1)
 
 
-Content: TypeAlias = Annotated[TextContent | BlobContent | OpaqueContent, Field(discriminator="type")]
+Content: TypeAlias = Annotated[
+    TextContent | BlobContent | OpaqueContent, Field(discriminator="type")
+]
 
 
 class MessagePayload(TrajectoryV2Model):
@@ -218,15 +229,34 @@ class UsageMeasurement(TrajectoryV2Model):
 
     @model_validator(mode="after")
     def validate_semantics(self) -> "UsageMeasurement":
-        common = {"input", "output", "cache_read", "cache_write", "reasoning", "total", "duration", "cost"}
+        common = {
+            "input",
+            "output",
+            "cache_read",
+            "cache_write",
+            "reasoning",
+            "total",
+            "duration",
+            "cost",
+        }
         if self.metric not in common and "/" not in self.metric:
             raise ValueError("provider-specific metrics must be namespaced")
-        if self.inclusion in {"included_in", "additional_to"} and self.related_metric is None:
+        if (
+            self.inclusion in {"included_in", "additional_to"}
+            and self.related_metric is None
+        ):
             raise ValueError("measurement inclusion requires related_metric")
-        if self.inclusion in {"standalone", "unknown"} and self.related_metric is not None:
-            raise ValueError("standalone or unknown inclusion cannot name related_metric")
+        if (
+            self.inclusion in {"standalone", "unknown"}
+            and self.related_metric is not None
+        ):
+            raise ValueError(
+                "standalone or unknown inclusion cannot name related_metric"
+            )
         if (self.unit == "currency") != (self.currency is not None):
-            raise ValueError("currency unit and currency code must be supplied together")
+            raise ValueError(
+                "currency unit and currency code must be supplied together"
+            )
         return self
 
 
@@ -322,10 +352,20 @@ class ProviderEvent(EventBase):
 
 
 SemanticEvent: TypeAlias = Annotated[
-    MessageEvent | ReasoningEvent | ToolCallEvent | ToolResultEvent | LifecycleEvent | ContextChangeEvent | RelationEvent | UsageEvent | ProviderEvent,
+    MessageEvent
+    | ReasoningEvent
+    | ToolCallEvent
+    | ToolResultEvent
+    | LifecycleEvent
+    | ContextChangeEvent
+    | RelationEvent
+    | UsageEvent
+    | ProviderEvent,
     Field(discriminator="kind"),
 ]
-TrajectoryRecordV2: TypeAlias = Annotated[HeaderRecord | ExecutionRecord | SemanticEvent, Field(discriminator="type")]
+TrajectoryRecordV2: TypeAlias = Annotated[
+    HeaderRecord | ExecutionRecord | SemanticEvent, Field(discriminator="type")
+]
 _RECORD = TypeAdapter(TrajectoryRecordV2)
 
 
@@ -346,7 +386,9 @@ def validate_trajectory_v2(data: bytes) -> ValidatedTrajectoryV2:
     """Validate one complete v2 JSONL trajectory and its cross-record references."""
 
     if not isinstance(data, bytes) or not data.strip():
-        raise TrajectoryError("invalid-trajectory", "Trajectory v2 must be non-empty bytes.")
+        raise TrajectoryError(
+            "invalid-trajectory", "Trajectory v2 must be non-empty bytes."
+        )
     records: list[TrajectoryRecordV2] = []
     try:
         for line in data.splitlines():
@@ -354,25 +396,42 @@ def validate_trajectory_v2(data: bytes) -> ValidatedTrajectoryV2:
                 raise ValueError("blank line")
             records.append(_RECORD.validate_json(line))
     except (ValidationError, ValueError) as error:
-        details = {"errors": error.errors(include_url=False)} if isinstance(error, ValidationError) else None
-        raise TrajectoryError("invalid-trajectory", "Trajectory v2 record is invalid.", details) from error
-    if not isinstance(records[0], HeaderRecord) or any(isinstance(item, HeaderRecord) for item in records[1:]):
-        raise TrajectoryError("invalid-trajectory", "Trajectory v2 requires one leading header.")
+        details = (
+            {"errors": error.errors(include_url=False)}
+            if isinstance(error, ValidationError)
+            else None
+        )
+        raise TrajectoryError(
+            "invalid-trajectory", "Trajectory v2 record is invalid.", details
+        ) from error
+    if not isinstance(records[0], HeaderRecord) or any(
+        isinstance(item, HeaderRecord) for item in records[1:]
+    ):
+        raise TrajectoryError(
+            "invalid-trajectory", "Trajectory v2 requires one leading header."
+        )
     executions = tuple(item for item in records if isinstance(item, ExecutionRecord))
     events = tuple(item for item in records if isinstance(item, EventBase))
     execution_ids = [item.execution_id for item in executions]
     event_ids = [item.event_id for item in events]
-    if len(execution_ids) != len(set(execution_ids)) or len(event_ids) != len(set(event_ids)):
+    if len(execution_ids) != len(set(execution_ids)) or len(event_ids) != len(
+        set(event_ids)
+    ):
         raise TrajectoryError("invalid-trajectory", "Trajectory v2 IDs must be unique.")
     header = records[0]
     assert isinstance(header, HeaderRecord)
     known_executions = set(execution_ids)
     if any(root not in known_executions for root in header.roots):
         raise TrajectoryError("invalid-trajectory", "Trajectory root does not resolve.")
-    if any(item.execution_id is not None and item.execution_id not in known_executions for item in events):
+    if any(
+        item.execution_id is not None and item.execution_id not in known_executions
+        for item in events
+    ):
         raise TrajectoryError("invalid-trajectory", "Event execution does not resolve.")
     if [item.seq for item in events] != list(range(len(events))):
-        raise TrajectoryError("invalid-trajectory", "Event seq values must be contiguous.")
+        raise TrajectoryError(
+            "invalid-trajectory", "Event seq values must be contiguous."
+        )
     return ValidatedTrajectoryV2(header, executions, events, data)
 
 

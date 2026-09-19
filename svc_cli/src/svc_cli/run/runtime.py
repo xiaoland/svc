@@ -17,7 +17,6 @@ from filelock import BaseFileLock, Timeout
 from .._execution import (
     ACTIVE_STATES,
     ExecutionRecord,
-    ExecutionState,
     ExecutionStore,
     LaunchSpec,
     follow_execution,

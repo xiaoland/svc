@@ -44,59 +44,6 @@
       "title": "CliUsageOutput",
       "type": "object"
     },
-    "ConfigGuideReference": {
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
-        "sha256": {
-          "title": "Sha256",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "sha256"
-      ],
-      "title": "ConfigGuideReference",
-      "type": "object"
-    },
-    "ConfigRemainingTarget": {
-      "additionalProperties": false,
-      "properties": {
-        "from_schema": {
-          "title": "From Schema",
-          "type": "integer"
-        },
-        "status": {
-          "enum": [
-            "pending",
-            "blocked"
-          ],
-          "title": "Status",
-          "type": "string"
-        },
-        "target": {
-          "const": "config",
-          "default": "config",
-          "title": "Target",
-          "type": "string"
-        },
-        "to_schema": {
-          "title": "To Schema",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "status",
-        "from_schema",
-        "to_schema"
-      ],
-      "title": "ConfigRemainingTarget",
-      "type": "object"
-    },
     "CorpusGuideReference": {
       "additionalProperties": false,
       "properties": {
@@ -152,52 +99,6 @@
         "migration"
       ],
       "title": "CorpusReleaseOutput",
-      "type": "object"
-    },
-    "CorpusRemainingTarget": {
-      "additionalProperties": false,
-      "properties": {
-        "code": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Code"
-        },
-        "from_version": {
-          "title": "From Version",
-          "type": "string"
-        },
-        "status": {
-          "enum": [
-            "pending",
-            "blocked"
-          ],
-          "title": "Status",
-          "type": "string"
-        },
-        "target": {
-          "const": "corpus",
-          "default": "corpus",
-          "title": "Target",
-          "type": "string"
-        },
-        "to_version": {
-          "title": "To Version",
-          "type": "string"
-        }
-      },
-      "required": [
-        "status",
-        "from_version",
-        "to_version"
-      ],
-      "title": "CorpusRemainingTarget",
       "type": "object"
     },
     "FileStateOutput": {
@@ -302,27 +203,8 @@
           "title": "Command",
           "type": "string"
         },
-        "configuration": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UpgradeConfigurationDetails"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
         "corpus": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UpgradeCorpusDetails"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
+          "$ref": "#/$defs/UpgradeCorpusDetails"
         },
         "migration": {
           "$ref": "#/$defs/UpgradeMigrationOutput"
@@ -344,27 +226,13 @@
           "title": "Plan Digest",
           "type": "string"
         },
-        "remaining_targets": {
-          "items": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CorpusRemainingTarget"
-              },
-              {
-                "$ref": "#/$defs/ConfigRemainingTarget"
-              }
-            ]
-          },
-          "title": "Remaining Targets",
-          "type": "array"
-        },
         "repo": {
           "title": "Repo",
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
-          "default": 1,
+          "const": 2,
+          "default": 2,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -374,100 +242,22 @@
           "title": "Status",
           "type": "string"
         },
-        "target": {
-          "enum": [
-            "config",
-            "corpus"
-          ],
-          "title": "Target",
-          "type": "string"
-        },
         "verification": {
-          "$ref": "#/$defs/UpgradeVerificationOutput"
+          "const": "passed",
+          "default": "passed",
+          "title": "Verification",
+          "type": "string"
         }
       },
       "required": [
         "repo",
-        "target",
         "plan_digest",
         "changed",
         "operations",
-        "migration",
-        "verification",
-        "remaining_targets"
+        "corpus",
+        "migration"
       ],
       "title": "UpgradeApplyOutput",
-      "type": "object"
-    },
-    "UpgradeConfigurationDetails": {
-      "additionalProperties": false,
-      "properties": {
-        "from_schema": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "From Schema"
-        },
-        "guidance": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/ConfigGuideReference"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Guidance"
-        },
-        "schema": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Schema"
-        },
-        "status": {
-          "anyOf": [
-            {
-              "const": "current",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Status"
-        },
-        "to_schema": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "To Schema"
-        }
-      },
-      "title": "UpgradeConfigurationDetails",
       "type": "object"
     },
     "UpgradeCorpusDetails": {
@@ -566,14 +356,7 @@
         },
         "guidance": {
           "items": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/ConfigGuideReference"
-              },
-              {
-                "$ref": "#/$defs/CorpusGuideReference"
-              }
-            ]
+            "$ref": "#/$defs/CorpusGuideReference"
           },
           "title": "Guidance",
           "type": "array"
@@ -607,10 +390,7 @@
           "$ref": "#/$defs/FileStateOutput"
         },
         "extent": {
-          "enum": [
-            "whole-file",
-            "json-field"
-          ],
+          "const": "json-field",
           "title": "Extent",
           "type": "string"
         },
@@ -623,10 +403,7 @@
           "type": "string"
         },
         "surface": {
-          "enum": [
-            "configuration",
-            "project-corpus-baseline"
-          ],
+          "const": "project-corpus-baseline",
           "title": "Surface",
           "type": "string"
         }
@@ -667,27 +444,8 @@
           "title": "Command",
           "type": "string"
         },
-        "configuration": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UpgradeConfigurationDetails"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
         "corpus": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UpgradeCorpusDetails"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
+          "$ref": "#/$defs/UpgradeCorpusDetails"
         },
         "mode": {
           "const": "plan",
@@ -714,27 +472,13 @@
           "default": null,
           "title": "Plan Digest"
         },
-        "remaining_targets": {
-          "items": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CorpusRemainingTarget"
-              },
-              {
-                "$ref": "#/$defs/ConfigRemainingTarget"
-              }
-            ]
-          },
-          "title": "Remaining Targets",
-          "type": "array"
-        },
         "repo": {
           "title": "Repo",
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
-          "default": 1,
+          "const": 2,
+          "default": 2,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -747,59 +491,19 @@
           ],
           "title": "Status",
           "type": "string"
-        },
-        "target": {
-          "anyOf": [
-            {
-              "enum": [
-                "config",
-                "corpus"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Target"
         }
       },
       "required": [
         "status",
         "repo",
-        "target",
         "operations",
-        "remaining_targets"
+        "corpus"
       ],
       "title": "UpgradePlanOutput",
       "type": "object"
-    },
-    "UpgradeVerificationOutput": {
-      "additionalProperties": false,
-      "properties": {
-        "scope": {
-          "enum": [
-            "effective-schema-3-configuration",
-            "project-corpus-baseline"
-          ],
-          "title": "Scope",
-          "type": "string"
-        },
-        "status": {
-          "const": "passed",
-          "default": "passed",
-          "title": "Status",
-          "type": "string"
-        }
-      },
-      "required": [
-        "scope"
-      ],
-      "title": "UpgradeVerificationOutput",
-      "type": "object"
     }
   },
-  "$id": "urn:svc:cli-output:upgrade:v1",
+  "$id": "urn:svc:cli-output:upgrade:v2",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "anyOf": [
     {
@@ -816,5 +520,5 @@
     }
   ],
   "title": "SVC upgrade machine output",
-  "x-svc-result-schema-version": 1
+  "x-svc-result-schema-version": 2
 }

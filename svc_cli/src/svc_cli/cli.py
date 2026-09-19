@@ -21,8 +21,6 @@ from .analysis.models_v3 import (
     read_response_schema_v3,
     error_schema_v3,
 )
-from .analysis.query import query_schema
-from .analysis.read import read_schema
 from .analysis.service import execute_query, execute_read
 from .cli_output.lookup import project_lookup
 from .cli_output.double import (
@@ -103,16 +101,13 @@ from .run.runtime import (
 )
 from .release import catalog, runtime_version
 from .upgrade import (
-    RemainingTarget,
     UpgradeApplyResult,
     UpgradePlan,
-    UpgradeTarget,
     apply_upgrade,
     plan_upgrade,
 )
 from .telemetry.agent_threads import ArchiveFilter
 from .telemetry.service import (
-    export_agent_thread,
     export_agent_thread_v4,
     list_agent_threads,
     list_pi_agent_threads,
@@ -312,7 +307,7 @@ def _parser() -> argparse.ArgumentParser:
             "Owned effects: create a missing minimal svc.json; maintain SVC-marked blocks "
             "in .gitignore, AGENTS.md, and docs/index.md; retire a clean legacy SVC CLI "
             "Skill. Existing configuration, Corpus baseline, svc.local.json, and unmarked "
-            "Consumer content are not rewritten. Use svc upgrade for config or Corpus migration."
+            "Consumer content are not rewritten. Use svc upgrade for Corpus adoption."
         ),
     )
     init.add_argument("repo", nargs="?", default=".", help="Project directory")
@@ -335,20 +330,16 @@ def _parser() -> argparse.ArgumentParser:
 
     upgrade = subparsers.add_parser(
         "upgrade",
-        help="Plan or apply one config-schema or Corpus-baseline upgrade stage",
+        help="Plan or apply Corpus-baseline adoption",
         description=(
-            "Plan or apply one project SVC upgrade stage. Config migration and "
-            "Corpus baseline adoption are independent targets; without --target, "
-            "config is selected first when both are pending."
+            "Plan or apply project adoption of the installed Corpus baseline."
         ),
         epilog=(
-            "Config apply performs only the exact supported file transform. Corpus "
-            "plans reference guidance for Agent/Human document work; Corpus apply "
+            "Plans reference guidance for Agent/Human document work; apply "
             "records only the reviewed baseline. This command does not update the CLI."
         ),
     )
     upgrade.add_argument("repo", nargs="?", default=".", help="Project directory")
-    upgrade.add_argument("--target", choices=("config", "corpus"))
     upgrade.add_argument("--apply", metavar="PLAN_DIGEST")
     _add_machine_output(upgrade, "upgrade", "Emit compact scripts/CI JSON")
 
@@ -781,7 +772,7 @@ reports the last unsealed projection and does not invent terminal state."""
             action="store_true",
             help="Return the machine contract; use svc analysis --help for interpretation guidance",
         )
-        tool.add_argument("--input", type=Path, help="Exact schema-v3 evidence ZIP")
+        tool.add_argument("--input", type=Path, help="Exact schema-v4 evidence ZIP")
         tool.add_argument("--request", help="JSON request file or - for stdin")
     return parser
 
@@ -855,8 +846,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
         if args.command == "upgrade":
-            target = cast(UpgradeTarget | None, args.target)
-            upgrade_plan = plan_upgrade(Path(args.repo), target)
+            upgrade_plan = plan_upgrade(Path(args.repo))
             if args.apply:
                 upgrade_payload = apply_upgrade(upgrade_plan, args.apply)
                 return deliver_result(
@@ -950,31 +940,29 @@ def main(argv: Sequence[str] | None = None) -> int:
                 and args.agent_thread_command == "list"
             ):
                 if args.home is not None and args.codex_home is not None:
-                    raise SvcError("invalid-cli-usage", "Use only one of --home and --codex-home.")
+                    raise SvcError(
+                        "invalid-cli-usage", "Use only one of --home and --codex-home."
+                    )
                 telemetry_payload = (
                     list_pi_agent_threads(args.home, args.limit)
                     if args.provider == "pi"
-                    else list_agent_threads(args.home or args.codex_home, args.limit, args.archive_state)
+                    else list_agent_threads(
+                        args.home or args.codex_home, args.limit, args.archive_state
+                    )
                 )
                 _emit_telemetry_list(telemetry_payload, json_output)
                 return EXIT_OK
             if args.home is not None and args.codex_home is not None:
-                raise SvcError("invalid-cli-usage", "Use only one of --home and --codex-home.")
-            if args.provider is None:
-                telemetry_payload = export_agent_thread(
-                    codex_home=args.codex_home,
-                    thread_id=args.thread_id,
-                    source=args.source,
-                    output=args.output,
+                raise SvcError(
+                    "invalid-cli-usage", "Use only one of --home and --codex-home."
                 )
-            else:
-                telemetry_payload = export_agent_thread_v4(
-                    provider_id=args.provider,
-                    home=args.home or args.codex_home,
-                    thread_id=args.thread_id,
-                    source=args.source,
-                    output=args.output,
-                )
+            telemetry_payload = export_agent_thread_v4(
+                provider_id=args.provider or "codex",
+                home=args.home or args.codex_home,
+                thread_id=args.thread_id,
+                source=args.source,
+                output=args.output,
+            )
             _emit_telemetry_export(telemetry_payload, json_output)
             return EXIT_OK
 
@@ -1004,7 +992,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     except AnalysisProtocolError as error:
         _emit_unscoped_json(
-            error.as_dict(version=3 if getattr(args, "analysis_version", None) == 3 else None),
+            error.as_dict(version=3),
             stream=sys.stderr,
         )
         return _analysis_exit_code(error)
@@ -1752,11 +1740,14 @@ def _binary_output(stream: Any) -> Any:
 def _run_analysis_tool(args: argparse.Namespace) -> int:
     if args.analysis_schema:
         if args.analysis_tool is not None:
-            raise AnalysisProtocolError("invalid-cli-usage", "Top-level --schema cannot be combined with a tool.")
+            raise AnalysisProtocolError(
+                "invalid-cli-usage",
+                "Top-level --schema cannot be combined with a tool.",
+            )
         _emit_unscoped_json(
             {
                 "format": "svc.analysis.schema/v3",
-                "versions": {"analysis": [2, 3], "evidence": [3, 4]},
+                "versions": {"analysis": [3], "evidence": [4]},
                 "tools": {
                     "query": {
                         "request": query_request_schema_v3(),
@@ -1780,7 +1771,9 @@ def _run_analysis_tool(args: argparse.Namespace) -> int:
         )
         return EXIT_OK
     if args.analysis_tool is None:
-        raise AnalysisProtocolError("invalid-cli-usage", "Analysis requires --schema, query, or read.")
+        raise AnalysisProtocolError(
+            "invalid-cli-usage", "Analysis requires --schema, query, or read."
+        )
     if args.schema:
         if args.input is not None or args.request is not None:
             raise AnalysisProtocolError(
@@ -1789,23 +1782,19 @@ def _run_analysis_tool(args: argparse.Namespace) -> int:
             )
         if args.analysis_tool == "query":
             payload = {
-                **query_schema(),
-                "versions": [2, 3],
-                "v3": {
-                    "request": query_request_schema_v3(),
-                    "response": query_response_schema_v3(),
-                    "error": error_schema_v3(),
-                },
+                "format": "svc.analysis.query.schema/v3",
+                "version": 3,
+                "request": query_request_schema_v3(),
+                "response": query_response_schema_v3(),
+                "error": error_schema_v3(),
             }
         else:
             payload = {
-                **read_schema(),
-                "versions": [2, 3],
-                "v3": {
-                    "request": read_request_schema_v3(),
-                    "response": read_response_schema_v3(),
-                    "error": error_schema_v3(),
-                },
+                "format": "svc.analysis.read.schema/v3",
+                "version": 3,
+                "request": read_request_schema_v3(),
+                "response": read_response_schema_v3(),
+                "error": error_schema_v3(),
             }
         _emit_unscoped_json(payload)
         return EXIT_OK
@@ -1815,7 +1804,7 @@ def _run_analysis_tool(args: argparse.Namespace) -> int:
             "Analysis execution requires --input and --request.",
         )
     request = _analysis_request(args.request)
-    args.analysis_version = request.get("version") if isinstance(request, dict) else None
+    args.analysis_version = 3
     if args.analysis_tool == "query":
         payload = execute_query(args.input, request)
     else:
@@ -1848,92 +1837,44 @@ def _render_upgrade_plan(plan: UpgradePlan, stream: TextIO) -> None:
     write = partial(print, file=stream)
     write(f"svc upgrade: {plan.status}")
     write(f"Repository: {plan.repo}")
-    if plan.target is None:
-        configuration = plan.details.configuration
-        corpus_state = plan.details.corpus
-        assert configuration is not None and corpus_state is not None
-        write(f"Configuration: schema {configuration.config_schema} (current)")
-        write(f"Corpus: baseline {corpus_state.project_version} (current)")
-        write("Project SVC upgrade state is current.")
+    if plan.status == "noop":
+        write(f"Corpus: baseline {plan.corpus.project_version} (current)")
         return
-
-    _emit_upgrade_target_heading(plan, stream)
     if plan.status == "blocked":
         write("No changes can be applied.")
         _emit_blockers(plan.blockers, stream)
-        _emit_upgrade_remaining(
-            plan.remaining_targets, label="Other target", stream=stream
-        )
-        write("Next: resolve the blocker, then recompute this target:")
-        write(f"  svc upgrade {shlex.quote(str(plan.repo))} --target {plan.target}")
+        write("Next: resolve the blocker, then recompute the plan:")
+        write(f"  svc upgrade {shlex.quote(str(plan.repo))}")
         return
 
-    if plan.target == "config":
-        write("\nAutomatic config changes:")
-        for change in plan.automatic_changes:
-            write(f"  {change}")
-        for guide in plan.config_guides:
-            write(
-                f"\nProject migration guidance ({guide.identifier}, sha256:{guide.sha256}):"
-            )
-            for line in guide.text.splitlines():
-                write(f"  {line}" if line else "")
-    else:
-        corpus_details = plan.details.corpus
-        assert corpus_details is not None and corpus_details.releases is not None
-        releases = corpus_details.releases
-        write(f"\nCorpus releases ({len(releases)}):")
-        paths: list[str] = []
-        for release in releases:
-            migration = release.migration
-            label = (
-                "guidance required"
-                if migration == "guide"
-                else "migration not required"
-            )
-            write(f"  {release.version}  {label}")
-            for guide_ref in release.guides or ():
-                paths.append(guide_ref.path)
-                write(f"    {guide_ref.path}")
-        if paths:
-            write("\nRead required guidance:")
-            for path in paths:
-                write(f"  svc lookup --path {shlex.quote(path)}")
-            write(
-                "\nSVC will only record the reviewed Corpus baseline; it will not "
-                "modify project-owned SVC documents."
-            )
+    assert plan.corpus.releases is not None
+    write(f"Corpus: baseline {plan.corpus.from_version} -> {plan.corpus.to_version}")
+    paths = [
+        guide.path for release in plan.corpus.releases for guide in release.guides or ()
+    ]
+    if paths:
+        write("\nRead required guidance:")
+        for path in paths:
+            write(f"  svc lookup --path {shlex.quote(path)}")
 
     write(f"\nWould change ({len(plan.mutations)}):")
     for operation in plan.mutations:
         write(f"  {operation.action} {operation.path} - {operation.reason}")
-    _emit_upgrade_remaining(plan.remaining_targets, label="Reminder", stream=stream)
     assert plan.digest is not None
     if plan.status == "migration-required":
         write("\nAfter completing the migration guidance, apply this exact plan:")
     else:
         write("\nApply this exact plan:")
-    write(
-        f"  svc upgrade {shlex.quote(str(plan.repo))} --target {plan.target} "
-        f"--apply {plan.digest}"
-    )
+    write(f"  svc upgrade {shlex.quote(str(plan.repo))} --apply {plan.digest}")
 
 
 def _render_upgrade_apply(payload: UpgradeApplyResult, stream: TextIO) -> None:
     write = partial(print, file=stream)
     write("svc upgrade: applied")
     write(f"Repository: {payload.repo}")
-    if payload.target == "config":
-        details = payload.configuration
-        assert details is not None
-        write(f"Target: config (schema {details.from_schema} -> {details.to_schema})")
-    else:
-        corpus_details = payload.corpus
-        assert corpus_details is not None
-        write(
-            "Target: corpus "
-            f"(baseline {corpus_details.from_version} -> {corpus_details.to_version})"
-        )
+    write(
+        f"Corpus: baseline {payload.corpus.from_version} -> {payload.corpus.to_version}"
+    )
     write(f"Applied plan: {payload.plan_digest}")
     if payload.migration.disposition == "caller-asserted":
         write(
@@ -1945,49 +1886,8 @@ def _render_upgrade_apply(payload: UpgradeApplyResult, stream: TextIO) -> None:
     for operation in payload.operations:
         write(f"  {operation.action} {operation.path}")
     write(f"\nVerification: {payload.verification.scope} {payload.verification.status}")
-    if payload.remaining_targets:
-        _emit_upgrade_remaining(
-            payload.remaining_targets, label="Reminder", stream=stream
-        )
-        write("Next upgrade:")
-        write(f"  svc upgrade {shlex.quote(payload.repo)}")
-    else:
-        write("\nRemaining upgrade targets: none")
-        write("Next observation:")
-        write(f"  svc status {shlex.quote(payload.repo)}")
-
-
-def _emit_upgrade_target_heading(plan: UpgradePlan, stream: TextIO) -> None:
-    write = partial(print, file=stream)
-    if plan.target == "config" and plan.details.configuration is not None:
-        details = plan.details.configuration
-        if details.from_schema is not None:
-            write(
-                f"Target: config (schema {details.from_schema} -> {details.to_schema})"
-            )
-            return
-    if plan.target == "corpus" and plan.details.corpus is not None:
-        corpus_details = plan.details.corpus
-        if corpus_details.from_version is not None:
-            write(
-                "Target: corpus "
-                f"(baseline {corpus_details.from_version} -> "
-                f"{corpus_details.to_version})"
-            )
-            return
-    write(f"Target: {plan.target}")
-
-
-def _emit_upgrade_remaining(
-    remaining: Sequence[RemainingTarget], *, label: str, stream: TextIO
-) -> None:
-    write = partial(print, file=stream)
-    for fact in remaining:
-        if fact.target == "corpus":
-            transition = f"{fact.from_version} -> {fact.to_version}"
-        else:
-            transition = f"schema {fact.from_schema} -> {fact.to_schema}"
-        write(f"\n{label}: {fact.target} upgrade {fact.status} ({transition})")
+    write("Next observation:")
+    write(f"  svc status {shlex.quote(payload.repo)}")
 
 
 def _render_init_plan(plan: InitPlan, stream: TextIO) -> None:

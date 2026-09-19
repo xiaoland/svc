@@ -76,9 +76,7 @@ def validate_expression(source: str) -> None:
     _compile(source)
 
 
-def evaluate_expression(
-    source: str, data: Mapping[str, JsonValue]
-) -> JsonValue:
+def evaluate_expression(source: str, data: Mapping[str, JsonValue]) -> JsonValue:
     """Evaluate a compiled-scenario expression under the same admitted profile."""
 
     try:
@@ -156,7 +154,10 @@ def _without_string_literals(source: str) -> str:
             continue
         static_binding = re.search(r"\bbindings\[$", source[:index])
         if static_binding is not None:
-            key = re.match(rf"{re.escape(quote)}[a-z][a-z0-9_]*{re.escape(quote)}\]", source[index:])
+            key = re.match(
+                rf"{re.escape(quote)}[a-z][a-z0-9_]*{re.escape(quote)}\]",
+                source[index:],
+            )
             if key is not None:
                 index += len(key.group(0)) - 1
                 continue

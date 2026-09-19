@@ -54,7 +54,7 @@ optionally declare development capabilities and bounded runs:
 ```json
 {
   "schema_version": 3,
-  "corpus_version": "14.0.0"
+  "corpus_version": "15.0.0"
 }
 ```
 
@@ -63,8 +63,8 @@ optionally declare development capabilities and bounded runs:
 local-only run name, or produce an invalid effective configuration. `init`
 maintains just its marked ignore block; it never writes a local configuration
 file. It creates a missing `AGENTS.local.md` as ignored, Consumer-owned local
-Agent guidance and never rewrites it. Supported older configuration is migrated through a plan-first
-`svc upgrade --target config`; `init` does not hide configuration migration.
+Agent guidance and never rewrites it. Version 15 rejects older configuration;
+`init` does not hide or perform configuration migration.
 
 Start with `svc status --json` in any repository. It is read-only and returns a
 compact JSON preflight with independent CLI, config, Corpus-baseline,
@@ -136,7 +136,7 @@ Agents, editor carriers, or CI should invoke through the same project name:
 ```json
 {
   "schema_version": 3,
-  "corpus_version": "14.0.0",
+  "corpus_version": "15.0.0",
   "run": {
     "check": {
       "argv": ["pdm", "run", "test"],
@@ -250,15 +250,13 @@ configuration and Corpus-baseline upgrades remain explicit SVC operations:
 ```bash
 svc status /path/to/project
 svc upgrade /path/to/project
-svc upgrade /path/to/project --target config --apply <plan-digest>
-svc upgrade /path/to/project --target corpus --apply <plan-digest>
+svc upgrade /path/to/project --apply <plan-digest>
 ```
 
-Config apply performs only a supported exact file transformation and reports
-remaining upgrade work. Corpus plans reference the exact packaged migration
-guidance; after an Agent/Human reviews and updates Consumer-owned SVC documents,
-Corpus apply records only the reviewed `corpus_version` baseline. SVC never
-programmatically rewrites those project documents.
+Version 15 does not migrate historical CLI configuration. Corpus plans reference
+the exact packaged migration guidance; after an Agent/Human reviews and updates
+Consumer-owned SVC documents, Corpus apply records only the reviewed
+`corpus_version` baseline. SVC never programmatically rewrites those documents.
 
 ## Behavioral SemVer and Releases
 
@@ -268,12 +266,10 @@ SVC uses Behavioral SemVer:
 - **MINOR** adds an optional backward-compatible capability.
 - **PATCH** fixes or clarifies the existing protocol without changing those behaviors.
 
-Changie 1.25.1 records each release-relevant change as a tool-native YAML
-fragment under `changes/unreleased/` with an explicit `major`, `minor`, or
-`patch` kind. Maintainers batch those fragments and merge the generated
-`CHANGELOG.md` through an ordinary release-preparation pull request. That merge
-starts the standard workflow, which derives the tag and PDM SCM package version
-from one Changie version, smoke-tests the installed distribution, publishes
-through Trusted Publishing, and creates the GitHub Release. Migration notes
-remain optional packaged consumer guidance. See [CONTRIBUTING.md](CONTRIBUTING.md)
-for the contributor and maintainer workflow.
+Towncrier records each release-relevant change as a Markdown fragment under
+`.changes/`. Maintainers set the static package version, build the changelog,
+and merge both through an ordinary release-preparation pull request. That merge
+starts the standard workflow, which validates the version, builds and tests the
+distribution once, publishes through Trusted Publishing, and creates the tag
+and GitHub Release. Corpus migration notes remain independent packaged guidance.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.

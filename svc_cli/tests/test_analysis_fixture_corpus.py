@@ -20,7 +20,14 @@ def test_analysis_fixture_corpus_preserves_native_shapes_and_manual_oracle() -> 
 
     assert root[0]["payload"]["id"] == "root"  # type: ignore[index]
     assert child[0]["payload"]["parent_thread_id"] == "root"  # type: ignore[index]
-    assert sum(item["message"]["usage"]["input"] for item in pi if item["type"] == "message" and item["message"]["role"] == "assistant") == 100  # type: ignore[index]
+    assert (
+        sum(
+            item["message"]["usage"]["input"]
+            for item in pi
+            if item["type"] == "message" and item["message"]["role"] == "assistant"
+        )
+        == 100
+    )  # type: ignore[index]
     assert fork[0]["parentSession"] == "session.jsonl"
     assert oracle["codex"]["usage"]["root"]["total"] == 180
     assert oracle["pi"]["all_work_usage"]["input"] == 114

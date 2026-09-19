@@ -1,9 +1,8 @@
-"""Strict current and legacy project configuration models.
+"""Strict current project configuration models.
 
 ``svc.json`` is complete and committed. ``svc.local.json`` is an optional,
 schema-governed sparse overlay; it is never materialized into the base model.
-Only schema v3 is runnable. Schema v2 has a separate read-only source model for
-the exact upgrade transform.
+Only the current schema is accepted.
 """
 
 from __future__ import annotations
@@ -28,7 +27,6 @@ from .catalog import require_semver
 
 
 CONFIG_SCHEMA_VERSION = 3
-LEGACY_CONFIG_SCHEMA_VERSION = 2
 PROJECT_CONFIG_FILE = "svc.json"
 LOCAL_CONFIG_FILE = "svc.local.json"
 
@@ -153,37 +151,12 @@ class TargetConfig(_TargetBase):
     stop: StopAction | None = None
 
 
-class LegacyTargetConfig(_TargetBase):
-    """Schema-v2 target; it deliberately cannot admit the v3 stop field."""
-
-
 class DevConfig(_StrictModel):
     targets: dict[str, TargetConfig] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_target_names(self) -> Self:
         _validate_names(self.targets, "target")
-        return self
-
-
-class LegacyProfileConfig(_StrictModel):
-    targets: dict[str, LegacyTargetConfig] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def validate_target_names(self) -> Self:
-        _validate_names(self.targets, "target")
-        return self
-
-
-class LegacyDevConfig(_StrictModel):
-    profile: str = Field(min_length=1)
-    profiles: dict[str, LegacyProfileConfig] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def validate_selected_profile(self) -> Self:
-        _validate_names(self.profiles, "profile")
-        if self.profile not in self.profiles:
-            raise ValueError("dev.profile must name an entry in dev.profiles")
         return self
 
 
@@ -236,19 +209,6 @@ class ProjectConfig(_StrictModel):
         return self
 
 
-class LegacyProjectConfig(_StrictModel):
-    schema_version: Literal[2]
-    svc_version: str = Field(min_length=1)
-    dev: LegacyDevConfig | None = None
-    run: dict[str, RunEntry] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def validate_svc_version(self) -> Self:
-        require_semver(self.svc_version, "svc_version")
-        _validate_names(self.run, "run entry")
-        return self
-
-
 @dataclass(frozen=True)
 class ResolvedConfig:
     """Validated current configuration views and declaration digests."""
@@ -293,38 +253,12 @@ def parse_project_config(
     return _validate_project(_parse_json_bytes(content, source), source)
 
 
-def parse_legacy_project_config(
-    content: bytes, source: str = PROJECT_CONFIG_FILE
-) -> LegacyProjectConfig:
-    value = _parse_json_bytes(content, source)
-    try:
-        return LegacyProjectConfig.model_validate(value)
-    except ValidationError as error:
-        raise ConfigError(
-            f"{source} does not match supported legacy schema v2: {error}"
-        ) from error
-
-
 def parse_local_overlay(
     content: bytes, source: str = LOCAL_CONFIG_FILE
 ) -> dict[str, Any]:
     value = _parse_json_bytes(content, source)
     _validate_local_overlay(value)
     return value
-
-
-def parse_legacy_local_overlay(
-    content: bytes, source: str = LOCAL_CONFIG_FILE
-) -> dict[str, Any]:
-    value = _parse_json_bytes(content, source)
-    _validate_legacy_local_overlay(value)
-    return value
-
-
-def parse_json_document(content: bytes, source: str) -> dict[str, Any]:
-    """Expose the one strict JSON-domain parser to the migration owner."""
-
-    return _parse_json_bytes(content, source)
 
 
 def render_config_value(value: object) -> bytes:
@@ -444,14 +378,6 @@ def _validate_local_overlay(
         _validate_overlay_run(value["run"], "$.run", committed_run_entries)
 
 
-def _validate_legacy_local_overlay(value: dict[str, Any]) -> None:
-    _validate_overlay_object(value, {"dev", "run"}, "$")
-    if "dev" in value:
-        _validate_legacy_overlay_dev(value["dev"], "$.dev")
-    if "run" in value:
-        _validate_overlay_run(value["run"], "$.run", None)
-
-
 def _validate_overlay_run(
     value: object, path: str, committed_entries: set[str] | None
 ) -> None:
@@ -481,22 +407,6 @@ def _validate_overlay_dev(value: object, path: str) -> None:
     if "targets" in value and isinstance(value["targets"], dict):
         for name, target in value["targets"].items():
             _validate_overlay_target(target, f"{path}.targets.{name}")
-
-
-def _validate_legacy_overlay_dev(value: object, path: str) -> None:
-    if not isinstance(value, dict):
-        return
-    _validate_overlay_object(value, {"profile", "profiles"}, path)
-    if "profiles" in value and isinstance(value["profiles"], dict):
-        for name, profile in value["profiles"].items():
-            if not isinstance(profile, dict):
-                continue
-            _validate_overlay_object(profile, {"targets"}, f"{path}.profiles.{name}")
-            if "targets" in profile and isinstance(profile["targets"], dict):
-                for target_name, target in profile["targets"].items():
-                    _validate_overlay_target(
-                        target, f"{path}.profiles.{name}.targets.{target_name}"
-                    )
 
 
 def _validate_overlay_target(value: object, path: str) -> None:

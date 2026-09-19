@@ -8,7 +8,11 @@ from svc_cli.workspace import resolve_workspace_identity
 
 def _git(root: Path, *arguments: str) -> None:
     subprocess.run(
-        ("git", "-C", str(root), *arguments), check=True, capture_output=True, text=True
+        ("git", "-C", str(root), *arguments),
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
     )
 
 

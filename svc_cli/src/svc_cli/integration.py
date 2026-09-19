@@ -1,4 +1,4 @@
-"""Generated, bounded project integration and legacy provenance inspection."""
+"""Generated, bounded project integration inspection."""
 
 from __future__ import annotations
 
@@ -93,16 +93,6 @@ def agent_body() -> str:
     )
 
 
-def _legacy_agent_navigation_body() -> str:
-    return (
-        "## SVC\n\n"
-        "Use the installed `svc` CLI when SVC guidance or project integration is "
-        "relevant. Discover the current interface through `svc --help` and "
-        "`svc <command> --help`; `svc lookup` reads the SVC Corpus, not CLI help. "
-        "Treat unmarked project instructions and documentation as Consumer-owned."
-    )
-
-
 def render_agent_block() -> str:
     return f"<!-- svc:begin -->\n{agent_body()}\n<!-- svc:end -->\n"
 
@@ -121,10 +111,6 @@ def render_navigation_block(relative_path: str = "AGENTS.md") -> str:
 
 def local_config_ignore_body() -> str:
     return "svc.local.json\nAGENTS.local.md\n"
-
-
-def _legacy_local_config_ignore_bodies() -> tuple[str, ...]:
-    return ("svc.local.json\n",)
 
 
 def local_agent_instructions_body() -> str:
@@ -171,8 +157,6 @@ def inspect_local_config_ignore(content: bytes | None) -> IntegrationInspection:
         return IntegrationInspection("modified", text, match)
     if body == local_config_ignore_body():
         return IntegrationInspection("current", text, match)
-    if body in _legacy_local_config_ignore_bodies():
-        return IntegrationInspection("outdated", text, match)
     return IntegrationInspection("modified", text, match)
 
 
@@ -271,8 +255,6 @@ def inspect_agent_router(content: bytes | None) -> IntegrationInspection:
         body = match.group("body")
         if body == agent_body():
             return IntegrationInspection("current", text, match)
-        if body == _legacy_agent_navigation_body():
-            return IntegrationInspection("outdated", text, match)
         return IntegrationInspection("modified", text, match)
     if legacy_begin_count != 1 or legacy_end_count != 1:
         return IntegrationInspection("modified", text)
@@ -282,27 +264,13 @@ def inspect_agent_router(content: bytes | None) -> IntegrationInspection:
     body = match.group("body")
     if sha256_bytes(body.encode("utf-8")) != match.group("digest"):
         return IntegrationInspection("modified", text, match)
-    if body == _legacy_agent_navigation_body():
-        return IntegrationInspection("outdated", text, match)
     return IntegrationInspection("modified", text, match)
 
 
 def inspect_retired_skill(content: bytes | None) -> IntegrationInspection:
     if content is None:
         return IntegrationInspection("missing", None)
-    text = _decode(content)
-    markers = list(SKILL_MARKER_RE.finditer(text))
-    if not markers:
-        return IntegrationInspection("unowned", text)
-    if len(markers) != 1:
-        return IntegrationInspection("modified", text)
-    match = markers[0]
-    if match.end() != len(text):
-        return IntegrationInspection("modified", text, match)
-    body = text[: match.start()]
-    if sha256_bytes(body.encode("utf-8")) != match.group("digest"):
-        return IntegrationInspection("modified", text, match)
-    return IntegrationInspection("clean-generated", text, match)
+    return IntegrationInspection("unowned", _decode(content))
 
 
 def desired_navigation(

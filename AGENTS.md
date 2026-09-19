@@ -16,8 +16,8 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - SVC's own durable Product, technical, and runtime truth: `docs/`
 - Corpus migration selection and guides: `src/migrations/`
 - Release configuration, version, Behavioral SemVer evidence, and notes:
-  `.changie.yaml`, Changie data under `changes/`, generated `CHANGELOG.md`,
-  GitHub Releases, and `CONTRIBUTING.md`
+  `towncrier.toml`, fragments under `.changes/`, `svc_cli/pyproject.toml`,
+  generated `CHANGELOG.md`, GitHub Releases, and `CONTRIBUTING.md`
 - Consumer runtime, project integration, and packaged-resource access:
   `svc_cli/src/svc_cli/`; its tests live under `svc_cli/tests/`
 - Catalog/wheel projection: `svc_cli/src/svc_cli/catalog.py`,
@@ -31,7 +31,7 @@ This repository is the source of the Sustainable Vibe Coding (SVC) framework, no
 - Runtime: Python 3.11+
 - Environment and commands: PDM 2.28+
 - Install: `pdm install`
-- Test: `pdm run test`
+- Check everything: `pdm run check`
 - Consumer CLI smoke test: `pdm run svc --help`
 - Build the installable distribution: `pdm build -p svc_cli`
 - Inspect the packaged corpus locally: `pdm run svc lookup --path task-packet/`

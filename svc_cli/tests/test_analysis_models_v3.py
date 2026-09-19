@@ -8,9 +8,18 @@ from pydantic import ValidationError
 
 from svc_cli.analysis.models_v3 import QUERY_REQUEST_V3, query_request_schema_v3
 from svc_cli.analysis.protocol import AnalysisProtocolError
-from svc_cli.analysis.versions import analysis_route
-from svc_cli.telemetry.evidence_v4 import build_evidence_v4_manifest, write_evidence_v4_stream
-from svc_cli.telemetry.trajectory_v2 import Coverage, ExecutionRecord, HeaderRecord, SourceRef, encode_trajectory_v2
+from svc_cli.analysis.versions import validate_analysis_versions
+from svc_cli.telemetry.evidence_v4 import (
+    build_evidence_v4_manifest,
+    write_evidence_v4_stream,
+)
+from svc_cli.telemetry.trajectory_v2 import (
+    Coverage,
+    ExecutionRecord,
+    HeaderRecord,
+    SourceRef,
+    encode_trajectory_v2,
+)
 
 
 EVIDENCE_ID = "a" * 64
@@ -22,8 +31,15 @@ def test_v3_requests_are_constructible_from_generated_schema_contract() -> None:
         {
             "version": 3,
             "intent": "trace",
-            "execution": {"evidence_id": EVIDENCE_ID, "kind": "execution", "id": "exec_root"},
-            "scope": {"history": "path", "leaf": {"evidence_id": EVIDENCE_ID, "kind": "event", "id": "evt_leaf"}},
+            "execution": {
+                "evidence_id": EVIDENCE_ID,
+                "kind": "execution",
+                "id": "exec_root",
+            },
+            "scope": {
+                "history": "path",
+                "leaf": {"evidence_id": EVIDENCE_ID, "kind": "event", "id": "evt_leaf"},
+            },
         }
     )
     assert overview.intent == "overview"
@@ -67,7 +83,12 @@ def _write_v4(path: Path) -> None:
                 roots=("exec_root",),
                 coverage=(Coverage(domain="content", status="complete"),),
             ),
-            ExecutionRecord(type="execution", execution_id="exec_root", role="root", source_refs=(source,)),
+            ExecutionRecord(
+                type="execution",
+                execution_id="exec_root",
+                role="root",
+                source_refs=(source,),
+            ),
         )
     )
     materials = {"native/root.jsonl": native}
@@ -82,10 +103,11 @@ def _write_v4(path: Path) -> None:
         write_evidence_v4_stream(stream, manifest, trajectory, materials)
 
 
-def test_compatibility_router_rejects_v2_on_v4_early(tmp_path: Path) -> None:
+def test_current_router_accepts_v3_and_rejects_v2_early(tmp_path: Path) -> None:
     bundle = tmp_path / "v4.zip"
     _write_v4(bundle)
-    assert analysis_route({"version": 3, "intent": "overview"}, bundle) == "v3-on-v4"
+    validate_analysis_versions({"version": 3, "intent": "overview"}, bundle)
+    validate_analysis_versions({"intent": "overview"}, bundle)
     with pytest.raises(AnalysisProtocolError) as raised:
-        analysis_route({"intent": "overview"}, bundle)
-    assert raised.value.code == "analysis-version-incompatible"
+        validate_analysis_versions({"version": 2, "intent": "overview"}, bundle)
+    assert raised.value.code == "unsupported-analysis-version"

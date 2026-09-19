@@ -62,8 +62,8 @@ from .model import (
 )
 from .openapi_profile import OpenApiProfileError, compile_openapi_profile
 from .yaml_surface import (
-    MAX_YAML_DEPTH,
-    MAX_YAML_NODES,
+    MAX_YAML_DEPTH as MAX_YAML_DEPTH,
+    MAX_YAML_NODES as MAX_YAML_NODES,
     load_yaml,
     source_location,
 )
@@ -1632,9 +1632,7 @@ class _Compiler:
                 **error.details,
             }
             if error.code == "invalid-double-json-value":
-                payload.update(
-                    {"path": ["contract", "schema"], "line": 1, "column": 1}
-                )
+                payload.update({"path": ["contract", "schema"], "line": 1, "column": 1})
             raise SvcError(error.code, error.message, payload) from error
 
     def _check_contract_coverage(

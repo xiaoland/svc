@@ -22,7 +22,9 @@ def _codex(tmp_path: Path):
     for name in ("root", "child"):
         shutil.copyfile(FIXTURES / "codex" / f"{name}.jsonl", home / f"{name}.jsonl")
     with sqlite3.connect(home / "state_5.sqlite") as database:
-        database.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT, parent_thread_id TEXT)")
+        database.execute(
+            "CREATE TABLE threads (id TEXT, rollout_path TEXT, parent_thread_id TEXT)"
+        )
         database.executemany(
             "INSERT INTO threads VALUES (?, ?, ?)",
             (("root", "root.jsonl", None), ("child", "child.jsonl", "root")),
@@ -47,7 +49,9 @@ def _metrics(value: dict[str, object]) -> dict[str, int | float]:
     return {item["metric"]: item["value"] for item in value["known"]}  # type: ignore[index,union-attr]
 
 
-def test_overview_answers_codex_subagent_usage_without_native_replay(tmp_path: Path) -> None:
+def test_overview_answers_codex_subagent_usage_without_native_replay(
+    tmp_path: Path,
+) -> None:
     evidence = _codex(tmp_path)
     overview = query_evidence_v3(evidence, {"version": 3, "intent": "overview"})
     oracle = json.loads((FIXTURES / "oracle.json").read_text())["codex"]
@@ -73,7 +77,9 @@ def test_overview_answers_codex_subagent_usage_without_native_replay(tmp_path: P
     assert _metrics(profile["total"])["total"] == 95
 
 
-def test_pi_path_profile_excludes_abandoned_branch_and_match_cursor_is_stable(tmp_path: Path) -> None:
+def test_pi_path_profile_excludes_abandoned_branch_and_match_cursor_is_stable(
+    tmp_path: Path,
+) -> None:
     evidence = _pi(tmp_path)
     trajectory = evidence.trajectory
     leaf = next(
@@ -89,7 +95,11 @@ def test_pi_path_profile_excludes_abandoned_branch_and_match_cursor_is_stable(tm
             "breakdown": "execution",
             "scope": {
                 "history": "path",
-                "leaf": {"evidence_id": evidence.evidence_id, "kind": "event", "id": leaf.event_id},
+                "leaf": {
+                    "evidence_id": evidence.evidence_id,
+                    "kind": "event",
+                    "id": leaf.event_id,
+                },
             },
         },
     )
@@ -105,7 +115,12 @@ def test_pi_path_profile_excludes_abandoned_branch_and_match_cursor_is_stable(tm
     first = query_evidence_v3(evidence, request)
     second = query_evidence_v3(
         evidence,
-        {"version": 3, "intent": "match", "cursor": first["next_cursor"], "max_items": 1},
+        {
+            "version": 3,
+            "intent": "match",
+            "cursor": first["next_cursor"],
+            "max_items": 1,
+        },
     )
     assert first["refs"] != second["refs"]
 
@@ -141,13 +156,19 @@ def test_large_payload_is_recoverable_by_public_blob_ref(tmp_path: Path) -> None
 
 def test_event_trace_associates_tool_call_and_result(tmp_path: Path) -> None:
     evidence = _pi(tmp_path)
-    call = next(event for event in evidence.trajectory.events if event.kind == "tool_call")
+    call = next(
+        event for event in evidence.trajectory.events if event.kind == "tool_call"
+    )
     trace = query_evidence_v3(
         evidence,
         {
             "version": 3,
             "intent": "trace",
-            "event": {"evidence_id": evidence.evidence_id, "kind": "event", "id": call.event_id},
+            "event": {
+                "evidence_id": evidence.evidence_id,
+                "kind": "event",
+                "id": call.event_id,
+            },
         },
     )
     assert {event["kind"] for event in trace["events"]} >= {"tool_call", "tool_result"}
@@ -156,13 +177,19 @@ def test_event_trace_associates_tool_call_and_result(tmp_path: Path) -> None:
 def test_profile_breakdowns_are_paginated_with_bounded_cursor(tmp_path: Path) -> None:
     evidence = _codex(tmp_path)
     first = query_evidence_v3(
-        evidence, {"version": 3, "intent": "profile", "breakdown": "execution", "max_items": 1}
+        evidence,
+        {"version": 3, "intent": "profile", "breakdown": "execution", "max_items": 1},
     )
     assert first["next_cursor"] is not None
     assert len(first["next_cursor"]) < 8192
     second = query_evidence_v3(
         evidence,
-        {"version": 3, "intent": "profile", "cursor": first["next_cursor"], "max_items": 1},
+        {
+            "version": 3,
+            "intent": "profile",
+            "cursor": first["next_cursor"],
+            "max_items": 1,
+        },
     )
     assert second["total"] == first["total"]
 
@@ -186,8 +213,19 @@ def test_trace_cursor_keeps_selector_across_all_pages(tmp_path: Path) -> None:
         seen.extend(page["events"])
         if page["next_cursor"] is None:
             break
-        request = {"version": 3, "intent": "trace", "cursor": page["next_cursor"], "max_items": 1}
-    assert len(seen) == len([event for event in evidence.trajectory.events if event.execution_id == execution.execution_id])
+        request = {
+            "version": 3,
+            "intent": "trace",
+            "cursor": page["next_cursor"],
+            "max_items": 1,
+        }
+    assert len(seen) == len(
+        [
+            event
+            for event in evidence.trajectory.events
+            if event.execution_id == execution.execution_id
+        ]
+    )
 
 
 def test_empty_trace_and_match_are_normal_results(tmp_path: Path) -> None:
@@ -197,7 +235,11 @@ def test_empty_trace_and_match_are_normal_results(tmp_path: Path) -> None:
     )
     match = query_evidence_v3(
         evidence,
-        {"version": 3, "intent": "match", "predicates": {"text_terms": ["never-present"]}},
+        {
+            "version": 3,
+            "intent": "match",
+            "predicates": {"text_terms": ["never-present"]},
+        },
     )
     assert trace["events"] == []
     assert match["refs"] == []

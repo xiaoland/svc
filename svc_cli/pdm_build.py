@@ -6,10 +6,6 @@ from pathlib import Path
 from typing import Protocol, cast
 
 
-class _ScmVersion(Protocol):
-    version: object
-
-
 class _BuildContext(Protocol):
     root: str | Path
     build_dir: str | Path
@@ -46,11 +42,6 @@ def _corpus_root(member_root: Path) -> Path:
         if candidate.is_dir() and (candidate / "version.json").is_file():
             return candidate
     raise FileNotFoundError("Canonical SVC Corpus build input is unavailable")
-
-
-def format_scm_version(version: _ScmVersion) -> str:
-    """Keep source checkouts on their latest strict stable release projection."""
-    return str(version.version)
 
 
 def pdm_build_update_files(

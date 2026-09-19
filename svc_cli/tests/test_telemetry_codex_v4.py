@@ -28,7 +28,9 @@ def _home(tmp_path: Path) -> Path:
     return home
 
 
-def test_codex_v4_collects_descendants_payloads_relations_and_usage(tmp_path: Path) -> None:
+def test_codex_v4_collects_descendants_payloads_relations_and_usage(
+    tmp_path: Path,
+) -> None:
     home = _home(tmp_path)
     manifest, trajectory_bytes, materials = collect_codex_v4(
         ProviderContext(home=home),
@@ -44,7 +46,10 @@ def test_codex_v4_collects_descendants_payloads_relations_and_usage(tmp_path: Pa
     trajectory = validate_trajectory_v2(trajectory_bytes)
     assert len(trajectory.executions) == 2
     assert {item.native_id for item in trajectory.executions} == {"root", "child"}
-    assert any(item.kind == "relation" and item.payload.relation == "delegation" for item in trajectory.events)
+    assert any(
+        item.kind == "relation" and item.payload.relation == "delegation"
+        for item in trajectory.events
+    )
     assert any(
         item.kind == "message"
         and item.payload.role == "user"
@@ -70,10 +75,17 @@ def test_codex_v4_keeps_missing_child_in_topology_and_coverage(tmp_path: Path) -
     assert len(trajectory.executions) == 2
     assert any(item.kind == "relation" for item in trajectory.events)
     assert {gap.object_id for gap in manifest.gaps} == {"child"}
-    assert next(item for item in trajectory.header.coverage if item.domain == "usage").status == "partial"
+    assert (
+        next(
+            item for item in trajectory.header.coverage if item.domain == "usage"
+        ).status
+        == "partial"
+    )
 
 
-def test_codex_v4_attaches_missing_grandchild_to_observed_parent(tmp_path: Path) -> None:
+def test_codex_v4_attaches_missing_grandchild_to_observed_parent(
+    tmp_path: Path,
+) -> None:
     home = _home(tmp_path)
     child = home / "child.jsonl"
     child.write_text(
@@ -90,13 +102,16 @@ def test_codex_v4_attaches_missing_grandchild_to_observed_parent(tmp_path: Path)
     trajectory = validate_trajectory_v2(trajectory_bytes)
     by_native = {item.native_id: item.execution_id for item in trajectory.executions}
     relation = next(
-        item for item in trajectory.events
+        item
+        for item in trajectory.events
         if item.kind == "relation" and item.payload.target.id == by_native["grand"]
     )
     assert relation.payload.source.id == by_native["child"]
 
 
-def test_codex_v4_marks_replayed_legacy_usage_ambiguous_without_double_counting(tmp_path: Path) -> None:
+def test_codex_v4_marks_replayed_legacy_usage_ambiguous_without_double_counting(
+    tmp_path: Path,
+) -> None:
     home = _home(tmp_path)
     root = home / "root.jsonl"
     records = root.read_text().splitlines()
@@ -114,7 +129,9 @@ def test_codex_v4_marks_replayed_legacy_usage_ambiguous_without_double_counting(
     from svc_cli.telemetry.trajectory_v2 import validate_trajectory_v2
 
     trajectory = validate_trajectory_v2(trajectory_bytes)
-    root_execution = next(item for item in trajectory.executions if item.native_id == "root")
+    root_execution = next(
+        item for item in trajectory.executions if item.native_id == "root"
+    )
     usage = usage_for_execution(trajectory, root_execution.execution_id)
     assert next(item.value for item in usage.known if item.metric == "input") == 160
     assert usage.ambiguous_observations >= 1

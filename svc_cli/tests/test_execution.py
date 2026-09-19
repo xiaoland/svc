@@ -269,6 +269,7 @@ def test_lifetime_coordination_lock_is_cross_process_authority(tmp_path: Path) -
                 ),
             ],
             check=False,
+            timeout=5,
         )
         assert completed.returncode == 0
     try:

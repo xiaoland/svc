@@ -115,7 +115,7 @@ OUTPUT_SCHEMA_SPECS = {
     "lookup": OutputSchemaSpec(2, TypeAdapter(LookupMachineOutput)),
     "init": OutputSchemaSpec(3, TypeAdapter(InitMachineOutput)),
     "status": OutputSchemaSpec(2, TypeAdapter(StatusMachineOutput)),
-    "upgrade": OutputSchemaSpec(1, TypeAdapter(UpgradeMachineOutput)),
+    "upgrade": OutputSchemaSpec(2, TypeAdapter(UpgradeMachineOutput)),
     "dev-identity": OutputSchemaSpec(2, TypeAdapter(DevIdentityMachineOutput)),
     "dev-status": OutputSchemaSpec(2, TypeAdapter(DevStatusMachineOutput)),
     "dev-ensure": OutputSchemaSpec(2, TypeAdapter(DevEnsureMachineOutput)),

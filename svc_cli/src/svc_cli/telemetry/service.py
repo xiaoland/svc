@@ -12,9 +12,7 @@ from .agent_threads import (
     ThreadInventoryQuery,
     ThreadSelection,
 )
-from .archive import write_agent_thread_evidence
 from .providers import provider as local_provider
-from .trajectory import projection_summary
 from .evidence_v4 import write_evidence_v4_stream
 from .providers.codex_v4 import collect_codex_v4
 from .providers.pi_v4 import collect_pi_v4, list_pi_sessions
@@ -84,70 +82,6 @@ def list_pi_agent_threads(home: Path | None, limit: int) -> dict[str, object]:
     }
 
 
-def export_agent_thread(
-    *,
-    codex_home: Path | None,
-    thread_id: str | None,
-    source: Path | None,
-    output: Path,
-) -> dict[str, object]:
-    """Capture one exact source into an immutable schema-v3 evidence ZIP."""
-
-    try:
-        selection = ThreadSelection(thread_id=thread_id, source=source)
-    except ValueError as error:
-        raise SvcError("invalid-thread-selector", str(error)) from error
-    try:
-        evidence = write_agent_thread_evidence(
-            local_provider(),
-            _context(codex_home),
-            selection,
-            Path(output),
-        )
-    except FileExistsError as error:
-        raise SvcError(
-            "output-exists",
-            "Evidence output already exists and was not replaced.",
-            {"path": str(output)},
-        ) from error
-    except ValueError as error:
-        raise SvcError("invalid-export-request", str(error)) from error
-    except OSError as error:
-        raise SvcError(
-            "output-write-failed",
-            "Could not write the Agent-thread evidence bundle.",
-            {"path": str(output), "reason": str(error)},
-        ) from error
-
-    manifest = evidence.manifest
-    projection = (
-        projection_summary(evidence.trajectory)
-        if evidence.trajectory is not None
-        else {
-            "result_status": "projection-unavailable",
-            "capabilities": {},
-            "lossiness": {},
-        }
-    )
-    return {
-        "schema_version": TELEMETRY_SCHEMA_VERSION,
-        "command": "telemetry agent-thread export",
-        "status": "exported",
-        "evidence": {
-            "path": str(output),
-            "evidence_id": manifest.evidence_id,
-            "schema_version": manifest.schema_version,
-            "native_bytes": len(evidence.native),
-            "native_records": len(evidence.native_index),
-        },
-        "capture": manifest.capture.model_dump(mode="json"),
-        "source": manifest.source.model_dump(mode="json"),
-        "projection_status": projection["result_status"],
-        "capabilities": projection["capabilities"],
-        "lossiness": projection["lossiness"],
-    }
-
-
 def export_agent_thread_v4(
     *,
     provider_id: str,
@@ -168,17 +102,26 @@ def export_agent_thread_v4(
     elif provider_id == "pi":
         manifest, trajectory, materials = collect_pi_v4(context, selection)
     else:
-        raise SvcError("unsupported-provider", f"Unsupported telemetry provider: {provider_id}")
+        raise SvcError(
+            "unsupported-provider", f"Unsupported telemetry provider: {provider_id}"
+        )
     target = Path(output).expanduser()
     if target.suffix != ".zip" or not target.parent.is_dir():
-        raise SvcError("invalid-export-request", "Evidence output must be an absent .zip in an existing directory.")
+        raise SvcError(
+            "invalid-export-request",
+            "Evidence output must be an absent .zip in an existing directory.",
+        )
     created = False
     try:
         with target.open("x+b") as stream:
             created = True
             evidence = write_evidence_v4_stream(stream, manifest, trajectory, materials)
     except FileExistsError as error:
-        raise SvcError("output-exists", "Evidence output already exists and was not replaced.", {"path": str(target)}) from error
+        raise SvcError(
+            "output-exists",
+            "Evidence output already exists and was not replaced.",
+            {"path": str(target)},
+        ) from error
     except Exception:
         if created:
             target.unlink(missing_ok=True)
@@ -196,9 +139,13 @@ def export_agent_thread_v4(
             "executions": len(evidence.trajectory.executions),
             "materials": len(evidence.materials),
         },
-        "coverage": [item.model_dump(mode="json") for item in evidence.trajectory.header.coverage],
-        "issues": [item.model_dump(mode="json") for item in evidence.trajectory.header.issues],
+        "coverage": [
+            item.model_dump(mode="json") for item in evidence.trajectory.header.coverage
+        ],
+        "issues": [
+            item.model_dump(mode="json") for item in evidence.trajectory.header.issues
+        ],
     }
 
 
-__all__ = ["export_agent_thread", "export_agent_thread_v4", "list_agent_threads", "list_pi_agent_threads"]
+__all__ = ["export_agent_thread_v4", "list_agent_threads", "list_pi_agent_threads"]

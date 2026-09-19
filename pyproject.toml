@@ -12,12 +12,11 @@ double = ["sustainable-vibe-coding[double]"]
 quality = [
     "mypy>=2.3,<2.4",
     "import-linter>=2.13,<3",
-    "zizmor>=1.28,<2",
+    "towncrier>=25.8,<26",
 ]
 test = [
     "pytest>=9,<10",
     "pytest-asyncio>=1.4,<2",
-    "PyYAML<7,>=6.0",
     "ruff>=0.15,<0.16",
 ]
 
@@ -28,80 +27,32 @@ distribution = false
 members = ["svc_cli"]
 
 [tool.pdm.scripts]
-build-release-projections = "python -m tools.build_release_projections"
-check-release-projections = "python -m tools.build_release_projections --check"
+check-corpus-release = "python -m tools.check_corpus_release"
 build-cli-output-schemas = "python -m tools.build_cli_output_schemas"
 check-cli-output-schemas = "python -m tools.build_cli_output_schemas --check"
 svc = "python -m svc_cli.cli"
 test-root = "pytest tests"
 test-cli = "pytest svc_cli/tests"
-test = "pytest tests svc_cli/tests"
-lint-tests = "ruff check tests svc_cli/tests --select E4,E7,E9,F,B,SIM,PT,TID251 --ignore PT007,PT018"
+test = "pytest"
+format = "ruff format svc_cli/src svc_cli/tests tools tests"
+format-check = "ruff format --check svc_cli/src svc_cli/tests tools tests"
+lint = "ruff check svc_cli/src svc_cli/tests tools tests"
 lint-imports = "lint-imports"
-lint-workflows = "zizmor --offline .github/workflows"
 typecheck = "mypy"
+check = { composite = ["check-corpus-release", "check-cli-output-schemas", "format-check", "lint", "typecheck", "lint-imports", "test"] }
 
 [tool.mypy]
 python_version = "3.11"
 files = [
+    "svc_cli/src/svc_cli/*.py",
+    "svc_cli/src/svc_cli/cli_output",
+    "svc_cli/src/svc_cli/dev",
+    "svc_cli/src/svc_cli/double",
+    "svc_cli/src/svc_cli/run",
     "svc_cli/pdm_build.py",
-    "svc_cli/src/svc_cli/catalog.py",
-    "svc_cli/src/svc_cli/cli.py",
-    "svc_cli/src/svc_cli/cli_delivery.py",
-    "svc_cli/src/svc_cli/config.py",
-    "svc_cli/src/svc_cli/config_migration.py",
-    "svc_cli/src/svc_cli/errors.py",
-    "svc_cli/src/svc_cli/_execution.py",
-    "svc_cli/src/svc_cli/cli_output/lookup.py",
-    "svc_cli/src/svc_cli/cli_output/common.py",
-    "svc_cli/src/svc_cli/cli_output/dev.py",
-    "svc_cli/src/svc_cli/cli_output/double.py",
-    "svc_cli/src/svc_cli/cli_output/model.py",
-    "svc_cli/src/svc_cli/cli_output/project.py",
-    "svc_cli/src/svc_cli/cli_output/run.py",
-    "svc_cli/src/svc_cli/cli_output/upgrade.py",
-    "svc_cli/src/svc_cli/integration.py",
-    "svc_cli/src/svc_cli/lookup.py",
-    "svc_cli/src/svc_cli/model.py",
-    "svc_cli/src/svc_cli/output_schema.py",
-    "svc_cli/src/svc_cli/plans.py",
-    "svc_cli/src/svc_cli/project.py",
-    "svc_cli/src/svc_cli/release.py",
-    "svc_cli/src/svc_cli/resources.py",
-    "svc_cli/src/svc_cli/upgrade.py",
-    "svc_cli/src/svc_cli/workspace.py",
-    "svc_cli/src/svc_cli/dev/identity.py",
-    "svc_cli/src/svc_cli/dev/readiness.py",
-    "svc_cli/src/svc_cli/dev/runtime.py",
-    "svc_cli/src/svc_cli/double/__init__.py",
-    "svc_cli/src/svc_cli/double/carrier.py",
-    "svc_cli/src/svc_cli/double/cel_profile.py",
-    "svc_cli/src/svc_cli/double/compiler.py",
-    "svc_cli/src/svc_cli/double/materialization.py",
-    "svc_cli/src/svc_cli/double/model.py",
-    "svc_cli/src/svc_cli/double/openapi_profile.py",
-    "svc_cli/src/svc_cli/double/runtime.py",
-    "svc_cli/src/svc_cli/double/schema_registry.py",
-    "svc_cli/src/svc_cli/double/service.py",
-    "svc_cli/src/svc_cli/double/yaml_surface.py",
-    "svc_cli/src/svc_cli/run/__init__.py",
-    "svc_cli/src/svc_cli/run/runtime.py",
-    "svc_cli/src/svc_cli/analysis/__init__.py",
-    "svc_cli/src/svc_cli/analysis/protocol.py",
-    "svc_cli/src/svc_cli/analysis/query.py",
-    "svc_cli/src/svc_cli/analysis/read.py",
-    "svc_cli/src/svc_cli/analysis/service.py",
-    "svc_cli/src/svc_cli/telemetry/agent_threads.py",
-    "svc_cli/src/svc_cli/telemetry/archive.py",
-    "svc_cli/src/svc_cli/telemetry/evidence.py",
-    "svc_cli/src/svc_cli/telemetry/service.py",
-    "svc_cli/src/svc_cli/telemetry/trajectory.py",
-    "svc_cli/src/svc_cli/telemetry/providers/codex_rollout.py",
-    "svc_cli/src/svc_cli/telemetry/providers/codex_trajectory.py",
-    "svc_cli/tests/svc_cli_test_support/agent_thread_contract.py",
-    "svc_cli/tests/svc_cli_test_support/project_contract.py",
-    "tools/build_cli_output_schemas.py",
+    "tools",
 ]
+follow_imports = "silent"
 plugins = ["pydantic.mypy"]
 check_untyped_defs = true
 disallow_any_generics = true
@@ -121,8 +72,8 @@ name = "Analysis core remains provider UI and network neutral"
 type = "forbidden"
 source_modules = [
     "svc_cli.analysis.protocol",
-    "svc_cli.analysis.query",
-    "svc_cli.analysis.read",
+    "svc_cli.analysis.query_v3",
+    "svc_cli.analysis.read_v3",
 ]
 forbidden_modules = [
     "svc_cli.telemetry.providers",
@@ -184,7 +135,6 @@ source_modules = [
     "svc_cli._execution",
     "svc_cli.catalog",
     "svc_cli.config",
-    "svc_cli.config_migration",
     "svc_cli.dev",
     "svc_cli.double",
     "svc_cli.errors",
@@ -220,6 +170,8 @@ forbidden_modules = ["svc_cli.output_schema"]
 allow_indirect_imports = true
 
 [tool.pytest.ini_options]
+addopts = ["--strict-config", "--strict-markers", "-ra"]
+testpaths = ["tests", "svc_cli/tests"]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
@@ -229,7 +181,7 @@ pythonpath = [".", "svc_cli/tests"]
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["TID251"]
+select = ["E4", "E7", "E9", "F", "B", "TID251"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "unittest".msg = "SVC tests use native pytest fixtures and monkeypatch."

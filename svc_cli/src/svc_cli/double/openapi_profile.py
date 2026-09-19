@@ -143,9 +143,7 @@ class _Profile:
                 self.source_name,
             )
 
-        self._walk_local_refs(
-            operation, self.source_path, self.document, set()
-        )
+        self._walk_local_refs(operation, self.source_path, self.document, set())
         resource_uris = self._schema_resource_uris()
         request_schema = self._extract_request_schema(
             operation, self.source_path, self.document, resource_uris
@@ -272,11 +270,11 @@ class _Profile:
         request_body = operation.get("requestBody")
         if request_body is None:
             return None
-        resolved = self._resolve_openapi_object(
-            request_body, document_path, document
-        )
+        resolved = self._resolve_openapi_object(request_body, document_path, document)
         content = resolved.get("content") if isinstance(resolved, Mapping) else None
-        media = content.get("application/json") if isinstance(content, Mapping) else None
+        media = (
+            content.get("application/json") if isinstance(content, Mapping) else None
+        )
         schema = media.get("schema") if isinstance(media, Mapping) else None
         if schema is None:
             return None
@@ -310,9 +308,7 @@ class _Profile:
                     str(document_path),
                     details={"status": status_text},
                 )
-            resolved = self._resolve_openapi_object(
-                authored, document_path, document
-            )
+            resolved = self._resolve_openapi_object(authored, document_path, document)
             content = resolved.get("content") if isinstance(resolved, Mapping) else None
             media = (
                 content.get("application/json")
@@ -382,7 +378,7 @@ class _Profile:
             ]
         try:
             return strict_json_value(value)
-        except TypeError as error:
+        except TypeError:
             self._fail(
                 "Value is not JSON-compatible under the BSL YAML 1.2 profile.",
                 str(document_path),
@@ -438,9 +434,7 @@ class _Profile:
                 details={"ref": reference},
             )
         if strict:
-            target_path, _, _ = self._resolve_ref(
-                reference, document_path, document
-            )
+            target_path, _, _ = self._resolve_ref(reference, document_path, document)
         elif not parsed.path:
             target_path = document_path
         else:
@@ -471,9 +465,7 @@ class _Profile:
             self._fail("OpenAPI $ref must be a string.", str(document_path))
         self._resolve_ref(reference, document_path, document)
         try:
-            return resolve_document_reference(
-                self.documents, document_path, reference
-            )
+            return resolve_document_reference(self.documents, document_path, reference)
         except Unresolvable:
             self._fail(
                 "OpenAPI $ref fragment does not resolve.",
@@ -506,9 +498,7 @@ class _Profile:
         code: str = "invalid-double-contract",
         details: Mapping[str, Any] | None = None,
     ) -> NoReturn:
-        raise OpenApiProfileError(
-            message, source, code=code, details=details
-        )
+        raise OpenApiProfileError(message, source, code=code, details=details)
 
 
 def _bounded_diagnostic(error: BaseException, maximum: int = 1_000) -> str:

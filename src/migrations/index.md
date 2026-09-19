@@ -1,24 +1,17 @@
 # Corpus Migrations
 
 Use these living guides when a Consumer project adopts a newer SVC Corpus
-baseline. The installed CLI selects the exact release chain; an Agent and
-Human evaluate and update Consumer-owned truth, then `svc upgrade --target
-corpus` records only the reviewed baseline. SVC never rewrites or claims to
-have verified those documents.
+baseline. Version 15 is the current anchor and has no runtime migration chain
+from pre-v15 baselines. An Agent and Human evaluate and update Consumer-owned
+truth before adopting v15; SVC never rewrites or claims to have verified those
+documents.
 
-Read versioned migration guides in ascending release order. Capability-named
-guides describe a required semantic transition selected by that chain. The
-package manager owns CLI installation; configuration migration is a separate
-`svc upgrade --target config` operation.
+Capability-named guides describe the current semantic transition. The package
+manager owns CLI installation. CLI configuration schemas are current-only
+contracts and are not part of Corpus guidance.
 
 Current guides:
 
-- [11.0.0 Agent-thread observability migration](11.0.0.md)
-- [Agent-owned query and native read](agent-analysis-query-read.md)
-- [schema-v3 Agent evidence authority](agent-task-performance-analysis.md)
-- [same-user local evidence boundary](local-trust-boundary.md)
-- [13.0.0 symmetric Corpus and progressive Task Packets](core-mechanism-evolution.md)
-- [14.0.0 Corpus ownership and CLI-help migration](corpus-layout-v14.md)
 - [Coding Agent debugger and profiler evidence](analysis-debugger-corpus.md)
 
 Version classification follows Consumer behavior:
@@ -28,6 +21,5 @@ Version classification follows Consumer behavior:
 - **minor** adds a backward-compatible optional capability
 - **patch** restores or clarifies the existing contract
 
-Every release-relevant change has a Changie fragment. Generated migration
-guides, version index, changelog, and release artifacts project that source;
-they do not replace this selection contract.
+Every release-relevant change has a Towncrier fragment. Migration guides and
+`src/version.json` are authored Corpus sources, independent of CLI release notes.

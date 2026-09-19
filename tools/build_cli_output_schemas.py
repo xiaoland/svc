@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
+import tomllib
 from pathlib import Path
-from typing import Any
-
-import yaml  # type: ignore[import-untyped]
 
 from svc_cli.output_schema import OUTPUT_SCHEMA_KEYS, generate_output_schema
 
@@ -16,7 +15,6 @@ from svc_cli.output_schema import OUTPUT_SCHEMA_KEYS, generate_output_schema
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_ROOT = ROOT / "svc_cli" / "src" / "svc_cli" / "data" / "output-schemas"
 SCHEMA_REPOSITORY_PREFIX = "svc_cli/src/svc_cli/data/output-schemas"
-LEGACY_SCHEMA_REPOSITORY_PREFIX = "svc_cli/data/output-schemas"
 
 
 def _encoded(key: str) -> bytes:
@@ -46,78 +44,67 @@ def build(*, check: bool) -> list[str]:
     return changed
 
 
-def _git_show(ref: str, relative: str) -> bytes | None:
-    completed = subprocess.run(
-        ("git", "show", f"{ref}:{relative}"),
-        cwd=ROOT,
-        capture_output=True,
-        check=False,
-    )
-    return completed.stdout if completed.returncode == 0 else None
-
-
-def _changed_major_fragment(ref: str) -> bool:
-    completed = subprocess.run(
-        (
-            "git",
-            "diff",
-            "--name-only",
-            ref,
-            "--",
-            "changes/unreleased",
-            "changes/fragments",
-        ),
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    for relative in completed.stdout.splitlines():
-        path = ROOT / relative
-        if not path.is_file():
-            continue
-        value: Any = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if (
-            isinstance(value, dict)
-            and value.get("component") == "cli"
-            and value.get("kind") == "major"
-        ):
-            return True
-    return False
+def _package_version(ref: str | None = None) -> tuple[int, int, int]:
+    if ref is None:
+        raw = (ROOT / "svc_cli/pyproject.toml").read_bytes()
+    else:
+        shown = subprocess.run(
+            ("git", "show", f"{ref}:svc_cli/pyproject.toml"),
+            cwd=ROOT,
+            capture_output=True,
+            check=True,
+        )
+        raw = shown.stdout
+    version = tomllib.loads(raw.decode())["project"].get("version")
+    if version is None and ref is not None:
+        described = subprocess.run(
+            ("git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", ref),
+            cwd=ROOT,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        version = described.stdout.strip().removeprefix("v")
+    if not isinstance(version, str):
+        raise ValueError("package version is not static")
+    parts = version.split(".")
+    if len(parts) != 3 or any(not part.isdigit() for part in parts):
+        raise ValueError(f"invalid package version: {version}")
+    return int(parts[0]), int(parts[1]), int(parts[2])
 
 
 def compare_ref(ref: str) -> list[str]:
-    """Return compatibility failures relative to a Git ref."""
-
-    changed_existing: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+    failures = []
+    result_schema_advanced = False
     for key in OUTPUT_SCHEMA_KEYS:
-        previous_bytes = _git_show(ref, f"{SCHEMA_REPOSITORY_PREFIX}/{key}.json")
-        if previous_bytes is None:
-            previous_bytes = _git_show(
-                ref, f"{LEGACY_SCHEMA_REPOSITORY_PREFIX}/{key}.json"
-            )
-        if previous_bytes is None:
-            continue
-        current = generate_output_schema(key)
-        previous = json.loads(previous_bytes)
-        if previous != current:
-            changed_existing.append((key, previous, current))
-    if not changed_existing:
-        return []
-
-    failures: list[str] = []
-    if not _changed_major_fragment(ref):
-        failures.append(
-            "output schema changed without a changed component=cli, kind=major "
-            "fragment"
+        previous = subprocess.run(
+            ("git", "show", f"{ref}:{SCHEMA_REPOSITORY_PREFIX}/{key}.json"),
+            cwd=ROOT,
+            capture_output=True,
+            check=False,
         )
-    for key, previous, current in changed_existing:
-        before = previous.get("x-svc-result-schema-version")
-        after = current.get("x-svc-result-schema-version")
-        if not isinstance(before, int) or not isinstance(after, int) or after <= before:
+        if previous.returncode != 0:
+            continue
+        before = json.loads(previous.stdout)
+        after = generate_output_schema(key)
+        if before == after:
+            continue
+        old_version = before.get("x-svc-result-schema-version")
+        new_version = after.get("x-svc-result-schema-version")
+        if (
+            not isinstance(old_version, int)
+            or not isinstance(new_version, int)
+            or new_version <= old_version
+        ):
             failures.append(
-                f"{key} output schema changed without advancing its result schema version"
+                f"{key} output changed without advancing x-svc-result-schema-version"
             )
+        else:
+            result_schema_advanced = True
+    if result_schema_advanced and _package_version()[0] <= _package_version(ref)[0]:
+        failures.append(
+            "result schema advancement requires a package major advancement"
+        )
     return failures
 
 
@@ -132,8 +119,9 @@ def main() -> int:
         for path in changed:
             print(f"outdated generated output schema: {path}")
         return 1
-    if args.compare_ref:
-        failures = compare_ref(args.compare_ref)
+    compare = args.compare_ref or os.environ.get("SVC_BASE_REF")
+    if compare:
+        failures = compare_ref(compare)
         for failure in failures:
             print(failure)
         if failures:

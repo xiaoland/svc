@@ -22,4 +22,5 @@ Python 包和 Corpus 合同的最小路径。
 必须按 [plan.md](plan.md) 逐项审查。advisor 已指出草稿遗漏 analysis/integration
 兼容路径并过度削弱 wheel 黑盒验收。
 
-当前前沿：[design.md](design.md) 已给出实现、静态检查、测试、CI、CD、工具处置和诊断性的完整方案，等待审阅后再处理现有草稿。
+当前前沿：[design.md](design.md) 已通过 advisor 复审；实现正在按该边界收敛，
+当前测试已切断旧 analysis/evidence 成功路径，CI/CD 与发布工具正在验证。

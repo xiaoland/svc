@@ -9,15 +9,19 @@ import pytest
 from svc_cli.analysis.protocol import AnalysisProtocolError
 from svc_cli.analysis.models_v3 import ReadResponseV3
 from svc_cli.analysis.read_v3 import read_evidence_v3
-from svc_cli.analysis.service import execute_read
-from svc_cli_test_support.agent_thread_contract import write_evidence_bundle
 from svc_cli.telemetry.evidence_v4 import (
     build_evidence_v4_manifest,
     validate_evidence_v4,
     write_evidence_v4_stream,
 )
 from svc_cli.telemetry.trajectory import canonical_json_bytes
-from svc_cli.telemetry.trajectory_v2 import Coverage, ExecutionRecord, HeaderRecord, SourceRef, encode_trajectory_v2
+from svc_cli.telemetry.trajectory_v2 import (
+    Coverage,
+    ExecutionRecord,
+    HeaderRecord,
+    SourceRef,
+    encode_trajectory_v2,
+)
 
 
 def _evidence(tmp_path: Path, material: bytes):
@@ -34,7 +38,12 @@ def _evidence(tmp_path: Path, material: bytes):
                 roots=("exec_root",),
                 coverage=(Coverage(domain="content", status="complete"),),
             ),
-            ExecutionRecord(type="execution", execution_id="exec_root", role="root", source_refs=(source,)),
+            ExecutionRecord(
+                type="execution",
+                execution_id="exec_root",
+                role="root",
+                source_refs=(source,),
+            ),
         )
     )
     materials = {name: material}
@@ -59,7 +68,9 @@ def _payload(item: dict[str, object]) -> bytes:
     return base64.b64decode(payload["data"])  # type: ignore[arg-type]
 
 
-def test_read_v3_pages_exact_binary_material_with_whole_response_budget(tmp_path: Path) -> None:
+def test_read_v3_pages_exact_binary_material_with_whole_response_budget(
+    tmp_path: Path,
+) -> None:
     original = ("你好" * 300).encode() + b"\xff\x00" + b"x" * 1200
     evidence, name = _evidence(tmp_path, original)
     request: dict[str, object] = {
@@ -91,23 +102,3 @@ def test_read_v3_rejects_cross_evidence_ref(tmp_path: Path) -> None:
             },
         )
     assert raised.value.code == "reference-scope-mismatch"
-
-
-def test_read_v3_keeps_exact_native_access_for_evidence_v3(tmp_path: Path) -> None:
-    legacy = write_evidence_bundle(
-        tmp_path,
-        "legacy",
-        (b'{"type":"session_meta"}\n', b'{"message":"hello"}\n'),
-    )
-    response = execute_read(
-        legacy.path,
-        {
-            "version": 3,
-            "ref": {
-                "evidence_id": legacy.evidence_id,
-                "kind": "native",
-                "id": "n000001",
-            },
-        },
-    )
-    assert response["items"][0]["payload"]["text"] == '{"message":"hello"}\n'

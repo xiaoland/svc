@@ -12,12 +12,6 @@ Usage events preserve owner, scope, temporality, measurements, sample/counter id
 
 Analysis API v3 uses generated JSON Schema 2020-12 models. Query is the closed union `overview | trace | profile | match`; read is exact-ref or native-forward with opaque continuation. Cursors bind evidence, version, intent, selector/order, and position. Pagination never changes coverage, and byte budgets apply to the complete encoded response. Validation errors identify bounded field paths; success is one JSON value on stdout and errors are one structured JSON value on stderr.
 
-Compatibility is explicit:
-
-| Analysis request | Evidence v3 | Evidence v4 |
-| --- | --- | --- |
-| v2 or omitted | Existing v2 query/read | Rejected |
-| v3 query | `re-export-required` capability limit | Full query |
-| v3 read | Exact/forward native recovery | Full material read |
-
-Evidence v1/v2 remains a historical cutoff. Analysis never imports a provider normalizer to repair an old bundle.
+Compatibility is explicit: versionless and explicit v3 requests both use
+analysis v3 with evidence v4. Analysis v1/v2 requests and evidence v1-v3 are
+rejected. Analysis never imports a provider normalizer to repair an old bundle.

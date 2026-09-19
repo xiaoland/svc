@@ -121,23 +121,22 @@ def test_modified_generated_surface_blocks_without_overwrite(
     assert tree_bytes(tmp_path) == before
 
 
-def test_clean_legacy_skill_is_deleted_and_modified_marker_blocks() -> None:
+def test_legacy_skill_is_preserved_as_consumer_owned() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         skill = write_legacy_skill(root)
         plan = plan_init(root)
-        deletion = next(
-            item for item in plan.mutations if item.path == CODEX_SKILL_FILE
-        )
-        assert (deletion.action, deletion.after.state) == ("delete", "absent")
+        assert not any(item.path == CODEX_SKILL_FILE for item in plan.mutations)
         apply_init(plan, plan.digest)
-        assert not skill.exists()
+        assert skill.exists()
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        write_legacy_skill(root, modified=True)
+        skill = write_legacy_skill(root, modified=True)
         plan = plan_init(root)
-        assert "generated-skill-drift" in {blocker.code for blocker in plan.blockers}
+        assert not plan.blockers
+        apply_init(plan, plan.digest)
+        assert skill.exists()
 
 
 def test_unowned_existing_skill_is_ignored_and_preserved() -> None:
@@ -178,7 +177,7 @@ def test_status_reports_corpus_relation_and_upgrade_continuation() -> None:
         assert status.corpus.available_version == initial.target_version
         assert status.next.action == "plan-project-upgrade"
         assert status.next.command is not None
-        assert status.next.command[-2:] == ("--target", "corpus")
+        assert status.next.command == ("svc", "upgrade", str(root.resolve()))
         assert not status.healthy
 
 
@@ -316,7 +315,7 @@ def test_unsupported_schema_and_corpus_ahead_block_init_writes() -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        (root / PROJECT_FILE).write_bytes(render_project_state("15.0.0"))
+        (root / PROJECT_FILE).write_bytes(render_project_state("16.0.0"))
         blocked = plan_init(root)
         assert "corpus-baseline-ahead" in {item.code for item in blocked.blockers}
 

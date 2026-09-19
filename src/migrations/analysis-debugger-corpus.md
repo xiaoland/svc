@@ -1,6 +1,6 @@
 # Adopt payload-bearing Coding Agent debugger and profiler evidence
 
-Corpus release: 14.1.0.
+Corpus release: 15.0.0.
 
 ### Applies when
 A project exports Agent evidence or calls the versionless `svc analysis`
@@ -14,10 +14,9 @@ that reconstructs provider logs, joins tool calls/results, or sums token
 counters; analysis v3 owns those mechanical operations. Keep semantic
 diagnosis and task-quality conclusions in the calling Agent.
 
-Versionless requests continue to use analysis v2 with evidence v3.
-Analysis v2 rejects evidence v4. Query v3 reports `re-export-required`
-for evidence v3; read v3 retains native access. Evidence v1/v2 must be
-recollected.
+Versionless requests use analysis v3. Only evidence v4 is accepted; evidence
+v1-v3 must be recollected. There is no query or read compatibility path for
+older bundles.
 
 ### Verify
 Run `svc analysis --schema`, export one Codex or standard Pi session, and

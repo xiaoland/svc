@@ -41,9 +41,9 @@ def test_catalog_is_deterministic_and_covers_every_canonical_markdown_document()
         assert "content" not in entry.as_dict()
 
     index = read_version_index(source)
-    assert catalog.corpus_version == index.corpus_version == "14.1.0"
+    assert catalog.corpus_version == index.corpus_version == "15.0.0"
     assert catalog.releases == index.releases
-    assert index.supported_anchor == "10.0.1"
+    assert index.supported_anchor == "15.0.0"
 
 
 def test_wheel_projection_contains_catalog_and_one_copy_of_each_document() -> None:
@@ -51,7 +51,7 @@ def test_wheel_projection_contains_catalog_and_one_copy_of_each_document() -> No
         files = build_projection(ROOT / "src", Path(tmp))
         assert "svc_cli/data/catalog.json" in files
         catalog = parse_catalog(files["svc_cli/data/catalog.json"].read_bytes())
-        assert catalog.corpus_version == "14.1.0"
+        assert catalog.corpus_version == "15.0.0"
         expected_corpus = {
             f"svc_cli/data/corpus/{entry.path}" for entry in catalog.entries
         }
@@ -76,7 +76,7 @@ def test_catalog_and_wheel_exclude_only_root_agents_document(
         "# Other corpus document\n", encoding="utf-8"
     )
     (source / "version.json").write_text(
-        '{"schema_version":1,"releases":[{"version":"7.1.0",'
+        '{"schema_version":2,"corpus_version":"7.1.0","releases":[{"version":"7.1.0",'
         '"previous_version":"7.0.0","migration":{"status":"not-required"}}]}',
         encoding="utf-8",
     )
@@ -134,7 +134,8 @@ def test_wheel_projection_reads_corpus_version_from_source_index(
     (source / "version.json").write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "corpus_version": "7.1.0",
                 "releases": [
                     {
                         "version": "7.1.0",
@@ -169,7 +170,7 @@ def test_pdm_hook_ignores_distribution_version_for_corpus_projection() -> None:
             PDM_BUILD_UPDATE_FILES(context, files)
             catalog_path = files["svc_cli/data/catalog.json"]
             assert catalog_path == context.build_dir / "svc_cli/data/catalog.json"
-            assert parse_catalog(catalog_path.read_bytes()).corpus_version == "14.1.0"
+            assert parse_catalog(catalog_path.read_bytes()).corpus_version == "15.0.0"
             assert all(name.startswith("svc_cli/data/") for name in files)
 
         sdist_files: dict[str, Path] = {}
@@ -197,7 +198,7 @@ def test_source_catalog_uses_the_same_source_owned_corpus_version(
     source.mkdir()
     (source / "index.md").write_text("# Source corpus\n", encoding="utf-8")
     (source / "version.json").write_text(
-        '{"schema_version":1,"releases":[{"version":"3.0.0",'
+        '{"schema_version":2,"corpus_version":"3.0.0","releases":[{"version":"3.0.0",'
         '"previous_version":"2.0.0","migration":{"status":"not-required"}}]}',
         encoding="utf-8",
     )
@@ -212,7 +213,8 @@ def test_source_catalog_uses_the_same_source_owned_corpus_version(
     (
         (
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "corpus_version": "1.0.0",
                 "releases": [
                     {
                         "version": "2.0.0",
@@ -230,7 +232,8 @@ def test_source_catalog_uses_the_same_source_owned_corpus_version(
         ),
         (
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "corpus_version": "1.0.0",
                 "releases": [
                     {
                         "version": "2.0.0",
@@ -253,7 +256,7 @@ def test_version_index_rejects_incomplete_release_authority(
 def test_catalog_builder_rejects_a_missing_guide(tmp_path: Path) -> None:
     (tmp_path / "index.md").write_text("# Corpus\n", encoding="utf-8")
     (tmp_path / "version.json").write_text(
-        '{"schema_version":1,"releases":[{"version":"2.0.0",'
+        '{"schema_version":2,"corpus_version":"2.0.0","releases":[{"version":"2.0.0",'
         '"previous_version":"1.0.0","migration":{"status":"guide",'
         '"paths":["migrations/missing.md"]}}]}',
         encoding="utf-8",

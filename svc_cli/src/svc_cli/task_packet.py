@@ -277,9 +277,7 @@ def _inventory(root: Path) -> tuple[tuple[_InventoryEntry, ...], bool]:
                 if relative_directory
                 else entry.name
             )
-            if visit_once(
-                directory / entry.name, child_relative, directory_level + 1
-            ):
+            if visit_once(directory / entry.name, child_relative, directory_level + 1):
                 return True
         return False
 
@@ -338,8 +336,7 @@ def _is_recognized(relative: str, recognized_bases: frozenset[str]) -> bool:
         # entry exists; unknown cells remain report-only.
         cell_stem = cell_entry
         return any(
-            base == f"cells/{cell_stem}.md"
-            for base in recognized_bases
+            base == f"cells/{cell_stem}.md" for base in recognized_bases
         ) and bool(remainder)
     return False
 
@@ -377,9 +374,7 @@ def _render_growth_brief(
         "Observed inventory (sample sorted by relative path; maximum two directory levels; maximum 100 entries):",
     ]
     if inventory:
-        lines.extend(
-            f"  {item.relative_path} [{item.kind}]" for item in inventory
-        )
+        lines.extend(f"  {item.relative_path} [{item.kind}]" for item in inventory)
     else:
         lines.append("  (empty)")
     if truncated:
@@ -389,9 +384,7 @@ def _render_growth_brief(
             f"{len(inventory) + 1} exist; scan stopped at the observation limit)."
         )
     else:
-        lines.append(
-            f"Inventory truncated: no ({len(inventory)} entries; limit 100)."
-        )
+        lines.append(f"Inventory truncated: no ({len(inventory)} entries; limit 100).")
     lines.extend(("", "Recognized packet entries:"))
     if recognized:
         lines.extend(f"  {item.relative_path}" for item in recognized)

@@ -16,9 +16,7 @@ def fixture_lookup() -> CorpusLookup:
         "templates/AGENTS.local.template.md": (
             b"# Local Instructions\n\nA task packet local template.\n"
         ),
-        "specs/alignment/index.md": (
-            b"# Alignment\n\nKeep one alignment boundary.\n"
-        ),
+        "specs/alignment/index.md": (b"# Alignment\n\nKeep one alignment boundary.\n"),
         "taste/implementation/index.md": (
             b"# Implementation Taste\n\nUse measured design judgment.\n"
         ),
@@ -71,9 +69,7 @@ def test_missing_or_invalid_directory_is_an_exact_selection_failure() -> None:
 
 
 def test_path_reads_one_exact_normalized_document() -> None:
-    response = fixture_lookup().lookup(
-        LookupQuery("path", "task-packet/index.md")
-    )
+    response = fixture_lookup().lookup(LookupQuery("path", "task-packet/index.md"))
 
     assert response.document is not None
     assert response.document.entry.path == "task-packet/index.md"

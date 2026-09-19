@@ -53,9 +53,7 @@ def test_machine_json_is_compact_for_results_and_errors() -> None:
 
 
 def test_lookup_directory_alias_returns_the_canonical_document_identity() -> None:
-    code, stdout, stderr = invoke_text(
-        ["lookup", "--path", "task-packet/", "--json"]
-    )
+    code, stdout, stderr = invoke_text(["lookup", "--path", "task-packet/", "--json"])
 
     payload = assert_compact_json(stdout)
     assert (code, stderr) == (EXIT_OK, "")
@@ -114,7 +112,7 @@ def test_help_is_self_sufficient_and_removed_commands_are_absent() -> None:
 
     code, stdout, stderr = invoke_text(["upgrade", "--help"])
     assert (code, stderr) == (EXIT_OK, "")
-    assert "--target {config,corpus}" in stdout
+    assert "--target" not in stdout
     assert "does not update the CLI" in stdout
     assert "Agent/Human document work" in stdout
 
@@ -273,6 +271,7 @@ def test_run_text_keeps_native_channels_and_wrapper_facts_separate() -> None:
             capture_output=True,
             text=True,
             check=False,
+            timeout=5,
         )
         assert completed.returncode == 0
         assert completed.stdout == "native-out\n"

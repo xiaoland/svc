@@ -13,7 +13,7 @@ from semantic_version import Version  # type: ignore[import-untyped]
 
 
 CATALOG_SCHEMA_VERSION = 2
-CORPUS_VERSION_SCHEMA_VERSION = 1
+CORPUS_VERSION_SCHEMA_VERSION = 2
 AUTHORING_ONLY_DOCUMENT = "AGENTS.md"
 TITLE_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
@@ -147,15 +147,14 @@ class CorpusVersionIndex:
     """Canonical source-owned Corpus release chain."""
 
     schema_version: int
+    corpus_version: str
     releases: tuple[CorpusRelease, ...]
 
     @property
-    def corpus_version(self) -> str:
-        return self.releases[-1].version
-
-    @property
     def supported_anchor(self) -> str:
-        return self.releases[0].previous_version
+        return (
+            self.releases[0].previous_version if self.releases else self.corpus_version
+        )
 
     @classmethod
     def from_mapping(cls, raw: object) -> "CorpusVersionIndex":
@@ -166,14 +165,15 @@ class CorpusVersionIndex:
                 "Unsupported Corpus version index schema: "
                 f"{raw.get('schema_version')!r}"
             )
-        if set(raw) != {"schema_version", "releases"}:
+        if set(raw) != {"schema_version", "corpus_version", "releases"}:
             raise ValueError("Corpus version index has unsupported fields")
+        corpus_version = require_semver(raw.get("corpus_version"), "Corpus version")
         releases_raw = raw.get("releases")
-        if not isinstance(releases_raw, list) or not releases_raw:
-            raise ValueError("Corpus version index must contain at least one release")
+        if not isinstance(releases_raw, list):
+            raise ValueError("Corpus version index releases must be a list")
         releases = tuple(CorpusRelease.from_mapping(item) for item in releases_raw)
-        seen = {releases[0].previous_version}
-        previous = releases[0].previous_version
+        previous = releases[0].previous_version if releases else corpus_version
+        seen = {previous}
         for release in releases:
             if release.previous_version != previous:
                 raise ValueError(
@@ -191,11 +191,14 @@ class CorpusVersionIndex:
                 )
             seen.add(release.version)
             previous = release.version
-        return cls(CORPUS_VERSION_SCHEMA_VERSION, releases)
+        if previous != corpus_version:
+            raise ValueError("Corpus version must match the last release")
+        return cls(CORPUS_VERSION_SCHEMA_VERSION, corpus_version, releases)
 
     def as_dict(self) -> dict[str, object]:
         return {
             "schema_version": self.schema_version,
+            "corpus_version": self.corpus_version,
             "releases": [release.as_dict() for release in self.releases],
         }
 
@@ -246,7 +249,9 @@ class Catalog:
 
     @property
     def version_index(self) -> CorpusVersionIndex:
-        return CorpusVersionIndex(CORPUS_VERSION_SCHEMA_VERSION, self.releases)
+        return CorpusVersionIndex(
+            CORPUS_VERSION_SCHEMA_VERSION, self.corpus_version, self.releases
+        )
 
     @classmethod
     def from_mapping(cls, raw: object) -> "Catalog":
@@ -263,17 +268,14 @@ class Catalog:
             "entries",
         }:
             raise ValueError("Catalog has unsupported fields")
+        version = require_semver(raw.get("corpus_version"), "catalog corpus_version")
         index = CorpusVersionIndex.from_mapping(
             {
                 "schema_version": CORPUS_VERSION_SCHEMA_VERSION,
+                "corpus_version": version,
                 "releases": raw.get("releases"),
             }
         )
-        version = require_semver(raw.get("corpus_version"), "catalog corpus_version")
-        if version != index.corpus_version:
-            raise ValueError(
-                "Catalog corpus_version does not match its last release record"
-            )
         entries_raw = raw.get("entries")
         if not isinstance(entries_raw, list) or not entries_raw:
             raise ValueError("Catalog must contain at least one entry")

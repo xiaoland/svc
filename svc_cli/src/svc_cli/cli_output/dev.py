@@ -13,7 +13,6 @@ from ..dev.runtime import (
     DevEnsureStatus,
     DevIdentityResult,
     DevStatusResult,
-    DevStopDeclaration as ServiceDevStopDeclaration,
     DevStopResult,
     DevTargetFailure as ServiceDevTargetFailure,
     DevTargetObservation as ServiceDevTargetObservation,

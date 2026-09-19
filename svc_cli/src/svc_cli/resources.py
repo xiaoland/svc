@@ -63,24 +63,3 @@ def read_document(path: str) -> bytes:
     if not source.is_file():
         raise FileNotFoundError(f"SVC source document does not exist: {normalized}")
     return source.read_bytes()
-
-
-def read_config_migration_descriptor(from_schema: int, to_schema: int) -> bytes:
-    """Read one CLI-owned configuration migration descriptor."""
-
-    name = f"config-{from_schema}-{to_schema}.json"
-    packaged = _packaged_data_root()
-    if packaged is not None:
-        resource = packaged.joinpath("migrations", name)
-        if not resource.is_file():
-            raise FileNotFoundError(
-                f"Packaged config migration descriptor does not exist: {name}"
-            )
-        return resource.read_bytes()
-
-    source = Path(__file__).resolve().parent / "data" / "migrations" / name
-    if not source.is_file():
-        raise FileNotFoundError(
-            f"Source config migration descriptor does not exist: {name}"
-        )
-    return source.read_bytes()

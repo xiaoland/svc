@@ -13,12 +13,7 @@ Use Python 3.11 or newer and PDM 2.28 or newer:
 
 ```console
 pdm install -d -G test -G quality
-changie batch auto --dry-run
-pdm run lint-tests
-pdm run typecheck
-pdm run lint-imports
-pdm run lint-workflows
-pdm run test
+pdm run check
 pdm build -p svc_cli
 pdm run svc lookup --path task-packet/
 ```
@@ -52,25 +47,22 @@ Commit type is navigation metadata. It never determines release impact or the ne
 
 ## Declare Behavioral Impact
 
-Release notes use Changie 1.25.1, installed separately from the Python
-environment (for example, `go install github.com/miniscruff/changie@v1.25.1`).
-Every user- or protocol-visible pull request runs `changie new` and selects
-exactly one Behavioral SemVer kind:
+Release notes use Towncrier from the PDM quality dependency group. Every user-
+or protocol-visible pull request adds one concise Markdown fragment:
 
 ```console
-changie new
+printf '%s\n' 'Describe the user-visible change.' > .changes/123.added.md
 ```
 
-Use:
+Use the `added`, `changed`, `removed`, or `fixed` suffix. Choose the package
+version with Behavioral SemVer:
 
 - `major` when required obligations, defaults, authority or permission boundaries, task-packet semantics, consumer layout, stable CLI/catalog contracts, or supported capabilities change incompatibly.
 - `minor` for an optional backward-compatible capability or accepted-input expansion.
 - `patch` for a correction or clarification that preserves declared protocol behavior.
 
-Changie writes a tool-native YAML fragment under `changes/unreleased/`. Keep its
-body concise and consumer-facing. Changes without user- or protocol-visible
-release impact do not add a fragment. Do not edit the generated `CHANGELOG.md`
-in a feature pull request.
+Changes without user- or protocol-visible impact do not add a fragment. Do not
+edit the generated `CHANGELOG.md` in a feature pull request.
 
 Add packaged Markdown migration guidance under `src/migrations/` when consumers
 need release-specific steps or judgment. Migration notes are optional guidance;
@@ -91,22 +83,19 @@ Maintainers configure these boundaries before the first release:
 
 The release flow is intentionally sequenced:
 
-1. Feature pull requests merge tool-native YAML fragments to
-   `changes/unreleased/`.
-2. A maintainer prepares a release with Changie 1.25.1:
+1. Feature pull requests merge Markdown fragments under `.changes/`.
+2. A maintainer prepares a release PR by updating the static version in
+   `svc_cli/pyproject.toml` and building the changelog:
 
    ```console
-   version=$(changie next auto)
-   changie batch "$version" --allow-no-changes=false \
-     --move-dir "fragments/$version"
-   pdm run build-release-projections
-   changie merge
+   pdm run towncrier build --version 15.0.0 --yes
+   pdm run check
    ```
 
-   The maintainer opens an ordinary release-preparation pull request containing
-   the batch result and generated `CHANGELOG.md`.
+   The version passed to Towncrier must equal the package version. The maintainer
+   opens an ordinary release-preparation pull request containing both changes.
 3. Merging that generated changelog triggers the standard release workflow. The
-   batched Changie version is the single release version: the workflow constructs
-   its matching tag and PDM SCM package version, builds the distributions,
-   installs and smoke-tests them, publishes through PyPI Trusted Publishing,
-   and creates the GitHub Release from the generated notes.
+   static package version is the single release version: the workflow validates
+   the changelog, builds and smoke-tests the distributions once, creates the
+   matching tag, publishes through PyPI Trusted Publishing, and creates the
+   GitHub Release from the generated notes.

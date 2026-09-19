@@ -22,9 +22,7 @@ def invoke(arguments: list[str]) -> tuple[int, str, str]:
 def test_init_creates_only_an_absent_packet_and_reports_canonical_routes(
     tmp_path: Path,
 ) -> None:
-    code, output, error = invoke(
-        ["task", "init", "small", "--repo", str(tmp_path)]
-    )
+    code, output, error = invoke(["task", "init", "small", "--repo", str(tmp_path)])
 
     packet = tmp_path / "tasks" / "small" / "packet.md"
     assert (code, error) == (EXIT_OK, "")
@@ -36,9 +34,7 @@ def test_init_creates_only_an_absent_packet_and_reports_canonical_routes(
     assert "shape-preflight" in output
     assert "svc task grow small" in output
 
-    code, _, error = invoke(
-        ["task", "init", "small", "--repo", str(tmp_path)]
-    )
+    code, _, error = invoke(["task", "init", "small", "--repo", str(tmp_path)])
     assert code == EXIT_CONFLICT
     assert "task-packet-exists" in error
     assert packet.read_bytes() == original
@@ -76,7 +72,11 @@ def test_grow_sorts_observed_bounded_entries_and_reports_unknown_entries(
     inventory = output.split("Observed inventory (", 1)[1].split(
         "Inventory truncated:", 1
     )[0]
-    listed = [line.strip().split(" [", 1)[0] for line in inventory.splitlines() if line.startswith("  ")]
+    listed = [
+        line.strip().split(" [", 1)[0]
+        for line in inventory.splitlines()
+        if line.startswith("  ")
+    ]
     assert listed == sorted(listed)
 
 

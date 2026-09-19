@@ -36,7 +36,9 @@ class PathScope(AnalysisModel):
         return self
 
 
-HistoryScope: TypeAlias = Annotated[AllWorkScope | PathScope, Field(discriminator="history")]
+HistoryScope: TypeAlias = Annotated[
+    AllWorkScope | PathScope, Field(discriminator="history")
+]
 
 
 class OverviewRequestV3(AnalysisModel):
@@ -53,16 +55,24 @@ class TraceRequestV3(AnalysisModel):
     execution: AnalysisRefV3 | None = None
     event: AnalysisRefV3 | None = None
     turn_id: str | None = Field(default=None, min_length=1)
-    scope: HistoryScope = Field(default_factory=lambda: AllWorkScope(history="all_work"))
+    scope: HistoryScope = Field(
+        default_factory=lambda: AllWorkScope(history="all_work")
+    )
     cursor: str | None = Field(default=None, min_length=1, max_length=8192)
     max_items: int = Field(default=50, ge=1, le=100)
     max_bytes: int = Field(default=65_536, ge=256, le=1_048_576)
 
     @model_validator(mode="after")
     def one_selector(self) -> "TraceRequestV3":
-        selected = sum(value is not None for value in (self.execution, self.event, self.turn_id))
-        if (self.cursor is None and selected != 1) or (self.cursor is not None and selected != 0):
-            raise ValueError("initial trace requires one selector; continuation requires only cursor")
+        selected = sum(
+            value is not None for value in (self.execution, self.event, self.turn_id)
+        )
+        if (self.cursor is None and selected != 1) or (
+            self.cursor is not None and selected != 0
+        ):
+            raise ValueError(
+                "initial trace requires one selector; continuation requires only cursor"
+            )
         if self.execution is not None and self.execution.kind != "execution":
             raise ValueError("execution selector requires an execution ref")
         if self.event is not None and self.event.kind != "event":
@@ -87,7 +97,9 @@ class ProfileRequestV3(AnalysisModel):
     version: Literal[3]
     intent: Literal["profile"]
     select: ProfileSelectV3 = Field(default_factory=ProfileSelectV3)
-    scope: HistoryScope = Field(default_factory=lambda: AllWorkScope(history="all_work"))
+    scope: HistoryScope = Field(
+        default_factory=lambda: AllWorkScope(history="all_work")
+    )
     breakdown: Literal["execution", "model", "tool"] | None = None
     cursor: str | None = Field(default=None, min_length=1, max_length=8192)
     max_items: int = Field(default=50, ge=1, le=100)
@@ -105,20 +117,23 @@ class ProfileRequestV3(AnalysisModel):
 
 
 class MatchPredicatesV3(AnalysisModel):
-    kinds: list[
-        Literal[
-            "message",
-            "reasoning",
-            "tool_call",
-            "tool_result",
-            "lifecycle",
-            "context_change",
-            "relation",
-            "usage",
-            "provider_event",
-        ],
-        ...,
-    ] | None = Field(default=None, min_length=1)
+    kinds: (
+        list[
+            Literal[
+                "message",
+                "reasoning",
+                "tool_call",
+                "tool_result",
+                "lifecycle",
+                "context_change",
+                "relation",
+                "usage",
+                "provider_event",
+            ],
+            ...,
+        ]
+        | None
+    ) = Field(default=None, min_length=1)
     execution: AnalysisRefV3 | None = None
     tool_names: list[str] | None = Field(default=None, min_length=1)
     text_terms: list[str] | None = Field(default=None, min_length=1)
@@ -126,13 +141,20 @@ class MatchPredicatesV3(AnalysisModel):
     @field_validator("tool_names", "text_terms")
     @classmethod
     def unique_bounded_terms(cls, value: list[str] | None) -> list[str] | None:
-        if value is not None and (len(value) > 8 or len(set(value)) != len(value) or any(not item or len(item) > 256 for item in value)):
+        if value is not None and (
+            len(value) > 8
+            or len(set(value)) != len(value)
+            or any(not item or len(item) > 256 for item in value)
+        ):
             raise ValueError("match terms must be unique bounded text")
         return value
 
     @model_validator(mode="after")
     def non_empty(self) -> "MatchPredicatesV3":
-        if all(value is None for value in (self.kinds, self.execution, self.tool_names, self.text_terms)):
+        if all(
+            value is None
+            for value in (self.kinds, self.execution, self.tool_names, self.text_terms)
+        ):
             raise ValueError("match predicates cannot be empty")
         if self.execution is not None and self.execution.kind != "execution":
             raise ValueError("match execution requires an execution ref")
@@ -193,7 +215,9 @@ class ContinueReadRequestV3(AnalysisModel):
     max_bytes: int = Field(default=65_536, ge=256, le=1_048_576)
 
 
-ReadRequestV3: TypeAlias = ExactReadRequestV3 | ForwardReadRequestV3 | ContinueReadRequestV3
+ReadRequestV3: TypeAlias = (
+    ExactReadRequestV3 | ForwardReadRequestV3 | ContinueReadRequestV3
+)
 READ_REQUEST_V3 = TypeAdapter(ReadRequestV3)
 
 
@@ -316,6 +340,7 @@ def _schema(adapter: TypeAdapter[Any]) -> dict[str, Any]:
 
 def query_request_schema_v3() -> dict[str, Any]:
     schema = _schema(QUERY_REQUEST_V3)
+
     def typed_ref(kind: str) -> dict[str, Any]:
         return {
             "allOf": [
@@ -323,14 +348,24 @@ def query_request_schema_v3() -> dict[str, Any]:
                 {"properties": {"kind": {"const": kind}}, "required": ["kind"]},
             ]
         }
+
     trace = schema.get("$defs", {}).get("TraceRequestV3")
     if isinstance(trace, dict):
         trace["oneOf"] = [
             {
                 "oneOf": [
-                    {"required": ["execution"], "properties": {"execution": typed_ref("execution")}},
-                    {"required": ["event"], "properties": {"event": typed_ref("event")}},
-                    {"required": ["turn_id"], "properties": {"turn_id": {"type": "string", "minLength": 1}}},
+                    {
+                        "required": ["execution"],
+                        "properties": {"execution": typed_ref("execution")},
+                    },
+                    {
+                        "required": ["event"],
+                        "properties": {"event": typed_ref("event")},
+                    },
+                    {
+                        "required": ["turn_id"],
+                        "properties": {"turn_id": {"type": "string", "minLength": 1}},
+                    },
                 ],
                 "properties": {"cursor": {"type": "null"}},
             },
@@ -356,15 +391,30 @@ def query_request_schema_v3() -> dict[str, Any]:
             },
             {
                 "required": ["cursor"],
-                "properties": {"cursor": {"type": "string", "minLength": 1}, "predicates": {"type": "null"}},
+                "properties": {
+                    "cursor": {"type": "string", "minLength": 1},
+                    "predicates": {"type": "null"},
+                },
             },
         ]
     profile = schema.get("$defs", {}).get("ProfileRequestV3")
     if isinstance(profile, dict):
         profile["allOf"] = [
             {
-                "if": {"required": ["cursor"], "properties": {"cursor": {"type": "string"}}},
-                "then": {"properties": {"select": {"properties": {"execution": {"type": "null"}, "descendants": {"const": False}}}}},
+                "if": {
+                    "required": ["cursor"],
+                    "properties": {"cursor": {"type": "string"}},
+                },
+                "then": {
+                    "properties": {
+                        "select": {
+                            "properties": {
+                                "execution": {"type": "null"},
+                                "descendants": {"const": False},
+                            }
+                        }
+                    }
+                },
             }
         ]
         profile["oneOf"] = [
@@ -377,15 +427,24 @@ def query_request_schema_v3() -> dict[str, Any]:
             },
             {
                 "required": ["cursor"],
-                "properties": {"cursor": {"type": "string", "minLength": 1}, "breakdown": {"type": "null"}},
+                "properties": {
+                    "cursor": {"type": "string", "minLength": 1},
+                    "breakdown": {"type": "null"},
+                },
             },
         ]
     profile_select = schema.get("$defs", {}).get("ProfileSelectV3")
     if isinstance(profile_select, dict):
-        profile_select["properties"]["execution"] = {"anyOf": [typed_ref("execution"), {"type": "null"}], "default": None}
+        profile_select["properties"]["execution"] = {
+            "anyOf": [typed_ref("execution"), {"type": "null"}],
+            "default": None,
+        }
     predicates = schema.get("$defs", {}).get("MatchPredicatesV3")
     if isinstance(predicates, dict):
-        predicates["properties"]["execution"] = {"anyOf": [typed_ref("execution"), {"type": "null"}], "default": None}
+        predicates["properties"]["execution"] = {
+            "anyOf": [typed_ref("execution"), {"type": "null"}],
+            "default": None,
+        }
     path = schema.get("$defs", {}).get("PathScope")
     if isinstance(path, dict):
         path["properties"]["leaf"] = typed_ref("event")

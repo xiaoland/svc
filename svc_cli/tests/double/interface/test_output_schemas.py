@@ -117,6 +117,7 @@ import svc_cli.output_schema
         check=False,
         capture_output=True,
         text=True,
+        timeout=5,
     )
 
     assert completed.returncode == 0, completed.stderr

@@ -11,7 +11,7 @@ from svc_cli.telemetry.agent_threads import (
     ThreadInventoryListing,
     ThreadInventoryRow,
 )
-from svc_cli.telemetry.evidence import validate_evidence
+from svc_cli.telemetry.evidence_v4 import validate_evidence_v4
 
 
 def _invoke(arguments: list[str]) -> tuple[int, str, str]:
@@ -86,22 +86,17 @@ def test_cli_export_query_and_read_contract(tmp_path: Path) -> None:
     )
     assert (code, stderr) == (0, "")
     exported = json.loads(stdout)
-    assert exported["schema_version"] == exported["evidence"]["schema_version"] == 3
-    assert exported["capture"]["status"] == "complete"
-    assert "diagnostics" not in exported
-    assert exported["evidence"]["native_records"] == 2
-    assert validate_evidence(bundle).native == source.read_bytes()
+    assert exported["schema_version"] == exported["evidence"]["schema_version"] == 4
+    assert exported["provider"] == "codex"
+    assert validate_evidence_v4(bundle).manifest.schema_version == 4
 
     code, stdout, stderr = _invoke(["analysis", "query", "--schema"])
     assert (code, stderr) == (0, "")
     schema = json.loads(stdout)
-    assert schema["schema_version"] == 2
-    assert schema["guidance"]["command"] == ["svc", "analysis", "--help"]
+    assert schema["version"] == 3
 
-    overview = _request(tmp_path, bundle, "query", {"intent": "overview"})
+    overview = _request(tmp_path, bundle, "query", {"version": 3, "intent": "overview"})
     assert (overview["intent"], overview["status"]) == ("overview", "complete")
-    first_page = _request(tmp_path, bundle, "read", {"max_items": 1})
-    assert first_page["items"][0]["ref"]["record_id"] == "n000000"
 
 
 def test_analysis_errors_and_removed_grammar_are_json(tmp_path: Path) -> None:
