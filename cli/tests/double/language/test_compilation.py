@@ -53,8 +53,8 @@ def test_compile_representative_module_to_normalized_ir() -> None:
     assert "urn:svc:double:schema-resource:" in str(scenario.contract.response_schemas)
     assert len(scenario.contract.schema_resources) == 2
     assert [item.logical_path for item in scenario.snapshots] == [
-        "svc_cli/tests/double/fixtures/language/contracts/payment.openapi.yaml",
-        "svc_cli/tests/double/fixtures/language/contracts/schemas.yaml",
+        "cli/tests/double/fixtures/language/contracts/payment.openapi.yaml",
+        "cli/tests/double/fixtures/language/contracts/schemas.yaml",
     ]
     assert interaction.provenance.snapshot_sha256 == scenario.contract.source.sha256
 

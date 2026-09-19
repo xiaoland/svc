@@ -5,7 +5,7 @@
 groups = ["default", "double", "quality", "test"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:bbf9ae5d735f44d0973752622669a23b5ec60bb23517ad0b3fc1c1c17b5f001c"
+content_hash = "sha256:28d3d7625502c8b8d516331c8a75f4e4d43523c0952d3f75aabe96f1d69ee491"
 
 [[metadata.targets]]
 requires_python = ">=3.11"
@@ -1062,7 +1062,7 @@ name = "sustainable-vibe-coding"
 version = "15.0.0"
 requires_python = ">=3.11"
 editable = true
-path = "./svc_cli"
+path = "./cli"
 summary = "Packaged SVC corpus and local development-collaboration CLI."
 groups = ["default", "double"]
 dependencies = [
@@ -1080,11 +1080,11 @@ version = "15.0.0"
 extras = ["double"]
 requires_python = ">=3.11"
 editable = true
-path = "./svc_cli"
+path = "./cli"
 summary = "Packaged SVC corpus and local development-collaboration CLI."
 groups = ["double"]
 dependencies = [
-    "-e file:///${PROJECT_ROOT}/svc_cli#egg=sustainable-vibe-coding",
+    "-e file:///${PROJECT_ROOT}/cli#egg=sustainable-vibe-coding",
     "cel-expr-python==0.1.3",
     "jsonschema<5,>=4.26",
     "referencing<0.38,>=0.37",

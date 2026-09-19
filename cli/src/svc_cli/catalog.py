@@ -374,7 +374,9 @@ def canonical_documents(source_root: Path) -> list[tuple[str, Path]]:
         try:
             relative = resolved.relative_to(root).as_posix()
         except ValueError as error:
-            raise ValueError(f"Canonical source escapes src/: {path}") from error
+            raise ValueError(
+                f"Canonical source escapes Corpus root/: {path}"
+            ) from error
         if relative == AUTHORING_ONLY_DOCUMENT:
             continue
         documents.append((normalized_document_path(relative), resolved))

@@ -20,7 +20,7 @@ from tools.build_catalog import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PDM_BUILD_UPDATE_FILES = runpy.run_path(str(ROOT / "svc_cli/pdm_build.py"))[
+PDM_BUILD_UPDATE_FILES = runpy.run_path(str(ROOT / "cli/pdm_build.py"))[
     "pdm_build_update_files"
 ]
 
@@ -28,7 +28,7 @@ PDM_BUILD_UPDATE_FILES = runpy.run_path(str(ROOT / "svc_cli/pdm_build.py"))[
 def test_catalog_is_deterministic_and_covers_every_canonical_markdown_document() -> (
     None
 ):
-    source = ROOT / "src"
+    source = ROOT / "corpus"
     first = build_catalog_bytes(source)
     second = build_catalog_bytes(source)
     assert first == second
@@ -48,7 +48,7 @@ def test_catalog_is_deterministic_and_covers_every_canonical_markdown_document()
 
 def test_wheel_projection_contains_catalog_and_one_copy_of_each_document() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        files = build_projection(ROOT / "src", Path(tmp))
+        files = build_projection(ROOT / "corpus", Path(tmp))
         assert "svc_cli/data/catalog.json" in files
         catalog = parse_catalog(files["svc_cli/data/catalog.json"].read_bytes())
         assert catalog.corpus_version == "15.0.0"
@@ -127,7 +127,7 @@ def test_wheel_projection_reads_corpus_version_from_source_index(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "source"
-    source = root / "src"
+    source = root / "corpus"
     source.mkdir(parents=True)
     document = source / "index.md"
     document.write_text("# Source corpus\n", encoding="utf-8")
@@ -162,7 +162,7 @@ def test_pdm_hook_ignores_distribution_version_for_corpus_projection() -> None:
         for package_version in ("12.3.4", "99.0.0"):
             context = SimpleNamespace(
                 target="wheel",
-                root=ROOT / "svc_cli",
+                root=ROOT / "cli",
                 build_dir=build_dir / package_version,
                 config=SimpleNamespace(metadata={"version": package_version}),
             )
@@ -177,11 +177,11 @@ def test_pdm_hook_ignores_distribution_version_for_corpus_projection() -> None:
         context.target = "sdist"
         PDM_BUILD_UPDATE_FILES(context, sdist_files)
         assert sdist_files["_build_inputs/corpus/version.json"] == (
-            ROOT / "src/version.json"
+            ROOT / "corpus/version.json"
         )
         expected_paths = {
             entry.path
-            for entry in parse_catalog(build_catalog_bytes(ROOT / "src")).entries
+            for entry in parse_catalog(build_catalog_bytes(ROOT / "corpus")).entries
         }
         assert {
             name.removeprefix("_build_inputs/corpus/")

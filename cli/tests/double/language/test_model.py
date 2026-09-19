@@ -67,9 +67,9 @@ def test_tagged_ir_round_trip_preserves_the_serialized_contract() -> None:
     ).encode()
 
     assert scenario.scenario_digest == (
-        "ea0dc6f0cf80c007fb6b14914a4a676a9853673bd49d5c446020b51086684d75"
+        "4e41468d6aa47d73d2b6272143a6fce773fd258b67ec5402ed2e8cb7e09b6070"
     )
     assert hashlib.sha256(encoded).hexdigest() == (
-        "1d37a65c3a522b114b4050d009086af621c41a5f943f7ed98bc949e696433a7e"
+        "d96fb594f3002120ec092941ef1a3e2c933a6b3b59a3e37df34104dfa14c0230"
     )
     assert Scenario.model_validate_json(json.dumps(payload)) == scenario

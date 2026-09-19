@@ -266,10 +266,13 @@ SVC uses Behavioral SemVer:
 - **MINOR** adds an optional backward-compatible capability.
 - **PATCH** fixes or clarifies the existing protocol without changing those behaviors.
 
-Towncrier records each release-relevant change as a Markdown fragment under
-`.changes/`. Maintainers set the static package version, build the changelog,
-and merge both through an ordinary release-preparation pull request. That merge
-starts the standard workflow, which validates the version, builds and tests the
-distribution once, publishes through Trusted Publishing, and creates the tag
-and GitHub Release. Corpus migration notes remain independent packaged guidance.
+Towncrier records CLI and Corpus changes independently under `.changes/cli/`
+and `.changes/corpus/`. Maintainers prepare ordinary release pull requests
+against the matching static version and changelog. A CLI release publishes the
+validated wheel through Trusted Publishing; a Corpus release creates its own
+tag and GitHub Release. Because the wheel embeds a Corpus snapshot, a newer
+Corpus reaches PyPI users with the next CLI release. Corpus migration notes
+remain independent packaged guidance. Corpus content and `corpus/version.json`
+advance together in the feature change; its release pull request only prepares
+the corresponding changelog.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.

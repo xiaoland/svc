@@ -36,7 +36,7 @@ def _catalog_module(root: Path) -> _CatalogProjection:
 def _corpus_root(member_root: Path) -> Path:
     candidates = (
         member_root / "_build_inputs" / "corpus",
-        member_root.parent / "src",
+        member_root.parent / "corpus",
     )
     for candidate in candidates:
         if candidate.is_dir() and (candidate / "version.json").is_file():

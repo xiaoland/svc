@@ -14,13 +14,13 @@ Use Python 3.11 or newer and PDM 2.28 or newer:
 ```console
 pdm install -d -G test -G quality
 pdm run check
-pdm build -p svc_cli
+pdm build -p cli
 pdm run svc lookup --path task-packet/
 ```
 
-Canonical framework sources live under `src/`. The installable package uses the
-workspace member layout `svc_cli/src/svc_cli`, and its tests live under
-`svc_cli/tests`. SVC's own durable Product, technical, and runtime truth lives
+Canonical framework sources live under `corpus/`. The installable package uses the
+workspace member layout `cli/src/svc_cli`, and its tests live under
+`cli/tests`. SVC's own durable Product, technical, and runtime truth lives
 under `docs/`; it is not packaged as Agent guidance.
 
 ## Commit Messages
@@ -48,10 +48,11 @@ Commit type is navigation metadata. It never determines release impact or the ne
 ## Declare Behavioral Impact
 
 Release notes use Towncrier from the PDM quality dependency group. Every user-
-or protocol-visible pull request adds one concise Markdown fragment:
+visible CLI or Corpus change adds one concise fragment to its owning product:
 
 ```console
-printf '%s\n' 'Describe the user-visible change.' > .changes/123.added.md
+printf '%s\n' 'Describe the CLI change.' > .changes/cli/123.added.md
+printf '%s\n' 'Describe the Corpus change.' > .changes/corpus/123.added.md
 ```
 
 Use the `added`, `changed`, `removed`, or `fixed` suffix. Choose the package
@@ -61,10 +62,12 @@ version with Behavioral SemVer:
 - `minor` for an optional backward-compatible capability or accepted-input expansion.
 - `patch` for a correction or clarification that preserves declared protocol behavior.
 
-Changes without user- or protocol-visible impact do not add a fragment. Do not
-edit the generated `CHANGELOG.md` in a feature pull request.
+Changes without user-visible impact do not add a fragment. A change affecting
+both products adds one fragment to each queue. Do not edit generated changelogs
+in a feature pull request. `CHANGELOG.md` remains the shared history from before
+the release streams were separated.
 
-Add packaged Markdown migration guidance under `src/migrations/` when consumers
+Add packaged Markdown migration guidance under `corpus/migrations/` when consumers
 need release-specific steps or judgment. Migration notes are optional guidance;
 SVC does not maintain a generic consumer-file migration graph.
 
@@ -83,19 +86,29 @@ Maintainers configure these boundaries before the first release:
 
 The release flow is intentionally sequenced:
 
-1. Feature pull requests merge Markdown fragments under `.changes/`.
-2. A maintainer prepares a release PR by updating the static version in
-   `svc_cli/pyproject.toml` and building the changelog:
+1. Feature pull requests merge Markdown fragments under `.changes/cli/` or
+   `.changes/corpus/`. A feature pull request that changes packaged Corpus
+   content also advances `corpus/version.json` and its migration index; the
+   repository check requires the content and Corpus version to move together.
+2. A maintainer prepares a CLI release PR by updating the static version in
+   `cli/pyproject.toml` and building its changelog:
 
    ```console
-   pdm run towncrier build --version 15.0.0 --yes
+   pdm run towncrier build --config towncrier.cli.toml --version 15.0.0 --yes
    pdm run check
    ```
 
-   The version passed to Towncrier must equal the package version. The maintainer
-   opens an ordinary release-preparation pull request containing both changes.
-3. Merging that generated changelog triggers the standard release workflow. The
-   static package version is the single release version: the workflow validates
-   the changelog, builds and smoke-tests the distributions once, creates the
-   matching tag, publishes through PyPI Trusted Publishing, and creates the
-   GitHub Release from the generated notes.
+   The version must equal the package version. Merging `CLI_CHANGELOG.md`
+   validates and publishes the accepted wheel under `cli-v<version>`.
+3. A Corpus release PR uses the Corpus version already accepted with the
+   feature changes and consumes its fragment queue:
+
+   ```console
+   pdm run towncrier build --config towncrier.corpus.toml --version 15.0.0 --yes
+   pdm run check
+   ```
+
+   Merging `CORPUS_CHANGELOG.md` creates `corpus-v<version>` and its GitHub
+   Release without publishing PyPI. A later CLI release carries that Corpus in
+   its wheel; when immediate PyPI delivery is required, prepare both releases in
+   the same PR.

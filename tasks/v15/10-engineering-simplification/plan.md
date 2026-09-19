@@ -15,3 +15,13 @@
 2. [进行中] 按命令所有权从根 `cli.py` 迁移纵向切片；analysis 与 telemetry 已迁移。
 3. [待处理] 迁移 double、dev、run 与 project 命令，保持根入口、退出码和延迟可选依赖合同。
 4. [进行中] 已抽出 double compiler 的资源所有者；待分离 provider source/capture 与 normalization。
+
+## 仓库与发布边界
+
+1. [完成] 将 Corpus 权威源从 `src/` 迁移到 `corpus/`，将 PDM member 从
+   `svc_cli/` 迁移到 `cli/`，保留 `cli/src/svc_cli/`。
+2. [完成] 分离 CLI/Corpus Towncrier 配置、fragment 队列、changelog 触发和
+   `cli-v…`/`corpus-v…` tag，同时保留旧 `CHANGELOG.md` 作为共同历史。
+3. [完成] 让 Corpus release 检查按相对内容跨旧 `src/` 基线比较，避免纯目录
+   改名被误判为语义发布。
+4. [完成] 验证 PDM workspace、全量检查、Towncrier 双 draft 与旧布局基线。

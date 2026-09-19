@@ -15,7 +15,7 @@ v15 建立一个只支持当前合同的 Python 工程。简化不是减少验�
 | 自动化测试 | 子进程等待可挂起，失败输出被吞，临时现场主动删除 | pytest 使用严格配置；每个进程边界有超时；失败包含命令、返回码和有界输出 | 三个故意失败的诊断回归测试 |
 | CI | 测试和 wheel 重复构建，质量门禁分散，但黑盒保证有价值 | 静态检查一次、3.11/3.14 测试、只构建一次 wheel、一次完整分发验收 | CI 与本地调用同名 PDM 脚本 |
 | CD | Changie 同时承担版本选择和发布事实，workflow 重复 CI 验收 | Towncrier 只写 changelog；release PR 写静态包版本；合并后构建并验证一次再发布同一 artifact | 发布准备演练 + artifact digest/版本一致性 |
-| Corpus release | Changie YAML 同时生成 changelog、Corpus 链和 CLI config descriptor | `src/version.json` 是 Corpus 唯一版本权威；v15 建新锚点；指南手写 | Catalog 构建和链接/版本校验 |
+| Corpus release | Changie YAML 同时生成 changelog、Corpus 链和 CLI config descriptor | `corpus/version.json` 是 Corpus 唯一版本权威；v15 建新锚点；指南手写 | Catalog 构建和链接/版本校验 |
 
 ## 代码实现 hard cut-off
 
@@ -25,8 +25,8 @@ v15 建立一个只支持当前合同的 Python 工程。简化不是减少验�
 - schema 1、2 或未知 schema 返回稳定的 `unsupported-config-schema`，不得猜测或改写文件。
 - `svc upgrade` 只属于 Corpus adoption；删除 `--target config`、配置 guide、双目标调度和 remaining-target 状态。
 - Corpus v15 建立新锚点，不保留 v10–v14 的运行时选择链。pre-v15 baseline 返回 `unsupported-corpus-baseline`；v15 不自动把旧项目标记为已采用。
-- `src/version.json` 采用能表达“当前版本 + 从 v15 开始的后续链”的新 schema。历史发布事实保留在 `CHANGELOG.md` 和 Git tag，不继续打包为可执行迁移链。
-- `src/migrations/` 只存 Corpus 语义采用指南。配置 schema、CLI machine output 和安装步骤写入 CLI changelog/User Manual，不进入 Corpus guide。
+- `corpus/version.json` 采用能表达“当前版本 + 从 v15 开始的后续链”的新 schema。历史发布事实保留在 `CHANGELOG.md` 和 Git tag，不继续打包为可执行迁移链。
+- `corpus/migrations/` 只存 Corpus 语义采用指南。配置 schema、CLI machine output 和安装步骤写入 CLI changelog/User Manual，不进入 Corpus guide。
 
 ### Analysis 与 evidence
 
@@ -117,7 +117,7 @@ distribution acceptance 使用同一 Python 入口，覆盖：
 4. 合并到 `main` 后，`CHANGELOG.md` 路径触发 Publish workflow。它从 `pyproject.toml` 读取唯一包版本，拒绝已被其它提交占用的 tag。
 5. workflow 构建一次，运行与 CI 相同的 distribution acceptance，上传该 artifact；随后依次创建不可变 tag、Trusted Publishing 到 PyPI、用对应 changelog section 创建 GitHub Release。
 
-包版本首次迁移时使用最近稳定 Git tag 的版本作为静态基线；v15 release PR 再显式推进到 `15.0.0`。之后发布判定只比较上一稳定 tag 中的 `svc_cli/pyproject.toml`、当前静态版本与 changelog，不从 SCM 推导构建版本。Corpus 版本继续由 `src/version.json` 独立拥有，两者允许不同步。无需复制 core-py 的多产品 release manager；一个短 Python 校验/准备脚本只负责版本、Towncrier 和 changelog 的原子一致性。
+包版本首次迁移时使用最近稳定 Git tag 的版本作为静态基线；v15 release PR 再显式推进到 `15.0.0`。之后发布判定只比较上一稳定 tag 中的 `svc_cli/pyproject.toml`、当前静态版本与 changelog，不从 SCM 推导构建版本。Corpus 版本继续由 `corpus/version.json` 独立拥有，两者允许不同步。无需复制 core-py 的多产品 release manager；一个短 Python 校验/准备脚本只负责版本、Towncrier 和 changelog 的原子一致性。
 
 CD 不假设 CI artifact 可跨 workflow 复用，因为合并提交与 PR 提交身份可能不同；CD 自己构建一次并发布同一份已验收 artifact。它不再在多个 job 重复构建。
 

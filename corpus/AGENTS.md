@@ -1,6 +1,6 @@
 # SVC Corpus Authoring
 
-These instructions apply only to the authored Consumer Corpus under `src/`.
+These instructions apply only to the authored Consumer Corpus under `corpus/`.
 They do not govern repository code, volatile Task Packets, or documents later
 created in Consumer projects. `AGENTS.md` itself is maintainer guidance and is
 excluded from the packaged Corpus.

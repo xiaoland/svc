@@ -24,7 +24,7 @@ test = [
 distribution = false
 
 [tool.pdm.workspace]
-members = ["svc_cli"]
+members = ["cli"]
 
 [tool.pdm.scripts]
 check-corpus-release = "python -m tools.check_corpus_release"
@@ -32,11 +32,11 @@ build-cli-output-schemas = "python -m tools.build_cli_output_schemas"
 check-cli-output-schemas = "python -m tools.build_cli_output_schemas --check"
 svc = "python -m svc_cli.cli"
 test-root = "pytest tests"
-test-cli = "pytest svc_cli/tests"
+test-cli = "pytest cli/tests"
 test = "pytest"
-format = "ruff format svc_cli/src svc_cli/tests tools tests"
-format-check = "ruff format --check svc_cli/src svc_cli/tests tools tests"
-lint = "ruff check svc_cli/src svc_cli/tests tools tests"
+format = "ruff format cli/src cli/tests tools tests"
+format-check = "ruff format --check cli/src cli/tests tools tests"
+lint = "ruff check cli/src cli/tests tools tests"
 lint-imports = "lint-imports"
 typecheck = "mypy"
 check = { composite = ["check-corpus-release", "check-cli-output-schemas", "format-check", "lint", "typecheck", "lint-imports", "test"] }
@@ -44,12 +44,12 @@ check = { composite = ["check-corpus-release", "check-cli-output-schemas", "form
 [tool.mypy]
 python_version = "3.11"
 files = [
-    "svc_cli/src/svc_cli/*.py",
-    "svc_cli/src/svc_cli/cli_output",
-    "svc_cli/src/svc_cli/dev",
-    "svc_cli/src/svc_cli/double",
-    "svc_cli/src/svc_cli/run",
-    "svc_cli/pdm_build.py",
+    "cli/src/svc_cli/*.py",
+    "cli/src/svc_cli/cli_output",
+    "cli/src/svc_cli/dev",
+    "cli/src/svc_cli/double",
+    "cli/src/svc_cli/run",
+    "cli/pdm_build.py",
     "tools",
 ]
 follow_imports = "silent"
@@ -171,11 +171,11 @@ allow_indirect_imports = true
 
 [tool.pytest.ini_options]
 addopts = ["--strict-config", "--strict-markers", "-ra"]
-testpaths = ["tests", "svc_cli/tests"]
+testpaths = ["tests", "cli/tests"]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
-pythonpath = [".", "svc_cli/tests"]
+pythonpath = [".", "cli/tests"]
 
 [tool.ruff]
 target-version = "py311"

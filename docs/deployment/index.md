@@ -18,6 +18,6 @@ Current operational projections are:
 - [Double runtime](double.md)
 - [Agent evidence runtime](agent-analysis.md)
 
-Use the [deployment runbook template](../../src/specs/deployment/deployment-runbook.template.md)
+Use the [deployment runbook template](../../corpus/specs/deployment/deployment-runbook.template.md)
 only when an operational response needs a repeatable observation, mitigation,
 rollback, and recovery path.

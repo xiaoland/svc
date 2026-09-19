@@ -22,4 +22,4 @@ Version classification follows Consumer behavior:
 - **patch** restores or clarifies the existing contract
 
 Every release-relevant change has a Towncrier fragment. Migration guides and
-`src/version.json` are authored Corpus sources, independent of CLI release notes.
+`corpus/version.json` are authored Corpus sources, independent of CLI release notes.

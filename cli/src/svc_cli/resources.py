@@ -20,7 +20,7 @@ class Resource(Protocol):
 def source_root() -> Path:
     member_root = Path(__file__).resolve().parents[2]
     candidates = (
-        member_root.parent / "src",
+        member_root.parent / "corpus",
         member_root / "_build_inputs" / "corpus",
     )
     for candidate in candidates:

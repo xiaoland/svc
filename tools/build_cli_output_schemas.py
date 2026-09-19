@@ -13,8 +13,9 @@ from svc_cli.output_schema import OUTPUT_SCHEMA_KEYS, generate_output_schema
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_ROOT = ROOT / "svc_cli" / "src" / "svc_cli" / "data" / "output-schemas"
-SCHEMA_REPOSITORY_PREFIX = "svc_cli/src/svc_cli/data/output-schemas"
+SCHEMA_ROOT = ROOT / "cli" / "src" / "svc_cli" / "data" / "output-schemas"
+SCHEMA_REPOSITORY_PREFIX = "cli/src/svc_cli/data/output-schemas"
+LEGACY_SCHEMA_REPOSITORY_PREFIX = "svc_cli/src/svc_cli/data/output-schemas"
 
 
 def _encoded(key: str) -> bytes:
@@ -46,14 +47,21 @@ def build(*, check: bool) -> list[str]:
 
 def _package_version(ref: str | None = None) -> tuple[int, int, int]:
     if ref is None:
-        raw = (ROOT / "svc_cli/pyproject.toml").read_bytes()
+        raw = (ROOT / "cli/pyproject.toml").read_bytes()
     else:
         shown = subprocess.run(
-            ("git", "show", f"{ref}:svc_cli/pyproject.toml"),
+            ("git", "show", f"{ref}:cli/pyproject.toml"),
             cwd=ROOT,
             capture_output=True,
-            check=True,
+            check=False,
         )
+        if shown.returncode != 0:
+            shown = subprocess.run(
+                ("git", "show", f"{ref}:svc_cli/pyproject.toml"),
+                cwd=ROOT,
+                capture_output=True,
+                check=True,
+            )
         raw = shown.stdout
     version = tomllib.loads(raw.decode())["project"].get("version")
     if version is None and ref is not None:
@@ -84,7 +92,18 @@ def compare_ref(ref: str) -> list[str]:
             check=False,
         )
         if previous.returncode != 0:
-            continue
+            previous = subprocess.run(
+                (
+                    "git",
+                    "show",
+                    f"{ref}:{LEGACY_SCHEMA_REPOSITORY_PREFIX}/{key}.json",
+                ),
+                cwd=ROOT,
+                capture_output=True,
+                check=False,
+            )
+            if previous.returncode != 0:
+                continue
         before = json.loads(previous.stdout)
         after = generate_output_schema(key)
         if before == after:

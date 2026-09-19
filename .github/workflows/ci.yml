@@ -31,10 +31,10 @@ jobs:
         env:
           SVC_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: pdm run check
-      - run: pdm build -p svc_cli
+      - run: pdm build -p cli
       - name: Accept the built wheel
         run: |
-          wheel=(svc_cli/dist/*.whl)
+          wheel=(cli/dist/*.whl)
           test "${#wheel[@]}" -eq 1
           mkdir -p /tmp/svc-wheelhouse
           python -m pip download --dest /tmp/svc-wheelhouse "${wheel[0]}"
@@ -44,7 +44,7 @@ jobs:
           /tmp/svc-wheel/bin/pip install "${wheel[0]}[double]"
           /tmp/svc-wheel/bin/svc --help
           /tmp/svc-wheel/bin/svc lookup --path task-packet/ --json
-          /tmp/svc-wheel/bin/svc double validate svc_cli/tests/double/fixtures/language/payment.double.yaml --json
+          /tmp/svc-wheel/bin/svc double validate cli/tests/double/fixtures/language/payment.double.yaml --json
 
   python-next:
     runs-on: ubuntu-latest
