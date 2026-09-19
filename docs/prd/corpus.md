@@ -53,7 +53,7 @@ optionally declare development capabilities and bounded runs:
 ```json
 {
   "schema_version": 3,
-  "corpus_version": "14.0.0"
+  "corpus_version": "15.0.0"
 }
 ```
 
@@ -62,8 +62,8 @@ optionally declare development capabilities and bounded runs:
 local-only run name, or produce an invalid effective configuration. `init`
 maintains just its marked ignore block; it never writes a local configuration
 file. It creates a missing `AGENTS.local.md` as ignored, Consumer-owned local
-Agent guidance and never rewrites it. Supported older configuration is migrated through a plan-first
-`svc upgrade --target config`; `init` does not hide configuration migration.
+Agent guidance and never rewrites it. Version 15 rejects older configuration;
+`init` does not hide or perform configuration migration.
 
 Start with `svc status --json` in any repository. It is read-only and returns a
 compact JSON preflight with independent CLI, config, Corpus-baseline,

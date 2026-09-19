@@ -20,7 +20,7 @@ from tools.build_catalog import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PDM_BUILD_UPDATE_FILES = runpy.run_path(str(ROOT / "svc_cli/pdm_build.py"))[
+PDM_BUILD_UPDATE_FILES = runpy.run_path(str(ROOT / "cli/pdm_build.py"))[
     "pdm_build_update_files"
 ]
 
@@ -28,7 +28,7 @@ PDM_BUILD_UPDATE_FILES = runpy.run_path(str(ROOT / "svc_cli/pdm_build.py"))[
 def test_catalog_is_deterministic_and_covers_every_canonical_markdown_document() -> (
     None
 ):
-    source = ROOT / "src"
+    source = ROOT / "corpus"
     first = build_catalog_bytes(source)
     second = build_catalog_bytes(source)
     assert first == second
@@ -41,17 +41,17 @@ def test_catalog_is_deterministic_and_covers_every_canonical_markdown_document()
         assert "content" not in entry.as_dict()
 
     index = read_version_index(source)
-    assert catalog.corpus_version == index.corpus_version == "14.1.0"
+    assert catalog.corpus_version == index.corpus_version == "15.0.0"
     assert catalog.releases == index.releases
-    assert index.supported_anchor == "10.0.1"
+    assert index.supported_anchor == "15.0.0"
 
 
 def test_wheel_projection_contains_catalog_and_one_copy_of_each_document() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        files = build_projection(ROOT / "src", Path(tmp))
+        files = build_projection(ROOT / "corpus", Path(tmp))
         assert "svc_cli/data/catalog.json" in files
         catalog = parse_catalog(files["svc_cli/data/catalog.json"].read_bytes())
-        assert catalog.corpus_version == "14.1.0"
+        assert catalog.corpus_version == "15.0.0"
         expected_corpus = {
             f"svc_cli/data/corpus/{entry.path}" for entry in catalog.entries
         }
@@ -76,7 +76,7 @@ def test_catalog_and_wheel_exclude_only_root_agents_document(
         "# Other corpus document\n", encoding="utf-8"
     )
     (source / "version.json").write_text(
-        '{"schema_version":1,"releases":[{"version":"7.1.0",'
+        '{"schema_version":2,"corpus_version":"7.1.0","releases":[{"version":"7.1.0",'
         '"previous_version":"7.0.0","migration":{"status":"not-required"}}]}',
         encoding="utf-8",
     )
@@ -127,14 +127,15 @@ def test_wheel_projection_reads_corpus_version_from_source_index(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "source"
-    source = root / "src"
+    source = root / "corpus"
     source.mkdir(parents=True)
     document = source / "index.md"
     document.write_text("# Source corpus\n", encoding="utf-8")
     (source / "version.json").write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "corpus_version": "7.1.0",
                 "releases": [
                     {
                         "version": "7.1.0",
@@ -161,7 +162,7 @@ def test_pdm_hook_ignores_distribution_version_for_corpus_projection() -> None:
         for package_version in ("12.3.4", "99.0.0"):
             context = SimpleNamespace(
                 target="wheel",
-                root=ROOT / "svc_cli",
+                root=ROOT / "cli",
                 build_dir=build_dir / package_version,
                 config=SimpleNamespace(metadata={"version": package_version}),
             )
@@ -169,18 +170,18 @@ def test_pdm_hook_ignores_distribution_version_for_corpus_projection() -> None:
             PDM_BUILD_UPDATE_FILES(context, files)
             catalog_path = files["svc_cli/data/catalog.json"]
             assert catalog_path == context.build_dir / "svc_cli/data/catalog.json"
-            assert parse_catalog(catalog_path.read_bytes()).corpus_version == "14.1.0"
+            assert parse_catalog(catalog_path.read_bytes()).corpus_version == "15.0.0"
             assert all(name.startswith("svc_cli/data/") for name in files)
 
         sdist_files: dict[str, Path] = {}
         context.target = "sdist"
         PDM_BUILD_UPDATE_FILES(context, sdist_files)
         assert sdist_files["_build_inputs/corpus/version.json"] == (
-            ROOT / "src/version.json"
+            ROOT / "corpus/version.json"
         )
         expected_paths = {
             entry.path
-            for entry in parse_catalog(build_catalog_bytes(ROOT / "src")).entries
+            for entry in parse_catalog(build_catalog_bytes(ROOT / "corpus")).entries
         }
         assert {
             name.removeprefix("_build_inputs/corpus/")
@@ -197,7 +198,7 @@ def test_source_catalog_uses_the_same_source_owned_corpus_version(
     source.mkdir()
     (source / "index.md").write_text("# Source corpus\n", encoding="utf-8")
     (source / "version.json").write_text(
-        '{"schema_version":1,"releases":[{"version":"3.0.0",'
+        '{"schema_version":2,"corpus_version":"3.0.0","releases":[{"version":"3.0.0",'
         '"previous_version":"2.0.0","migration":{"status":"not-required"}}]}',
         encoding="utf-8",
     )
@@ -212,7 +213,8 @@ def test_source_catalog_uses_the_same_source_owned_corpus_version(
     (
         (
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "corpus_version": "1.0.0",
                 "releases": [
                     {
                         "version": "2.0.0",
@@ -230,7 +232,8 @@ def test_source_catalog_uses_the_same_source_owned_corpus_version(
         ),
         (
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "corpus_version": "1.0.0",
                 "releases": [
                     {
                         "version": "2.0.0",
@@ -253,7 +256,7 @@ def test_version_index_rejects_incomplete_release_authority(
 def test_catalog_builder_rejects_a_missing_guide(tmp_path: Path) -> None:
     (tmp_path / "index.md").write_text("# Corpus\n", encoding="utf-8")
     (tmp_path / "version.json").write_text(
-        '{"schema_version":1,"releases":[{"version":"2.0.0",'
+        '{"schema_version":2,"corpus_version":"2.0.0","releases":[{"version":"2.0.0",'
         '"previous_version":"1.0.0","migration":{"status":"guide",'
         '"paths":["migrations/missing.md"]}}]}',
         encoding="utf-8",

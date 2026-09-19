@@ -23,6 +23,10 @@ Analysis v3 has four closed query intents. `overview` returns execution topology
 
 Usage remains a set of observations, not one invented total. Results distinguish owner, self versus subtree scope, delta/cumulative/gauge temporality, measurement inclusion, reported versus estimated source, metric coverage, ambiguity, and unknown baselines. SVC deduplicates identical samples and excludes inherited history from new fork consumption; it does not sum overlapping scopes, exchange currencies, or turn missing measurements into zero.
 
-Existing requests without `version` retain analysis v2 behavior on evidence v3. Explicit analysis v3 consumes evidence v4; query v3 on evidence v3 reports `re-export-required`, while read v3 can still recover exact evidence-v3 native material. Analysis v2 rejects evidence v4 rather than misreading its multi-material shape. Legacy telemetry flags `--codex-home` and `--thread-id` remain aliases; an export without `--provider` retains the evidence-v3 compatibility path.
+Versionless requests select analysis v3. Analysis accepts only evidence v4;
+older requests and bundles are rejected with a recollection instruction. Codex
+remains the default provider when `--provider` is omitted, but the export still
+produces evidence v4. `--codex-home` and `--thread-id` remain spelling aliases,
+not protocol-version compatibility paths.
 
 This is a same-user local workflow. Export reads selected sources without mutation, refuses output overwrite, and does not upload evidence or invoke a model. Native material can contain sensitive provider content; the caller owns selection, storage, retention, access, and disclosure.
