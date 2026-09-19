@@ -18,12 +18,20 @@ from svc_cli_test_support.project_contract import write_project_config
 EXECUTION_ID = re.compile(rb"owner ([0-9a-f-]{36})\n")
 
 
-def svc_command(root: Path, *arguments: str) -> list[str]:
+def svc_command(root: Path, *arguments: str, ready: Path | None = None) -> list[str]:
     runtime_root = root / "svc-test-runtime"
     bootstrap = (
         "import svc_cli._execution as execution; "
         f"execution.user_runtime_dir=lambda *_args, **_kwargs: {str(runtime_root)!r}; "
-        "from svc_cli.cli import main; raise SystemExit(main())"
+        + (
+            "from pathlib import Path; import svc_cli.run.runtime as run_runtime; "
+            "original_follow=run_runtime.follow_execution; "
+            f"run_runtime.follow_execution=lambda *args, **kwargs: (Path({str(ready)!r}).write_text('yes'), original_follow(*args, **kwargs))[1]; "
+            if ready
+            else ""
+        )
+        + "from svc_cli.cli import main; "
+        + "raise SystemExit(main())"
     )
     return [sys.executable, "-c", bootstrap, *arguments]
 
@@ -103,6 +111,7 @@ def test_follower_sigint_detaches_without_interrupting_owner(tmp_path: Path) -> 
         f"from pathlib import Path; import time; Path({str(started)!r}).write_text('yes'); time.sleep(2)",
     )
     owner, execution_id = start_owner(tmp_path)
+    follower_ready = tmp_path / "follower-ready"
     follower = subprocess.Popen(
         svc_command(
             tmp_path,
@@ -112,13 +121,17 @@ def test_follower_sigint_detaches_without_interrupting_owner(tmp_path: Path) -> 
             "--repo",
             str(tmp_path),
             "--json",
+            ready=follower_ready,
         ),
         cwd=tmp_path,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
     try:
-        time.sleep(0.5)
+        deadline = time.monotonic() + 5
+        while not follower_ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert follower_ready.exists()
         os.kill(follower.pid, signal.SIGINT)
         follower_stdout, follower_stderr = follower.communicate(timeout=5)
         assert follower.returncode == 130
