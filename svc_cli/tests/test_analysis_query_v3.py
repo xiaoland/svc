@@ -58,6 +58,7 @@ def test_overview_answers_codex_subagent_usage_without_native_replay(tmp_path: P
     child = _metrics(by_role["subagent"]["self_usage"])
     assert child["input"] == oracle["usage"]["child"]["input"]
     assert child["output"] == oracle["usage"]["child"]["output"]
+    assert by_role["subagent"]["self_usage"]["unknown_observations"] == 0
 
     profile = query_evidence_v3(
         evidence,

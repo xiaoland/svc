@@ -154,7 +154,16 @@ def _aggregate_events(events: Iterable[UsageEvent]) -> UsageAggregate:
         related = observations[0][1].related_metric
         if deltas:
             value = sum(float(item[1].value) for item in deltas)
-            unknown += sum(item[0].payload.temporality == "cumulative" for item in observations)
+            delta_coordinates = {
+                tuple((ref.material, ref.record_id, ref.line) for ref in event.source_refs)
+                for event, _ in deltas
+            }
+            unknown += sum(
+                event.payload.temporality == "cumulative"
+                and tuple((ref.material, ref.record_id, ref.line) for ref in event.source_refs)
+                not in delta_coordinates
+                for event, _ in observations
+            )
         else:
             counters: dict[str, list[tuple[UsageEvent, UsageMeasurement]]] = defaultdict(list)
             for item in observations:
