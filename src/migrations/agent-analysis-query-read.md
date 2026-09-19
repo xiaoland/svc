@@ -1,32 +1,17 @@
-# Replace normalized Agent-thread analysis with Agent-owned query and native read
+# Adopt Coding Agent debugger/profiler analysis v3
 
-Corpus release: 12.0.0.
+Use this guide when a project exports Agent evidence or calls `svc analysis` v2.
 
-### Applies when
-A project calls `svc telemetry agent-thread analyze`, uses the removed
-Textual navigator, or parses the former normalized analysis response.
-
-### Required change
-Replace that surface with the two machine-first tools:
+Export new self-contained evidence explicitly by provider:
 
 ```text
-svc analysis query --schema
-svc analysis query --input <evidence-v3.zip> --request <file|->
-svc analysis read --schema
-svc analysis read --input <evidence-v3.zip> --request <file|->
+svc telemetry agent-thread export --provider codex|pi (--id <id> | --source <path>) --output <evidence-v4.zip> --json
 ```
 
-Use `query` only for the closed `overview` and `match` navigation intents.
-Use `read` for captured native content in source order and scope-bound
-continuation. Remove old `analyze --json` response parsing and removed
-`--include-sensitive`, `--repo`, and TTY branches. The calling Agent owns
-interpretation, hypotheses, and conclusions; SVC does not return a score or
-causal verdict.
+Then send explicit v3 requests. Start with `{"version":3,"intent":"overview"}` and use one `trace` or `profile` request for the diagnostic question. Use `read` only for content/blob recovery or native audit. Discover exact request/response schemas with `svc analysis --schema`.
 
-### Verify
-Run the project's actual caller against `query --schema` and `read --schema`,
-then query and read one schema-v3 bundle through its ordinary request path.
+Requests without `version` continue to use analysis v2 with evidence v3. Analysis v2 rejects evidence v4. Query v3 reports `re-export-required` for evidence v3 because that bundle lacks the required payload-bearing trajectory; read v3 still supports its native references. Evidence v1/v2 must be recollected.
 
-### Reference
-`sections/working-protocol.md` owns the Agent Task Analysis method;
-`sections/product-tdd.md` owns the query/read wire contract.
+Replace code that joins native frames, reconstructs parent/sub-agent relationships, or sums token counters. Analysis v3 now owns those mechanical operations and reports coverage, ambiguity, and unknown values explicitly. Keep semantic diagnosis and task-quality conclusions in the calling Agent.
+
+Legacy `--codex-home` and `--thread-id` flags remain aliases. Pi subagent extensions, additional provider adapters, arbitrary query/grouping DSLs, online control, and automatic causal conclusions are not part of this release.

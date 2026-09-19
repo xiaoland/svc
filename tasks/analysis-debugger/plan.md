@@ -198,5 +198,5 @@ outputs；API v2 + evidence v3 行为不变；API v2 + evidence v4 明确拒绝�
 
 ## Current Gate
 
-- Continue：Human 已接受本 Plan 并授权源码实现。按 01→11 持续推进，除非实现证据会改变已接受
-  产品合同、范围或授权。
+- Complete：01→11 已实现并通过完整测试、构建与 fresh-wheel smoke。已接受产品合同和 provider
+  范围未改变。

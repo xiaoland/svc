@@ -14,6 +14,13 @@ from typing import Any, Literal, Never, Sequence, TextIO, cast
 
 from ._execution import ExecutionStore
 from .analysis.protocol import AnalysisProtocolError
+from .analysis.models_v3 import (
+    query_request_schema_v3,
+    query_response_schema_v3,
+    read_request_schema_v3,
+    read_response_schema_v3,
+    error_schema_v3,
+)
 from .analysis.query import query_schema
 from .analysis.read import read_schema
 from .analysis.service import execute_query, execute_read
@@ -106,7 +113,9 @@ from .upgrade import (
 from .telemetry.agent_threads import ArchiveFilter
 from .telemetry.service import (
     export_agent_thread,
+    export_agent_thread_v4,
     list_agent_threads,
+    list_pi_agent_threads,
 )
 from .task_packet import (
     TASK_PACKET_GUIDANCE_PATH,
@@ -705,6 +714,8 @@ reports the last unsealed projection and does not invent terminal state."""
     thread_list = agent_thread_commands.add_parser(
         "list", help="List bounded Codex thread selection context"
     )
+    thread_list.add_argument("--provider", choices=("codex", "pi"))
+    thread_list.add_argument("--home", type=Path)
     thread_list.add_argument("--codex-home", type=Path)
     thread_list.add_argument(
         "--archive-state",
@@ -720,11 +731,11 @@ reports the last unsealed projection and does not invent terminal state."""
     )
     thread_list.add_argument("--json", action="store_true", dest="json_output")
     thread_export = agent_thread_commands.add_parser(
-        "export",
-        help="Capture one exact local thread into a schema-v3 evidence ZIP",
+        "export", help="Capture one exact local thread into an evidence ZIP"
     )
+    thread_export.add_argument("--provider", choices=("codex", "pi"))
     selector = thread_export.add_mutually_exclusive_group(required=True)
-    selector.add_argument("--thread-id")
+    selector.add_argument("--id", "--thread-id", dest="thread_id")
     selector.add_argument(
         "--source", type=Path, help="Exact Codex rollout JSONL source"
     )
@@ -735,6 +746,7 @@ reports the last unsealed projection and does not invent terminal state."""
         help="Absent .zip destination distinct from the source",
     )
     thread_export.add_argument("--codex-home", type=Path)
+    thread_export.add_argument("--home", type=Path)
     thread_export.add_argument("--json", action="store_true", dest="json_output")
 
     analysis = subparsers.add_parser(
@@ -757,7 +769,8 @@ reports the last unsealed projection and does not invent terminal state."""
             "task-performance conclusion. Use query/read --schema for machine contracts."
         ),
     )
-    analysis_tools = analysis.add_subparsers(dest="analysis_tool", required=True)
+    analysis.add_argument("--schema", action="store_true", dest="analysis_schema")
+    analysis_tools = analysis.add_subparsers(dest="analysis_tool")
     for name, help_text in (
         ("query", "Inspect boundaries or match deterministic navigation predicates"),
         ("read", "Read ordered native evidence from start, exact ref, or cursor"),
@@ -936,17 +949,32 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.telemetry_resource == "agent-thread"
                 and args.agent_thread_command == "list"
             ):
-                telemetry_payload = list_agent_threads(
-                    args.codex_home, args.limit, args.archive_state
+                if args.home is not None and args.codex_home is not None:
+                    raise SvcError("invalid-cli-usage", "Use only one of --home and --codex-home.")
+                telemetry_payload = (
+                    list_pi_agent_threads(args.home, args.limit)
+                    if args.provider == "pi"
+                    else list_agent_threads(args.home or args.codex_home, args.limit, args.archive_state)
                 )
                 _emit_telemetry_list(telemetry_payload, json_output)
                 return EXIT_OK
-            telemetry_payload = export_agent_thread(
-                codex_home=args.codex_home,
-                thread_id=args.thread_id,
-                source=args.source,
-                output=args.output,
-            )
+            if args.home is not None and args.codex_home is not None:
+                raise SvcError("invalid-cli-usage", "Use only one of --home and --codex-home.")
+            if args.provider is None:
+                telemetry_payload = export_agent_thread(
+                    codex_home=args.codex_home,
+                    thread_id=args.thread_id,
+                    source=args.source,
+                    output=args.output,
+                )
+            else:
+                telemetry_payload = export_agent_thread_v4(
+                    provider_id=args.provider,
+                    home=args.home or args.codex_home,
+                    thread_id=args.thread_id,
+                    source=args.source,
+                    output=args.output,
+                )
             _emit_telemetry_export(telemetry_payload, json_output)
             return EXIT_OK
 
@@ -975,7 +1003,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             exit_code=_exit_code(error),
         )
     except AnalysisProtocolError as error:
-        _emit_unscoped_json(error.as_dict(), stream=sys.stderr)
+        _emit_unscoped_json(
+            error.as_dict(version=3 if getattr(args, "analysis_version", None) == 3 else None),
+            stream=sys.stderr,
+        )
         return _analysis_exit_code(error)
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
         failure = SvcError("invalid-release", str(error))
@@ -1719,13 +1750,63 @@ def _binary_output(stream: Any) -> Any:
 
 
 def _run_analysis_tool(args: argparse.Namespace) -> int:
+    if args.analysis_schema:
+        if args.analysis_tool is not None:
+            raise AnalysisProtocolError("invalid-cli-usage", "Top-level --schema cannot be combined with a tool.")
+        _emit_unscoped_json(
+            {
+                "format": "svc.analysis.schema/v3",
+                "versions": {"analysis": [2, 3], "evidence": [3, 4]},
+                "tools": {
+                    "query": {
+                        "request": query_request_schema_v3(),
+                        "response": query_response_schema_v3(),
+                    },
+                    "read": {
+                        "request": read_request_schema_v3(),
+                        "response": read_response_schema_v3(),
+                    },
+                },
+                "error": error_schema_v3(),
+                "ref_consumers": {
+                    "execution": ["query.trace", "query.profile", "query.match"],
+                    "turn": ["query.trace"],
+                    "event": ["query.trace"],
+                    "content": ["read"],
+                    "blob": ["read"],
+                    "native": ["read"],
+                },
+            }
+        )
+        return EXIT_OK
+    if args.analysis_tool is None:
+        raise AnalysisProtocolError("invalid-cli-usage", "Analysis requires --schema, query, or read.")
     if args.schema:
         if args.input is not None or args.request is not None:
             raise AnalysisProtocolError(
                 "invalid-cli-usage",
                 "--schema cannot be combined with --input or --request.",
             )
-        payload = query_schema() if args.analysis_tool == "query" else read_schema()
+        if args.analysis_tool == "query":
+            payload = {
+                **query_schema(),
+                "versions": [2, 3],
+                "v3": {
+                    "request": query_request_schema_v3(),
+                    "response": query_response_schema_v3(),
+                    "error": error_schema_v3(),
+                },
+            }
+        else:
+            payload = {
+                **read_schema(),
+                "versions": [2, 3],
+                "v3": {
+                    "request": read_request_schema_v3(),
+                    "response": read_response_schema_v3(),
+                    "error": error_schema_v3(),
+                },
+            }
         _emit_unscoped_json(payload)
         return EXIT_OK
     if args.input is None or args.request is None:
@@ -1734,6 +1815,7 @@ def _run_analysis_tool(args: argparse.Namespace) -> int:
             "Analysis execution requires --input and --request.",
         )
     request = _analysis_request(args.request)
+    args.analysis_version = request.get("version") if isinstance(request, dict) else None
     if args.analysis_tool == "query":
         payload = execute_query(args.input, request)
     else:

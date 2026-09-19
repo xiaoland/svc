@@ -2,6 +2,17 @@
 
 Human 拥有最终 acceptance；本文件只拥有实现应返回哪些可复核证据，以及什么观察足以支持接受。
 
+## Qualification record（2026-09-19）
+
+- `pdm run test`：275 passed。
+- `pdm build -p svc_cli`：sdist 与 wheel 构建成功。
+- clean temporary venv 仅安装 wheel 后，标准 Pi fixture 完成
+  `export v4 → analysis --schema → overview → profile → trace → read`；overview 的手算 usage 是
+  input=114、output=25、cache_read=15。
+- Targeted contracts cover Codex root/child delegation 与 child usage、Pi active-path/all-work usage、
+  evidence v4 integrity、trajectory v2 strict payloads、版本矩阵、cursor scope，以及 binary/Unicode
+  byte-for-byte read pagination。
+
 ## 验收目标
 
 验收证明的不是“新增字段存在”，而是调用 Agent 不再机械重放 provider 日志，即可：

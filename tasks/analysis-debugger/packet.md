@@ -5,8 +5,9 @@
   source-faithful native evidence，analysis 负责机械关联行为与消耗；调用 Agent 负责结合任务
   语义解释事实、提出原因和结论。共同模型应以 extensions 和 coverage 接纳 Codex、Pi 与后续
   Agent 的差异，而不是放弃统一 trajectory。
-- **边界**：先讨论并接受产品与技术设计，再改 durable 文档或源码；不加入断点、单步、
-  在线控制或模型判分；不把因果判断、任务质量结论交给 SVC；不 commit/release。
+- **边界**：产品与技术设计已先行接受，现已获准实现；不加入断点、单步、在线控制或模型判分；
+  不把因果判断、任务质量结论交给 SVC；不执行 release。任务包基线已按 Human 要求单独提交，
+  实现变更仍保持未提交，等待最终复核。
 - **完成验证**：以 Codex 与 Pi 的代表性日志证明同一分析表面可以返回执行拓扑、已关联的
   turn/model/tool 链、带覆盖说明的 token/cost/time/tool 指标和 native evidence refs；调用方
   无须重放 provider 状态机，未知与缺失不会伪装成零或完整；相关 CLI、bundle、迁移和
@@ -21,9 +22,10 @@
   trajectory 合同与 [`design/analysis-interface.md`](design/analysis-interface.md) 的 agent-friendly
   query/read 交互。Closure review 已补齐 usage ledger、显式 leaf-path、coverage scope 与版本矩阵；
   设计阶段关闭。Human 已接受 [`verification.md`](verification.md) 的验收证据方案。
-- **下一步**：Human 已接受 [`plan.md`](plan.md) 的 11 个严格串行 slices；按 01→11 开始实现。首版 adapters 是 Codex
-  rollout 与标准 Pi session；Codex parent/sub-agent consumption 必须支持，Pi subagent extension
-  延期；Claude Code、DeepSeek Harness、DimAgent 只作为设计压力。
+- **当前实现**：[`plan.md`](plan.md) 的 11 个 slices 已完成。Codex parent/sub-agent consumption、
+  标准 Pi branch/fork/compaction、trajectory v2、evidence v4 与 analysis API v3 已通过源码树和
+  fresh-wheel 验证。Pi subagent extension 延期；Claude Code、DeepSeek Harness、DimAgent 仍只
+  作为设计压力。
 
 ## 支撑材料
 

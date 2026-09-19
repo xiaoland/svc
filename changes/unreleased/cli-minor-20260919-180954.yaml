@@ -1,0 +1,9 @@
+component: cli
+kind: minor
+body: Add payload-bearing Agent trajectories, Codex/Pi execution topology, sub-agent and branch-aware usage profiling, and analysis v3 overview/trace/profile/match/read contracts.
+time: 2026-09-19T18:09:54.046765+08:00
+custom:
+    FromSchema: "3"
+    Guidance: Use svc telemetry agent-thread export --provider codex|pi and explicit version 3 analysis requests; see migrations/agent-analysis-query-read.md.
+    Migration: guide
+    ToSchema: "4"
