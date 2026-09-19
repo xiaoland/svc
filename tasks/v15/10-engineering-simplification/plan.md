@@ -14,4 +14,4 @@
 1. [完成] 由 advisor 在方案形成前调查 monolith 候选与真实切缝。
 2. [进行中] 按命令所有权从根 `cli.py` 迁移纵向切片；analysis 与 telemetry 已迁移。
 3. [待处理] 迁移 double、dev、run 与 project 命令，保持根入口、退出码和延迟可选依赖合同。
-4. [待处理] 抽出 double compiler 的资源所有者，并分离 provider source/capture 与 normalization。
+4. [进行中] 已抽出 double compiler 的资源所有者；待分离 provider source/capture 与 normalization。
