@@ -16,12 +16,15 @@ flowchart LR
   S --> R["Consumer-relative solution + material residual"]
 ```
 
-Relate Product/Technical claims, current repository and external reality,
-deployment needs, stakeholders, resources, short- and long-horizon return on
-investment, personal taste, and rebuttable design judgment. Challenge the
-proposed arrangement through representative consequences and revise any side
-of the relation. Cheap, reversible, local choices remain Implementation
-freedom unless their consequence is material.
+Start with a representative journey or state transition where a decision
+matters. Trace the current claim through its entry point, owner of data and
+state, dependencies, and failure or recovery path. Propose one arrangement
+and challenge it with a plausible counterexample or change. If it fails,
+revisit the Product claim or Technical boundary; carry cross-owner
+consequences into Test Design. Stop when the consumer can implement the
+current horizon without silently deciding a material requirement. Cheap,
+reversible, local choices remain Implementation freedom unless their
+consequence is material.
 
 ## Route Through Three Solution Projections
 

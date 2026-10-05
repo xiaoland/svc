@@ -16,7 +16,12 @@ flowchart LR
   O --> Q["Realized return + residual"]
 ```
 
-Plan a linear partial route only as far as can be predicted. Each Slice owns a
+Before committing to a route, identify unknowns that could change it:
+external protocol, permission, runtime, migration, or another hard boundary.
+Test a consequential unknown with the smallest real probe and record what
+would stop or redirect the change. Plan only the path supported by that
+evidence, then implement in bounded Slices with local feedback. For a simple
+local change with no route-changing unknown, act directly. Each Slice owns a
 bounded return and its local verification; use `NN-IM` only as a Human-readable
 return tag, never as a posture state. Stop with an explicit to-be-continued
 condition rather than inventing future certainty.

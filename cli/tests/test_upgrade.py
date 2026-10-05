@@ -15,14 +15,27 @@ def write_project(root: Path, baseline: str = "15.0.0") -> None:
     )
 
 
-def test_v15_corpus_baseline_is_the_new_upgrade_anchor(tmp_path: Path) -> None:
+def test_v15_corpus_baseline_can_upgrade_without_migration(tmp_path: Path) -> None:
     write_project(tmp_path)
 
     plan = plan_upgrade(tmp_path)
 
+    assert plan.status == "ready"
+    assert plan.corpus.from_version == "15.0.0"
+    assert plan.corpus.to_version == "15.0.1"
+    assert plan.corpus.releases is not None
+    assert len(plan.corpus.releases) == 1
+    assert plan.corpus.releases[0].migration == "not-required"
+
+
+def test_current_corpus_baseline_needs_no_upgrade(tmp_path: Path) -> None:
+    write_project(tmp_path, "15.0.1")
+
+    plan = plan_upgrade(tmp_path)
+
     assert plan.status == "noop"
-    assert plan.corpus.project_version == "15.0.0"
-    assert plan.corpus.available_version == "15.0.0"
+    assert plan.corpus.project_version == "15.0.1"
+    assert plan.corpus.available_version == "15.0.1"
 
 
 @pytest.mark.parametrize("schema", [1, 2, 4])

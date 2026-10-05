@@ -1,1 +1,1 @@
-{"corpus_version":"15.0.0","releases":[],"schema_version":2}
+{"corpus_version":"15.0.1","releases":[{"version":"15.0.1","previous_version":"15.0.0","migration":{"status":"not-required"}}],"schema_version":2}
