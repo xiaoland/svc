@@ -13,7 +13,7 @@ pdm run svc --help
 pdm build -p cli
 ```
 
-框架权威源位于 `corpus/`，从[共同协作契约与导航](corpus/index.md)进入。`corpus/AGENTS.md` 只指导框架维护者；SVC 自身的持久项目事实位于 `docs/`。可安装 CLI 及其测试位于 `cli/` workspace member，仓库专用的检查与发布工具位于 `tools/`。
+框架权威源位于 `corpus/`，从[框架介绍与导航](corpus/index.md)进入。`corpus/AGENTS.md` 只指导框架维护者；SVC 自身的持久项目事实位于 `docs/`。可安装 CLI 及其测试位于 `cli/` workspace member，仓库专用的检查与发布工具位于 `tools/`。
 
 ## 使用 SVC
 
@@ -22,7 +22,7 @@ pdm build -p cli
 ## 仓库布局
 
 ```text
-corpus/                     框架共同契约、六个 Skills 和版本迁移指导
+corpus/                     框架导航、六个自包含 Skills 和版本迁移指导
 cli/
   pyproject.toml            可安装 CLI workspace member
   src/svc_cli/              Python runtime 和 CLI 静态资源

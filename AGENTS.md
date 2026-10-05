@@ -4,7 +4,7 @@
 
 ## 知识所有者
 
-- 框架目的、共同协作契约和六入口导航：`corpus/index.md`
+- 框架目的和六入口导航：`corpus/index.md`
 - Skill 作者与布局规则：`corpus/AGENTS.md`，仅供维护者使用
 - Working Methods：`corpus/svc-methods/`
 - Task Packet 语义与增长：`corpus/svc-task-packet/`
@@ -18,7 +18,7 @@
 - CLI 发布配置、版本、Behavioral SemVer 证据与说明：`towncrier.cli.toml`、`.changes/cli/`、`cli/pyproject.toml`、生成的 `CLI_CHANGELOG.md`、GitHub Releases 和 `CONTRIBUTING.md`
 - Corpus 发布配置、版本、Behavioral SemVer 证据与说明：`towncrier.corpus.toml`、`.changes/corpus/`、`corpus/version.json`、生成的 `CORPUS_CHANGELOG.md`、GitHub Releases 和 `CONTRIBUTING.md`
 - 消费者 runtime、工具项目集成与 CLI 静态资源：`cli/src/svc_cli/`；测试位于 `cli/tests/`
-- CLI 归档构建：`cli/pdm_build.py`；构建与运行不得依赖 Corpus
+- CLI 归档构建：`cli/pyproject.toml`；构建与运行不得依赖 Corpus
 - 仓库检查与构建工具：`tools/`；自动化测试仅位于 `cli/tests/`
 - 任务工作与留存证据：`tasks/`；保留方式由任务决定，任务材料不属于 Corpus
 

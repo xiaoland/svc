@@ -9,7 +9,7 @@
 
 <!-- Replace these pointers with the actual adopted locations. The placeholders do not prescribe an installation layout; this entry must remain visible to the Agent during ordinary project work. -->
 
-- Common collaboration contract: `<adopted-SVC-common-contract-path>`. Read it before acting when it is absent from current context; it owns Human authority and the conditions for consequential changes.
+- Human authority covers Product intent, preferences, permissions, consequential trade-offs, and acceptance. Check factual and technical claims against evidence. Before durable mutation, establish the authorized effect, semantic owner, affected consumers and invariants, and proportionate verification.
 - For every non-trivial Task, use `svc-task-packet` at `<adopted-svc-task-packet-entry-path>`. Recover an existing Packet before creating another, and keep task state sufficient to resume and verify completion.
 - Load other adopted SVC Skills only when their pressure is present. Their use does not grant write, delegation, external-effect, or acceptance authority.
 

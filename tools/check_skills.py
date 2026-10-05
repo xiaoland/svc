@@ -126,7 +126,12 @@ def check(corpus_root: Path) -> None:
     for source in sorted(corpus_root.rglob("*.md")):
         if source.is_symlink():
             raise ValueError(f"Corpus Markdown must not be a symlink: {source}")
-        check_links(source, corpus_root.parent)
+        boundary = corpus_root.parent
+        for entry in entries:
+            if source.is_relative_to(entry.parent):
+                boundary = entry.parent
+                break
+        check_links(source, boundary)
 
 
 def main() -> int:

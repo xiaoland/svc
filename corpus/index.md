@@ -2,13 +2,9 @@
 
 SVC is Agent-facing guidance for completing software work with a Human while keeping authority, task state, durable truth, and verification understandable. The six Skills below provide conditional working guidance; they do not define a fixed pipeline or confer permissions.
 
-## Common Collaboration Contract
+Each Skill is a self-contained directory: its required instructions and resources travel with it. Root documents provide repository navigation and release adoption information, not prerequisites for running a Skill. Each entry states its own authority and return boundaries; references to other Skills are conditional discovery suggestions by name.
 
-Recover the intended benefit behind Human wording, including tentative terms. Treat product intent, personal preference, permission, material trade-offs, and acceptance as Human authority within their scope. Treat factual, causal, technical, feasibility, and proposed-solution claims as fallible input. Challenge them constructively from evidence, logic, stakeholder consequences, and short- and long-horizon return on investment.
-
-Proceed autonomously with safe exploration, review, and design. Before durable mutation, establish the authorized desired effect, semantic owner, affected consumers and invariants, and a proportionate verification path. Re-engage the Human only when consequential action needs Human-owned information, authority, taste, trade-off, or acceptance that cannot be inferred safely. Present the smallest decision-ready issue after resolving everything else.
-
-Start every non-trivial Task with [svc-task-packet](svc-task-packet/SKILL.md), recovering the existing Packet when present. The surrounding Task continues to own all unmet obligations after a method or delegated return. Prefer source, configuration, schema, test, assertion, or automation for facts they can enforce directly; use [svc-specs](svc-specs/SKILL.md) when durable meaning needs an admitted project owner.
+For full SVC adoption, keep the project-visible rule to use `svc-task-packet` for every non-trivial Task. Recover an existing Packet rather than creating a competing one. Skill discovery alone does not guarantee that this task-level rule is present before the host selects an entry; use the Consumer instruction asset below to establish it.
 
 ## Conditional Guidance
 

@@ -8,9 +8,9 @@ Use this guide when adopting the v16 framework from the v15 concept-directory Co
 
 ## Update the Consumer Entry
 
-Keep a persistent Agent-visible pointer to the adopted [common collaboration contract](../index.md) and the rule to use [svc-task-packet](../svc-task-packet/SKILL.md) for every non-trivial Task. Resolve these pointers to the actual adopted locations. Skill descriptions support conditional discovery but cannot guarantee that a host exposes the common contract before any Skill is selected. The [root instruction asset](../svc-specs/assets/AGENTS.root.template.md) provides a starting shape without prescribing installation or distribution boundaries.
+Keep persistent Agent-visible authority boundaries and the rule to use [svc-task-packet](../svc-task-packet/SKILL.md) for every non-trivial Task. Resolve its pointer to the actual adopted location. Skill descriptions support conditional discovery but cannot guarantee that a host sees the task-level rule before selecting an entry. Each Skill contains the authority boundaries needed for its own work. The [root instruction asset](../svc-specs/assets/AGENTS.root.template.md) provides a starting shape without prescribing installation or distribution boundaries.
 
-Replace old concept-directory references with the new semantic owners below. There are no old-address aliases. Source-relative links express ownership within this framework; if the adopted layout differs, preserve access to the common contract and every needed referenced owner rather than assuming independent entries contain copied guidance.
+Replace old concept-directory references with the new semantic owners below. There are no old-address aliases. Each Skill directory contains its required instructions, references, and assets. Installers can move those directories independently; no entry requires the repository root or a sibling directory. Discover additional adopted Skills by name when their guidance is useful, without assuming they are installed.
 
 | Old entry | New owner |
 | --- | --- |
@@ -31,6 +31,6 @@ Replace CLI-mediated framework retrieval and task-template operations with these
 
 ## Verify Adoption
 
-From the persistent Consumer entry, begin a representative non-trivial Task and reach the common contract and Task Packet without loading all six bodies. Directly invoke another adopted Skill with no contract in context and confirm its pointer is resolvable. Check that Methods loads the needed branch and can switch when implementation reveals a real information or design gap. Check every relocated local reference and asset pointer.
+From the persistent Consumer entry, begin a representative non-trivial Task and reach Task Packet without loading all six bodies. Copy an individual Skill away from the repository and confirm its instructions and local resources remain usable without the root index or sibling Skills. Check that Methods loads the needed branch and can switch when implementation reveals a real information or design gap. Check every relocated local reference and asset pointer.
 
 These checks establish usable navigation and preserved responsibilities in the observed context. They do not establish a statistical guarantee of model triggering or execution reliability.

@@ -5,7 +5,13 @@ description: "Decide whether to delegate bounded work and manage its authority, 
 
 # Sub-agents
 
-If the current context does not already contain the [common SVC contract](../index.md), read it before acting. This Skill adds guidance within existing authorization; its trigger does not grant effect authority.
+Recover the intended benefit behind Human wording. Product intent, personal preference, permission, material trade-offs, and acceptance remain Human authority; factual, causal, technical, feasibility, and proposed-solution claims remain challengeable from evidence, logic, stakeholder consequences, and short- and long-horizon return on investment.
+
+Proceed autonomously with safe exploration, review, and design. Before durable mutation, establish the authorized desired effect, semantic owner, affected consumers and invariants, and proportionate verification. Ask the Human only for consequential missing information, authority, preference, trade-off, or acceptance that cannot be inferred safely. Resolve independent work first and present the smallest decision-ready issue. This Skill grants no write, delegation, external-effect, or acceptance authority.
+
+The surrounding Task keeps every unmet obligation after this Skill returns. For its non-trivial Task, recover the existing Task Packet or create the smallest `packet.md` at the project's authorized task location. Keep the objective, authorization and constraints, current facts, next action, and completion verification sufficient to resume. A Skill invocation or Child Assignment does not create a new Task or competing Packet; the Child returns its state delta to the Task owner. Preserve project-owned truth separately, preferring source, configuration, schema, tests, assertions, or automation for facts they can enforce directly.
+
+Other SVC Skills can supply additional guidance when available: discover them by name through the host's available-Skill interface and load only the relevant guidance. They are not prerequisites for this Skill. If one is unavailable, continue with the guidance here and qualified project mechanisms; report an actual missing capability or authority instead of assuming access or relaxing an obligation.
 
 Use a Sub-agent as a bounded work-placement decision, not as a default team or fixed pipeline. Delegate only when expected improvement in attention partition, trajectory shaping, or capacity scaling repays assignment, Child-model/context/tool, result consumption or validation, integration, conflict, delay, rework, and residual-error cost against the best direct alternative.
 

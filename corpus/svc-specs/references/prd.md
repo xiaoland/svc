@@ -10,7 +10,7 @@ Keep one concise Product owner containing, as applicable:
 - rules, non-goals, and scope
 - stable business language
 
-Derive technical contracts and work from owned Product claims; do not infer Product truth from current implementation, fixtures, or passing tests. Use [Product Design](../../svc-methods/references/product-design.md) to shape a proposed Product solution and update this owner only when that solution is accepted as durable truth.
+Derive technical contracts and work from owned Product claims; do not infer Product truth from current implementation, fixtures, or passing tests. Use Product Design in `svc-methods` to shape a proposed Product solution and update this owner only when that solution is accepted as durable truth.
 
 Create further depth only when a Product capability has enough stable content and an independent consumer. Do not use Product depth to duplicate cross-unit wire contracts or runtime implementation; route those to Product TDD or Deployment.
 

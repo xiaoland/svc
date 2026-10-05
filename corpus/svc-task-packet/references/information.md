@@ -16,6 +16,6 @@ Decision records an authoritative choice separately from the evolving Design: su
 
 ## Verification
 
-Verification state is normally distributed through Claims, Slices, Plans, Cells, and effect gates. Add a root `verification.md` only when claims, evidence, residuals, or requalification span several returns and require a shared synthesis. It is not a final Task phase and does not own acceptance. Use the [Verification capability](../../svc-verification/SKILL.md) for its semantics.
+Verification state is normally distributed through Claims, Slices, Plans, Cells, and effect gates. Add a root `verification.md` only when claims, evidence, residuals, or requalification span several returns and require a shared synthesis. It is not a final Task phase and does not own acceptance. Use the Verification capability in `svc-verification` for its semantics.
 
 Do not create default Implementation, Delivery, Acceptance, Retrospective, Agent, Track, Phase, Slice, or generic module files. Add a surface because its owner and management return are real, not because a template exists.

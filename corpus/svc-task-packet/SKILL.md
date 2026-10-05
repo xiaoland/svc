@@ -5,7 +5,13 @@ description: "Create, recover, maintain, grow, and close a Task Packet for every
 
 # Task Packet
 
-If the current context does not already contain the [common SVC contract](../index.md), read it before acting. This Skill adds guidance within existing authorization; its trigger does not grant effect authority.
+Recover the intended benefit behind Human wording. Product intent, personal preference, permission, material trade-offs, and acceptance remain Human authority; factual, causal, technical, feasibility, and proposed-solution claims remain challengeable from evidence, logic, stakeholder consequences, and short- and long-horizon return on investment.
+
+Proceed autonomously with safe exploration, review, and design. Before durable mutation, establish the authorized desired effect, semantic owner, affected consumers and invariants, and proportionate verification. Ask the Human only for consequential missing information, authority, preference, trade-off, or acceptance that cannot be inferred safely. Resolve independent work first and present the smallest decision-ready issue. This Skill grants no write, delegation, external-effect, or acceptance authority.
+
+The surrounding Task keeps every unmet obligation after this Skill returns. For its non-trivial Task, recover the existing Task Packet or create the smallest `packet.md` at the project's authorized task location. Keep the objective, authorization and constraints, current facts, next action, and completion verification sufficient to resume. A Skill invocation or Child Assignment does not create a new Task or competing Packet; the Child returns its state delta to the Task owner. Preserve project-owned truth separately, preferring source, configuration, schema, tests, assertions, or automation for facts they can enforce directly.
+
+Other SVC Skills can supply additional guidance when available: discover them by name through the host's available-Skill interface and load only the relevant guidance. They are not prerequisites for this Skill. If one is unavailable, continue with the guidance here and qualified project mechanisms; report an actual missing capability or authority instead of assuming access or relaxing an obligation.
 
 A Task Packet is a disposable filesystem package that helps a Human and Agent complete one non-trivial Task. It preserves only task-local state whose persistence, recovery, or sharing lowers control cost. It does not own durable project truth, Working Methods, acceptance, or a runtime work graph.
 
@@ -43,4 +49,4 @@ Task scale, Task nature, and collaboration pressure influence the shape, but do 
 
 Update the semantic information owner first, then work-control state, then the short Human projection when the Human consequence changed. Mechanical shards such as `decisions-001-010.md` may lower editing cost without becoming new semantic modules; keep a stable entry that owns current meaning.
 
-Integrate accepted durable truth during the Task; use [Specs](../svc-specs/SKILL.md) when its canonical owner or admission is unclear. At close, check for stranded deltas and material residual, then delete the packet under the Consumer project's retention rule without an archive or deletion-time promotion review. Agent work-system retrospective is pressure-triggered closing guidance, not a required packet module.
+Integrate accepted durable truth during the Task; use Specs in `svc-specs` when its canonical owner or admission is unclear. At close, check for stranded deltas and material residual, then delete the packet under the Consumer project's retention rule without an archive or deletion-time promotion review. Agent work-system retrospective is pressure-triggered closing guidance, not a required packet module.

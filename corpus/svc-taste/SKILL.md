@@ -5,7 +5,13 @@ description: "Apply consequence-based judgment to real design and implementation
 
 # Taste and Design Judgment
 
-If the current context does not already contain the [common SVC contract](../index.md), read it before acting. This Skill adds guidance within existing authorization; its trigger does not grant effect authority.
+Recover the intended benefit behind Human wording. Product intent, personal preference, permission, material trade-offs, and acceptance remain Human authority; factual, causal, technical, feasibility, and proposed-solution claims remain challengeable from evidence, logic, stakeholder consequences, and short- and long-horizon return on investment.
+
+Proceed autonomously with safe exploration, review, and design. Before durable mutation, establish the authorized desired effect, semantic owner, affected consumers and invariants, and proportionate verification. Ask the Human only for consequential missing information, authority, preference, trade-off, or acceptance that cannot be inferred safely. Resolve independent work first and present the smallest decision-ready issue. This Skill grants no write, delegation, external-effect, or acceptance authority.
+
+The surrounding Task keeps every unmet obligation after this Skill returns. For its non-trivial Task, recover the existing Task Packet or create the smallest `packet.md` at the project's authorized task location. Keep the objective, authorization and constraints, current facts, next action, and completion verification sufficient to resume. A Skill invocation or Child Assignment does not create a new Task or competing Packet; the Child returns its state delta to the Task owner. Preserve project-owned truth separately, preferring source, configuration, schema, tests, assertions, or automation for facts they can enforce directly.
+
+Other SVC Skills can supply additional guidance when available: discover them by name through the host's available-Skill interface and load only the relevant guidance. They are not prerequisites for this Skill. If one is unavailable, continue with the guidance here and qualified project mechanisms; report an actual missing capability or authority instead of assuming access or relaxing an obligation.
 
 Taste is compressed consequence knowledge used when several plausible designs need judgment beyond owned Product or Technical truth. Use it for local Design or Implementation pressure; do not load a global maxim catalog or apply taste as universal law.
 
@@ -13,7 +19,7 @@ Taste is compressed consequence knowledge used when several plausible designs ne
 
 Start from the concrete choice, its consequences, existing project facts, and the Human's legitimate preferences. Read [Implementation Taste](references/implementation.md) only when authority, data, state, boundaries, naming, dependencies, or complexity can change the judgment. Mechanical edits with clear ownership and verification do not need a maxim review.
 
-Return a judgment with its causal reason, material cost, and counter-pressure at the resolution needed by the consuming work. Stop consulting guidance when further heuristics cannot change the choice. A material missing fact calls for [Methods' Explore guidance](../svc-methods/references/explore.md); an unresolved coherent solution calls for [Design](../svc-methods/references/design.md); Human-owned preferences or consequential trade-offs follow the common contract. These are conditional routes, not a required sequence.
+Return a judgment with its causal reason, material cost, and counter-pressure at the resolution needed by the consuming work. Stop consulting guidance when further heuristics cannot change the choice. A material missing fact calls for Methods' Explore guidance in `svc-methods`; an unresolved coherent solution calls for Design in `svc-methods`; Human-owned preferences or consequential trade-offs follow the authority boundaries above. These are conditional routes, not a required sequence.
 
 Keep four authorities distinct:
 
