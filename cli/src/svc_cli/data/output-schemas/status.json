@@ -145,44 +145,6 @@
       "title": "ConfigurationUnavailableStatus",
       "type": "object"
     },
-    "CorpusStatusOutput": {
-      "additionalProperties": false,
-      "properties": {
-        "available_version": {
-          "title": "Available Version",
-          "type": "string"
-        },
-        "project_version": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Project Version"
-        },
-        "status": {
-          "enum": [
-            "absent",
-            "behind",
-            "current",
-            "ahead",
-            "unavailable"
-          ],
-          "title": "Status",
-          "type": "string"
-        }
-      },
-      "required": [
-        "status",
-        "project_version",
-        "available_version"
-      ],
-      "title": "CorpusStatusOutput",
-      "type": "object"
-    },
     "DeclaredDevStatus": {
       "additionalProperties": false,
       "properties": {
@@ -420,10 +382,8 @@
           "enum": [
             "plan-integration-establishment",
             "repair-project-configuration",
-            "plan-project-upgrade",
             "migrate-project-configuration",
             "plan-integration-repair",
-            "install-compatible-corpus",
             "continue"
           ],
           "title": "Action",
@@ -484,11 +444,6 @@
     "ProjectMissingStatus": {
       "additionalProperties": false,
       "properties": {
-        "corpus_version": {
-          "default": null,
-          "title": "Corpus Version",
-          "type": "null"
-        },
         "path": {
           "title": "Path",
           "type": "string"
@@ -509,10 +464,6 @@
     "ProjectSchemaBlockedStatus": {
       "additionalProperties": false,
       "properties": {
-        "corpus_version": {
-          "title": "Corpus Version",
-          "type": "string"
-        },
         "path": {
           "title": "Path",
           "type": "string"
@@ -530,8 +481,7 @@
       },
       "required": [
         "path",
-        "schema_version",
-        "corpus_version"
+        "schema_version"
       ],
       "title": "ProjectSchemaBlockedStatus",
       "type": "object"
@@ -539,10 +489,6 @@
     "ProjectVersionStatus": {
       "additionalProperties": false,
       "properties": {
-        "corpus_version": {
-          "title": "Corpus Version",
-          "type": "string"
-        },
         "path": {
           "title": "Path",
           "type": "string"
@@ -552,20 +498,15 @@
           "type": "integer"
         },
         "status": {
-          "enum": [
-            "current",
-            "corpus-behind",
-            "corpus-ahead"
-          ],
+          "const": "current",
+          "default": "current",
           "title": "Status",
           "type": "string"
         }
       },
       "required": [
         "path",
-        "status",
-        "schema_version",
-        "corpus_version"
+        "schema_version"
       ],
       "title": "ProjectVersionStatus",
       "type": "object"
@@ -573,10 +514,6 @@
     "RootStatusOutput": {
       "additionalProperties": false,
       "properties": {
-        "available_corpus_version": {
-          "title": "Available Corpus Version",
-          "type": "string"
-        },
         "configuration": {
           "anyOf": [
             {
@@ -587,9 +524,6 @@
             }
           ],
           "title": "Configuration"
-        },
-        "corpus": {
-          "$ref": "#/$defs/CorpusStatusOutput"
         },
         "dev": {
           "$ref": "#/$defs/DeclaredDevStatus"
@@ -642,14 +576,6 @@
           ],
           "title": "Project"
         },
-        "resource_mode": {
-          "enum": [
-            "source",
-            "wheel"
-          ],
-          "title": "Resource Mode",
-          "type": "string"
-        },
         "retired_skill": {
           "$ref": "#/$defs/GuidanceStatus"
         },
@@ -660,8 +586,8 @@
           "$ref": "#/$defs/RuntimeStatusOutput"
         },
         "schema_version": {
-          "const": 2,
-          "default": 2,
+          "const": 3,
+          "default": 3,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -683,12 +609,9 @@
         "status",
         "next",
         "installed_cli_version",
-        "available_corpus_version",
-        "resource_mode",
         "runtime",
         "workspace",
         "project",
-        "corpus",
         "configuration",
         "dev",
         "run",
@@ -765,7 +688,7 @@
       "type": "object"
     }
   },
-  "$id": "urn:svc:cli-output:status:v2",
+  "$id": "urn:svc:cli-output:status:v3",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "anyOf": [
     {
@@ -779,5 +702,5 @@
     }
   ],
   "title": "SVC status machine output",
-  "x-svc-result-schema-version": 2
+  "x-svc-result-schema-version": 3
 }

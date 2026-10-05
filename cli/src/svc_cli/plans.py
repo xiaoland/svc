@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import tempfile
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, TypeAlias
-
-from .catalog import canonical_json, sha256_bytes
 from .errors import SvcError
 
 
@@ -19,6 +19,17 @@ FileStateKind: TypeAlias = Literal["absent", "file"]
 PlanAction: TypeAlias = Literal["create", "append", "refresh", "rewrite", "delete"]
 RollbackStatus: TypeAlias = Literal["succeeded", "conflicted", "failed"]
 LocalApplyStatus: TypeAlias = Literal["noop", "applied"]
+
+
+def sha256_bytes(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def canonical_json(value: Any) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        + "\n"
+    ).encode("utf-8")
 
 
 @dataclass(frozen=True)

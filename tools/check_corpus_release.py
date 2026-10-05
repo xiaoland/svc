@@ -10,7 +10,7 @@ import subprocess
 import tarfile
 from pathlib import Path
 
-from svc_cli.catalog import parse_version_index
+from tools.corpus import parse_version_index
 
 
 def _version(raw: bytes) -> str:

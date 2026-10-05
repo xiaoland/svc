@@ -19,8 +19,7 @@ from svc_cli.config import (
 
 def base_document() -> dict[str, object]:
     return {
-        "schema_version": 3,
-        "corpus_version": "10.0.1",
+        "schema_version": 4,
         "dev": {
             "targets": {
                 "frontend": {
@@ -76,13 +75,12 @@ def test_complete_strict_base_has_a_stable_canonical_model() -> None:
     assert first.model_dump() == second.model_dump()
 
     for invalid in (
-        {"schema_version": 3, "corpus_version": "10.0.1", "unknown": True},
+        {"schema_version": 4, "unknown": True},
         {
-            "schema_version": 3,
-            "corpus_version": "10.0.1",
+            "schema_version": 4,
             "dev": {"targets": {}},
         },
-        {"schema_version": 3, "corpus_version": "not-a-version"},
+        {"schema_version": 4, "dev": None},
         {"schema_version": 2, "svc_version": "10.0.1"},
     ):
         with pytest.raises(ConfigError):
@@ -91,16 +89,16 @@ def test_complete_strict_base_has_a_stable_canonical_model() -> None:
 
 def test_parser_rejects_duplicate_nonfinite_invalid_utf8_and_null() -> None:
     for content in (
-        b'{"schema_version":3,"schema_version":3,"corpus_version":"10.0.1"}',
-        b'{"schema_version":3,"corpus_version":"10.0.1","dev":NaN}',
-        b'{"schema_version":3,"corpus_version":"10.0.1","dev":null}',
+        b'{"schema_version":4,"schema_version":4}',
+        b'{"schema_version":4,"dev":NaN}',
+        b'{"schema_version":4,"dev":null}',
         b"\xff",
     ):
         with pytest.raises(ConfigError):
             parse_project_config(content)
 
 
-def test_sparse_v3_overlay_merges_objects_and_replaces_scalars_and_arrays() -> None:
+def test_sparse_v4_overlay_merges_objects_and_replaces_scalars_and_arrays() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         write_config(root, PROJECT_CONFIG_FILE, base_document())
@@ -108,7 +106,7 @@ def test_sparse_v3_overlay_merges_objects_and_replaces_scalars_and_arrays() -> N
             root,
             LOCAL_CONFIG_FILE,
             {
-                "schema_version": 3,
+                "schema_version": 4,
                 "run": {
                     "check": {
                         "argv": ["pdm", "run", "test"],
@@ -153,7 +151,7 @@ def test_absent_overlay_is_noop_and_effective_config_is_not_written() -> None:
         assert resolved.base == resolved.effective
         assert sorted(path.name for path in root.iterdir()) == before
 
-        write_config(root, LOCAL_CONFIG_FILE, {"schema_version": 3})
+        write_config(root, LOCAL_CONFIG_FILE, {"schema_version": 4})
         empty_overlay = load_config(root)
         assert empty_overlay.base == empty_overlay.effective
         assert empty_overlay.local_digest is not None
@@ -163,16 +161,16 @@ def test_overlay_refuses_corpus_authority_unknown_paths_and_invalid_schema() -> 
     for overlay in (
         {},
         {"schema_version": 2},
-        {"schema_version": 3, "corpus_version": "10.0.2"},
-        {"schema_version": 3, "profile": "worktree"},
-        {"schema_version": 3, "dev": {"profiles": {}}},
+        {"schema_version": 4, "corpus_version": "10.0.2"},
+        {"schema_version": 4, "profile": "worktree"},
+        {"schema_version": 4, "dev": {"profiles": {}}},
         {
-            "schema_version": 3,
+            "schema_version": 4,
             "dev": {
                 "targets": {"frontend": {"probe": {"kind": "http", "made_up": True}}}
             },
         },
-        {"schema_version": 3, "run": {"check": {"unknown": True}}},
+        {"schema_version": 4, "run": {"check": {"unknown": True}}},
     ):
         with pytest.raises(ConfigError):
             parse_local_overlay(json.dumps(overlay).encode())
@@ -200,7 +198,7 @@ def test_run_entries_are_strict_and_local_overlay_cannot_create_names() -> None:
             root,
             LOCAL_CONFIG_FILE,
             {
-                "schema_version": 3,
+                "schema_version": 4,
                 "run": {"local-only": {"argv": ["tool"]}},
             },
         )

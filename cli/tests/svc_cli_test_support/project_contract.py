@@ -7,20 +7,13 @@ from collections.abc import Mapping
 from pathlib import Path
 
 
-CORPUS_VERSION = "14.0.0"
-
-
 def write_project_config(
     root: Path,
     *,
     dev_targets: Mapping[str, object] | None = None,
     run_entries: Mapping[str, object] | None = None,
-    corpus_version: str = CORPUS_VERSION,
 ) -> Path:
-    document: dict[str, object] = {
-        "schema_version": 3,
-        "corpus_version": corpus_version,
-    }
+    document: dict[str, object] = {"schema_version": 4}
     if dev_targets is not None:
         document["dev"] = {"targets": dict(dev_targets)}
     if run_entries is not None:
@@ -33,7 +26,7 @@ def write_project_config(
 def write_local_run_overlay(root: Path, entries: Mapping[str, object]) -> Path:
     path = root / "svc.local.json"
     path.write_text(
-        json.dumps({"schema_version": 3, "run": dict(entries)}),
+        json.dumps({"schema_version": 4, "run": dict(entries)}),
         encoding="utf-8",
     )
     return path

@@ -7,9 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Literal, TypeAlias, cast
 
-from semantic_version import Version  # type: ignore[import-untyped]
-
-from .catalog import canonical_json, require_semver, sha256_bytes
+from .plans import canonical_json, sha256_bytes
 from .config import (
     CONFIG_SCHEMA_VERSION,
     LOCAL_CONFIG_FILE,
@@ -43,8 +41,7 @@ from .plans import (
     make_delete,
     make_write,
 )
-from .release import catalog, installed_distribution_version
-from .resources import resource_mode
+from .release import installed_distribution_version
 from .workspace import WorkspaceIdentity, resolve_workspace_identity
 
 
@@ -60,10 +57,8 @@ GuidanceKind: TypeAlias = Literal[
 NextActionKind: TypeAlias = Literal[
     "plan-integration-establishment",
     "repair-project-configuration",
-    "plan-project-upgrade",
     "migrate-project-configuration",
     "plan-integration-repair",
-    "install-compatible-corpus",
     "continue",
 ]
 InitSurface: TypeAlias = Literal[
@@ -75,11 +70,6 @@ InitSurface: TypeAlias = Literal[
     "legacy-cli-skill",
 ]
 InitExtent: TypeAlias = Literal["whole-file", "svc-managed-block"]
-
-
-class CorpusBaseline(ValueModel):
-    disposition: Literal["create", "unchanged"]
-    version: str | None
 
 
 class InitOperation(ValueModel):
@@ -100,8 +90,6 @@ class InitApplyResult(ValueModel):
     status: Literal["noop", "applied"]
     repo: Path
     intent: Literal["establish", "repair"]
-    corpus_version: str
-    corpus_baseline: CorpusBaseline
     plan_digest: str
     operations: tuple[InitOperation, ...]
     verification: InitVerification
@@ -110,7 +98,6 @@ class InitApplyResult(ValueModel):
 class ProjectMissingStatus(ValueModel):
     path: str
     status: Literal["missing"] = "missing"
-    corpus_version: None = None
 
 
 class ProjectInvalidStatus(ValueModel):
@@ -123,14 +110,12 @@ class ProjectSchemaBlockedStatus(ValueModel):
     path: str
     status: Literal["schema-write-blocked"] = "schema-write-blocked"
     schema_version: int
-    corpus_version: str
 
 
 class ProjectVersionStatus(ValueModel):
     path: str
-    status: Literal["current", "corpus-behind", "corpus-ahead"]
+    status: Literal["current"] = "current"
     schema_version: int
-    corpus_version: str
 
 
 ProjectStatus: TypeAlias = (
@@ -195,12 +180,6 @@ class NextActionDecision(ValueModel):
     command: tuple[str, ...] | None = None
 
 
-class CorpusStatus(ValueModel):
-    status: Literal["absent", "behind", "current", "ahead", "unavailable"]
-    project_version: str | None
-    available_version: str
-
-
 class IntegrationAnomaly(ValueModel):
     path: str
     kind: GuidanceKind
@@ -220,12 +199,9 @@ class ProjectStatusInspection(ValueModel):
     status: Literal["unadopted", "malformed", "actionable", "healthy"]
     next: NextActionDecision
     installed_cli_version: str | None
-    available_corpus_version: str
-    resource_mode: Literal["source", "wheel"]
     runtime: RuntimeStatus
     workspace: WorkspaceIdentity
     project: ProjectStatus
-    corpus: CorpusStatus
     configuration: ConfigurationStatus
     dev: DeclaredDevStatus
     run: DeclaredRunStatus
@@ -240,19 +216,14 @@ class ProjectStatusInspection(ValueModel):
 class InitPlan:
     local_plan: LocalPlan
     intent: Literal["establish", "repair"]
-    corpus_baseline: CorpusBaseline
 
     @property
     def repo(self) -> Path:
         return self.local_plan.repo
 
     @property
-    def corpus_version(self) -> str:
-        return self.local_plan.target_version
-
-    @property
     def target_version(self) -> str:
-        return self.corpus_version
+        return self.local_plan.target_version
 
     @property
     def mutations(self) -> tuple[PlannedFileMutation, ...]:
@@ -278,15 +249,10 @@ class InitPlan:
 
     def signature(self) -> dict[str, object]:
         return {
-            "schema_version": 3,
+            "schema_version": 4,
             "command": "init",
             "repo": str(self.repo),
             "intent": self.intent,
-            "corpus_version": self.corpus_version,
-            "corpus_baseline": {
-                "disposition": self.corpus_baseline.disposition,
-                "version": self.corpus_baseline.version,
-            },
             "operations": [
                 _init_operation_signature(mutation) for mutation in self.mutations
             ],
@@ -297,13 +263,11 @@ class InitPlan:
         }
 
 
-def render_project_state(corpus_version: str) -> bytes:
-    require_semver(corpus_version, "project corpus_version")
+def render_project_state() -> bytes:
     return (
         json.dumps(
             {
                 "schema_version": PROJECT_SCHEMA_VERSION,
-                "corpus_version": corpus_version,
             },
             indent=2,
         )
@@ -329,16 +293,11 @@ def parse_project_state(content: bytes) -> ProjectConfig:
 
 def plan_init(repo: Path) -> InitPlan:
     root = _require_repo(repo)
-    target_version = catalog().corpus_version
     blockers: list[Blocker] = []
     writes = []
     state_content = _read_project_content(root, blockers)
     intent: Literal["establish", "repair"] = (
         "establish" if state_content is None else "repair"
-    )
-    baseline = CorpusBaseline(
-        disposition="create" if state_content is None else "unchanged",
-        version=target_version if state_content is None else None,
     )
     if state_content is None and not any(
         blocker.path == PROJECT_FILE for blocker in blockers
@@ -362,8 +321,8 @@ def plan_init(repo: Path) -> InitPlan:
                         root,
                         PROJECT_FILE,
                         "create",
-                        "record initial Corpus baseline",
-                        render_project_state(target_version),
+                        "create initial CLI configuration",
+                        render_project_state(),
                     )
                 )
     elif state_content is not None:
@@ -373,10 +332,6 @@ def plan_init(repo: Path) -> InitPlan:
             blockers.append(Blocker("invalid-project-state", PROJECT_FILE, str(error)))
         else:
             _block_noncurrent_schema(state, blockers)
-            baseline = CorpusBaseline(
-                disposition=baseline.disposition,
-                version=_state_corpus_version(state),
-            )
             if not blockers:
                 try:
                     load_config(root)
@@ -384,14 +339,6 @@ def plan_init(repo: Path) -> InitPlan:
                     blockers.append(
                         Blocker(
                             "invalid-project-configuration", PROJECT_FILE, str(error)
-                        )
-                    )
-                if Version(_state_corpus_version(state)) > Version(target_version):
-                    blockers.append(
-                        Blocker(
-                            "corpus-baseline-ahead",
-                            PROJECT_FILE,
-                            "The project Corpus baseline is newer than the installed Corpus; init will not project older integration.",
                         )
                     )
 
@@ -425,9 +372,10 @@ def plan_init(repo: Path) -> InitPlan:
         )
     )
     return InitPlan(
-        LocalPlan("init", root, target_version, tuple(writes), tuple(blockers)),
+        LocalPlan(
+            "init", root, str(CONFIG_SCHEMA_VERSION), tuple(writes), tuple(blockers)
+        ),
         intent,
-        baseline,
     )
 
 
@@ -468,8 +416,6 @@ def apply_init(plan: InitPlan, approved_digest: str) -> InitApplyResult:
         status=result.status,
         repo=plan.repo,
         intent=plan.intent,
-        corpus_version=plan.corpus_version,
-        corpus_baseline=plan.corpus_baseline,
         plan_digest=approved_digest,
         operations=tuple(_init_operation(mutation) for mutation in plan.mutations),
         verification=InitVerification(),
@@ -480,12 +426,11 @@ def inspect_status(repo: Path) -> ProjectStatusInspection:
     """Inspect one repository without probing or changing a dev capability."""
 
     root = _require_repo(repo)
-    corpus = catalog()
     installed_cli_version = installed_distribution_version()
     runtime_status: Literal["source-tree", "installed"] = (
         "source-tree" if installed_cli_version is None else "installed"
     )
-    project = _inspect_project(root, corpus.corpus_version)
+    project = _inspect_project(root)
     configuration, resolved = _inspect_configuration(root, project)
     dev = _inspect_dev_declaration(resolved)
     run = _inspect_run_declaration(resolved)
@@ -527,18 +472,14 @@ def inspect_status(repo: Path) -> ProjectStatusInspection:
         managed_ignore,
         retired_skill,
     )
-    corpus_status = _corpus_status(project, corpus.corpus_version)
     integration_status = _integration_status(guidance, managed_ignore, retired_skill)
     return ProjectStatusInspection(
         status=status,
         next=next_action,
         installed_cli_version=installed_cli_version,
-        available_corpus_version=corpus.corpus_version,
-        resource_mode=resource_mode(),
         runtime=RuntimeStatus(status=runtime_status),
         workspace=resolve_workspace_identity(root),
         project=project,
-        corpus=corpus_status,
         configuration=configuration,
         dev=dev,
         run=run,
@@ -670,7 +611,7 @@ def _init_operation_signature(mutation: PlannedFileMutation) -> dict[str, object
     }
 
 
-def _inspect_project(root: Path, available_version: str) -> ProjectStatus:
+def _inspect_project(root: Path) -> ProjectStatus:
     try:
         content = _read_optional(root, PROJECT_FILE)
     except SvcError as error:
@@ -685,23 +626,8 @@ def _inspect_project(root: Path, available_version: str) -> ProjectStatus:
         return ProjectSchemaBlockedStatus(
             path=PROJECT_FILE,
             schema_version=state.schema_version,
-            corpus_version=_state_corpus_version(state),
         )
-    status: Literal["current", "corpus-behind", "corpus-ahead"] = (
-        "current"
-        if _state_corpus_version(state) == available_version
-        else (
-            "corpus-behind"
-            if Version(_state_corpus_version(state)) < Version(available_version)
-            else "corpus-ahead"
-        )
-    )
-    return ProjectVersionStatus(
-        path=PROJECT_FILE,
-        status=status,
-        schema_version=state.schema_version,
-        corpus_version=_state_corpus_version(state),
-    )
+    return ProjectVersionStatus(path=PROJECT_FILE, schema_version=state.schema_version)
 
 
 def _inspect_configuration(
@@ -722,7 +648,7 @@ def _inspect_configuration(
             status="invalid",
             message=f"{LOCAL_CONFIG_FILE} exists while {PROJECT_FILE} is absent.",
         ), None
-    if project_status not in {"current", "corpus-behind", "corpus-ahead"}:
+    if project_status != "current":
         return ConfigurationUnavailableStatus(
             status="not-inspected", reason="project-state-not-current-schema"
         ), None
@@ -810,20 +736,9 @@ def _status_decision(
             "Managed SVC integration needs review; inspect the non-mutating init plan.",
             command=("svc", "init", str(root)),
         )
-    if project_status == "corpus-behind":
-        return "actionable", _next_action(
-            "plan-project-upgrade",
-            "The project Corpus baseline is behind the installed Corpus.",
-            command=("svc", "upgrade", str(root)),
-        )
-    if project_status == "corpus-ahead":
-        return "actionable", _next_action(
-            "install-compatible-corpus",
-            "The project Corpus baseline is newer than the installed Corpus; use the package manager to install a compatible CLI distribution.",
-        )
     return "healthy", _next_action(
         "continue",
-        "Configuration, Corpus baseline, and managed integration are current.",
+        "Configuration and managed integration are current.",
     )
 
 
@@ -834,29 +749,6 @@ def _next_action(
     command: tuple[str, ...] | None = None,
 ) -> NextActionDecision:
     return NextActionDecision(action=action, reason=reason, command=command)
-
-
-def _corpus_status(project: ProjectStatus, available_version: str) -> CorpusStatus:
-    project_status = project.status
-    version = (
-        project.corpus_version
-        if not isinstance(project, ProjectInvalidStatus)
-        else None
-    )
-    relation = cast(
-        Literal["absent", "behind", "current", "ahead", "unavailable"],
-        {
-            "missing": "absent",
-            "corpus-behind": "behind",
-            "current": "current",
-            "corpus-ahead": "ahead",
-        }.get(project_status, "unavailable"),
-    )
-    return CorpusStatus(
-        status=relation,
-        project_version=version,
-        available_version=available_version,
-    )
 
 
 def _integration_status(
@@ -900,57 +792,6 @@ def _block_noncurrent_schema(state: ProjectConfig, blockers: list[Blocker]) -> N
             f"Unsupported svc.json schema: {state.schema_version}.",
         )
     )
-
-
-def _state_corpus_version(state: ProjectConfig) -> str:
-    return state.corpus_version
-
-
-def replace_corpus_baseline(content: bytes, version: str, field: str) -> bytes:
-    """Replace only one recognized root Corpus baseline JSON value."""
-
-    require_semver(version, "project corpus_version")
-    text = content.decode("utf-8")
-    decoder = json.JSONDecoder()
-    index = _skip_json_space(text, 0)
-    if index >= len(text) or text[index] != "{":
-        raise ValueError("svc.json must contain a JSON object")
-    index += 1
-    found: tuple[int, int] | None = None
-    while True:
-        index = _skip_json_space(text, index)
-        if index < len(text) and text[index] == "}":
-            break
-        key, index = decoder.raw_decode(text, index)
-        if not isinstance(key, str):
-            raise ValueError("svc.json object keys must be strings")
-        index = _skip_json_space(text, index)
-        if index >= len(text) or text[index] != ":":
-            raise ValueError("svc.json object entry is malformed")
-        index = _skip_json_space(text, index + 1)
-        value_start = index
-        _, value_end = decoder.raw_decode(text, index)
-        if key == field:
-            if found is not None:
-                raise ValueError(f"svc.json contains duplicate {field} entries")
-            found = (value_start, value_end)
-        index = _skip_json_space(text, value_end)
-        if index < len(text) and text[index] == ",":
-            index += 1
-            continue
-        if index < len(text) and text[index] == "}":
-            break
-        raise ValueError("svc.json object entry is malformed")
-    if found is None:
-        raise ValueError(f"svc.json has no {field} entry")
-    start, end = found
-    return (text[:start] + json.dumps(version) + text[end:]).encode("utf-8")
-
-
-def _skip_json_space(text: str, index: int) -> int:
-    while index < len(text) and text[index] in " \t\r\n":
-        index += 1
-    return index
 
 
 def _inspect_guidance(

@@ -14,7 +14,6 @@ from ..project import (
     ConfigurationFileStatus as ServiceConfigurationFileStatus,
     ConfigurationStatus as ServiceConfigurationStatus,
     ConfigurationUnavailableStatus as ServiceConfigurationUnavailableStatus,
-    CorpusBaseline,
     GuidanceKind,
     GuidanceStatus as ServiceGuidanceStatus,
     InitApplyResult,
@@ -35,11 +34,6 @@ from ..workspace import WorkspaceIdentity
 from .common import BlockerOutput, FileStateOutput, project_blocker, project_file_state
 
 
-class CorpusBaselineOutput(MachineModel):
-    disposition: Literal["create", "unchanged"]
-    version: str | None
-
-
 class InitOperationOutput(MachineModel):
     action: PlanAction
     path: str
@@ -55,14 +49,12 @@ class InitVerificationOutput(MachineModel):
 
 
 class InitPlanOutput(MachineModel):
-    schema_version: Literal[3] = 3
+    schema_version: Literal[4] = 4
     command: Literal["init"] = "init"
     mode: Literal["plan"] = "plan"
     status: Literal["blocked", "ready", "noop"]
     repo: str
     intent: Literal["establish", "repair"]
-    corpus_version: str
-    corpus_baseline: CorpusBaselineOutput
     operations: tuple[InitOperationOutput, ...]
     blockers: tuple[BlockerOutput, ...]
     plan_digest: str | None = Field(
@@ -71,14 +63,12 @@ class InitPlanOutput(MachineModel):
 
 
 class InitApplyOutput(MachineModel):
-    schema_version: Literal[3] = 3
+    schema_version: Literal[4] = 4
     command: Literal["init"] = "init"
     mode: Literal["apply"] = "apply"
     status: Literal["noop", "applied"]
     repo: str
     intent: Literal["establish", "repair"]
-    corpus_version: str
-    corpus_baseline: CorpusBaselineOutput
     plan_digest: str
     operations: tuple[InitOperationOutput, ...]
     verification: InitVerificationOutput
@@ -87,7 +77,6 @@ class InitApplyOutput(MachineModel):
 class ProjectMissingStatus(MachineModel):
     path: str
     status: Literal["missing"] = "missing"
-    corpus_version: None = None
 
 
 class ProjectInvalidStatus(MachineModel):
@@ -100,14 +89,12 @@ class ProjectSchemaBlockedStatus(MachineModel):
     path: str
     status: Literal["schema-write-blocked"] = "schema-write-blocked"
     schema_version: int
-    corpus_version: str
 
 
 class ProjectVersionStatus(MachineModel):
     path: str
-    status: Literal["current", "corpus-behind", "corpus-ahead"]
+    status: Literal["current"] = "current"
     schema_version: int
-    corpus_version: str
 
 
 ProjectStatus: TypeAlias = (
@@ -174,12 +161,6 @@ class NextActionOutput(MachineModel):
     )
 
 
-class CorpusStatusOutput(MachineModel):
-    status: Literal["absent", "behind", "current", "ahead", "unavailable"]
-    project_version: str | None
-    available_version: str
-
-
 class IntegrationAnomaly(MachineModel):
     path: str
     kind: GuidanceKind
@@ -196,16 +177,13 @@ class RuntimeStatusOutput(MachineModel):
 
 
 class RootStatusOutput(MachineModel):
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     status: Literal["unadopted", "malformed", "actionable", "healthy"]
     next: NextActionOutput
     installed_cli_version: str | None
-    available_corpus_version: str
-    resource_mode: Literal["source", "wheel"]
     runtime: RuntimeStatusOutput
     workspace: WorkspaceIdentity
     project: ProjectStatus
-    corpus: CorpusStatusOutput
     configuration: ConfigurationStatus
     dev: DeclaredDevStatus
     run: DeclaredRunStatus
@@ -221,8 +199,6 @@ def project_init_plan(plan: InitPlan) -> InitPlanOutput:
         status=cast(Literal["blocked", "ready", "noop"], plan.status),
         repo=str(plan.repo),
         intent=plan.intent,
-        corpus_version=plan.corpus_version,
-        corpus_baseline=_corpus_baseline(plan.corpus_baseline),
         operations=()
         if plan.blockers
         else tuple(_init_operation(value) for value in plan.operations),
@@ -236,8 +212,6 @@ def project_init_apply(result: InitApplyResult) -> InitApplyOutput:
         status=result.status,
         repo=str(result.repo),
         intent=result.intent,
-        corpus_version=result.corpus_version,
-        corpus_baseline=_corpus_baseline(result.corpus_baseline),
         plan_digest=result.plan_digest,
         operations=tuple(_init_operation(value) for value in result.operations),
         verification=InitVerificationOutput(
@@ -256,16 +230,9 @@ def project_status(result: ProjectStatusInspection) -> RootStatusOutput:
             command=result.next.command,
         ),
         installed_cli_version=result.installed_cli_version,
-        available_corpus_version=result.available_corpus_version,
-        resource_mode=result.resource_mode,
         runtime=RuntimeStatusOutput(status=result.runtime.status),
         workspace=result.workspace,
         project=_project_state(result.project),
-        corpus=CorpusStatusOutput(
-            status=result.corpus.status,
-            project_version=result.corpus.project_version,
-            available_version=result.corpus.available_version,
-        ),
         configuration=_configuration(result.configuration),
         dev=DeclaredDevStatus(
             status=result.dev.status,
@@ -288,10 +255,6 @@ def project_status(result: ProjectStatusInspection) -> RootStatusOutput:
     )
 
 
-def _corpus_baseline(value: CorpusBaseline) -> CorpusBaselineOutput:
-    return CorpusBaselineOutput(disposition=value.disposition, version=value.version)
-
-
 def _init_operation(value: InitOperation) -> InitOperationOutput:
     return InitOperationOutput(
         action=value.action,
@@ -312,14 +275,12 @@ def _project_state(value: ServiceProjectStatus) -> ProjectStatus:
         return ProjectSchemaBlockedStatus(
             path=value.path,
             schema_version=value.schema_version,
-            corpus_version=value.corpus_version,
         )
     assert isinstance(value, ServiceProjectVersionStatus)
     return ProjectVersionStatus(
         path=value.path,
         status=value.status,
         schema_version=value.schema_version,
-        corpus_version=value.corpus_version,
     )
 
 

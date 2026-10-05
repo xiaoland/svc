@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
-from .catalog import sha256_bytes
+from .plans import sha256_bytes
 
 
 NAVIGATION_BEGIN_RE = re.compile(
@@ -71,11 +71,9 @@ def navigation_body(relative_path: str = "AGENTS.md") -> str:
     if relative_path == "AGENTS.md":
         return agent_body()
     return (
-        "## SVC Corpus\n\n"
-        "Use `svc lookup` when packaged Sustainable Vibe Coding Corpus guidance is "
-        "relevant, and discover its browse/search/read grammar through "
-        "`svc lookup --help`. Project documentation outside this marked block remains "
-        "Consumer-owned."
+        "## SVC CLI\n\n"
+        "Use `svc --help` and the installed SVC Skills for framework guidance. "
+        "Project documentation outside this marked block remains Consumer-owned."
     )
 
 
@@ -84,9 +82,6 @@ def agent_body() -> str:
         "## SVC\n\n"
         "Use `svc --help` or `svc <command> --help`.\n\n"
         "- `svc status`: inspect project state\n"
-        "- `svc lookup`: read SVC guidance\n"
-        "- `svc task init`: create a task packet\n"
-        "- `svc task grow`: inspect packet shape without changing files\n"
         "- `svc dev`: manage declared development targets\n\n"
         "If `AGENTS.local.md` exists, read it after this file. It is ignored local "
         "guidance; shared rules belong here."

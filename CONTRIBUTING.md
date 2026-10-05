@@ -1,114 +1,87 @@
-# Contributing to SVC
+# 贡献 SVC
 
-SVC is a source-first protocol. A contribution is complete when its behavioral impact, release note, and verification evidence are reviewable—not merely when code passes locally.
+SVC 是 source-first 的协议。贡献完成意味着行为影响、发布说明与验证证据可审查，而不仅是代码在本地通过。
 
-## Report Security Issues
+## 安全问题
 
-Follow the [security policy](SECURITY.md) for suspected vulnerabilities. Do not
-post exploitable details in a public issue or pull request.
+疑似漏洞遵循[安全政策](SECURITY.md)，不要在公开 issue 或 PR 发布可利用细节。
 
-## Set Up and Verify
+## 准备与验证
 
-Use Python 3.11 or newer and PDM 2.28 or newer:
+使用 Python 3.11+ 和 PDM 2.28+：
 
 ```console
 pdm install -d -G test -G quality
 pdm run check
 pdm build -p cli
-pdm run svc lookup --path task-packet/
+pdm run svc --help
 ```
 
-Canonical framework sources live under `corpus/`. The installable package uses the
-workspace member layout `cli/src/svc_cli`, and its tests live under
-`cli/tests`. SVC's own durable Product, technical, and runtime truth lives
-under `docs/`; it is not packaged as Agent guidance.
+框架权威源位于 `corpus/`，从 `corpus/index.md` 与六个 Skill 入口进入；维护者须遵守 `corpus/AGENTS.md`。CLI workspace member 使用 `cli/src/svc_cli`，测试位于 `cli/tests`。SVC 自身持久的产品、技术与运行时事实位于 `docs/`。CLI 构建和运行均不读取 Corpus，归档不包含框架正文、模板或 catalog。
 
-## Commit Messages
+## 提交说明
 
-Use this grammar:
+使用以下语法，人类可读的说明写中文：
 
 ```text
-feat|fix|ref|docs|chore(<scope>): <imperative summary>
+feat|fix|ref|docs|chore(<scope>): <summary>
 ```
 
-Keep the first line concise. Add body bullets when they preserve expensive context, constraints, or verification results.
-
-Accepted examples:
+首行简洁；正文 bullet 只保留难以重建的上下文、约束或验证结果。例如：
 
 ```text
-feat(lookup): add an optional local corpus capability
-docs(protocol): define project adoption authority
-ref(cli): isolate packaged resource lookup
+feat(run): 增加命名运行入口
+docs(protocol): 明确项目采用权限
+ref(cli): 移除框架内容依赖
 ```
 
-Rejected examples include `update files` (no type, scope, or intent), `feat: migration` (no scope), and `fix(cli): fixed status` (not imperative).
+`update files` 缺少类型、scope 与意图；`feat: migration` 缺少 scope。Commit type 只是导航元数据，不决定发布影响或下个版本。
 
-Commit type is navigation metadata. It never determines release impact or the next version.
+## 声明行为影响
 
-## Declare Behavioral Impact
-
-Release notes use Towncrier from the PDM quality dependency group. Every user-
-visible CLI or Corpus change adds one concise fragment to its owning product:
+Towncrier 位于 PDM quality dependency group。每项消费者可见的 CLI 或 Corpus 变化向对应产品添加简洁中文片段：
 
 ```console
-printf '%s\n' 'Describe the CLI change.' > .changes/cli/123.added.md
-printf '%s\n' 'Describe the Corpus change.' > .changes/corpus/123.added.md
+printf '%s\n' '说明 CLI 变化。' > .changes/cli/123.added.md
+printf '%s\n' '说明 Corpus 变化。' > .changes/corpus/123.added.md
 ```
 
-Use the `added`, `changed`, `removed`, or `fixed` suffix. Choose the package
-version with Behavioral SemVer:
+使用 `added`、`changed`、`removed` 或 `fixed` 后缀，按 Behavioral SemVer 选择版本：
 
-- `major` when required obligations, defaults, authority or permission boundaries, task-packet semantics, consumer layout, stable CLI/catalog contracts, or supported capabilities change incompatibly.
-- `minor` for an optional backward-compatible capability or accepted-input expansion.
-- `patch` for a correction or clarification that preserves declared protocol behavior.
+- `major`：不兼容地改变必要义务、默认行为、权限边界、Task Packet 语义、消费者布局、稳定 CLI 合同或支持的能力。
+- `minor`：可选的向后兼容能力，或扩大可接受输入。
+- `patch`：修正或澄清而保持已声明协议行为。
 
-Changes without user-visible impact do not add a fragment. A change affecting
-both products adds one fragment to each queue. Do not edit generated changelogs
-in a feature pull request. `CHANGELOG.md` remains the shared history from before
-the release streams were separated.
+没有消费者可见影响则不添加片段；影响两产品则向两队列各添加片段。功能 PR 不修改生成的 changelog；`CHANGELOG.md` 保留发布流拆分前的共同历史。
 
-Add packaged Markdown migration guidance under `corpus/migrations/` when consumers
-need release-specific steps or judgment. Migration notes are optional guidance;
-SVC does not maintain a generic consumer-file migration graph.
+消费者需要版本相关步骤或判断时，在 `corpus/migrations/` 添加 Markdown 指导。它是可选指导，不是通用文件迁移图，也不负责 CLI 配置变换。CLI 配置采用 current-only 合同，schema 4 的人工迁移说明由[用户手册](USER_MANUAL.md)拥有，不加入自动迁移或字段别名。
 
-## Release Boundary
+## 发布边界
 
-`main` is SVC's only integration and release source. Do not create or target a
-long-lived `develop` or release branch. Every admitted `main` commit has passed
-the required CI checks and is eligible for a future release.
+`main` 是唯一集成与发布源，不创建或面向长期 `develop` 或 release 分支。每个已接纳的 `main` commit 都已通过必要 CI，可进入后续发布。
 
-Maintainers configure these boundaries before the first release:
+维护者在首次发布前配置：
 
-- Protect `main` with PR-only admission, the required CI checks, no
-  force-push/deletion, and an explicit narrow bypass policy.
-- Configure PyPI Trusted Publishing for the standard release workflow.
-- Protect workflow-created release tags from update and deletion.
+- `main` 只通过 PR 接纳，要求 CI 通过，禁止 force-push/删除，并明确狭窄 bypass 政策。
+- 标准发布 workflow 的 PyPI Trusted Publishing。
+- 禁止更新或删除 workflow 创建的发布 tag。
 
-The release flow is intentionally sequenced:
+发布顺序如下：
 
-1. Feature pull requests merge Markdown fragments under `.changes/cli/` or
-   `.changes/corpus/`. A feature pull request that changes packaged Corpus
-   content also advances `corpus/version.json` and its migration index; the
-   repository check requires the content and Corpus version to move together.
-2. A maintainer prepares a CLI release PR by updating the static version in
-   `cli/pyproject.toml` and building its changelog:
+1. 功能 PR 合并 `.changes/cli/` 或 `.changes/corpus/` 的片段。改变 Corpus 源内容时同时推进 `corpus/version.json` 与迁移索引；仓库检查要求内容和版本一起变化。
+2. 维护者更新 `cli/pyproject.toml` 静态版本，准备 CLI 发布 PR 并生成 changelog：
 
    ```console
-   pdm run towncrier build --config towncrier.cli.toml --version 15.0.0 --yes
+   pdm run towncrier build --config towncrier.cli.toml --version 16.0.0 --yes
    pdm run check
    ```
 
-   The version must equal the package version. Merging `CLI_CHANGELOG.md`
-   validates and publishes the accepted wheel under `cli-v<version>`.
-3. A Corpus release PR uses the Corpus version already accepted with the
-   feature changes and consumes its fragment queue:
+   版本须等于 package version。合并 `CLI_CHANGELOG.md` 后，验证并以 `cli-v<version>` 发布接受的 wheel。
+3. Corpus 发布 PR 使用功能变更已接纳的 Corpus 版本并消费其片段：
 
    ```console
-   pdm run towncrier build --config towncrier.corpus.toml --version 15.0.0 --yes
+   pdm run towncrier build --config towncrier.corpus.toml --version 16.0.0 --yes
    pdm run check
    ```
 
-   Merging `CORPUS_CHANGELOG.md` creates `corpus-v<version>` and its GitHub
-   Release without publishing PyPI. A later CLI release carries that Corpus in
-   its wheel; when immediate PyPI delivery is required, prepare both releases in
-   the same PR.
+   合并 `CORPUS_CHANGELOG.md` 后创建 `corpus-v<version>` 与 GitHub Release，不发布 PyPI。两产品独立发布，CLI wheel 不再携带 Corpus；此流程不决定 Skills 的安装边界或新增宿主分发方案。

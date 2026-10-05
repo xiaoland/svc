@@ -43,8 +43,36 @@ jobs:
           python -m venv /tmp/svc-wheel
           /tmp/svc-wheel/bin/pip install "${wheel[0]}[double]"
           /tmp/svc-wheel/bin/svc --help
-          /tmp/svc-wheel/bin/svc lookup --path task-packet/ --json
+          mkdir -p /tmp/svc-cli-project
+          python - <<'PYTHON'
+          import json
+          import subprocess
+
+          def svc(*args):
+              return json.loads(subprocess.check_output(["/tmp/svc-wheel/bin/svc", *args], text=True))
+
+          plan = svc("init", "/tmp/svc-cli-project", "--json")
+          applied = svc("init", "/tmp/svc-cli-project", "--apply", plan["plan_digest"], "--json")
+          assert applied["status"] == "applied"
+          assert svc("status", "/tmp/svc-cli-project", "--json")["healthy"] is True
+          PYTHON
           /tmp/svc-wheel/bin/svc double validate cli/tests/double/fixtures/language/payment.double.yaml --json
+      - name: Verify independent CLI archives
+        run: |
+          python - <<'PY'
+          import tarfile
+          import zipfile
+          from pathlib import Path
+
+          wheel, = Path("cli/dist").glob("*.whl")
+          sdist, = Path("cli/dist").glob("*.tar.gz")
+          with zipfile.ZipFile(wheel) as archive:
+              names = archive.namelist()
+              assert not any("/corpus/" in name or name.endswith("catalog.json") for name in names)
+          with tarfile.open(sdist) as archive:
+              assert not any("/corpus/" in name or "_build_inputs" in name for name in archive.getnames())
+          PY
+          python -m pip wheel --no-deps cli/dist/*.tar.gz --wheel-dir /tmp/svc-isolated-build
 
   python-next:
     runs-on: ubuntu-latest

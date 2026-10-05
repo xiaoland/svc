@@ -1,1 +1,1 @@
-{"corpus_version":"15.0.1","releases":[{"version":"15.0.1","previous_version":"15.0.0","migration":{"status":"not-required"}}],"schema_version":2}
+{"corpus_version":"16.0.0","releases":[{"version":"15.0.1","previous_version":"15.0.0","migration":{"status":"not-required"}},{"version":"16.0.0","previous_version":"15.0.1","migration":{"status":"guide","paths":["migrations/agent-skills.md"]}}],"schema_version":2}

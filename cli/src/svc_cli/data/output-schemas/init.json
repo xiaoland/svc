@@ -44,36 +44,6 @@
       "title": "CliUsageOutput",
       "type": "object"
     },
-    "CorpusBaselineOutput": {
-      "additionalProperties": false,
-      "properties": {
-        "disposition": {
-          "enum": [
-            "create",
-            "unchanged"
-          ],
-          "title": "Disposition",
-          "type": "string"
-        },
-        "version": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Version"
-        }
-      },
-      "required": [
-        "disposition",
-        "version"
-      ],
-      "title": "CorpusBaselineOutput",
-      "type": "object"
-    },
     "FileStateOutput": {
       "additionalProperties": false,
       "properties": {
@@ -125,13 +95,6 @@
           "title": "Command",
           "type": "string"
         },
-        "corpus_baseline": {
-          "$ref": "#/$defs/CorpusBaselineOutput"
-        },
-        "corpus_version": {
-          "title": "Corpus Version",
-          "type": "string"
-        },
         "intent": {
           "enum": [
             "establish",
@@ -162,8 +125,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 3,
-          "default": 3,
+          "const": 4,
+          "default": 4,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -183,8 +146,6 @@
         "status",
         "repo",
         "intent",
-        "corpus_version",
-        "corpus_baseline",
         "plan_digest",
         "operations",
         "verification"
@@ -264,13 +225,6 @@
           "title": "Command",
           "type": "string"
         },
-        "corpus_baseline": {
-          "$ref": "#/$defs/CorpusBaselineOutput"
-        },
-        "corpus_version": {
-          "title": "Corpus Version",
-          "type": "string"
-        },
         "intent": {
           "enum": [
             "establish",
@@ -309,8 +263,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 3,
-          "default": 3,
+          "const": 4,
+          "default": 4,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -328,8 +282,6 @@
         "status",
         "repo",
         "intent",
-        "corpus_version",
-        "corpus_baseline",
         "operations",
         "blockers"
       ],
@@ -403,7 +355,7 @@
       "type": "object"
     }
   },
-  "$id": "urn:svc:cli-output:init:v3",
+  "$id": "urn:svc:cli-output:init:v4",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "anyOf": [
     {
@@ -420,5 +372,5 @@
     }
   ],
   "title": "SVC init machine output",
-  "x-svc-result-schema-version": 3
+  "x-svc-result-schema-version": 4
 }

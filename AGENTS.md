@@ -1,54 +1,46 @@
 # AGENTS
 
-This repository is the source of the Sustainable Vibe Coding (SVC) framework, not a consumer project. Keep the framework small, source-first, and mechanically verifiable.
+本仓库是 Sustainable Vibe Coding（SVC）框架的权威源，不是消费者项目。保持框架精简、source-first，并让结构和引用可以机械验证。
 
-## Knowledge Owners
+## 知识所有者
 
-- Framework purpose and Corpus navigation: `corpus/index.md`
-- Corpus authoring and layout rules: `corpus/AGENTS.md` (maintainer-only; excluded from the packaged Corpus)
-- Working Methods: `corpus/methods/`
-- Task Packet semantics and growth: `corpus/task-packet/`
-- Sub-agent work placement: `corpus/sub-agents/`
-- Claim qualification: `corpus/verification/`
-- Design judgment and implementation taste: `corpus/taste/`
-- Product, technical, unit, runtime, and coordination specifications: `corpus/specs/`
-- Consumer Agent-instruction shapes: `corpus/templates/`
-- SVC's own durable Product, technical, and runtime truth: `docs/`
-- Corpus migration selection and guides: `corpus/migrations/`
-- CLI release configuration, version, Behavioral SemVer evidence, and notes:
-  `towncrier.cli.toml`, `.changes/cli/`, `cli/pyproject.toml`, generated
-  `CLI_CHANGELOG.md`, GitHub Releases, and `CONTRIBUTING.md`
-- Corpus release configuration, version, Behavioral SemVer evidence, and notes:
-  `towncrier.corpus.toml`, `.changes/corpus/`, `corpus/version.json`, generated
-  `CORPUS_CHANGELOG.md`, GitHub Releases, and `CONTRIBUTING.md`
-- Consumer runtime, project integration, and packaged-resource access:
-  `cli/src/svc_cli/`; its tests live under `cli/tests/`
-- Catalog/wheel projection: `cli/src/svc_cli/catalog.py`,
-  `tools/build_catalog.py`, and `cli/pdm_build.py`
-- Root repository-tool behavior: `tools/` and root `tests/`
-- Task work and retained task evidence: `tasks/`; retention is task-specific and
-  task material is never part of the packaged Corpus.
+- 框架目的、共同协作契约和六入口导航：`corpus/index.md`
+- Skill 作者与布局规则：`corpus/AGENTS.md`，仅供维护者使用
+- Working Methods：`corpus/svc-methods/`
+- Task Packet 语义与增长：`corpus/svc-task-packet/`
+- 子代理工作安排：`corpus/svc-sub-agents/`
+- 声明资格与证据：`corpus/svc-verification/`
+- 设计与实施判断：`corpus/svc-taste/`
+- 产品、技术、单元、运行时与协调规范：`corpus/svc-specs/`
+- Consumer Agent 指导起始形状：`corpus/svc-specs/assets/`
+- SVC 自身持久的产品、技术与运行时事实：`docs/`
+- Corpus 版本迁移选择与指导：`corpus/migrations/`
+- CLI 发布配置、版本、Behavioral SemVer 证据与说明：`towncrier.cli.toml`、`.changes/cli/`、`cli/pyproject.toml`、生成的 `CLI_CHANGELOG.md`、GitHub Releases 和 `CONTRIBUTING.md`
+- Corpus 发布配置、版本、Behavioral SemVer 证据与说明：`towncrier.corpus.toml`、`.changes/corpus/`、`corpus/version.json`、生成的 `CORPUS_CHANGELOG.md`、GitHub Releases 和 `CONTRIBUTING.md`
+- 消费者 runtime、工具项目集成与 CLI 静态资源：`cli/src/svc_cli/`；测试位于 `cli/tests/`
+- CLI 归档构建：`cli/pdm_build.py`；构建与运行不得依赖 Corpus
+- 仓库检查与构建工具：`tools/`；自动化测试仅位于 `cli/tests/`
+- 任务工作与留存证据：`tasks/`；保留方式由任务决定，任务材料不属于 Corpus
 
-## Development Workflow
+## 开发流程
 
-- Runtime: Python 3.11+
-- Environment and commands: PDM 2.28+
-- Install: `pdm install`
-- Check everything: `pdm run check`
-- Consumer CLI smoke test: `pdm run svc --help`
-- Build the installable distribution: `pdm build -p cli`
-- Inspect the packaged corpus locally: `pdm run svc lookup --path task-packet/`
-- Search source with `rg`; exclude `tasks/`, `.venv/`, and `build/` unless they are the target.
-- Diagnose builder failures from the reported source file and Markdown target; missing local paths and fragments are contract failures.
+- Runtime：Python 3.11+
+- 环境与命令：PDM 2.28+
+- 安装：`pdm install`
+- 全量检查：`pdm run check`
+- CLI 冒烟：`pdm run svc --help`
+- 构建可安装发行物：`pdm build -p cli`
+- 阅读框架源：从 `corpus/index.md` 和对应 `SKILL.md` 进入，按需读取 references/assets
+- 使用 `rg` 搜索源；除非它们是目标，否则排除 `tasks/`、`.venv/` 和 `build/`
+- 根据检查报告中的源文件和 Markdown 目标定位引用错误；缺失的本地路径或片段属于合同失败
 
-## Execution Rules
+## 执行规则
 
-- For non-trivial work, read `corpus/index.md` and the governing Corpus owner before mutation.
-- Before materially editing the Corpus, read the nearest `corpus/AGENTS.md` authoring contract.
-- Load `corpus/taste/implementation/index.md` only when a change shapes code structure, boundaries, data, authority, naming, abstraction, or complexity.
-- Apply the nearest local `AGENTS.md` as an additive constraint when one exists.
-- Edit canonical source first. Update a template only when its consumer-facing shape changes.
-- Keep `corpus/` free of Python runtime and build-tool code; package sources and
-  projections belong under `cli/`, and repository tooling belongs under
-  `tools/`.
-- Do not add a layer, template, tool, or agent surface without a distinct owner, trigger, consumer, and verification path.
+- 所有非平凡任务使用 `corpus/svc-task-packet/SKILL.md`；修改前读取 `corpus/index.md` 与对应知识所有者。
+- 实质修改 Corpus 前读取最近的 `corpus/AGENTS.md` 作者合同。
+- 只有改变涉及代码结构、边界、数据、权限、命名、抽象或复杂度时，才加载 `corpus/svc-taste/references/implementation.md`。
+- 最近的本地 `AGENTS.md` 是附加约束。
+- 先修改权威源；仅当消费者形状变化时更新模板。
+- Corpus 不放 Python runtime 或构建工具代码；CLI 源与静态资源位于 `cli/`，仓库工具位于 `tools/`。
+- 新增层、模板、工具或 Agent 入口必须有独立的所有者、触发条件、消费者和验证路径。
+- 正文按语义段落换行，不按固定列宽硬换行；列表、表格和代码保留结构。
