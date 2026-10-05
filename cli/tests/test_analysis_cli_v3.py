@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import shutil
 
+import pytest
+
 from svc_cli.cli import main
 from svc_cli.analysis.models_v3 import AnalysisErrorV3
 
@@ -81,3 +83,14 @@ def test_v3_cli_discovers_exports_and_analyzes_standard_pi(tmp_path: Path) -> No
     )
     assert (code, stdout) == (2, "")
     AnalysisErrorV3.model_validate_json(stderr)
+
+
+def test_analysis_help_routes_normalized_trace_before_native_audit() -> None:
+    stdout = StringIO()
+    with redirect_stdout(stdout), pytest.raises(SystemExit) as exit_info:
+        main(["analysis", "--help"])
+    assert exit_info.value.code == 0
+    help_text = " ".join(stdout.getvalue().split())
+    assert "trace for linked normalized context" in help_text
+    assert "read for exact content recovery or native audit" in help_text
+    assert "read contiguous opening" not in help_text

@@ -32,8 +32,9 @@ def register(subparsers: argparse._SubParsersAction[Any]) -> None:
         ),
         epilog=(
             "Analysis method: establish the task objective and authority; use overview "
-            "and match only to locate evidence; read contiguous opening, relevant, and "
-            "terminal or handoff context before concluding; distinguish observations, "
+            "and match to locate evidence, then trace for linked normalized context or "
+            "profile for supported measurements. Use read for exact content recovery "
+            "or native audit, not as a mandatory step after trace. Distinguish observations, "
             "within-case inference, candidate mechanisms, and recurring patterns; search "
             "for competing explanations and counterexamples; report the supported claim, "
             "evidence horizon, material unknowns, and task-visible cost. A match, completion "
