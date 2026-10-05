@@ -30,6 +30,7 @@ from .cli_output.double import (
 from .cli_output.project import InitApplyOutput, InitPlanOutput, RootStatusOutput
 from .cli_output.model import CliUsageOutput, MachineError
 from .cli_output.run import RunReceipt
+from .cli_output.skills import SkillsOutput, AdoptionOutput
 
 
 InitMachineOutput: TypeAlias = (
@@ -73,7 +74,9 @@ DoubleStopMachineOutput: TypeAlias = (
 )
 
 RegisteredMachineOutput: TypeAlias = (
-    InitPlanOutput
+    SkillsOutput
+    | AdoptionOutput
+    | InitPlanOutput
     | InitApplyOutput
     | RootStatusOutput
     | DevIdentityOutput
@@ -103,6 +106,9 @@ class OutputSchemaSpec:
 
 
 OUTPUT_SCHEMA_SPECS = {
+    "skills": OutputSchemaSpec(
+        1, TypeAdapter(SkillsOutput | AdoptionOutput | MachineError | CliUsageOutput)
+    ),
     "init": OutputSchemaSpec(4, TypeAdapter(InitMachineOutput)),
     "status": OutputSchemaSpec(3, TypeAdapter(StatusMachineOutput)),
     "dev-identity": OutputSchemaSpec(2, TypeAdapter(DevIdentityMachineOutput)),

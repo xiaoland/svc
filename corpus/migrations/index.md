@@ -15,4 +15,4 @@ Version classification follows Consumer behavior:
 - **minor** adds a backward-compatible optional capability
 - **patch** restores or clarifies the existing contract
 
-Every release-relevant change has a Towncrier fragment. Migration guides and `corpus/version.json` are authored framework sources, independent of CLI release notes.
+Every release-relevant change has a Towncrier fragment. Migration guides and the root `[tool.svc.corpus].version` setting are authored framework sources, independent of CLI release notes.

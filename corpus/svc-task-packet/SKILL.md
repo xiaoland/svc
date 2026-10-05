@@ -1,6 +1,7 @@
 ---
 name: svc-task-packet
 description: "Create, recover, maintain, grow, and close a Task Packet for every non-trivial task. Use when starting or continuing substantial work, recovering a paused task, changing its plan or information shape, coordinating returns, or checking remaining obligations before completion."
+metadata: {"version": "16.1.0"}
 ---
 
 # Task Packet

@@ -1,6 +1,7 @@
 ---
 name: svc-methods
 description: "Choose and compose Explore, Design, and Implementation for software work. Use when a bug, failure, unfamiliar system, or comparison leaves a non-obvious information gap; when requirements, architecture, behavior, or recovery choices conflict; or when an authorized bounded change needs realization and local feedback. Select only the method needed now, including during ongoing work."
+metadata: {"version": "16.1.0"}
 ---
 
 # Working Methods

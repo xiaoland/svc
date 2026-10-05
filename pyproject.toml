@@ -23,12 +23,17 @@ test = [
 [tool.pdm]
 distribution = false
 
+[tool.svc.corpus]
+version = "16.1.0"
+
 [tool.pdm.workspace]
 members = ["cli"]
 
 [tool.pdm.scripts]
 check-corpus-release = "python -m tools.check_corpus_release"
 check-skills = "python -m tools.check_skills"
+prepare-corpus-release = "python -m tools.prepare_corpus_release"
+build-corpus-archive = "python -m tools.build_corpus_archive"
 build-cli-output-schemas = "python -m tools.build_cli_output_schemas"
 check-cli-output-schemas = "python -m tools.build_cli_output_schemas --check"
 svc = "python -m svc_cli.cli"
@@ -139,6 +144,8 @@ source_modules = [
     "svc_cli.plans",
     "svc_cli.project",
     "svc_cli.release",
+    "svc_cli.skills",
+    "svc_cli.skill_adoption",
     "svc_cli.run",
     "svc_cli.workspace",
 ]
@@ -155,6 +162,8 @@ source_modules = [
     "svc_cli.dev",
     "svc_cli.double",
     "svc_cli.project",
+    "svc_cli.skills",
+    "svc_cli.skill_adoption",
     "svc_cli.run",
 ]
 forbidden_modules = ["svc_cli.output_schema"]

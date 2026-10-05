@@ -1,6 +1,7 @@
 ---
 name: svc-sub-agents
 description: "Decide whether to delegate bounded work and manage its authority, context, result, and integration. Use when isolation or parallel capacity may help, preparing an Assignment, selecting an Explorer or Executor, receiving a return, repairing a rejection, or adjusting a delegated boundary. Delegation is a choice, not a default team."
+metadata: {"version": "16.1.0"}
 ---
 
 # Sub-agents

@@ -1,0 +1,542 @@
+{
+  "$defs": {
+    "AdoptionOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "title": "Agent",
+          "type": "string"
+        },
+        "blockers": {
+          "items": {
+            "$ref": "#/$defs/BlockerOutput"
+          },
+          "title": "Blockers",
+          "type": "array"
+        },
+        "command": {
+          "enum": [
+            "skills adopt",
+            "skills unadopt"
+          ],
+          "title": "Command",
+          "type": "string"
+        },
+        "entries": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Entries",
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "plan",
+            "apply"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "operations": {
+          "items": {
+            "$ref": "#/$defs/SkillOperationOutput"
+          },
+          "title": "Operations",
+          "type": "array"
+        },
+        "plan_digest": {
+          "title": "Plan Digest",
+          "type": "string"
+        },
+        "repo": {
+          "title": "Repo",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "skills_root": {
+          "title": "Skills Root",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "blocked",
+            "noop",
+            "applied"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "mode",
+        "status",
+        "repo",
+        "agent",
+        "skills_root",
+        "entries",
+        "plan_digest",
+        "operations",
+        "blockers"
+      ],
+      "title": "AdoptionOutput",
+      "type": "object"
+    },
+    "BlockerOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "path",
+        "message"
+      ],
+      "title": "BlockerOutput",
+      "type": "object"
+    },
+    "CliUsageOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "const": "invalid-cli-usage",
+          "default": "invalid-cli-usage",
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "CliUsageOutput",
+      "type": "object"
+    },
+    "FileStateOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "posix_mode": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Posix Mode"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "state": {
+          "enum": [
+            "absent",
+            "file"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "FileStateOutput",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "MachineError": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/MachineErrorBody"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "MachineError",
+      "type": "object"
+    },
+    "MachineErrorBody": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "details"
+      ],
+      "title": "MachineErrorBody",
+      "type": "object"
+    },
+    "SkillOperationOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "after": {
+          "$ref": "#/$defs/FileStateOutput"
+        },
+        "before": {
+          "$ref": "#/$defs/FileStateOutput"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "action",
+        "reason",
+        "before",
+        "after"
+      ],
+      "title": "SkillOperationOutput",
+      "type": "object"
+    },
+    "SkillUnitOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "actual_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actual Version"
+        },
+        "changed": {
+          "default": 0,
+          "title": "Changed",
+          "type": "integer"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MachineErrorBody"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "installation_status": {
+          "enum": [
+            "absent",
+            "current",
+            "outdated",
+            "modified",
+            "missing",
+            "unknown",
+            "invalid",
+            "unsafe"
+          ],
+          "title": "Installation Status",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "operations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SkillOperationOutput"
+          },
+          "title": "Operations",
+          "type": "array"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "recorded_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Version"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status",
+        "installation_status",
+        "path"
+      ],
+      "title": "SkillUnitOutput",
+      "type": "object"
+    },
+    "SkillsOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "enum": [
+            "skills install",
+            "skills status",
+            "skills check",
+            "skills update",
+            "skills remove"
+          ],
+          "title": "Command",
+          "type": "string"
+        },
+        "migration_guidance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Migration Guidance"
+        },
+        "mode": {
+          "enum": [
+            "plan",
+            "apply",
+            "status",
+            "check"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "plan_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Plan Digest"
+        },
+        "release_notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Notes"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "blocked",
+            "noop",
+            "applied",
+            "failed",
+            "partial",
+            "current",
+            "attention",
+            "available",
+            "absent"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "target_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Version"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/SkillsTargetOutput"
+          },
+          "title": "Targets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "command",
+        "mode",
+        "status",
+        "targets"
+      ],
+      "title": "SkillsOutput",
+      "type": "object"
+    },
+    "SkillsTargetOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "enum": [
+            "codex",
+            "claude"
+          ],
+          "title": "Agent",
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "project",
+            "global"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "skills_root": {
+          "title": "Skills Root",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "units": {
+          "items": {
+            "$ref": "#/$defs/SkillUnitOutput"
+          },
+          "title": "Units",
+          "type": "array"
+        }
+      },
+      "required": [
+        "agent",
+        "scope",
+        "skills_root",
+        "status",
+        "units"
+      ],
+      "title": "SkillsTargetOutput",
+      "type": "object"
+    }
+  },
+  "$id": "urn:svc:cli-output:skills:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/SkillsOutput"
+    },
+    {
+      "$ref": "#/$defs/AdoptionOutput"
+    },
+    {
+      "$ref": "#/$defs/MachineError"
+    },
+    {
+      "$ref": "#/$defs/CliUsageOutput"
+    }
+  ],
+  "title": "SVC skills machine output",
+  "x-svc-result-schema-version": 1
+}

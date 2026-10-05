@@ -1,6 +1,6 @@
 # Sustainable Vibe Coding
 
-Sustainable Vibe Coding（SVC）是 source-first 的 Agent 协作框架。框架指导以六个 Agent Skills 组织，开发协作 CLI 独立提供执行与观测工具；CLI 不携带 Corpus，也不安装或管理 Skills。
+Sustainable Vibe Coding（SVC）是 source-first 的 Agent 协作框架。框架指导以六个 Agent Skills 组织，开发协作 CLI 独立提供执行与观测工具；CLI 不携带 Corpus 正文，通过独立发行 ZIP 安装、管理和采用 SVC Skills。Vercel Skills、OpenSkills 也可以直接安装同一份 Skill 源目录。
 
 ## 开发 SVC
 
@@ -27,11 +27,11 @@ cli/
   pyproject.toml            可安装 CLI workspace member
   src/svc_cli/              Python runtime 和 CLI 静态资源
   tests/                    CLI runtime 测试
-  pdm_build.py              CLI 构建 hook，不读取 Corpus
 towncrier.{cli,corpus}.toml 独立发布说明配置
 .changes/{cli,corpus}/      独立待发布片段
 CHANGELOG.md                发布流拆分前的共同历史
 tools/                      源检查、发布与验收工具
-tests/                      框架源与仓库工具测试
 tasks/                      任务工作与留存证据
 ```
+
+本仓库采用 [MIT 许可证](LICENSE)。单独安装的 Skill 和 CLI 发行物各自携带许可声明。

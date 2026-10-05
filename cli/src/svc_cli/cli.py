@@ -85,6 +85,11 @@ from .run.runtime import (
     follow_run,
     inspect_run,
 )
+from .skills_cli import (
+    register as register_skills,
+    run as run_skills,
+    render as render_skills,
+)
 from .release import runtime_version
 from .telemetry.cli import register as register_telemetry
 from .telemetry.cli import run as run_telemetry
@@ -212,6 +217,8 @@ def _parser() -> argparse.ArgumentParser:
         "--version", action="version", version=f"%(prog)s {runtime_version()}"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    register_skills(subparsers, _add_machine_output)
 
     init = subparsers.add_parser(
         "init",
@@ -573,6 +580,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_USAGE
     json_output = bool(getattr(args, "json_output", False))
     try:
+        if args.command == "skills":
+            skills_payload, skills_exit = run_skills(args)
+            return deliver_result(
+                skills_payload,
+                json_output=json_output,
+                project=lambda value: value,
+                render=render_skills,
+                exit_code=skills_exit,
+            )
+
         if args.command == "status":
             status_payload = inspect_status(Path(args.repo))
             return deliver_result(
@@ -1594,6 +1611,7 @@ def _exit_code(error: SvcError) -> int:
         "execution-state-unreadable",
         "invalid-execution-coordination",
         "invalid-release",
+        "skills-source-failed",
         "postcondition-failed",
         "staging-failed",
         "output-write-failed",

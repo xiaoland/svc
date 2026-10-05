@@ -15,11 +15,11 @@
 
 描述提供目标与触发条件，正文明确首动作和完成条件，条件引用连接深层内容。Methods 内的小选择表处理三种方法的选择困难；六个 Skills 不构成固定流水线。这些源结构不保证每个宿主或模型都能可靠发现、加载和执行指导。
 
-每个 Skill 的必需指导与资源都位于自身目录内，不要求加载仓库根文件或其它 Skill。完整采用需要常驻入口，使授权边界与所有非平凡任务使用 Task Packet 的规则在工作开始时可见。[消费者 AGENTS 模板](corpus/svc-specs/assets/AGENTS.root.template.md)提供带路径占位的起始形状，项目所有者须适配实际可访问位置并维护自己的内容。当前不承诺 Skills 安装边界、宿主插件或跨 Skill 依赖解析。
+每个 Skill 的必需指导与资源都位于自身目录内，不要求加载仓库根文件或其它 Skill。完整采用需要常驻入口，使授权边界与所有非平凡任务使用 Task Packet 的规则在工作开始时可见。[消费者 AGENTS 模板](corpus/svc-specs/assets/AGENTS.root.template.md)提供带路径占位的起始形状，项目所有者须适配实际可访问位置并维护自己的内容。下面的安装与采用步骤建立可访问入口；仍需在目标宿主中观察发现与执行，不能只凭文件存在宣称生效。
 
 ## 安装与初始化 CLI
 
-CLI 独立提供开发执行和观测工具，不携带 Corpus，也不安装、管理或更新 Skills。
+CLI 提供开发执行和观测工具，并从独立发行物安装、管理 SVC Skills；CLI 包不携带 Corpus 正文。
 
 ```bash
 python -m pip install sustainable-vibe-coding
@@ -56,7 +56,39 @@ docs/index.md              缺失时创建，带有界 CLI 工具导航块
 
 在任何仓库先用 `svc status --json` 获取只读 preflight。它分别报告 CLI、配置、集成和 workspace 事实及一个主要延续动作，只汇总 dev target 和 run entry 名称而不执行它们；需要 runtime 观察时用 `svc dev status`。每个当前 `--json` 响应都是一个紧凑 JSON 值。
 
-未标记内容、消费者框架指针和本地 Agent 指导归消费者所有。CLI 的受管导航只提供工具入口，不生成框架采用协议。只有可识别且未被修改的生成块可被精确计划维护；修改过的导航或忽略块停止修复。过期计划、并发修改检查与失败回滚保护仍然有效。
+未标记内容、消费者框架指针和本地 Agent 指导归消费者所有。`init` 的受管导航只提供工具入口；框架采用使用独立的 `skills adopt` 标记块。只有可识别且未被修改的生成块可被精确计划维护；修改过的导航或忽略块停止修复。过期计划、并发修改检查与失败回滚保护仍然有效。
+
+## 安装、升级与采用 Skills
+
+六个 Skills 共用一个 Corpus 发布版本，可以选装。CLI 安装默认复制到项目目录，写操作必须显式选择宿主；Codex 使用 `.agents/skills`，Claude Code 使用 `.claude/skills`。`--global` 显式选择对应的用户目录。`--skill NAME` 可重复，省略时选择六个。安装、更新、移除和采用默认返回只读计划；重复相同命令并添加 `--apply <plan-digest>` 才写入。计划绑定当前文件状态，过期后必须重新审阅。
+
+```bash
+svc skills install --repo /path/to/project --agent codex --version 16.1.0 --json
+svc skills install --repo /path/to/project --agent codex --version 16.1.0 --apply <plan-digest>
+svc skills status --repo /path/to/project --agent codex --json
+svc skills check --repo /path/to/project --agent codex --json
+svc skills update --repo /path/to/project --agent codex --version <target-version> --json
+svc skills adopt --repo /path/to/project --agent codex --json
+svc skills adopt --repo /path/to/project --agent codex --apply <plan-digest>
+svc skills unadopt --repo /path/to/project --agent codex --json
+svc skills remove --repo /path/to/project --agent codex --json
+```
+
+`--version` 指向正式 `corpus-v<version>` 发布。`check` 未指定版本时只选择最新稳定 Corpus 发布，不使用同仓库的 CLI latest Release；`status` 不访问网络。离线安装与更新用 `--archive /path/svc-corpus-<version>.zip`，默认读取相邻 `.zip.sha256`，也可用 `--checksum` 指定校验文件。发布附件必须先实际发布才能通过在线路径下载；本地源码开发不把尚未发布的版本当作可下载发行物。
+
+更新先校验目标发行物，再比较实际目录与安装基线。本地改动、新增文件、未知目录、另一管理器安装或符号链接均阻止覆盖；CLI 不提供强制覆盖或三方合并。安装记录位于目标 Skills 根下的 `.svc/<name>.json`。`recorded_version` 是记录版本，`actual_version` 仅在文件与目标发行物匹配时确认。多目标先做整体冲突预检，再逐 Skill 执行；失败停止后续项，已成功项保留并报告真实状态。受控错误与中断按文件事务回滚当前项；掉电或强制终止后的混合状态由下次检查识别并拒绝覆盖，没有自动恢复承诺。
+
+`adopt` 不安装文件，不接管第三方安装。它要求实际可读的 `svc-task-packet`，在 Codex 的 `AGENTS.md` 或 Claude 的 `CLAUDE.md` 添加独立标记块，让 Human 权限边界和所有非平凡任务使用实际 Task Packet 的规则常驻可见。可用 `--skills-dir /actual/skills/root` 指向其它管理器的目录；原文件、锁文件和更新仍归原管理器。采用和取消采用保护块外内容，拒绝改写修改过的块。`unadopt` 不删除安装，`remove` 不修改项目采用指令；更新文件不自动迁移消费者资料，结果提供 release notes 与迁移指导链接。
+
+也可以使用通用管理器直接安装源目录。例如 Vercel Skills 的宿主名为 `claude-code`，与 SVC CLI 的 `claude` 不同：
+
+```bash
+npx skills@1.7.0 add xiaoland/svc --skill svc-task-packet --agent codex --copy
+npx skills@1.7.0 add xiaoland/svc --skill svc-methods --agent claude-code --copy
+npx openskills@1.5.0 install xiaoland/svc
+```
+
+需要可复现内容时，按管理器支持的语法固定 `corpus-v<version>` tag 或完整 commit；不能把它们跟踪原来源的 update 当作 SVC 的明确换版。通用管理器可能覆盖本地定制；长期项目规则放在项目入口，修改 Skill 正文时使用自有 fork 并自行同步。OpenSkills 的 `sync` 管理自己的发现块，与 SVC `adopt` 的常驻规则不同。目录安装成功、宿主列出入口和 Agent 实际执行分别观察；当前已隔离验证两个管理器的目录安装和 Codex 的只读发现，未据此承诺 Claude 或模型自动触发。
 
 ## Task Packet
 
@@ -139,7 +171,7 @@ schema-v3 ZIP 的权威是 `manifest.json`、`native.bin` 和 `native-index.json
 
 先备份并审查项目配置，把 `svc.json` 与存在的 `svc.local.json` 的 `schema_version` 改为 `4`，从主配置删除 `corpus_version`，保留其余 dev/run 声明与 overlay 内容。之后用 `svc status --json` 检查，再审查新的 init 计划及其受管工具导航变化。未知字段和无效有效配置继续被拒绝。
 
-框架采用变化遵循[Corpus 版本迁移指导](corpus/migrations/index.md)，由 Agent/Human 更新消费者拥有的契约与引用；它不变换 CLI 配置，也不由 CLI 记录基线。
+框架采用变化遵循[Corpus 版本迁移指导](corpus/migrations/index.md)，由 Agent/Human 更新消费者拥有的契约与引用；它不变换 CLI 配置，不自动迁移消费者语义；CLI 只记录自己安装文件的基线。
 
 ## Behavioral SemVer 与发布
 
@@ -147,4 +179,4 @@ schema-v3 ZIP 的权威是 `manifest.json`、`native.bin` 和 `native-index.json
 - **MINOR**：增加可选、向后兼容的能力。
 - **PATCH**：修正或澄清已有协议而不改变上述行为。
 
-Towncrier 分别记录 `.changes/cli/` 和 `.changes/corpus/`。CLI 发布通过 Trusted Publishing 发布已验证 wheel；Corpus 发布有独立 tag 与 GitHub Release。CLI wheel 不含框架内容，因此新 Corpus 不再随 CLI 发布投递。框架内容与 `corpus/version.json` 在功能变更中一起推进，发布 PR 只准备对应 changelog。当前不新增 Skills 安装或分发承诺，详见[贡献指南](CONTRIBUTING.md)。
+Towncrier 分别记录 `.changes/cli/` 和 `.changes/corpus/`。CLI 发布通过 Trusted Publishing 发布已验证 wheel；Corpus 发布有独立 `corpus-v<version>` tag 与 GitHub Release。CLI wheel 不含框架内容，因此新 Corpus 不随 CLI 发布投递。框架版本权威是根 `pyproject.toml` 的 `[tool.svc.corpus].version`，六个 Skill 的 `metadata.version` 由发布准备命令同步；发布物提供精简 Skills ZIP、manifest 与外部 SHA-256 校验文件。MIT 声明随每个独立 Skill 与 CLI 发行物携带，详见[贡献指南](CONTRIBUTING.md)。

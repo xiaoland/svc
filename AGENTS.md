@@ -16,7 +16,8 @@
 - SVC 自身持久的产品、技术与运行时事实：`docs/`
 - Corpus 版本迁移选择与指导：`corpus/migrations/`
 - CLI 发布配置、版本、Behavioral SemVer 证据与说明：`towncrier.cli.toml`、`.changes/cli/`、`cli/pyproject.toml`、生成的 `CLI_CHANGELOG.md`、GitHub Releases 和 `CONTRIBUTING.md`
-- Corpus 发布配置、版本、Behavioral SemVer 证据与说明：`towncrier.corpus.toml`、`.changes/corpus/`、`corpus/version.json`、生成的 `CORPUS_CHANGELOG.md`、GitHub Releases 和 `CONTRIBUTING.md`
+- Corpus 发布配置、版本、Behavioral SemVer 证据与说明：`towncrier.corpus.toml`、`.changes/corpus/`、根 `pyproject.toml` 的 `[tool.svc.corpus].version`、生成的 `CORPUS_CHANGELOG.md`、GitHub Releases 和 `CONTRIBUTING.md`
+- 许可权威源与发布副本：根 `LICENSE`；六个 Skill 与 CLI 的 `LICENSE` 必须由发布准备同步并由检查器核对
 - 消费者 runtime、工具项目集成与 CLI 静态资源：`cli/src/svc_cli/`；测试位于 `cli/tests/`
 - CLI 归档构建：`cli/pyproject.toml`；构建与运行不得依赖 Corpus
 - 仓库检查与构建工具：`tools/`；自动化测试仅位于 `cli/tests/`

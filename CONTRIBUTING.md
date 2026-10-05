@@ -68,11 +68,11 @@ printf '%s\n' '说明 Corpus 变化。' > .changes/corpus/123.added.md
 
 发布顺序如下：
 
-1. 功能 PR 合并 `.changes/cli/` 或 `.changes/corpus/` 的片段。改变 Corpus 源内容时同时推进 `corpus/version.json` 与迁移索引；仓库检查要求内容和版本一起变化。
+1. 功能 PR 合并 `.changes/cli/` 或 `.changes/corpus/` 的片段。改变 Corpus 源内容时推进根 `pyproject.toml` 的 `[tool.svc.corpus].version` 与需要的迁移指导；仓库检查要求内容和版本一起变化。根 `LICENSE` 是 MIT 许可权威源，六个 Skill 和 CLI 各带逐字副本。Corpus release PR 合并前运行发布准备命令，把版本元数据和已存在的许可副本同步后与正文一起提交。
 2. 维护者更新 `cli/pyproject.toml` 静态版本，准备 CLI 发布 PR 并生成 changelog：
 
    ```console
-   pdm run towncrier build --config towncrier.cli.toml --version 16.0.0 --yes
+   pdm run towncrier build --config towncrier.cli.toml --version 16.1.0 --yes
    pdm run check
    ```
 
@@ -80,8 +80,9 @@ printf '%s\n' '说明 Corpus 变化。' > .changes/corpus/123.added.md
 3. Corpus 发布 PR 使用功能变更已接纳的 Corpus 版本并消费其片段：
 
    ```console
-   pdm run towncrier build --config towncrier.corpus.toml --version 16.0.0 --yes
+   pdm run towncrier build --config towncrier.corpus.toml --version 16.1.0 --yes
+   pdm run prepare-corpus-release
    pdm run check
    ```
 
-   合并 `CORPUS_CHANGELOG.md` 后创建 `corpus-v<version>` 与 GitHub Release，不发布 PyPI。两产品独立发布，CLI wheel 不再携带 Corpus；此流程不决定 Skills 的安装边界或新增宿主分发方案。
+   提交并合并包含 `CORPUS_CHANGELOG.md`、六个 Skill 元数据和许可副本的 release PR 后，发布 workflow 以同一 commit 创建 `corpus-v<version>`。workflow 只读校验已提交源文件，发布物包含六个 Skill 与根 `manifest.json` 的精简 ZIP 及外部 SHA-256 校验文件；CLI wheel 不再携带 Corpus，归档重跑不得覆盖不同内容。

@@ -1,6 +1,7 @@
 ---
 name: svc-verification
 description: "Qualify consequential claims with discriminating evidence. Use when checking a fix, behavior, existing system, test result, integration return, or completion claim; deciding whether existing evidence remains valid; or identifying the scope, trusted assumptions, and residual of an observation."
+metadata: {"version": "16.1.0"}
 ---
 
 # Verification

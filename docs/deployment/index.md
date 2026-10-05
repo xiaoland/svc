@@ -6,6 +6,7 @@ Reality work may use logs, metrics, traces, and runbooks as evidence, but the di
 
 Current operational projections are:
 
+- [Skills release and installation](skills.md)
 - [local shared execution](execution.md)
 - [Double runtime](double.md)
 - [Agent evidence runtime](agent-analysis.md)
