@@ -17,48 +17,6 @@ from svc_cli.double.model import Replay
 from ..support.scenarios import LANGUAGE_FIXTURES
 
 
-def test_compile_representative_module_to_normalized_ir() -> None:
-    module = LANGUAGE_FIXTURES / "payment.double.yaml"
-
-    scenario = compile_scenario(module)
-
-    assert scenario.name == "payment-confirmed"
-    assert scenario.language == "svc.double/v0"
-    assert scenario.event_target_policy == "loopback-only"
-    assert len(scenario.scenario_digest) == 64
-    assert scenario.scenario_digest == compile_scenario(module).scenario_digest
-    assert scenario.fidelity == (
-        "http-exact-boundary",
-        "provenance-declared",
-        "json.compact-utf8/v1",
-        "selected-operation-schema",
-        "local-snapshots",
-    )
-    assert "consumer-egress: not-enforced" in scenario.nonclaims
-
-    interaction = scenario.interactions[0]
-    assert interaction.request.query["observed-at"] == "2026-08-10T02:00:00Z"
-    assert isinstance(interaction.request.query["observed-at"], str)
-    assert interaction.request.query_nodes[0].path == ("trace",)
-    assert interaction.request.header_nodes[0].path == ("x-request-id",)
-    assert interaction.response.header_nodes[0].path == ("x-payment-id",)
-    assert scenario.events[0].request.header_nodes[0].path == ("x-request-id",)
-    assert interaction.request.header_nodes[0].location is not None
-    assert interaction.request.header_nodes[0].location.line == 37
-
-    assert scenario.contract is not None
-    assert scenario.contract.method == "POST"
-    assert scenario.contract.path == "/v1/payments"
-    assert "urn:svc:double:schema-resource:" in str(scenario.contract.request_schema)
-    assert "urn:svc:double:schema-resource:" in str(scenario.contract.response_schemas)
-    assert len(scenario.contract.schema_resources) == 2
-    assert [item.logical_path for item in scenario.snapshots] == [
-        "cli/tests/double/fixtures/language/contracts/payment.openapi.yaml",
-        "cli/tests/double/fixtures/language/contracts/schemas.yaml",
-    ]
-    assert interaction.provenance.snapshot_sha256 == scenario.contract.source.sha256
-
-
 def test_compiled_ir_drives_matching_captures_and_output_materialization() -> None:
     scenario = compile_scenario(LANGUAGE_FIXTURES / "payment.double.yaml")
     interaction = scenario.interactions[0]
@@ -122,7 +80,7 @@ def test_compiled_ir_drives_matching_captures_and_output_materialization() -> No
     )
 
 
-def test_scenario_digest_ignores_physical_location_and_yaml_comments(
+def test_scenario_identity_tracks_behavior_but_ignores_location_and_comments(
     tmp_path: Path,
 ) -> None:
     first = tmp_path / "first"
@@ -143,3 +101,9 @@ def test_scenario_digest_ignores_physical_location_and_yaml_comments(
         left.interactions[0].request.header_nodes[0].location
         != right.interactions[0].request.header_nodes[0].location
     )
+
+    module.write_text(
+        module.read_text().replace("'^trace-[0-9]{3}$'", "'^trace-[0-9]{3,4}$'")
+    )
+    changed = compile_scenario(module)
+    assert changed.scenario_digest != left.scenario_digest

@@ -42,10 +42,10 @@ MAX_ARCHIVE_BYTES = 16 * 1024 * 1024
 MAX_MEMBER_BYTES = 4 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 4096
 DEFAULT_SKILLS = (
-    "svc-methods",
-    "svc-task-packet",
+    "svc-workflow",
     "svc-verification",
-    "svc-sub-agents",
+    "svc-task-packet",
+    "svc-agent-collaboration",
     "svc-specs",
     "svc-taste",
 )

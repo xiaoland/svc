@@ -17,7 +17,7 @@ pdm build -p cli
 
 ## 使用 SVC
 
-阅读[用户手册](USER_MANUAL.md)。六个 Skills 分别负责 Task Packet、Methods、Verification、Sub-agents、Specs 和 Taste。Task Packet 适用于所有非平凡任务；Methods 按需组合 Explore、Design 和 Implementation，不构成固定阶段流程。Skill 描述帮助发现入口，正文提供首动作与完成条件，条件引用连接深层指导；这些结构不保证宿主或模型在任何上下文中可靠触发。
+阅读[用户手册](USER_MANUAL.md)。六个 Skills 分别负责 Task Packet、Workflow、Verification、Agent Collaboration、Specs 和 Taste。Task Packet 适用于所有非平凡任务；Workflow 提供阶段确认式与持续迭代式人机协作，按当前缺口组合 Explore、Design、Planning 和 Implementation，并按名称发现独立 Verification 的 V&V 指导。协作流程决定承诺与反馈方式，方法可递归组合。Skill 描述帮助发现入口，正文提供首动作与完成条件，条件引用连接深层指导；这些结构不保证宿主或模型在任何上下文中可靠触发。
 
 ## 仓库布局
 

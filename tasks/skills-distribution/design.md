@@ -8,7 +8,7 @@
 
 ```toml
 [tool.svc.corpus]
-version = "16.1.0"
+version = "15.0.0"
 ```
 
 cli/pyproject.toml 的 project.version 继续独立表示 CLI。删除 corpus/version.json 及无人执行的 previous/migration 历史链；已有迁移指南保留，按适用条件与 release notes 提供。发布版本不根据 commit 类型自动推导，沿用已有 Behavioral SemVer 判断。每次可见变化进入既有独立 Towncrier 队列。

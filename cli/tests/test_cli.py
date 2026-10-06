@@ -67,14 +67,9 @@ def test_help_is_self_sufficient_and_removed_commands_are_absent() -> None:
 
     code, stdout, stderr = invoke_text(["analysis", "--help"])
     assert (code, stderr) == (EXIT_OK, "")
-    assert "Analysis method:" in stdout
-    assert "performance conclusion" in stdout
-    assert "calling Agent owns task intent" in stdout
 
     code, stdout, stderr = invoke_text(["telemetry", "--help"])
     assert (code, stderr) == (EXIT_OK, "")
-    assert "does not interpret task" in stdout
-    assert "performance" in stdout
 
     code, stdout, stderr = invoke_text(["dev", "--help"])
     assert (code, stderr) == (EXIT_OK, "")

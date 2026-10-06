@@ -1,54 +1,21 @@
 ---
 name: svc-verification
-description: "Qualify consequential claims with discriminating evidence. Use when checking a fix, behavior, existing system, test result, integration return, or completion claim; deciding whether existing evidence remains valid; or identifying the scope, trusted assumptions, and residual of an observation."
-metadata: {"version": "16.1.0"}
+description: "Establish, use, and improve criteria, evidence, and feedback for product iteration. Use during implementation or qualification when reliable feedback is needed; when checks pass without establishing the user outcome, reject a valid implementation, hide a critical assumption, or give slow or misleading feedback; or when existing evidence or checks need reuse or revision."
+metadata: {"version": "15.0.0"}
 ---
 
 # Verification
 
-Recover the intended benefit behind Human wording. Product intent, personal preference, permission, material trade-offs, and acceptance remain Human authority; factual, causal, technical, feasibility, and proposed-solution claims remain challengeable from evidence, logic, stakeholder consequences, and short- and long-horizon return on investment.
+Software is a means to a product result. This Skill helps an Agent turn the intended result into feedback that can guide implementation, while allowing any implementation that preserves the result. The useful relationship is product purpose → behavior constraint → observable evidence → judgment rule (oracle); every arrow can lose or add meaning, and a successful build or green check does not repair a broken relationship.
 
-Proceed autonomously with safe exploration, review, and design. Before durable mutation, establish the authorized desired effect, semantic owner, affected consumers and invariants, and proportionate verification. Ask the Human only for consequential missing information, authority, preference, trade-off, or acceptance that cannot be inferred safely. Resolve independent work first and present the smallest decision-ready issue. This Skill grants no write, delegation, external-effect, or acceptance authority.
+Verification asks whether the observed behavior conforms to the owned constraints. Validation asks whether those constraints and the realized result still serve the intended goal in the relevant use context. They can interleave during a Task: a valid implementation can expose an inadequate requirement, and a good requirement can expose a weak check. Neither question grants Human acceptance or authority to cause an external effect.
 
-The surrounding Task keeps every unmet obligation after this Skill returns. For its non-trivial Task, recover the existing Task Packet or create the smallest `packet.md` at the project's authorized task location. Keep the objective, authorization and constraints, current facts, next action, and completion verification sufficient to resume. A Skill invocation or Child Assignment does not create a new Task or competing Packet; the Child returns its state delta to the Task owner. Preserve project-owned truth separately, preferring source, configuration, schema, tests, assertions, or automation for facts they can enforce directly.
+Begin with the decision the next person or system needs to make. State the intended result, its Product or Technical owner, relevant conditions, and the consequence at stake. Separate required behavior from design assumptions. Find the smallest existing observation that can distinguish the claim from a material alternative; if it is inadequate, obtain or repair the observation rather than silently changing the criterion. Execute it under known conditions, then return the supported or contradicted claim, examined scope, trusted assumptions, material residual, and the change that would require requalification. Stop when the evidence supports the consuming decision; do not add observations merely to complete a ritual. If no feasible, authorized, and proportionate continuation exists, return partial or unavailable evidence with the unmet condition and smallest viable next action; do not relax the obligation or claim acceptance.
 
-Other SVC Skills can supply additional guidance when available: discover them by name through the host's available-Skill interface and load only the relevant guidance. They are not prerequisites for this Skill. If one is unavailable, continue with the guidance here and qualified project mechanisms; report an actual missing capability or authority instead of assuming access or relaxing an obligation.
+The oracle must be sensitive to differences the requirement cares about and insensitive to implementation changes that preserve all relevant requirements. A route, DOM shape, collaborator call, or internal event can be an observation carrier, but none may become a normative expectation merely because the current implementation exposes it; its relation to the requirement must be justified. For example, a save-success prompt is too weak to establish that a changed setting survives the next login, while requiring `/dashboard` may reject a valid route change; observing the saved value after a new session connects the check to the promised behavior. A precise, automated, repeatable check can still encode a wrong interpretation, and checks produced from the same interpretation—especially by one Agent—are not independent confirmation. Read [Requirements and oracles](references/requirements-and-oracles.md) when the intended behavior or judgment rule is unclear, over-specific, or suspected to be too weak.
 
-Verification qualifies a consequential owned claim with evidence from an observation that can distinguish the claim from a material alternative. It does not create the claim, infer Product requirements from an implementation, or authorize acceptance and effects.
+Evidence is conditional. A local rule, a real component composition, a connected product path, and a production observation answer different questions; none becomes sufficient merely by being called a test, E2E check, or independent opinion. Select conditions for the uncertainty that could change the decision, preserve the semantic boundary being judged, and distinguish acceptance evidence from diagnostic evidence. Reuse an existing qualified guarantee when its scope, assumptions, and consumer connection still cover the decision; otherwise obtain proportionate new evidence. Read [Evidence](references/evidence.md) when the observation, boundary, dependency, measurement, reproducibility, reuse, or conclusion scope is the missing part.
 
-## Establish the Claim Before Running Checks
+Feedback also shapes the next implementation search. When behavior is stable enough to state, a check that fails for the expected missing behavior can bound a small coherent change; when the product is still being discovered, premature executable detail can freeze an accidental design. Fast feedback and broader product evidence should complement each other, and a changed criterion must have a stated reason. Read [Feedback](references/feedback.md) when arranging feedback, applying test-first ideas, interpreting a mismatch, reusing evidence, or evolving a check.
 
-First state the consequential claim, its Product or Technical owner, and the boundary at which its consequence can be observed. If the expected behavior is missing, return that gap to the owner; use Methods' Design guidance in `svc-methods` when the observation or oracle needs design. Do not infer the expected result from the candidate implementation.
-
-Execute the smallest credible observation that distinguishes the claim from a material alternative, then interpret it against the owned oracle. Return the evidence, scope, trusted base, and material residual so the consumer can decide its consequence. Stop when that claim is adequately qualified for the consumer, or report an explicit partial/unavailable result with its unmet condition. Building a missing probe belongs to Methods' Implementation guidance in `svc-methods`; discovering an unknown mechanism belongs to Explore in `svc-methods`. Read those only when that work is required.
-
-```text
-owned Product/Technical claim
-  -> relevant observation surface + discriminating oracle/relation
-  -> evidence + scope + trusted base + residual
-  -> consumer disposition: continue / reject / rework / accept / waive
-```
-
-## Keep the Owner Seams Clear
-
-Product and Technical Design own expected claims. Test Design chooses consequential scenarios, observation, oracle, comparison, Human criteria, and required independence. Implementation builds probes, fixtures, automation, and observability. Verification executes and interprets the applicable mechanism. The consuming authority or effect gate decides what consequence the qualification permits.
-
-These concerns may interleave inside one Slice. They are ownership seams, not phases, files, roles, or mandatory handoffs.
-
-## Observe Where the Claim Is Authoritative
-
-For a Product claim, prefer the Product-visible consequence. An internal value is sufficient only when the claim is owned there or a qualified module guarantee makes the projection valid. Control relevant preconditions and use representative inputs; a stale, noisy, or confounded observation is not made authoritative by convenience.
-
-Choose the smallest credible mechanism for the loss at stake. Prefer compiler, type, schema, constraint, or existing qualified guarantees when they discriminate the claim. Add focused runtime, metamorphic or differential, integration, external readback, shadow, fuzz, statistical, visual, or Human observation only when the claim and residual require them. There is no fixed test pyramid or universal verification ladder.
-
-## Bound the Trusted Base
-
-Determinism is useful but not validity. The trusted base includes the claim and owner, input integrity and representativeness, oracle or relation, instrumentation and environment, verdict interpretation, residual horizon, and effect gate. A compiler or test can reliably prove the wrong proposition.
-
-Treat implementation, fixture, oracle, and tests generated from one correlated AI context as candidate evidence. Where the false-accept loss justifies it, strengthen with owner-derived claims, real or historical inputs, an independent mechanism, mutation/metamorphic/differential relations, or external readback. Do not add a test when static enforcement or an existing guarantee already owns the failure mode.
-
-## Reuse and Distribute Proof
-
-Reuse a qualified deep-module guarantee by checking the consumer connection and its assumptions. Retest only composition behavior newly created by the consumer. Changes to the claim, assumptions, environment, oracle, connection, or relevant implementation invalidate that reuse and trigger proportionate requalification.
-
-Keep local proof with its Slice, Cell, or realization surface. Add a Task-root `verification.md` only when claims, evidence, residuals, or requalification span multiple returns and need one shared synthesis; use Task Packet information guidance in `svc-task-packet` when that state needs its own owner. It is not a final phase, global evidence ledger, mandatory acceptance file, assurance schema, or Reviewer role.
+For every non-trivial Task, preserve the surrounding Task Packet's obligations and recover or create its smallest packet at the project's authorized location. This Skill does not create a competing task or mandatory evidence document. Human intent, preference, permission, material trade-offs, and acceptance remain Human authority; this Skill supplies no write, delegation, external-effect, or acceptance authority. Other Skills may provide optional guidance when available, but this directory is self-contained and remains actionable when they are absent.

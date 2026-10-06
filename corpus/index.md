@@ -13,9 +13,9 @@ Read only the entry whose pressure is present. Each entry routes directly to its
 | Skill | When to use |
 | --- | --- |
 | [svc-task-packet](svc-task-packet/SKILL.md) | Start, recover, maintain, grow, and close every non-trivial Task |
-| [svc-methods](svc-methods/SKILL.md) | Need non-obvious information, a coherent solution, or realization of an authorized bounded change |
-| [svc-verification](svc-verification/SKILL.md) | Qualify a consequential claim or decide whether prior evidence can be reused |
-| [svc-sub-agents](svc-sub-agents/SKILL.md) | Compare work placement or manage a bounded Assignment and its return |
+| [svc-workflow](svc-workflow/SKILL.md) | Work with a Human through staged or iterative collaboration; compose investigation, design, planning, and implementation, with optional V&V guidance by name |
+| [svc-verification](svc-verification/SKILL.md) | Establish, use, or improve criteria, evidence, and feedback; judge conformance, fitness, and evidence reuse |
+| [svc-agent-collaboration](svc-agent-collaboration/SKILL.md) | Arrange useful work across Agents, adopt results, coordinate dependencies, or transfer responsibility |
 | [svc-specs](svc-specs/SKILL.md) | Find or update the canonical owner of durable project knowledge |
 | [svc-taste](svc-taste/SKILL.md) | Judge real design or implementation alternatives by their consequences |
 

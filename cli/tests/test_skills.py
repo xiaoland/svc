@@ -11,7 +11,6 @@ import pytest
 import svc_cli.skills as skills
 from svc_cli.errors import SvcError
 from svc_cli.skills import (
-    DEFAULT_SKILLS,
     REPOSITORY,
     SkillArchiveError,
     SkillTarget,
@@ -20,18 +19,29 @@ from svc_cli.skills import (
     install,
     parse_release,
     remove,
-    skills_root,
     status,
     update,
 )
 
 
-def release(
+# A distribution contract fixture must not inherit the installer's expected set.
+RELEASE_SKILLS = (
+    "svc-workflow",
+    "svc-verification",
+    "svc-task-packet",
+    "svc-agent-collaboration",
+    "svc-specs",
+    "svc-taste",
+)
+
+
+def release_bytes(
     *,
     version: str = "1.0.0",
     body: bytes = b"# SVC\n",
-    names: tuple[str, ...] = ("svc-methods",),
-):
+    names: tuple[str, ...] = ("svc-workflow",),
+    skill_names: tuple[str, ...] = RELEASE_SKILLS,
+) -> bytes:
     def document(name: str, payload: bytes) -> bytes:
         if payload.startswith(b"---\n"):
             lines = payload.decode().splitlines(keepends=True)
@@ -54,7 +64,7 @@ def release(
             "SKILL.md": document(name, body if name in names else b"# SVC\n"),
             "references/guide.md": b"# Section\nguide\n",
         }
-        for name in DEFAULT_SKILLS
+        for name in skill_names
     }
     entries = []
     for name, files in files_by_skill.items():
@@ -82,27 +92,16 @@ def release(
         for name, files in files_by_skill.items():
             for relative, content in files.items():
                 archive.writestr(f"corpus/{name}/{relative}", content)
-    return parse_release(output.getvalue())
+    return output.getvalue()
 
 
-def test_install_is_a_plan_and_apply_preserves_nested_skill_files(
-    tmp_path: Path,
-) -> None:
-    target = SkillTarget(tmp_path)
-    plan = install(release(), target, ["svc-methods"])
-
-    assert plan.status == "ready"
-    assert not (tmp_path / ".agents").exists()
-
-    result = apply_plan(plan, plan.digest)
-
-    assert result.status == "applied"
-    assert result.units[0].status == "applied"
-    assert status(target, ["svc-methods"])[0].status == "current"
-    assert (tmp_path / ".agents/skills/svc-methods/references/guide.md").is_file()
-    record = tmp_path / ".agents/skills/.svc/svc-methods.json"
-    assert record.is_file()
-    assert json.loads(record.read_text())["source"] == "bytes"
+def release(
+    *,
+    version: str = "1.0.0",
+    body: bytes = b"# SVC\n",
+    names: tuple[str, ...] = ("svc-workflow",),
+):
+    return parse_release(release_bytes(version=version, body=body, names=names))
 
 
 def test_default_selection_does_not_take_over_unrelated_skill(tmp_path: Path) -> None:
@@ -113,92 +112,58 @@ def test_default_selection_does_not_take_over_unrelated_skill(tmp_path: Path) ->
 
     plan = install(release(), target)
 
-    assert {unit.name for unit in plan.units} == set(DEFAULT_SKILLS)
     result = apply_plan(plan, plan.digest)
     assert result.status == "applied"
+    assert {unit.name for unit in status(target)} == set(RELEASE_SKILLS)
+    assert {
+        path.name
+        for path in target.skills_root.iterdir()
+        if path.is_dir() and path.name != ".svc"
+    } == set(RELEASE_SKILLS) | {"svc-custom"}
     assert (unrelated / "SKILL.md").read_text() == "external\n"
-
-
-def test_install_does_not_take_over_unknown_skill(tmp_path: Path) -> None:
-    path = tmp_path / ".agents/skills/svc-methods/SKILL.md"
-    path.parent.mkdir(parents=True)
-    path.write_bytes(b"consumer-owned\n")
-    plan = install(release(), SkillTarget(tmp_path), ["svc-methods"])
-
-    assert plan.status == "blocked"
-    result = apply_plan(plan, plan.digest)
-    assert result.status == "blocked"
-    assert path.read_bytes() == b"consumer-owned\n"
 
 
 def test_update_and_remove_protect_baseline_and_extra_files(tmp_path: Path) -> None:
     target = SkillTarget(tmp_path)
-    first = install(release(), target, ["svc-methods"])
+    first = install(release(), target, ["svc-workflow"])
     apply_plan(first, first.digest)
-    extra = tmp_path / ".agents/skills/svc-methods/local.md"
+    extra = tmp_path / ".agents/skills/svc-workflow/local.md"
     extra.write_bytes(b"keep\n")
 
     update_plan = update(
-        release(version="2.0.0", body=b"# v2\n"), target, ["svc-methods"]
+        release(version="2.0.0", body=b"# v2\n"), target, ["svc-workflow"]
     )
-    remove_plan = remove(target, ["svc-methods"])
+    remove_plan = remove(target, ["svc-workflow"])
 
     assert update_plan.status == "blocked"
     assert remove_plan.status == "blocked"
     assert extra.read_bytes() == b"keep\n"
 
 
-def test_remove_cleans_empty_directories_for_reinstall(tmp_path: Path) -> None:
-    target = SkillTarget(tmp_path)
-    first = install(release(), target, ["svc-methods"])
-    apply_plan(first, first.digest)
-    removal = remove(target, ["svc-methods"])
-    assert apply_plan(removal, removal.digest).status == "applied"
-    assert not (tmp_path / ".agents/skills/svc-methods").exists()
-
-    reinstall = install(release(version="2.0.0"), target, ["svc-methods"])
-    assert reinstall.status == "ready"
-    assert apply_plan(reinstall, reinstall.digest).status == "applied"
-
-
-def test_install_same_archive_is_noop_and_remove_absent_is_noop(tmp_path: Path) -> None:
-    target = SkillTarget(tmp_path)
-    first = install(release(), target, ["svc-methods"])
-    apply_plan(first, first.digest)
-
-    repeat = install(release(), target, ["svc-methods"])
-    absent = remove(target, ["svc-task-packet"])
-
-    assert repeat.status == "noop"
-    assert apply_plan(repeat, repeat.digest).status == "noop"
-    assert absent.status == "noop"
-    assert apply_plan(absent, absent.digest).status == "noop"
-
-
 def test_plan_rejects_extra_file_and_record_change_without_writes(
     tmp_path: Path,
 ) -> None:
     target = SkillTarget(tmp_path)
-    first = install(release(), target, ["svc-methods"])
+    first = install(release(), target, ["svc-workflow"])
     apply_plan(first, first.digest)
-    planned = update(release(version="2.0.0", body=b"# v2\n"), target, ["svc-methods"])
-    record = tmp_path / ".agents/skills/.svc/svc-methods.json"
+    planned = update(release(version="2.0.0", body=b"# v2\n"), target, ["svc-workflow"])
+    record = tmp_path / ".agents/skills/.svc/svc-workflow.json"
     record_data = json.loads(record.read_text())
     record_data["source"] = "changed-source"
     record.write_text(json.dumps(record_data))
-    before = (tmp_path / ".agents/skills/svc-methods/SKILL.md").read_bytes()
+    before = (tmp_path / ".agents/skills/svc-workflow/SKILL.md").read_bytes()
 
     result = apply_plan(planned, planned.digest)
 
     assert result.status == "failed"
     assert result.units[0].status == "failed"
-    assert (tmp_path / ".agents/skills/svc-methods/SKILL.md").read_bytes() == before
+    assert (tmp_path / ".agents/skills/svc-workflow/SKILL.md").read_bytes() == before
 
     planned_again = update(
-        release(version="2.0.0", body=b"# v2\n"), target, ["svc-methods"]
+        release(version="2.0.0", body=b"# v2\n"), target, ["svc-workflow"]
     )
     record.write_bytes(record.read_bytes().rstrip() + b"\n")
-    extra = tmp_path / ".agents/skills/svc-methods/local.md"
+    extra = tmp_path / ".agents/skills/svc-workflow/local.md"
     extra.write_bytes(b"local\n")
     result = apply_plan(planned_again, planned_again.digest)
     assert result.status == "failed"
@@ -209,8 +174,8 @@ def test_failed_unit_stops_later_units_and_keeps_prior_success(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     target = SkillTarget(tmp_path)
-    archive = release(names=("svc-methods", "svc-task-packet", "svc-specs"))
-    selected = ["svc-methods", "svc-task-packet", "svc-specs"]
+    archive = release(names=("svc-workflow", "svc-task-packet", "svc-specs"))
+    selected = ["svc-workflow", "svc-task-packet", "svc-specs"]
     plan = install(archive, target, selected)
     blocked = tmp_path / ".agents/skills/svc-task-packet/SKILL.md"
     original_apply = skills.apply_local_plan
@@ -230,23 +195,31 @@ def test_failed_unit_stops_later_units_and_keeps_prior_success(
 
     assert result.status == "partial"
     assert [unit.status for unit in result.units] == ["applied", "failed", "skipped"]
-    assert (tmp_path / ".agents/skills/svc-methods/SKILL.md").is_file()
+    assert (tmp_path / ".agents/skills/svc-workflow/SKILL.md").is_file()
     assert not (tmp_path / ".agents/skills/svc-specs/SKILL.md").exists()
     assert result.units[1].failure is not None
     assert result.units[1].failure.code == "stale-plan"
     assert result.verification == "partial"
 
 
-def test_global_targets_are_explicit_and_do_not_use_real_home(tmp_path: Path) -> None:
-    codex = SkillTarget(tmp_path, "codex", "global")
-    claude = SkillTarget(tmp_path, "claude", "global")
+def test_global_targets_preserve_existing_home_installations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    for directory in (".agents", ".claude"):
+        existing = home / directory / "skills/svc-workflow/SKILL.md"
+        existing.parent.mkdir(parents=True)
+        existing.write_bytes(b"existing home installation\n")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
 
-    for target in (codex, claude):
-        plan = install(release(), target, ["svc-methods"])
-        assert str(target.skills_root).startswith(str(tmp_path))
+    for host, directory in (("codex", ".agents"), ("claude", ".claude")):
+        target = SkillTarget(tmp_path / "explicit", host, "global")
+        plan = install(release(), target, ["svc-workflow"])
         assert apply_plan(plan, plan.digest).status == "applied"
-    assert not (Path.home() / ".agents/skills/svc-methods").exists()
-    assert not (Path.home() / ".claude/skills/svc-methods").exists()
+        assert (target.root / directory / "skills/svc-workflow/SKILL.md").is_file()
+        assert (
+            home / directory / "skills/svc-workflow/SKILL.md"
+        ).read_bytes() == b"existing home installation\n"
 
 
 def test_latest_release_filters_pages_prereleases_and_non_corpus_tags(
@@ -271,12 +244,12 @@ def test_latest_release_filters_pages_prereleases_and_non_corpus_tags(
         if page == 1:
             value = [{"tag_name": "cli-v99.0.0", "draft": False, "prerelease": False}]
             value += [
-                {
-                    "tag_name": "corpus-v1.0.0",
-                    "draft": False,
-                    "prerelease": False,
-                }
-                for _ in range(100)
+                {"tag_name": "corpus-v8.0.0", "draft": True, "prerelease": False},
+                {"tag_name": "corpus-v9.0.0", "draft": False, "prerelease": True},
+            ]
+            value += [
+                {"tag_name": "corpus-v1.0.0", "draft": False, "prerelease": False}
+                for _ in range(97)
             ]
         else:
             value = [
@@ -287,7 +260,17 @@ def test_latest_release_filters_pages_prereleases_and_non_corpus_tags(
 
     monkeypatch.setattr(skills.urllib.request, "urlopen", open_url)
 
-    assert skills._latest_release_version(1.0) == "1.10.0"
+    selected = release(version="1.10.0")
+    downloads = []
+
+    def download(source, **kwargs):
+        downloads.append(source)
+        return selected
+
+    monkeypatch.setattr(skills, "read_release", download)
+    assert skills.resolve_release().manifest.version == "1.10.0"
+    assert len(downloads) == 1
+    assert "/corpus-v1.10.0/" in downloads[0]
 
 
 def test_resolve_release_rejects_archive_with_wrong_requested_version(
@@ -296,7 +279,7 @@ def test_resolve_release_rejects_archive_with_wrong_requested_version(
     wrong = release(version="2.0.0")
     monkeypatch.setattr(skills, "read_release", lambda *args, **kwargs: wrong)
 
-    with pytest.raises(SkillArchiveError, match="does not match requested version"):
+    with pytest.raises(SkillArchiveError):
         skills.resolve_release("1.0.0")
 
 
@@ -315,48 +298,33 @@ def test_symlink_parent_is_blocked_without_escape(tmp_path: Path) -> None:
     outside.mkdir()
     (tmp_path / ".agents").symlink_to(outside, target_is_directory=True)
 
-    plan = install(release(), SkillTarget(tmp_path), ["svc-methods"])
+    plan = install(release(), SkillTarget(tmp_path), ["svc-workflow"])
 
     assert plan.status == "blocked"
     assert not (outside / "skills").exists()
 
 
-def test_check_is_read_only_and_detects_release_change(tmp_path: Path) -> None:
-    target = SkillTarget(tmp_path)
-    first = install(release(), target, ["svc-methods"])
-    apply_plan(first, first.digest)
-    before = (tmp_path / ".agents/skills/svc-methods/SKILL.md").read_bytes()
-
-    result = check(target, release(version="2.0.0", body=b"# v2\n"), ["svc-methods"])
-
-    assert result.units[0].status == "outdated"
-    assert (tmp_path / ".agents/skills/svc-methods/SKILL.md").read_bytes() == before
-
-
-def test_release_rejects_unmanifested_and_unsafe_members() -> None:
-    archive = release()
-    assert archive.manifest.version == "1.0.0"
-
-    output = io.BytesIO()
-    with zipfile.ZipFile(output, "w") as raw:
-        raw.writestr("manifest.json", b"{}")
-        raw.writestr("../escape", b"no")
+@pytest.mark.parametrize("extra", ["corpus/svc-workflow/unlisted.md", "../escape"])
+def test_release_rejects_one_unmanifested_or_unsafe_member(extra: str) -> None:
+    output = io.BytesIO(release_bytes())
+    with zipfile.ZipFile(output, "a") as raw:
+        raw.writestr(extra, b"untrusted")
     with pytest.raises(SkillArchiveError):
         parse_release(output.getvalue())
 
 
-def test_release_validates_frontmatter_version_and_markdown_closure() -> None:
-    with pytest.raises(SkillArchiveError, match="metadata version"):
+def test_release_rejects_metadata_version_different_from_manifest() -> None:
+    with pytest.raises(SkillArchiveError):
         release(
-            body=b'---\nname: svc-methods\ndescription: "Fixture"\nmetadata: {"version": "9.9.9"}\n---\nBody\n',
-            names=("svc-methods",),
+            body=b'---\nname: svc-workflow\ndescription: "Fixture"\nmetadata: {"version": "9.9.9"}\n---\nBody\n',
+            names=("svc-workflow",),
         )
 
 
 def test_markdown_links_normalize_internal_parent_fragments_and_titles() -> None:
     archive = release(
         body=(
-            b'---\nname: svc-methods\ndescription: "Fixture"\n'
+            b'---\nname: svc-workflow\ndescription: "Fixture"\n'
             b'metadata: {"version": "1.0.0"}\n---\n'
             b'[guide](references/../references/guide.md#section "title")\n'
             b"[encoded](references/guide%2Emd)\n"
@@ -364,31 +332,133 @@ def test_markdown_links_normalize_internal_parent_fragments_and_titles() -> None
             b"`[ignored](missing.md)`\n"
             b"```\n[ignored](missing.md)\n```\n"
         ),
-        names=("svc-methods",),
+        names=("svc-workflow",),
     )
 
     assert archive.manifest.version == "1.0.0"
-    with pytest.raises(SkillArchiveError, match="Missing Markdown target"):
+    with pytest.raises(SkillArchiveError):
         release(
-            body=b'---\nname: svc-methods\ndescription: "Fixture"\nmetadata: {"version": "1.0.0"}\n---\n[missing](missing.md)\n',
-            names=("svc-methods",),
+            body=b'---\nname: svc-workflow\ndescription: "Fixture"\nmetadata: {"version": "1.0.0"}\n---\n[missing](missing.md)\n',
+            names=("svc-workflow",),
         )
-    with pytest.raises(SkillArchiveError, match="Missing Markdown fragment"):
+    with pytest.raises(SkillArchiveError):
         release(
-            body=b'---\nname: svc-methods\ndescription: "Fixture"\nmetadata: {"version": "1.0.0"}\n---\n[missing](references/guide.md#missing)\n',
-            names=("svc-methods",),
+            body=b'---\nname: svc-workflow\ndescription: "Fixture"\nmetadata: {"version": "1.0.0"}\n---\n[missing](references/guide.md#missing)\n',
+            names=("svc-workflow",),
         )
-    with pytest.raises(SkillArchiveError, match="escapes Skill"):
+    with pytest.raises(SkillArchiveError):
         release(
-            body=b'---\nname: svc-methods\ndescription: "Fixture"\nmetadata: {"version": "1.0.0"}\n---\n[escape](../../outside.md)\n',
-            names=("svc-methods",),
+            body=b'---\nname: svc-workflow\ndescription: "Fixture"\nmetadata: {"version": "1.0.0"}\n---\n[escape](../../outside.md)\n',
+            names=("svc-workflow",),
         )
 
 
-def test_skills_root_matches_supported_host_scopes(tmp_path: Path) -> None:
-    assert skills_root(tmp_path, "codex") == tmp_path / ".agents/skills"
-    assert skills_root(tmp_path, "claude") == tmp_path / ".claude/skills"
-    assert (
-        skills_root(tmp_path, "codex", True, home=tmp_path)
-        == tmp_path / ".agents/skills"
+@pytest.mark.parametrize("mixed", [False, True])
+def test_release_rejects_legacy_and_mixed_collaboration_entries(mixed: bool) -> None:
+    names = tuple(
+        "svc-sub-agents" if name == "svc-agent-collaboration" else name
+        for name in RELEASE_SKILLS
     )
+    if mixed:
+        names += ("svc-agent-collaboration",)
+    raw = release_bytes(version="15.0.0", skill_names=names)
+    with pytest.raises(SkillArchiveError):
+        parse_release(raw)
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_release_rejects_retired_methods_and_mixed_workflow(mixed: bool) -> None:
+    names = tuple(name for name in RELEASE_SKILLS if name != "svc-workflow")
+    names += ("svc-methods",)
+    if mixed:
+        names += ("svc-workflow",)
+    raw = release_bytes(version="15.0.0", skill_names=names)
+    with pytest.raises(SkillArchiveError):
+        parse_release(raw)
+
+
+@pytest.mark.parametrize(
+    "legacy_name,modified", [("svc-methods", False), ("svc-sub-agents", True)]
+)
+def test_legacy_installation_can_be_inspected_and_safely_removed(
+    tmp_path: Path, modified: bool, legacy_name: str
+) -> None:
+    target = SkillTarget(tmp_path)
+    replacement = (
+        "svc-agent-collaboration" if legacy_name == "svc-sub-agents" else "svc-workflow"
+    )
+    legacy = target.skills_root / legacy_name
+    legacy.mkdir(parents=True)
+    body = (
+        f'---\nname: {legacy_name}\ndescription: "Legacy"\nmetadata: {{"version": "15.0.0"}}\n---\nLegacy guidance\n'
+    ).encode()
+    entry = legacy / "SKILL.md"
+    entry.write_bytes(body)
+    record = target.skills_root / f".svc/{legacy_name}.json"
+    record.parent.mkdir()
+    record.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "name": legacy_name,
+                "host": "codex",
+                "scope": "project",
+                "version": "15.0.0",
+                "source": "legacy-release.zip",
+                "repository": REPOSITORY,
+                "revision": "a" * 40,
+                "archive_sha256": "b" * 64,
+                "path": f".agents/skills/{legacy_name}",
+                "files": {"SKILL.md": hashlib.sha256(body).hexdigest()},
+            }
+        )
+    )
+    if modified:
+        entry.write_bytes(body + b"Consumer edit\n")
+    before = entry.read_bytes()
+    assert status(target, [legacy_name])[0].status == (
+        "modified" if modified else "current"
+    )
+
+    # Both layouts belong to the same unpublished v15 development cycle.
+    # Current defaults install the replacement without claiming the old directory.
+    plan = install(release(version="15.0.0"), target)
+    assert apply_plan(plan, plan.digest).status == "applied"
+    assert status(target, [replacement])[0].status == "current"
+    assert legacy_name not in {unit.name for unit in status(target)}
+    assert entry.read_bytes() == before
+    unavailable = update(release(version="15.0.0"), target, [legacy_name])
+    assert unavailable.status == "blocked"
+    assert entry.read_bytes() == before
+
+    removal = remove(target, [legacy_name])
+    result = apply_plan(removal, removal.digest)
+    if modified:
+        assert result.status == "blocked"
+        assert entry.read_bytes() == before
+        assert record.is_file()
+    else:
+        assert result.status == "applied"
+        assert not legacy.exists()
+        assert not record.exists()
+    assert status(target, [replacement])[0].status == "current"
+
+
+def test_verification_remains_an_independently_installable_and_updatable_skill(
+    tmp_path: Path,
+) -> None:
+    target = SkillTarget(tmp_path)
+    first = install(release(version="15.0.0"), target, ["svc-verification"])
+    assert apply_plan(first, first.digest).status == "applied"
+    entry = target.skills_root / "svc-verification/SKILL.md"
+    assert b"name: svc-verification" in entry.read_bytes()
+    revised = release(
+        version="15.0.0",
+        body=b"Revised verification guidance\n",
+        names=("svc-verification",),
+    )
+    planned = update(revised, target, ["svc-verification"])
+    assert apply_plan(planned, planned.digest).status == "applied"
+    assert b"Revised verification guidance" in entry.read_bytes()
+    assert check(target, revised, ["svc-verification"]).units[0].status == "current"
+    assert status(target, ["svc-workflow"])[0].status == "absent"

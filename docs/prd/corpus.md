@@ -28,7 +28,7 @@ svc status /path/to/project --json
 
 `svc.local.json` 是可选、被忽略的稀疏 overlay，也必须声明 schema 4。它只覆盖 `dev` 和已在主配置声明的 `run`，不能创建本地专有 run 名称或形成无效的有效配置。`init` 只维护其标记的忽略块，不写本地配置；缺失时创建 `AGENTS.local.md`，之后不重写它。
 
-CLI 16 采用 hard-cutoff，拒绝旧配置而不改写文件。人工迁移须把主配置和存在的 overlay 都改为 schema 4，从主配置删除 `corpus_version`，保留其余声明。没有自动迁移、字段别名或旧命令转发。
+CLI 15 采用 hard-cutoff，拒绝旧配置而不改写文件。人工迁移须把主配置和存在的 overlay 都改为 schema 4，从主配置删除 `corpus_version`，保留其余声明。没有自动迁移、字段别名或旧命令转发。
 
 `status` 是只读的紧凑 JSON preflight，独立报告 CLI、配置、集成和 workspace 事实及一个主要延续动作。它汇总 dev target 和提交的 run entry 名称而不执行它们；观察 runtime 使用 `svc dev status`。每个当前 `--json` 响应都是一个紧凑 JSON 值。
 

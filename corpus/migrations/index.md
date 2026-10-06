@@ -6,7 +6,8 @@ Capability-named guides describe a semantic transition. The framework now has si
 
 Current guides:
 
-- [Six Agent Skills](agent-skills.md): replace concept-directory and CLI-mediated framework navigation while preserving task and authority obligations.
+- [Agent collaboration](agent-collaboration.md): replace the `svc-sub-agents` address and role-based guidance with collaboration across execution forms, including installation and adoption changes.
+- [Six Agent Skills](agent-skills.md): replace concept-directory and CLI-mediated navigation, replace Methods with Workflow while retaining independent V&V, and align draft installations while preserving task and authority obligations.
 - [Coding Agent debugger and profiler evidence](analysis-debugger-corpus.md): adopt the current evidence and analysis contracts when exporting or consuming that evidence.
 
 Version classification follows Consumer behavior:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import tomllib
 from pathlib import Path
@@ -45,34 +46,9 @@ def build(*, check: bool) -> list[str]:
     return changed
 
 
-def _package_version(ref: str | None = None) -> tuple[int, int, int]:
-    if ref is None:
-        raw = (ROOT / "cli/pyproject.toml").read_bytes()
-    else:
-        shown = subprocess.run(
-            ("git", "show", f"{ref}:cli/pyproject.toml"),
-            cwd=ROOT,
-            capture_output=True,
-            check=False,
-        )
-        if shown.returncode != 0:
-            shown = subprocess.run(
-                ("git", "show", f"{ref}:svc_cli/pyproject.toml"),
-                cwd=ROOT,
-                capture_output=True,
-                check=True,
-            )
-        raw = shown.stdout
+def _package_version() -> tuple[int, int, int]:
+    raw = (ROOT / "cli/pyproject.toml").read_bytes()
     version = tomllib.loads(raw.decode())["project"].get("version")
-    if version is None and ref is not None:
-        described = subprocess.run(
-            ("git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", ref),
-            cwd=ROOT,
-            capture_output=True,
-            check=True,
-            text=True,
-        )
-        version = described.stdout.strip().removeprefix("v")
     if not isinstance(version, str):
         raise ValueError("package version is not static")
     parts = version.split(".")
@@ -81,30 +57,44 @@ def _package_version(ref: str | None = None) -> tuple[int, int, int]:
     return int(parts[0]), int(parts[1]), int(parts[2])
 
 
-def compare_ref(ref: str) -> list[str]:
-    failures = []
-    result_schema_advanced = False
-    for key in OUTPUT_SCHEMA_KEYS:
+def _schema_at_ref(ref: str, key: str) -> dict[str, object] | None:
+    for prefix in (SCHEMA_REPOSITORY_PREFIX, LEGACY_SCHEMA_REPOSITORY_PREFIX):
         previous = subprocess.run(
-            ("git", "show", f"{ref}:{SCHEMA_REPOSITORY_PREFIX}/{key}.json"),
+            ("git", "show", f"{ref}:{prefix}/{key}.json"),
             cwd=ROOT,
             capture_output=True,
             check=False,
         )
-        if previous.returncode != 0:
-            previous = subprocess.run(
-                (
-                    "git",
-                    "show",
-                    f"{ref}:{LEGACY_SCHEMA_REPOSITORY_PREFIX}/{key}.json",
-                ),
-                cwd=ROOT,
-                capture_output=True,
-                check=False,
-            )
-            if previous.returncode != 0:
-                continue
-        before = json.loads(previous.stdout)
+        if previous.returncode == 0:
+            return json.loads(previous.stdout)
+    return None
+
+
+def _latest_cli_release() -> tuple[str, tuple[int, int, int]] | None:
+    tags = subprocess.run(
+        ("git", "tag", "--list", "v[0-9]*", "cli-v[0-9]*"),
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.splitlines()
+    releases = []
+    for tag in tags:
+        match = re.fullmatch(
+            r"(?:cli-)?v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag
+        )
+        if match:
+            releases.append((tag, (int(match[1]), int(match[2]), int(match[3]))))
+    return max(releases, key=lambda release: release[1]) if releases else None
+
+
+def compare_ref(ref: str) -> list[str]:
+    failures = []
+    result_schema_advanced = False
+    for key in OUTPUT_SCHEMA_KEYS:
+        before = _schema_at_ref(ref, key)
+        if before is None:
+            continue
         after = generate_output_schema(key)
         if before == after:
             continue
@@ -120,10 +110,17 @@ def compare_ref(ref: str) -> list[str]:
             )
         else:
             result_schema_advanced = True
-    if result_schema_advanced and _package_version()[0] <= _package_version(ref)[0]:
-        failures.append(
-            "result schema advancement requires a package major advancement"
-        )
+    published = _latest_cli_release() if result_schema_advanced else None
+    if published is not None and _package_version()[0] <= published[1][0]:
+        # A release job may compare the tagged target with an older branch baseline.
+        # Only changes beyond the published schemas spend a new package major.
+        if any(
+            _schema_at_ref(published[0], key) != generate_output_schema(key)
+            for key in OUTPUT_SCHEMA_KEYS
+        ):
+            failures.append(
+                "result schema advancement requires a package major advancement"
+            )
     return failures
 
 

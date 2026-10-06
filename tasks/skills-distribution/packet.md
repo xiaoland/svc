@@ -11,3 +11,5 @@
 完成状态：实现、文档和本地验收已完成，239 个 CLI 测试、独立 wheel/sdist 构建与隔离安装实验通过。真实 GitHub 发布、Claude 宿主发现和模型自动触发未执行，不能由资源闭合或文件安装推导这些结果。
 
 证据入口：[升级与分发调查](inquiry.md)、[第三方管理器与 Codex 发现](manager-verification.md)、[发布工具边界](release-verification.md)、[总体验收](verification.md)。运行和采用合同以 `USER_MANUAL.md`、`docs/deployment/skills.md` 和 `CONTRIBUTING.md` 为权威，本 Packet 保留任务决策与观察。
+
+2026-10-06 版本纠正：用户明确全部尚未发布的改进仍属 v15。当前 CLI 与 Corpus 预备版本统一为 15.0.0；此前任务材料中 16.0.0/16.1.0 的本地快照与构建数字保留为历史观察，不构成已发布版本或后续版本决策。当前版本以权威配置为准，同一未发布开发线不逐次升版。

@@ -3,14 +3,14 @@
 
 ## Owned Claim
 
-<!-- State the exact claim this document qualifies and its semantic owner. -->
+<!-- State the exact claim and its semantic owner; distinguish conformance from fitness for the intended goal when that difference matters. -->
 
 - Claim: <observable claim>
 - Owner / consumer: <authority and reader>
 
 ## Observation / Oracle
 
-<!-- Define what is observed and which oracle or rule decides whether it supports the claim. -->
+<!-- Define the examined conditions, direct outcome observed, and oracle or judgment rule. Diagnostic clues do not replace an unobserved outcome. -->
 
 - Observation: <measured behavior or artifact>
 - Oracle: <expected rule, comparator, or acceptance relation>

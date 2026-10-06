@@ -7,13 +7,13 @@
 | Skill | 工作职责 |
 | --- | --- |
 | [svc-task-packet](corpus/svc-task-packet/SKILL.md) | 所有非平凡任务的持续状态、规划、信息组织、增长与收尾 |
-| [svc-methods](corpus/svc-methods/SKILL.md) | 按需选择并组合 Explore、Design 和 Implementation |
-| [svc-verification](corpus/svc-verification/SKILL.md) | 判断声明的证据、适用范围、可信基础与残余 |
-| [svc-sub-agents](corpus/svc-sub-agents/SKILL.md) | 判断委派价值，安排责任、权限和结果接收 |
+| [svc-workflow](corpus/svc-workflow/SKILL.md) | 阶段确认式与持续迭代式人机协作；按需组合 Explore、Design、Planning 和 Implementation，并按名称发现 V&V 指导 |
+| [svc-verification](corpus/svc-verification/SKILL.md) | 独立拥有产品迭代的判据、证据与反馈，判断符合性、目标适合性和证据复用 |
+| [svc-agent-collaboration](corpus/svc-agent-collaboration/SKILL.md) | 安排 Agent 间工作、采用结果、协调依赖与转移责任 |
 | [svc-specs](corpus/svc-specs/SKILL.md) | 持久项目知识的准入、归属与维护 |
 | [svc-taste](corpus/svc-taste/SKILL.md) | 有真实压力的设计与实施取舍 |
 
-描述提供目标与触发条件，正文明确首动作和完成条件，条件引用连接深层内容。Methods 内的小选择表处理三种方法的选择困难；六个 Skills 不构成固定流水线。这些源结构不保证每个宿主或模型都能可靠发现、加载和执行指导。
+描述提供目标与触发条件，正文明确首动作和完成条件，条件引用连接深层内容。Workflow 区分协作承诺与方法选择：阶段确认式按共同确认的范围推进，持续迭代式通过结果和反馈调整需求与路线；两者都要求关键设计、工程自主推进和适当验证。工作方法按当前缺口选择，可递归组合，专业 V&V 指导由独立 Verification Skill 所有；六个 Skills 不构成固定流水线。这些源结构不保证每个宿主或模型都能可靠发现、加载和执行指导。
 
 每个 Skill 的必需指导与资源都位于自身目录内，不要求加载仓库根文件或其它 Skill。完整采用需要常驻入口，使授权边界与所有非平凡任务使用 Task Packet 的规则在工作开始时可见。[消费者 AGENTS 模板](corpus/svc-specs/assets/AGENTS.root.template.md)提供带路径占位的起始形状，项目所有者须适配实际可访问位置并维护自己的内容。下面的安装与采用步骤建立可访问入口；仍需在目标宿主中观察发现与执行，不能只凭文件存在宣称生效。
 
@@ -62,9 +62,11 @@ docs/index.md              缺失时创建，带有界 CLI 工具导航块
 
 六个 Skills 共用一个 Corpus 发布版本，可以选装。CLI 安装默认复制到项目目录，写操作必须显式选择宿主；Codex 使用 `.agents/skills`，Claude Code 使用 `.claude/skills`。`--global` 显式选择对应的用户目录。`--skill NAME` 可重复，省略时选择六个。安装、更新、移除和采用默认返回只读计划；重复相同命令并添加 `--apply <plan-digest>` 才写入。计划绑定当前文件状态，过期后必须重新审阅。
 
+v15 的六入口包含替代 Methods 的 `svc-workflow`、独立 `svc-verification`，以及 `svc-agent-collaboration`。如果曾安装开发期间的 `svc-methods` 或 `svc-sub-agents` 草稿，显式检查并移除旧名、安装对应新名、更新其余已安装项，再重新 `adopt` 刷新项目指针；修改过的文件和第三方管理器安装继续受所有权保护。开发期间的入口调整没有形成额外发布版本；当前归档合同只接受最终六入口。工作流升级与草稿安装整理见 [Skills 采用指导](corpus/migrations/agent-skills.md)，Agent 协作调整见 [协作指导](corpus/migrations/agent-collaboration.md)。下例的版本应替换为实际已发布并准备采用的目标版本。
+
 ```bash
-svc skills install --repo /path/to/project --agent codex --version 16.1.0 --json
-svc skills install --repo /path/to/project --agent codex --version 16.1.0 --apply <plan-digest>
+svc skills install --repo /path/to/project --agent codex --version <target-version> --json
+svc skills install --repo /path/to/project --agent codex --version <target-version> --apply <plan-digest>
 svc skills status --repo /path/to/project --agent codex --json
 svc skills check --repo /path/to/project --agent codex --json
 svc skills update --repo /path/to/project --agent codex --version <target-version> --json
@@ -84,7 +86,7 @@ svc skills remove --repo /path/to/project --agent codex --json
 
 ```bash
 npx skills@1.7.0 add xiaoland/svc --skill svc-task-packet --agent codex --copy
-npx skills@1.7.0 add xiaoland/svc --skill svc-methods --agent claude-code --copy
+npx skills@1.7.0 add xiaoland/svc --skill svc-workflow --agent claude-code --copy
 npx openskills@1.5.0 install xiaoland/svc
 ```
 
@@ -167,7 +169,7 @@ schema-v3 ZIP 的权威是 `manifest.json`、`native.bin` 和 `native-index.json
 
 ## 人工迁移 CLI 配置
 
-包管理器拥有 CLI 安装和更新。CLI 16 不提供 `lookup`、`upgrade` 或 `task init/grow`，不保留别名或转发。旧配置采用 hard-cutoff，失败时保持文件不变；`init` 不清空、重建或自动迁移旧配置。
+包管理器拥有 CLI 安装和更新。CLI 15 不提供 `lookup`、`upgrade` 或 `task init/grow`，不保留别名或转发。旧配置采用 hard-cutoff，失败时保持文件不变；`init` 不清空、重建或自动迁移旧配置。
 
 先备份并审查项目配置，把 `svc.json` 与存在的 `svc.local.json` 的 `schema_version` 改为 `4`，从主配置删除 `corpus_version`，保留其余 dev/run 声明与 overlay 内容。之后用 `svc status --json` 检查，再审查新的 init 计划及其受管工具导航变化。未知字段和无效有效配置继续被拒绝。
 

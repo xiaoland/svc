@@ -104,7 +104,7 @@ catalog 中被文件事务继续使用的 JSON 编码和散列小函数移入既
 
 ## 发布、文档与检查
 
-这次消费者地址与 CLI 契约变化建议分别推进 Corpus 与 CLI 至 16.0.0；配置 schema 4、各命令结果 schema 和两产品版本仍是独立概念。保留当前 Towncrier、changelog、tag 及发布 workflow 的职责，不决定 Skills 安装包或发布新宿主插件。
+这次消费者地址与 CLI 契约变化与本开发线其它调整共同归入未发布的 Corpus 与 CLI 15.0.0；配置 schema 4、各命令结果 schema 和两产品版本仍是独立概念。保留当前 Towncrier、changelog、tag 及发布 workflow 的职责，不决定 Skills 安装包或发布新宿主插件。
 
 添加各产品的中文发布片段，以及框架采用指南和 CLI 手工配置迁移说明。Corpus migration 不负责 CLI 配置变换。更新 root/corpus AGENTS、README、USER_MANUAL、CONTRIBUTING、CLI README 和已有产品事实所有者；不建立第二套持久项目说明。保持框架内容与版本一起推进的检查。
 

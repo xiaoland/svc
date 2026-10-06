@@ -28,9 +28,9 @@ _BLOCK = re.compile(
 )
 _SKILL_NAMES = (
     "svc-task-packet",
-    "svc-methods",
+    "svc-workflow",
     "svc-verification",
-    "svc-sub-agents",
+    "svc-agent-collaboration",
     "svc-specs",
     "svc-taste",
 )

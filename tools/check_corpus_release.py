@@ -25,8 +25,16 @@ def _current_snapshot(corpus_root: Path) -> dict[str, bytes]:
 
 
 def _git_snapshot(root: Path, ref: str) -> dict[str, bytes]:
+    directories = subprocess.run(
+        ("git", "ls-tree", "--name-only", ref, "corpus", "src"),
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    source_root = "corpus" if "corpus" in directories else "src"
     archive = subprocess.run(
-        ("git", "archive", "--format=tar", ref, "corpus"),
+        ("git", "archive", "--format=tar", ref, source_root),
         cwd=root,
         check=True,
         capture_output=True,
@@ -38,7 +46,7 @@ def _git_snapshot(root: Path, ref: str) -> dict[str, bytes]:
                 continue
             source = stream.extractfile(member)
             if source is not None:
-                snapshot[member.name.removeprefix("corpus/")] = source.read()
+                snapshot[member.name.removeprefix(f"{source_root}/")] = source.read()
     return snapshot
 
 
@@ -67,15 +75,30 @@ def _version_at_ref(root: Path, ref: str) -> str:
         version = _version_from_old_pyproject(pyproject.stdout)
         if version is not None:
             return version
-    legacy = subprocess.run(
-        ("git", "show", f"{ref}:corpus/version.json"),
-        cwd=root,
-        check=True,
-        capture_output=True,
-    ).stdout
-    value = json.loads(legacy)
-    if isinstance(value, dict) and isinstance(value.get("corpus_version"), str):
-        return require_version(value["corpus_version"])
+    for path in ("corpus/version.json", "src/version.json"):
+        legacy = subprocess.run(
+            ("git", "show", f"{ref}:{path}"),
+            cwd=root,
+            check=False,
+            capture_output=True,
+        )
+        if legacy.returncode != 0:
+            continue
+        value = json.loads(legacy.stdout)
+        if isinstance(value, dict):
+            version = value.get("corpus_version")
+            if isinstance(version, str):
+                return require_version(version)
+            releases = value.get("releases")
+            if (
+                isinstance(releases, list)
+                and releases
+                and isinstance(releases[-1], dict)
+            ):
+                version = releases[-1].get("version")
+                if isinstance(version, str):
+                    return require_version(version)
+        raise ValueError(f"Cannot read Corpus version from {ref}:{path}")
     raise ValueError(f"Cannot read Corpus version from {ref}")
 
 
@@ -100,10 +123,23 @@ def check(
             )
     if compare_ref is not None:
         old_version = _version_at_ref(root, compare_ref)
-        changed = _git_snapshot(root, compare_ref) != _current_snapshot(root / "corpus")
-        if changed != (_version_key(version) > _version_key(old_version)):
+        current_snapshot = _current_snapshot(root / "corpus")
+        changed = _git_snapshot(root, compare_ref) != current_snapshot
+        published = subprocess.run(
+            ("git", "tag", "--list", f"v{version}", f"corpus-v{version}"),
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        if (
+            _version_key(version) < _version_key(old_version)
+            or (not changed and version != old_version)
+            or any(_git_snapshot(root, tag) != current_snapshot for tag in published)
+        ):
             raise ValueError(
-                "Corpus source and pyproject.toml [tool.svc.corpus].version must advance together: "
+                "Corpus version must not regress; source changes need a new version "
+                "after publication, while an unpublished version may keep evolving: "
                 f"{old_version} -> {version}"
             )
     if archive is not None:

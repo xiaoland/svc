@@ -5,7 +5,7 @@ import pytest
 from svc_cli import skills
 from svc_cli.cli import main
 from test_cli import assert_compact_json, invoke_text
-from test_skills import release
+from test_skills import release, release_bytes
 
 
 def test_skills_schema_bypasses_required_host_and_source() -> None:
@@ -15,93 +15,103 @@ def test_skills_schema_bypasses_required_host_and_source() -> None:
     assert schema["$id"] == "urn:svc:cli-output:skills:v1"
 
 
-def test_cli_install_update_adopt_and_remove_are_separate_exact_plans(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    first = release(
-        body=b'---\nname: svc-task-packet\ndescription: "Fixture"\n---\nTask\n',
-        names=("svc-task-packet",),
-    )
-    monkeypatch.setattr(skills, "resolve_release", lambda version: first)
-    base = [
-        "skills",
-        "install",
+def test_offline_install_check_update_remove_and_reinstall(tmp_path: Path) -> None:
+    import hashlib
+
+    archive = tmp_path / "release.zip"
+
+    def write_release(version: str, body: bytes) -> None:
+        content = release_bytes(version=version, body=body, names=("svc-task-packet",))
+        archive.write_bytes(content)
+        archive.with_suffix(".zip.sha256").write_text(
+            hashlib.sha256(content).hexdigest()
+        )
+
+    scope = [
         "--repo",
         str(tmp_path),
         "--agent",
         "codex",
-        "--version",
-        "1.0.0",
         "--skill",
         "svc-task-packet",
         "--json",
     ]
-    code, stdout, stderr = invoke_text(base)
+    entry = tmp_path / ".agents/skills/svc-task-packet/SKILL.md"
+    guide = entry.parent / "references/guide.md"
+    consumer = tmp_path / "AGENTS.md"
+    write_release("1.0.0", b"# First\n[Guide](references/guide.md)\n")
+    install = ["skills", "install", *scope, "--archive", str(archive)]
+    code, stdout, stderr = invoke_text(install)
     assert (code, stderr) == (0, "")
     plan = assert_compact_json(stdout)
-    assert plan["mode"] == "plan"
-    assert not (tmp_path / ".agents").exists()
-    code, stdout, stderr = invoke_text(base + ["--apply", str(plan["plan_digest"])])
+    assert not entry.exists()
+    assert invoke_text(install + ["--apply", str(plan["plan_digest"])])[0] == 0
+    first = entry.read_bytes()
+    assert b"# First" in first
+    assert guide.read_bytes() == b"# Section\nguide\n"
+    assert not consumer.exists()
+    code, stdout, stderr = invoke_text(install)
     assert (code, stderr) == (0, "")
-    assert assert_compact_json(stdout)["status"] == "applied"
-    assert not (tmp_path / "AGENTS.md").exists()
-    _, stdout, _ = invoke_text(
-        [
-            "skills",
-            "status",
-            "--repo",
-            str(tmp_path),
-            "--agent",
-            "codex",
-            "--skill",
-            "svc-task-packet",
-            "--json",
-        ]
-    )
-    installed = assert_compact_json(stdout)["targets"][0]["units"][0]
-    assert installed["recorded_version"] == "1.0.0"
-    assert installed["actual_version"] is None
-    _, stdout, _ = invoke_text(
-        [
-            "skills",
-            "check",
-            "--repo",
-            str(tmp_path),
-            "--agent",
-            "codex",
-            "--version",
-            "1.0.0",
-            "--skill",
-            "svc-task-packet",
-            "--json",
-        ]
-    )
-    assert (
-        assert_compact_json(stdout)["targets"][0]["units"][0]["actual_version"]
-        == "1.0.0"
-    )
+    assert assert_compact_json(stdout)["status"] == "noop"
+
     adopt = ["skills", "adopt", "--repo", str(tmp_path), "--agent", "codex", "--json"]
-    code, stdout, stderr = invoke_text(adopt)
+    _, stdout, _ = invoke_text(adopt)
+    assert not consumer.exists()
+    assert (
+        invoke_text(
+            adopt + ["--apply", str(assert_compact_json(stdout)["plan_digest"])]
+        )[0]
+        == 0
+    )
+    adopted = consumer.read_bytes()
+    assert b"every non-trivial task" in adopted
+
+    write_release("2.0.0", b"# Second\n[Guide](references/guide.md)\n")
+    code, stdout, stderr = invoke_text(
+        ["skills", "check", *scope, "--archive", str(archive)]
+    )
     assert (code, stderr) == (0, "")
-    assert not (tmp_path / "AGENTS.md").exists()
-    digest = str(assert_compact_json(stdout)["plan_digest"])
-    assert invoke_text(adopt + ["--apply", digest])[0] == 0
-    assert "every non-trivial task" in (tmp_path / "AGENTS.md").read_text()
-    remove = [
-        "skills",
-        "remove",
-        "--repo",
-        str(tmp_path),
-        "--agent",
-        "codex",
-        "--skill",
-        "svc-task-packet",
-        "--json",
-    ]
-    _, stdout, _ = invoke_text(remove)
-    digest = str(assert_compact_json(stdout)["plan_digest"])
-    assert invoke_text(remove + ["--apply", digest])[0] == 0
-    assert "svc:begin adoption" in (tmp_path / "AGENTS.md").read_text()
+    unit = assert_compact_json(stdout)["targets"][0]["units"][0]
+    assert unit["installation_status"] == "outdated"
+    assert entry.read_bytes() == first
+    upgrade = ["skills", "update", *scope, "--archive", str(archive)]
+    _, stdout, _ = invoke_text(upgrade)
+    assert entry.read_bytes() == first
+    assert (
+        invoke_text(
+            upgrade + ["--apply", str(assert_compact_json(stdout)["plan_digest"])]
+        )[0]
+        == 0
+    )
+    assert b"# Second" in entry.read_bytes()
+    assert guide.read_bytes() == b"# Section\nguide\n"
+    assert consumer.read_bytes() == adopted
+    _, stdout, _ = invoke_text(["skills", "check", *scope, "--archive", str(archive)])
+    unit = assert_compact_json(stdout)["targets"][0]["units"][0]
+    assert unit["installation_status"] == "current"
+    assert unit["actual_version"] == "2.0.0"
+
+    removal = ["skills", "remove", *scope]
+    _, stdout, _ = invoke_text(removal)
+    assert (
+        invoke_text(
+            removal + ["--apply", str(assert_compact_json(stdout)["plan_digest"])]
+        )[0]
+        == 0
+    )
+    assert not entry.parent.exists()
+    assert consumer.read_bytes() == adopted
+    _, stdout, _ = invoke_text(removal)
+    assert assert_compact_json(stdout)["status"] == "noop"
+    _, stdout, _ = invoke_text(install)
+    assert (
+        invoke_text(
+            install + ["--apply", str(assert_compact_json(stdout)["plan_digest"])]
+        )[0]
+        == 0
+    )
+    assert b"# Second" in entry.read_bytes()
+
     unadopt = [
         "skills",
         "unadopt",
@@ -112,16 +122,21 @@ def test_cli_install_update_adopt_and_remove_are_separate_exact_plans(
         "--json",
     ]
     _, stdout, _ = invoke_text(unadopt)
-    digest = str(assert_compact_json(stdout)["plan_digest"])
-    assert invoke_text(unadopt + ["--apply", digest])[0] == 0
-    assert "svc:begin adoption" not in (tmp_path / "AGENTS.md").read_text()
+    assert (
+        invoke_text(
+            unadopt + ["--apply", str(assert_compact_json(stdout)["plan_digest"])]
+        )[0]
+        == 0
+    )
+    assert b"svc:begin adoption" not in consumer.read_bytes()
+    assert entry.is_file()
 
 
 def test_multi_host_preflight_preserves_all_targets_when_one_is_foreign(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(skills, "resolve_release", lambda version: release())
-    foreign = tmp_path / ".claude/skills/svc-methods/SKILL.md"
+    foreign = tmp_path / ".claude/skills/svc-workflow/SKILL.md"
     foreign.parent.mkdir(parents=True)
     foreign.write_bytes(b"foreign-manager")
     base = [
@@ -136,7 +151,7 @@ def test_multi_host_preflight_preserves_all_targets_when_one_is_foreign(
         "--agent",
         "claude",
         "--skill",
-        "svc-methods",
+        "svc-workflow",
         "--json",
     ]
     code, stdout, stderr = invoke_text(base)
@@ -178,7 +193,7 @@ def test_multi_host_runtime_failure_preserves_completed_target_and_reports_rollb
         "--agent",
         "claude",
         "--skill",
-        "svc-methods",
+        "svc-workflow",
         "--json",
     ]
     _, stdout, _ = invoke_text(base)
@@ -201,8 +216,8 @@ def test_multi_host_runtime_failure_preserves_completed_target_and_reports_rollb
     assert failure["installation_status"] == "absent"
     assert failure["actual_version"] is None
     assert failure["error"]["details"]["rollback"]["status"] == "succeeded"
-    assert (tmp_path / ".agents/skills/svc-methods/SKILL.md").is_file()
-    assert not (tmp_path / ".claude/skills/svc-methods/SKILL.md").exists()
+    assert (tmp_path / ".agents/skills/svc-workflow/SKILL.md").is_file()
+    assert not (tmp_path / ".claude/skills/svc-workflow/SKILL.md").exists()
 
 
 def test_absent_status_does_not_claim_installation_is_current(tmp_path: Path) -> None:

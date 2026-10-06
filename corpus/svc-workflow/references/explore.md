@@ -2,7 +2,7 @@
 
 Explore finds the key information needed by consuming work. Use it when reliable progress depends on a material information need and the answer or a fitting way to obtain it is not already obvious. Directly query an obvious authoritative target; do not wrap lookup in ceremony.
 
-Explore owns a stateless information method. It does not own persistent Inquiry state, Task sequencing, effect authority, claim qualification, Human decisions, or the Explorer sub-agent in `svc-sub-agents`.
+Explore owns a stateless information method. It does not own persistent Inquiry state, Task sequencing, effect authority, claim qualification, Human decisions, or Agent collaboration. Discover `svc-agent-collaboration` by name when assigning a substantial inquiry, coordinating its owner, or adopting another Agent's result needs guidance; its availability is not required to use Explore.
 
 ```mermaid
 flowchart TD

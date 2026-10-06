@@ -1,7 +1,7 @@
 ---
 name: svc-taste
 description: "Apply consequence-based judgment to real design and implementation trade-offs. Use when alternatives affect authority, data, state, boundaries, naming, dependencies, abstraction, performance, product experience, or future change cost, including choices uncovered while implementing. Keep project truth and Human preferences distinct from rebuttable heuristics."
-metadata: {"version": "16.1.0"}
+metadata: {"version": "15.0.0"}
 ---
 
 # Taste and Design Judgment
@@ -20,7 +20,7 @@ Taste is compressed consequence knowledge used when several plausible designs ne
 
 Start from the concrete choice, its consequences, existing project facts, and the Human's legitimate preferences. Read [Implementation Taste](references/implementation.md) only when authority, data, state, boundaries, naming, dependencies, or complexity can change the judgment. Mechanical edits with clear ownership and verification do not need a maxim review.
 
-Return a judgment with its causal reason, material cost, and counter-pressure at the resolution needed by the consuming work. Stop consulting guidance when further heuristics cannot change the choice. A material missing fact calls for Methods' Explore guidance in `svc-methods`; an unresolved coherent solution calls for Design in `svc-methods`; Human-owned preferences or consequential trade-offs follow the authority boundaries above. These are conditional routes, not a required sequence.
+Return a judgment with its causal reason, material cost, and counter-pressure at the resolution needed by the consuming work. Stop consulting guidance when further heuristics cannot change the choice. A material missing fact calls for Explore guidance in `svc-workflow`; an unresolved coherent solution calls for Design in `svc-workflow`; Human-owned preferences or consequential trade-offs follow the authority boundaries above. These are conditional routes, not a required sequence.
 
 Keep four authorities distinct:
 

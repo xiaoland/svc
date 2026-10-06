@@ -6,10 +6,10 @@
 
 - 框架目的和六入口导航：`corpus/index.md`
 - Skill 作者与布局规则：`corpus/AGENTS.md`，仅供维护者使用
-- Working Methods：`corpus/svc-methods/`
+- 人机协作流程与共通工作方法：`corpus/svc-workflow/`
+- 产品迭代的判据、证据与反馈：`corpus/svc-verification/`
 - Task Packet 语义与增长：`corpus/svc-task-packet/`
-- 子代理工作安排：`corpus/svc-sub-agents/`
-- 声明资格与证据：`corpus/svc-verification/`
+- Agent 间工作安排、协调与结果采用：`corpus/svc-agent-collaboration/`
 - 设计与实施判断：`corpus/svc-taste/`
 - 产品、技术、单元、运行时与协调规范：`corpus/svc-specs/`
 - Consumer Agent 指导起始形状：`corpus/svc-specs/assets/`

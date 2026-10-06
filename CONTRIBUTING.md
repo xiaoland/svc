@@ -54,6 +54,10 @@ printf '%s\n' '说明 Corpus 变化。' > .changes/corpus/123.added.md
 
 没有消费者可见影响则不添加片段；影响两产品则向两队列各添加片段。功能 PR 不修改生成的 changelog；`CHANGELOG.md` 保留发布流拆分前的共同历史。
 
+版本相对于最近的已发布版本评估，不能把同一未发布开发线中的每个提交或功能当成一次发布。尚未发布的目标版本可以持续积累变化和片段；例如本轮 v15 同时包含布局拆分、Skills 分发、Verification 与 Agent 协作改进。已发布 tag 对应的版本不能通过后续源码修改重新使用。
+
+CLI 输出 schema 仍维护自己的结果版本；它要求的 package major 以最近已发布的 `v<version>` 或 `cli-v<version>` 为基线，而不是分支中的暂定 package version。Corpus 的 `corpus-v<version>` 不参与 CLI 的 major 判定。
+
 消费者需要版本相关步骤或判断时，在 `corpus/migrations/` 添加 Markdown 指导。它是可选指导，不是通用文件迁移图，也不负责 CLI 配置变换。CLI 配置采用 current-only 合同，schema 4 的人工迁移说明由[用户手册](USER_MANUAL.md)拥有，不加入自动迁移或字段别名。
 
 ## 发布边界
@@ -68,11 +72,11 @@ printf '%s\n' '说明 Corpus 变化。' > .changes/corpus/123.added.md
 
 发布顺序如下：
 
-1. 功能 PR 合并 `.changes/cli/` 或 `.changes/corpus/` 的片段。改变 Corpus 源内容时推进根 `pyproject.toml` 的 `[tool.svc.corpus].version` 与需要的迁移指导；仓库检查要求内容和版本一起变化。根 `LICENSE` 是 MIT 许可权威源，六个 Skill 和 CLI 各带逐字副本。Corpus release PR 合并前运行发布准备命令，把版本元数据和已存在的许可副本同步后与正文一起提交。
+1. 功能 PR 合并 `.changes/cli/` 或 `.changes/corpus/` 的片段。改变 Corpus 源内容时维护根 `pyproject.toml` 的 `[tool.svc.corpus].version` 与需要的迁移指导：未发布目标可以继续积累变更，已发布版本的源内容变化需要新的目标版本。版本检查需要完整的发行 tags；CI 使用完整 Git 历史，发布比较采用 `v<version>` 与 `corpus-v<version>` 对应的源码。根 `LICENSE` 是 MIT 许可权威源，六个 Skill 和 CLI 各带逐字副本。Corpus release PR 合并前运行发布准备命令，把版本元数据和已存在的许可副本同步后与正文一起提交。
 2. 维护者更新 `cli/pyproject.toml` 静态版本，准备 CLI 发布 PR 并生成 changelog：
 
    ```console
-   pdm run towncrier build --config towncrier.cli.toml --version 16.1.0 --yes
+   pdm run towncrier build --config towncrier.cli.toml --version 15.0.0 --yes
    pdm run check
    ```
 
@@ -80,7 +84,7 @@ printf '%s\n' '说明 Corpus 变化。' > .changes/corpus/123.added.md
 3. Corpus 发布 PR 使用功能变更已接纳的 Corpus 版本并消费其片段：
 
    ```console
-   pdm run towncrier build --config towncrier.corpus.toml --version 16.1.0 --yes
+   pdm run towncrier build --config towncrier.corpus.toml --version 15.0.0 --yes
    pdm run prepare-corpus-release
    pdm run check
    ```
