@@ -1,1 +1,0 @@
-在未发布的 v15 开发线内，将 svc-sub-agents 草稿入口收敛为 svc-agent-collaboration，移除旧地址与 Explorer/Executor reference；不另行增加发布版本。指导从协作的认知与执行收益、理解分叉、责任连续性、结果采用与共享影响推导行动，覆盖 sub-agent、独立会话、依赖协调及责任转移；采用依据按主张选择，不再强制星形拓扑或普遍独立 validator 前置要求。新增草稿安装整理、消费者指针更新及当前 CLI 归档合同的说明；不授予额外权限、不改变非平凡任务的 Task Packet 义务。
