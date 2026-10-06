@@ -1,6 +1,6 @@
 # Adopt the Six SVC Agent Skills
 
-Target Corpus release: 15.0.0 (in preparation).
+Target Corpus release: 15.0.0.
 
 ## Applies When
 
