@@ -1,0 +1,29 @@
+# Evidence
+
+Read this reference when a requirement and oracle exist but the agent does not yet know which conditions to create, which boundary to observe, which assumptions are real, or what conclusion the observation can support. Return a reproducible, bounded observation or the smallest missing condition that could change the decision. This expands the [Verification Skill](../SKILL.md); use this reference directly when its pressure is already known.
+
+Separate three questions that are often accidentally collapsed:
+
+| Question | Example for an invoice-delivery claim |
+| --- | --- |
+| Oracle | What result counts as the promised delivery? |
+| Selection | Which recipient, invoice, state, retry, and time condition will be exercised? |
+| Observation | How will the intended mailbox, content, and arrival time be read? |
+
+The selection should target the uncertainty most likely to change the decision. Use a boundary or equivalence class when behavior changes at a rule edge; a state history when the same action means different things after earlier events; a combination when variables are expected to interact; generated inputs when a stable property can judge many cases; and a constructed fault when recovery or failure behavior is the uncertainty. Each choice has blind spots: pairwise combinations do not establish higher-order interactions, a generator may miss a rare history, and a non-crashing fault does not prove the product result.
+
+Choose the smallest execution boundary that preserves the meaning of the claim. A local property can constrain a calculation or transition; real integration can expose persistence, transactions, identity, and dependency contracts; a connected product path can observe what a user actually receives; production can add real workload, data, and long-lived conditions. A larger boundary is valuable when it retains a material semantic relation the smaller one cannot observe. It is wasteful when it merely repeats the same assumption. No fixed pyramid, layer count, or test ratio replaces this question.
+
+When the decision concerns a user completing a connected product goal, prefer an E2E observation that faithfully anchors that result, complemented by cheaper properties and real integration for dense feedback and diagnosis. This is a starting preference under those conditions, not a quota or requirement for every change. An E2E check of only a success prompt has not earned that role, and adequate existing guarantees may make another run unnecessary.
+
+Prefer a real dependency when it is affordable and controllable because a substitute can silently assume the behavior being checked. A substitute remains useful for time control, rare failures, expensive or dangerous effects, or a separate diagnostic question. State which behavior it replaces, which contract supports the replacement, and which uncertainty still needs real interaction. Do not freeze an implementation by asserting incidental collaborator calls when the requirement concerns the resulting behavior; do preserve a call or protocol when that interaction is itself the contract.
+
+Acceptance evidence answers whether the promised result occurred; diagnostic evidence helps explain where and why a process differed. A successful SMTP handoff may diagnose invoice processing, while the intended mailbox receiving the correct invoice within the promised time is closer to the delivery claim. Internal state can be acceptance evidence when the requirement owns that state. Classify evidence by the question it answers, not simply by whether it is internal or external.
+
+Make the observation reproducible enough to interpret. Record the candidate, check, inputs, initial state, environment and dependency conditions, action, wait condition, observation, and criterion. Setup that bypasses a promised fresh state or user interaction leaves that part unexamined. Command completion does not establish asynchronous persistence or delivery; wait for the judged consequence with a bounded condition. Preserve the original failure and relevant logs rather than allowing a retry, filter, or stale output to turn an unexamined result into a pass.
+
+Reset only state owned by the observation and preserve enough inputs, configuration, versions, seeds, state, and failure context to reproduce a mismatch. If setup fails, dependent product behavior is unexamined, not automatically a product failure or pass. For performance and other measurements, name the baseline, workload, start and stop events, environment, units, samples, statistic, comparison, and noise that could change the decision. A threshold without those conditions is an incomplete oracle.
+
+Reuse an existing compiler, schema, constraint, proof, or qualified module guarantee when it directly owns the failure mode and its connection and assumptions still hold. Check the consumer boundary and changed conditions before relying on it; do not rerun an experiment merely to create another record when the existing guarantee already supports the decision. Requalify when the requirement, relevant implementation, input or state, environment, dependency, oracle, observation, or consumer connection changes in a way that could affect the claim.
+
+Bound the conclusion by the available observations or guarantees and their assumptions. A passing local rule does not establish persistence, concurrency, or the complete product path; a passing product path does not establish every state or implementation invariant. Several checks may share the same requirement interpretation, fixture, reference value, substitute dependency, generator, or observation mechanism, so their agreement is not automatically independent evidence. Stop when the consuming decision is adequately supported; repeat or broaden only for a changed claim, failure, or material unresolved uncertainty.

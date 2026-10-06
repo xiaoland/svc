@@ -28,6 +28,22 @@ def test_file_state_signature_names_absence_content_and_intended_mode(
         assert mutation.after.posix_mode == 0o644
 
 
+def test_one_plan_can_create_a_parent_for_multiple_files(tmp_path: Path) -> None:
+    transaction = _plan(
+        tmp_path,
+        make_write(tmp_path, "nested/SKILL.md", "create", "test", b"skill\n"),
+        make_write(
+            tmp_path, "nested/references/guide.md", "create", "test", b"guide\n"
+        ),
+    )
+
+    result = apply_local_plan(transaction, transaction.digest)
+
+    assert result.status == "applied"
+    assert (tmp_path / "nested/SKILL.md").read_bytes() == b"skill\n"
+    assert (tmp_path / "nested/references/guide.md").read_bytes() == b"guide\n"
+
+
 def test_rollback_restores_exact_existing_mode_after_later_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

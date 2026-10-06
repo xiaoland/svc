@@ -1,51 +1,22 @@
 # Sustainable Vibe Coding
 
-SVC is an Agent-facing corpus for completing software work with a Human while
-keeping authority, task state, durable truth, and verification understandable.
-Browse one concept at a time; load deeper guidance only when its pressure is
-present.
+SVC is Agent-facing guidance for completing software work with a Human while keeping authority, task state, durable truth, and verification understandable. The six Skills below provide conditional working guidance; they do not define a fixed pipeline or confer permissions.
 
-## Daily Guidance
+Each Skill is a self-contained directory: its required instructions and resources travel with it. Root documents provide repository navigation and release adoption information, not prerequisites for running a Skill. Each entry states its own authority and return boundaries; references to other Skills are conditional discovery suggestions by name.
 
-Start non-trivial work with a [Task Packet](task-packet/index.md). Keep its
-Human-facing `packet.md` concise while preserving the work and information
-topology needed to complete the task.
+For full SVC adoption, keep the project-visible rule to use `svc-task-packet` for every non-trivial Task. Recover an existing Packet rather than creating a competing one. Skill discovery alone does not guarantee that this task-level rule is present before the host selects an entry; use the Consumer instruction asset below to establish it.
 
-Recover the intended benefit behind Human wording, including tentative terms.
-Treat product intent, personal preference, permission, material trade-offs, and
-acceptance as Human authority within their scope. Treat factual, causal,
-technical, feasibility, and proposed-solution claims as fallible input. Challenge
-them constructively from evidence, logic, stakeholder consequences, and short-
-and long-horizon return on investment.
+## Conditional Guidance
 
-Proceed autonomously with safe exploration, review, and design. Before durable
-mutation, establish the authorized desired effect, semantic owner, affected
-consumers and invariants, and a proportionate verification path. Re-engage the
-Human only when consequential action needs Human-owned information, authority,
-taste, trade-off, or acceptance that cannot be inferred safely. Present the
-smallest decision-ready issue after resolving everything else.
+Read only the entry whose pressure is present. Each entry routes directly to its own references and to other owners when needed; the map does not require loading them all.
 
-## Knowledge Owners
+| Skill | When to use |
+| --- | --- |
+| [svc-task-packet](svc-task-packet/SKILL.md) | Start, recover, maintain, grow, and close every non-trivial Task |
+| [svc-workflow](svc-workflow/SKILL.md) | Work with a Human through staged or iterative collaboration; compose investigation, design, planning, and implementation, with optional V&V guidance by name |
+| [svc-verification](svc-verification/SKILL.md) | Establish, use, or improve criteria, evidence, and feedback; judge conformance, fitness, and evidence reuse |
+| [svc-agent-collaboration](svc-agent-collaboration/SKILL.md) | Arrange useful work across Agents, adopt results, coordinate dependencies, or transfer responsibility |
+| [svc-specs](svc-specs/SKILL.md) | Find or update the canonical owner of durable project knowledge |
+| [svc-taste](svc-taste/SKILL.md) | Judge real design or implementation alternatives by their consequences |
 
-Prefer source, configuration, schema, test, assertion, or automation for facts
-they can enforce directly. Use [Specifications](specs/index.md) for durable
-Product, cross-unit Technical, unit-internal, runtime, and coordination truth
-that remains expensive to recover.
-
-A Unit is the smallest responsibility that can be delivered or deployed
-independently, such as an application, service, or library. The nearest local
-`AGENTS.md` may preserve a repeated fragile seam in one physical subtree.
-
-## Corpus Map
-
-- [Task Packet](task-packet/index.md): persistent task control and progressive
-  packet growth
-- [Working Methods](methods/index.md): Explore, Design, and Implementation
-- [Sub-agents](sub-agents/index.md): bounded work placement and initial profiles
-- [Verification](verification/index.md): claim-relative evidence and residual
-- [Taste](taste/index.md): consequence-based design and implementation judgment
-- [Specifications](specs/index.md): durable project truth and optional
-  coordination extensions
-- [Consumer instruction templates](templates/AGENTS.root.template.md): root and
-  local `AGENTS.md` starting shapes
-- [Migrations](migrations/index.md): release-specific Corpus adoption guidance
+For framework adoption across releases, use the applicable [migration guide](migrations/index.md). For a Consumer project's persistent Agent entry, use the [root instruction starting shape](svc-specs/assets/AGENTS.root.template.md); it must point to the actual adopted guidance, not assume a particular installation layout.

@@ -23,10 +23,8 @@ from pydantic import (
     model_validator,
 )
 
-from .catalog import require_semver
 
-
-CONFIG_SCHEMA_VERSION = 3
+CONFIG_SCHEMA_VERSION = 4
 PROJECT_CONFIG_FILE = "svc.json"
 LOCAL_CONFIG_FILE = "svc.local.json"
 
@@ -197,14 +195,12 @@ class RunEntry(_StrictModel):
 
 
 class ProjectConfig(_StrictModel):
-    schema_version: Literal[3]
-    corpus_version: str = Field(min_length=1)
+    schema_version: Literal[4]
     dev: DevConfig | None = None
     run: dict[str, RunEntry] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_corpus_version(self) -> Self:
-        require_semver(self.corpus_version, "corpus_version")
+    def validate_config(self) -> Self:
         _validate_names(self.run, "run entry")
         return self
 

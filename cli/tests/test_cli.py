@@ -30,11 +30,6 @@ def assert_compact_json(raw: str) -> dict[str, object]:
 
 
 def test_machine_json_is_compact_for_results_and_errors() -> None:
-    code, stdout, stderr = invoke_text(["lookup", "--list", "--json"])
-
-    assert (code, stderr) == (EXIT_OK, "")
-    assert assert_compact_json(stdout)["command"] == "lookup"
-
     with tempfile.TemporaryDirectory() as tmp:
         code, stdout, stderr = invoke_text(["status", tmp, "--json"])
 
@@ -46,23 +41,9 @@ def test_machine_json_is_compact_for_results_and_errors() -> None:
     assert (code, stdout) == (2, "")
     assert assert_compact_json(stderr)["code"] == "invalid-cli-usage"
 
-    code, stdout, stderr = invoke_text(["lookup", "--path", "../invalid.md", "--json"])
-
-    assert (code, stdout) == (2, "")
-    assert assert_compact_json(stderr)["error"]["code"] == "invalid-document-path"
-
-
-def test_lookup_directory_alias_returns_the_canonical_document_identity() -> None:
-    code, stdout, stderr = invoke_text(["lookup", "--path", "task-packet/", "--json"])
-
-    payload = assert_compact_json(stdout)
-    assert (code, stderr) == (EXIT_OK, "")
-    assert payload["document"]["path"] == "task-packet/index.md"
-
 
 def test_output_schema_discovery_is_compact_and_bypasses_command_selection() -> None:
     for arguments in (
-        ["lookup", "--json-schema"],
         ["init", "--json-schema"],
         ["dev", "ensure", "--json-schema"],
         ["run", "--json-schema"],
@@ -74,47 +55,21 @@ def test_output_schema_discovery_is_compact_and_bypasses_command_selection() -> 
         assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert schema["x-svc-result-schema-version"] >= 1
         if arguments[0] == "init":
-            assert schema["x-svc-result-schema-version"] == 3
+            assert schema["x-svc-result-schema-version"] == 4
 
 
 def test_help_is_self_sufficient_and_removed_commands_are_absent() -> None:
     code, stdout, stderr = invoke_text(["--help"])
     assert code == EXIT_OK
     assert stderr == ""
-    assert "svc lookup --help" in stdout
+    assert "svc lookup" not in stdout
     assert "self-update" not in stdout
-
-    code, stdout, stderr = invoke_text(["lookup", "--help"])
-    assert code == EXIT_OK
-    assert stderr == ""
-    assert "--list" in stdout
-    assert "--path" in stdout
-    assert "--regex" in stdout
-    assert "SVC CLI usage" in stdout
-    assert "concept directory" in stdout
-
-    code, stdout, stderr = invoke_text(["lookup", "--list"])
-    assert code == EXIT_OK
-    assert stderr == ""
-    assert "task-packet/" in stdout
-    assert "Expand: svc lookup --list <directory>" in stdout
 
     code, stdout, stderr = invoke_text(["analysis", "--help"])
     assert (code, stderr) == (EXIT_OK, "")
-    assert "Analysis method:" in stdout
-    assert "performance conclusion" in stdout
-    assert "calling Agent owns task intent" in stdout
 
     code, stdout, stderr = invoke_text(["telemetry", "--help"])
     assert (code, stderr) == (EXIT_OK, "")
-    assert "does not interpret task" in stdout
-    assert "performance" in stdout
-
-    code, stdout, stderr = invoke_text(["upgrade", "--help"])
-    assert (code, stderr) == (EXIT_OK, "")
-    assert "--target" not in stdout
-    assert "does not update the CLI" in stdout
-    assert "Agent/Human document work" in stdout
 
     code, stdout, stderr = invoke_text(["dev", "--help"])
     assert (code, stderr) == (EXIT_OK, "")
@@ -122,7 +77,7 @@ def test_help_is_self_sufficient_and_removed_commands_are_absent() -> None:
 
     code, _, stderr = invoke_text([])
     assert code == 2
-    assert "Hint: Use `svc lookup --help`" in stderr
+    assert "invalid-cli-usage" in stderr
 
 
 def test_dev_identity_text_describes_workspace() -> None:

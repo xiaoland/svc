@@ -1,35 +1,32 @@
-# SVC User Manual
+# SVC 用户手册
 
-## Inspect the Corpus in This Source Tree
+## 阅读框架指导
 
-Query the guidance you need through the workspace CLI. Ordinary lookup writes
-nothing and contacts no service.
+框架权威源从[框架介绍与导航](corpus/index.md)进入，按当前工作选择六个 Skills：
+
+| Skill | 工作职责 |
+| --- | --- |
+| [svc-task-packet](corpus/svc-task-packet/SKILL.md) | 所有非平凡任务的持续状态、规划、信息组织、增长与收尾 |
+| [svc-workflow](corpus/svc-workflow/SKILL.md) | 阶段确认式与持续迭代式人机协作；按需组合 Explore、Design、Planning 和 Implementation，并按名称发现 V&V 指导 |
+| [svc-verification](corpus/svc-verification/SKILL.md) | 独立拥有产品迭代的判据、证据与反馈，判断符合性、目标适合性和证据复用 |
+| [svc-agent-collaboration](corpus/svc-agent-collaboration/SKILL.md) | 安排 Agent 间工作、采用结果、协调依赖与转移责任 |
+| [svc-specs](corpus/svc-specs/SKILL.md) | 持久项目知识的准入、归属与维护 |
+| [svc-taste](corpus/svc-taste/SKILL.md) | 有真实压力的设计与实施取舍 |
+
+描述提供目标与触发条件，正文明确首动作和完成条件，条件引用连接深层内容。Workflow 区分协作承诺与方法选择：阶段确认式按共同确认的范围推进，持续迭代式通过结果和反馈调整需求与路线；两者都要求关键设计、工程自主推进和适当验证。工作方法按当前缺口选择，可递归组合，专业 V&V 指导由独立 Verification Skill 所有；六个 Skills 不构成固定流水线。这些源结构不保证每个宿主或模型都能可靠发现、加载和执行指导。
+
+每个 Skill 的必需指导与资源都位于自身目录内，不要求加载仓库根文件或其它 Skill。完整采用需要常驻入口，使授权边界与所有非平凡任务使用 Task Packet 的规则在工作开始时可见。[消费者 AGENTS 模板](corpus/svc-specs/assets/AGENTS.root.template.md)提供带路径占位的起始形状，项目所有者须适配实际可访问位置并维护自己的内容。下面的安装与采用步骤建立可访问入口；仍需在目标宿主中观察发现与执行，不能只凭文件存在宣称生效。
+
+## 安装与初始化 CLI
+
+CLI 提供开发执行和观测工具，并从独立发行物安装、管理 SVC Skills；CLI 包不携带 Corpus 正文。
 
 ```bash
-pdm run svc lookup --list --json
-pdm run svc lookup --list methods
-pdm run svc lookup --path task-packet/
-pdm run svc lookup --keyword "task packet growth"
-pdm run svc lookup --regex 'bounded-incomplete' --scope both --limit 10
+python -m pip install sustainable-vibe-coding
+svc --help
 ```
 
-For an installed release, use `python -m pip install sustainable-vibe-coding`,
-then start with `svc lookup --list`. CLI package and Corpus versions are
-independent, so use paths returned by the installed wheel rather than assuming
-that they match the current source tree.
-
-`--list [prefix]` expands one Corpus directory level at a time. Use a returned
-canonical Markdown path with `--path`, or pass a directory such as
-`task-packet` or `task-packet/` to read its `index.md`. The response
-always reports the canonical Markdown identity. `--keyword` returns a bounded
-relevance-ordered candidate set; `--regex` returns bounded exact path/content
-occurrences. A valid search with no matches succeeds with an empty collection.
-Lookup reads the SVC Corpus, not the CLI manual; use `svc lookup --help` and
-`svc <command> --help` for the current grammar.
-
-## Initialize a Consumer Project
-
-Initialization is dry-run by default. It creates no copied SVC documents and never silently overwrites consumer content.
+源码工作区使用 `pdm install`，随后通过 `pdm run svc` 调用 CLI。初始化默认 dry-run，不静默覆盖消费者内容：
 
 ```bash
 svc init /path/to/project --json
@@ -37,75 +34,71 @@ svc init /path/to/project --apply <plan-digest>
 svc status /path/to/project --json
 ```
 
-The exact-plan apply may create:
+精确计划 apply 可以创建：
 
 ```text
 svc.json
-.gitignore                 (a bounded generated ignore block for svc.local.json)
-AGENTS.md                  (a bounded generated SVC navigation block)
-AGENTS.local.md            (ignored, Consumer-owned local Agent guidance)
-docs/index.md              (created when absent, with a bounded generated navigation block)
+.gitignore                 局部配置的有界忽略块
+AGENTS.md                  有界 CLI 工具导航块
+AGENTS.local.md            被忽略、归消费者所有的本地 Agent 指导
+docs/index.md              缺失时创建，带有界 CLI 工具导航块
 ```
 
-`svc.json` is the complete, committed project configuration. Schema v3 records
-the adopted Corpus baseline independently from the CLI version and can
-optionally declare development capabilities and bounded runs:
+`svc.json` 是完整、提交到版本控制的项目配置。schema 4 可声明开发能力与有界运行，最小配置为：
 
 ```json
 {
-  "schema_version": 3,
-  "corpus_version": "15.0.0"
+  "schema_version": 4
 }
 ```
 
-`svc.local.json` is an optional, ignored sparse overlay for `dev` and existing
-`run` declarations. It must declare schema 3, cannot change the Corpus baseline, create a
-local-only run name, or produce an invalid effective configuration. `init`
-maintains just its marked ignore block; it never writes a local configuration
-file. It creates a missing `AGENTS.local.md` as ignored, Consumer-owned local
-Agent guidance and never rewrites it. Version 15 rejects older configuration;
-`init` does not hide or perform configuration migration.
+可选的 `svc.local.json` 是被忽略的稀疏 overlay，也须声明 schema 4。它可覆盖 `dev` 和主配置已有的 `run`，不能创建本地专有 run 名称或形成无效的有效配置。`init` 只维护标记的忽略块，不写本地配置；缺失时创建 `AGENTS.local.md`，之后不重写它。
 
-Start with `svc status --json` in any repository. It is read-only and returns a
-compact JSON preflight with independent CLI, config, Corpus-baseline,
-integration, and workspace facts plus one primary continuation. Status
-summarizes declared dev target names and committed run-entry names without executing them; use
-`svc dev status` when runtime observation is needed. Every current `--json`
-response is one compact JSON value; JSONL is reserved for a future command with
-meaningful progress events.
+在任何仓库先用 `svc status --json` 获取只读 preflight。它分别报告 CLI、配置、集成和 workspace 事实及一个主要延续动作，只汇总 dev target 和 run entry 名称而不执行它们；需要 runtime 观察时用 `svc dev status`。每个当前 `--json` 响应都是一个紧凑 JSON 值。
 
-Everything unmarked in `AGENTS.md` and `docs/index.md` remains Consumer-owned.
-CLI help is self-sufficient; there is no installed SVC CLI Skill. A clean
-legacy generated Skill is retired by an exact init plan, while a modified or
-unproven file is never silently deleted. Modified generated navigation or
-local-config-ignore blocks stop repair for review.
+未标记内容、消费者框架指针和本地 Agent 指导归消费者所有。`init` 的受管导航只提供工具入口；框架采用使用独立的 `skills adopt` 标记块。只有可识别且未被修改的生成块可被精确计划维护；修改过的导航或忽略块停止修复。过期计划、并发修改检查与失败回滚保护仍然有效。
 
-## Task Packets
+## 安装、升级与采用 Skills
 
-Create the standard task-local control surface without overwriting an existing
-packet:
+六个 Skills 共用一个 Corpus 发布版本，可以选装。CLI 安装默认复制到项目目录，写操作必须显式选择宿主；Codex 使用 `.agents/skills`，Claude Code 使用 `.claude/skills`。`--global` 显式选择对应的用户目录。`--skill NAME` 可重复，省略时选择六个。安装、更新、移除和采用默认返回只读计划；重复相同命令并添加 `--apply <plan-digest>` 才写入。计划绑定当前文件状态，过期后必须重新审阅。
+
+v15 的六入口包含替代 Methods 的 `svc-workflow`、独立 `svc-verification`，以及 `svc-agent-collaboration`。如果曾安装开发期间的 `svc-methods` 或 `svc-sub-agents` 草稿，显式检查并移除旧名、安装对应新名、更新其余已安装项，再重新 `adopt` 刷新项目指针；修改过的文件和第三方管理器安装继续受所有权保护。开发期间的入口调整没有形成额外发布版本；当前归档合同只接受最终六入口。工作流升级与草稿安装整理见 [Skills 采用指导](corpus/migrations/agent-skills.md)，Agent 协作调整见 [协作指导](corpus/migrations/agent-collaboration.md)。下例的版本应替换为实际已发布并准备采用的目标版本。
 
 ```bash
-svc task init <task-id> --repo /path/to/project
+svc skills install --repo /path/to/project --agent codex --version <target-version> --json
+svc skills install --repo /path/to/project --agent codex --version <target-version> --apply <plan-digest>
+svc skills status --repo /path/to/project --agent codex --json
+svc skills check --repo /path/to/project --agent codex --json
+svc skills update --repo /path/to/project --agent codex --version <target-version> --json
+svc skills adopt --repo /path/to/project --agent codex --json
+svc skills adopt --repo /path/to/project --agent codex --apply <plan-digest>
+svc skills unadopt --repo /path/to/project --agent codex --json
+svc skills remove --repo /path/to/project --agent codex --json
 ```
 
-Inspect the packet shape and obtain a bounded growth brief:
+`--version` 指向正式 `corpus-v<version>` 发布。`check` 未指定版本时只选择最新稳定 Corpus 发布，不使用同仓库的 CLI latest Release；`status` 不访问网络。离线安装与更新用 `--archive /path/svc-corpus-<version>.zip`，默认读取相邻 `.zip.sha256`，也可用 `--checksum` 指定校验文件。发布附件必须先实际发布才能通过在线路径下载；本地源码开发不把尚未发布的版本当作可下载发行物。
+
+更新先校验目标发行物，再比较实际目录与安装基线。本地改动、新增文件、未知目录、另一管理器安装或符号链接均阻止覆盖；CLI 不提供强制覆盖或三方合并。安装记录位于目标 Skills 根下的 `.svc/<name>.json`。`recorded_version` 是记录版本，`actual_version` 仅在文件与目标发行物匹配时确认。多目标先做整体冲突预检，再逐 Skill 执行；失败停止后续项，已成功项保留并报告真实状态。受控错误与中断按文件事务回滚当前项；掉电或强制终止后的混合状态由下次检查识别并拒绝覆盖，没有自动恢复承诺。
+
+`adopt` 不安装文件，不接管第三方安装。它要求实际可读的 `svc-task-packet`，在 Codex 的 `AGENTS.md` 或 Claude 的 `CLAUDE.md` 添加独立标记块，让 Human 权限边界和所有非平凡任务使用实际 Task Packet 的规则常驻可见。可用 `--skills-dir /actual/skills/root` 指向其它管理器的目录；原文件、锁文件和更新仍归原管理器。采用和取消采用保护块外内容，拒绝改写修改过的块。`unadopt` 不删除安装，`remove` 不修改项目采用指令；更新文件不自动迁移消费者资料，结果提供 release notes 与迁移指导链接。
+
+也可以使用通用管理器直接安装源目录。例如 Vercel Skills 的宿主名为 `claude-code`，与 SVC CLI 的 `claude` 不同：
 
 ```bash
-svc task grow <task-id> --repo /path/to/project
+npx skills@1.7.0 add xiaoland/svc --skill svc-task-packet --agent codex --copy
+npx skills@1.7.0 add xiaoland/svc --skill svc-workflow --agent claude-code --copy
+npx openskills@1.5.0 install xiaoland/svc
 ```
 
-The command inventories at most two directory levels, reports recognized and
-unknown entries, and changes no file. The Agent uses the packaged Task Packet
-guidance to make any semantic growth decision.
+需要可复现内容时，按管理器支持的语法固定 `corpus-v<version>` tag 或完整 commit；不能把它们跟踪原来源的 update 当作 SVC 的明确换版。通用管理器可能覆盖本地定制；长期项目规则放在项目入口，修改 Skill 正文时使用自有 fork 并自行同步。OpenSkills 的 `sync` 管理自己的发现块，与 SVC `adopt` 的常驻规则不同。目录安装成功、宿主列出入口和 Agent 实际执行分别观察；当前已隔离验证两个管理器的目录安装和 Codex 的只读发现，未据此承诺 Claude 或模型自动触发。
 
-## Declare and Ensure Development Capabilities
+## Task Packet
 
-An optional `dev.targets` map declares named capabilities directly. Each target
-has a scope (`worktree`, `repository`, or `host`), one readiness probe (`http`,
-`tcp`, or `exec`), an executable or manual provisioner, and an optional
-target-local executable or manual `stop` action. Default text serves ordinary
-Agent/Human use; compact JSON is the deliberate scripts/CI projection:
+所有非平凡任务使用 Task Packet。先找到现有 Packet，不存在时建立足以表达目标、授权、当前状态与验证边界的最小入口，随后按任务压力增长。[Task Packet Skill](corpus/svc-task-packet/SKILL.md)拥有选择和维护规则，并提供 references/assets；Agent 使用已有文件工具完成操作，保护现有 Packet 和授权路径。模板存在不意味着必须创建所有文件，文件工具也不自动具备旧 CLI 创建命令的全部事务与路径保护。
+
+## 声明与确保开发能力
+
+可选的 `dev.targets` 直接声明命名能力。每个 target 有 scope（`worktree`、`repository` 或 `host`）、一个 readiness probe（`http`、`tcp` 或 `exec`）、可执行或手动 provisioner，以及可选的 target-local 可执行或手动 `stop` 动作。默认文本服务 Agent/Human，紧凑 JSON 服务脚本与 CI：
 
 ```bash
 svc dev identity --repo /path/to/project --json
@@ -115,28 +108,17 @@ svc dev ensure frontend --repo /path/to/project --json
 svc dev stop frontend --repo /path/to/project --json
 ```
 
-Root `status` summarizes declarations only; `svc dev status` observes declared
-targets without starting or taking over a process. `ensure` handles one declared
-target, reuses a healthy endpoint, refuses an occupied but unhealthy endpoint,
-and does not run a `manual` provisioner. `stop` runs only Consumer-declared
-cleanup and never infers authority from a recorded PID. Executable work is coordinated
-at the declared scope and releases process authority once readiness succeeds.
-Worktree scope is the default and its probe endpoint must prove the resolved
-instance; host scope requires a declared `host_key`.
+根 `status` 只汇总声明；`dev status` 观察 target，不启动或接管进程。`ensure` 处理一个 target，复用健康 endpoint，拒绝被占用但不健康的 endpoint，不执行 `manual` provisioner。`stop` 只执行消费者声明的清理动作，不从记录的 PID 推断权限。可执行工作按声明的 scope 协调，readiness 成功后释放进程权限。默认 worktree scope 的 probe endpoint 必须证明解析出的实例；host scope 要求 `host_key`。
 
-Dev values may interpolate only `${dev.instance}`, `${dev.worktree.id}`, and
-`${dev.target}`. Commands are argument arrays, not shell snippets, and their
-configured working directories must remain inside the workspace.
+Dev 值只支持 `${dev.instance}`、`${dev.worktree.id}` 和 `${dev.target}` 插值。命令是参数数组，配置的工作目录必须位于 workspace 内。
 
-## Run One Shared Declared Command
+## 运行共同声明的命令
 
-Use a separate `run` map for bounded project-owned commands that Humans,
-Agents, editor carriers, or CI should invoke through the same project name:
+独立的 `run` map 声明有界、归项目所有的命令，让 Human、Agent、编辑器或 CI 使用相同名称：
 
 ```json
 {
-  "schema_version": 3,
-  "corpus_version": "15.0.0",
+  "schema_version": 4,
   "run": {
     "check": {
       "argv": ["pdm", "run", "test"],
@@ -153,28 +135,13 @@ svc run --follow <execution-id> --repo /path/to/project
 svc run --inspect <execution-id> --repo /path/to/project --json
 ```
 
-One caller owns the foreground process; concurrent local callers of the same
-effective worktree entry follow that execution instead of starting it again.
-The execution ID addresses captured stdout/stderr and a bounded receipt for
-handoff. A later explicit entry invocation runs again—settled receipts are not
-freshness or acceptance claims. Text mode preserves native stdout/stderr and
-puts SVC lifecycle facts on stderr; `--json` suppresses native display and
-returns one compact receipt.
+一个 caller 拥有前台进程；同一有效 worktree entry 的并发本地 caller 跟随该次执行，不重复启动。execution ID 寻址捕获的 stdout/stderr 和有界 receipt。之后显式调用 entry 会重新执行，已结束的 receipt 不声明新鲜度或验收通过。文本模式保留原生 stdout/stderr，把 SVC 生命周期事实写入 stderr；`--json` 不显示原生输出，只返回紧凑 receipt。
 
-`svc.local.json` may replace argv, cwd, and env-file arrays and merge inline env
-for an existing committed entry. Relative paths resolve from the workspace
-root. Environment files are strict and load in order before inline env; raw
-environment values are never stored in the receipt. `run` has no shell string,
-dependency graph, arbitrary arguments, background mode, readiness, cache,
-artifact model, or project-result verdict.
+Overlay 可替换已有 entry 的 argv、cwd、env-file 数组并合并 inline env。相对路径从 workspace 根解析；严格环境文件按顺序加载，再应用 inline env，receipt 不保存原始环境值。`run` 不提供 shell 字符串、依赖图、任意参数、后台模式、readiness、缓存、artifact 模型或项目结果判定。
 
-## Analyze Agent Task Evidence
+## 分析 Agent 任务证据
 
-Telemetry acquires one explicitly selected local provider source; analysis reads
-one immutable evidence bundle. Neither surface uploads data, contacts a network
-service, invokes a model, or claims an audit-completeness verdict. The calling
-Agent owns semantic interpretation and conclusions; SVC owns bounded capture,
-native fidelity, snapshot identity, and deterministic structural navigation.
+Telemetry 获取一个显式选择的本地 provider 源，analysis 读取一个不可变证据 bundle。两者不上传数据、访问网络服务、调用模型或宣称审计完整性。调用 Agent 拥有语义解释和结论；SVC 拥有有界捕获、原生保真、快照身份和确定性结构导航。
 
 ```bash
 svc telemetry agent-thread list [selection options] [--json]
@@ -186,93 +153,32 @@ svc analysis read --schema
 svc analysis read --input /path/to/evidence-v3.zip --request <file|->
 ```
 
-`list` is one bounded inventory surface. It exposes provider lifecycle,
-recognition, and local provenance without predicting whether a source will
-still be readable when export begins. `export` requires one exact thread ID or
-source path and an absent destination, while keeping the source read-only and
-refusing overwrite or source/output aliasing. A successful export is a
-validated bundle; an interrupted process may leave an invalid partial target
-that must be removed before retry. The caller owns where exported evidence is
-stored and who may see it; there is no `--include-sensitive`
-acknowledgement, `--repo` boundary, TTY gate, or private member-mode promise.
+`list` 提供有界 inventory，展示 provider 生命周期、识别结果和本地来源，不预测 export 时源是否仍可读。`export` 要求确切 thread ID 或源路径与不存在的目标，保持源只读，拒绝覆盖及源/目标别名。成功 export 是已验证 bundle；进程中断可能留下无效的部分目标，重试前须删除。caller 决定存储与访问权限；没有 `--include-sensitive` 确认、`--repo` 边界、TTY gate 或 private member-mode 承诺。
 
-The schema-v3 ZIP authority is `manifest.json`, `native.bin`, and
-`native-index.jsonl`. Native provider bytes remain in source order; framing
-records only stable IDs, contiguous byte ranges, source coordinates, and
-`complete|incomplete` state. One `evidence_id` binds native and framing bytes.
-`trajectory.jsonl` may be included as a derived structural cache, but it is not
-evidence authority and can be discarded and rebuilt. Its counts, capabilities,
-and loss summary likewise remain derived. A schema-v1 or schema-v2 bundle is a
-historical cutoff: query/read reject it after bounded identification; recollect
-from the provider-local source.
+schema-v3 ZIP 的权威是 `manifest.json`、`native.bin` 和 `native-index.jsonl`。Provider 原生字节保留源顺序；framing 只记录稳定 ID、连续字节范围、源坐标和 `complete|incomplete` 状态。一个 `evidence_id` 绑定原生与 framing 字节。可选 `trajectory.jsonl` 是可丢弃重建的派生结构缓存，其计数、能力和损失摘要也不是证据权威。schema-v1/v2 bundle 属于历史 cutoff，query/read 在有界识别后拒绝，须从 provider 本地源重新获取。
 
-This is a same-user local workflow, not a security sandbox. SVC does not
-protect against root, a hostile process under the same account, or adversarial
-path replacement. Native evidence may contain all selected provider content;
-structural projection and omission are not confidentiality or redaction. The
-caller owns storage, access, retention, and disclosure.
+这是同用户本地流程，不是安全沙箱；SVC 不防御 root、同账号恶意进程或对抗性路径替换。原生证据可包含所有选中内容，结构投影与省略不提供保密或脱敏。caller 拥有存储、访问、保留和披露决策。
 
-`query` is a closed machine-first protocol with `overview` and deterministic
-`match` intents. It uses or rebuilds the structural cache and returns evidence
-identity, source/capture facts, derived capability/loss status, stable native
-and trajectory references, structural ranges, and bounded
-predicate matches over record type, role, tool, relationship, native range, or
-literal text. It does not accept arbitrary field selection, SQL/JSONPath,
-regular-expression programs, joins, grouping, scoring, or natural-language
-prompts. `read` is forward-only native reading: start at the beginning or an
-exact native reference, optionally include bounded preceding records, and use a
-scope-bound cursor to continue. It returns captured native bytes/values with
-exact frame and fragment offsets, digests, provenance, and continuation.
-Cursors carry typed request scope and are unsigned local state, not
-authenticated capabilities. Frame and fragment digests are computed from the
-native bytes when read rather than stored as framing authority.
-Exact UTF-8 fragments are directly readable as text; arbitrary bytes use a
-lossless base64 fallback. Read never filters, reorders, summarizes, or silently
-returns normalized text.
+`query` 是封闭的 machine-first 协议，提供 `overview` 和确定性 `match`。它使用或重建结构缓存，返回证据身份、源/捕获事实、派生能力与损失、稳定 native/trajectory 引用、结构范围及有界匹配。匹配条件覆盖 record type、role、tool、relationship、native range 或 literal text；不支持任意字段选择、SQL/JSONPath、正则程序、join、grouping、scoring 或自然语言提示。
 
-Responses distinguish `complete`, `partial`, and `unavailable`; pagination is
-not evidence loss. An incomplete acquisition frame remains readable but cannot
-produce a projection record. A missing or invalid cache is rebuilt from native
-evidence; failed rebuild makes structural query unavailable without preventing
-native read. Query/read are JSON-first. Their machine contracts come from
-`--schema`; the task-analysis method and authority boundary are part of
-`svc analysis --help`, not the SVC Corpus.
+`read` 按原生顺序向前读取，从开头或确切 native 引用开始，可包含有界前置 records，并以绑定请求 scope 的 cursor 延续。结果提供捕获的字节/值、确切 frame/fragment offsets、digest、来源与延续。cursor 是带类型请求 scope 的未签名本地状态，不是认证能力；frame/fragment digest 在读取时从原生字节计算。确切 UTF-8 fragment 可直接读为文本，任意字节以无损 base64 返回。Read 不过滤、重排、总结或静默标准化文本。
 
-The old `telemetry agent-thread analyze` command and Textual navigator are
-removed; analysis is now the composition of explicit `query` and native
-`read`, with the calling Agent deciding what the evidence means.
+响应区分 `complete`、`partial` 和 `unavailable`；分页不是证据损失。不完整的 acquisition frame 可读，但不能产生 projection record。缺失或无效缓存从原生证据重建；重建失败使结构 query 不可用，不阻止 native read。Query/read 是 JSON-first，`--schema` 拥有机器合同；任务分析方法和权限边界由 `svc analysis --help` 提供。
 
-## Upgrade Deliberately
+旧 `telemetry agent-thread analyze` 与 Textual navigator 已移除；调用 Agent 通过显式 `query` 与原生 `read` 解释证据。
 
-The installed package manager owns CLI installation and updates. Project
-configuration and Corpus-baseline upgrades remain explicit SVC operations:
+## 人工迁移 CLI 配置
 
-```bash
-svc status /path/to/project
-svc upgrade /path/to/project
-svc upgrade /path/to/project --apply <plan-digest>
-```
+包管理器拥有 CLI 安装和更新。CLI 15 不提供 `lookup`、`upgrade` 或 `task init/grow`，不保留别名或转发。旧配置采用 hard-cutoff，失败时保持文件不变；`init` 不清空、重建或自动迁移旧配置。
 
-Version 15 does not migrate historical CLI configuration. Corpus plans reference
-the exact packaged migration guidance; after an Agent/Human reviews and updates
-Consumer-owned SVC documents, Corpus apply records only the reviewed
-`corpus_version` baseline. SVC never programmatically rewrites those documents.
+先备份并审查项目配置，把 `svc.json` 与存在的 `svc.local.json` 的 `schema_version` 改为 `4`，从主配置删除 `corpus_version`，保留其余 dev/run 声明与 overlay 内容。之后用 `svc status --json` 检查，再审查新的 init 计划及其受管工具导航变化。未知字段和无效有效配置继续被拒绝。
 
-## Behavioral SemVer and Releases
+框架采用变化遵循[Corpus 版本迁移指导](corpus/migrations/index.md)，由 Agent/Human 更新消费者拥有的契约与引用；它不变换 CLI 配置，不自动迁移消费者语义；CLI 只记录自己安装文件的基线。
 
-SVC uses Behavioral SemVer:
+## Behavioral SemVer 与发布
 
-- **MAJOR** changes required obligations, defaults, permission/authority boundaries, task-packet semantics, consumer layout, or a stable CLI/catalog contract.
-- **MINOR** adds an optional backward-compatible capability.
-- **PATCH** fixes or clarifies the existing protocol without changing those behaviors.
+- **MAJOR**：不兼容地改变必要义务、默认行为、权限边界、Task Packet 语义、消费者布局或稳定 CLI 合同。
+- **MINOR**：增加可选、向后兼容的能力。
+- **PATCH**：修正或澄清已有协议而不改变上述行为。
 
-Towncrier records CLI and Corpus changes independently under `.changes/cli/`
-and `.changes/corpus/`. Maintainers prepare ordinary release pull requests
-against the matching static version and changelog. A CLI release publishes the
-validated wheel through Trusted Publishing; a Corpus release creates its own
-tag and GitHub Release. Because the wheel embeds a Corpus snapshot, a newer
-Corpus reaches PyPI users with the next CLI release. Corpus migration notes
-remain independent packaged guidance. Corpus content and `corpus/version.json`
-advance together in the feature change; its release pull request only prepares
-the corresponding changelog.
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
+Towncrier 分别记录 `.changes/cli/` 和 `.changes/corpus/`。CLI 发布通过 Trusted Publishing 发布已验证 wheel；Corpus 发布有独立 `corpus-v<version>` tag 与 GitHub Release。CLI wheel 不含框架内容，因此新 Corpus 不随 CLI 发布投递。框架版本权威是根 `pyproject.toml` 的 `[tool.svc.corpus].version`，六个 Skill 的 `metadata.version` 由发布准备命令同步；发布物提供精简 Skills ZIP、manifest 与外部 SHA-256 校验文件。MIT 声明随每个独立 Skill 与 CLI 发行物携带，详见[贡献指南](CONTRIBUTING.md)。

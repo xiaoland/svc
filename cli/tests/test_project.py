@@ -9,7 +9,7 @@ import pytest
 
 import svc_cli.project as project
 from svc_cli.errors import SvcError
-from svc_cli.catalog import sha256_bytes
+from svc_cli.plans import sha256_bytes
 from svc_cli.integration import local_config_ignore_body, navigation_body
 from svc_cli.project import (
     AGENTS_FILE,
@@ -18,9 +18,7 @@ from svc_cli.project import (
     PROJECT_FILE,
     apply_init,
     inspect_status,
-    parse_project_state,
     plan_init,
-    render_project_state,
 )
 
 
@@ -51,8 +49,7 @@ def test_generated_guidance_separates_cli_discovery_from_corpus_navigation() -> 
 
     assert "svc --help" in agent
     assert "svc <command> --help" in agent
-    assert "svc lookup --help" in docs
-    assert "svc lookup --list" not in docs
+    assert "svc lookup" not in docs
     assert "Human authorization" not in agent + docs
     assert "svc adopt" not in agent + docs
 
@@ -63,10 +60,7 @@ def test_init_apply_produces_a_healthy_idempotent_project() -> None:
         first = plan_init(root)
         result = apply_init(first, first.digest)
         assert result.status == "applied"
-        assert (
-            parse_project_state((root / PROJECT_FILE).read_bytes()).corpus_version
-            == first.target_version
-        )
+        assert json.loads((root / PROJECT_FILE).read_bytes())["schema_version"] == 4
         assert not (root / CODEX_SKILL_FILE).exists()
         assert (root / DOCS_INDEX_FILE).is_file()
         assert b"svc:begin local-config" in (root / ".gitignore").read_bytes()
@@ -163,25 +157,7 @@ def test_stale_plan_detects_consumer_change_before_any_write() -> None:
         assert not (root / PROJECT_FILE).exists()
 
 
-def test_status_reports_corpus_relation_and_upgrade_continuation() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        initial = plan_init(root)
-        apply_init(initial, initial.digest)
-        (root / PROJECT_FILE).write_bytes(render_project_state("11.0.1"))
-        status = inspect_status(root)
-        assert status.status == "actionable"
-        assert status.project.status == "corpus-behind"
-        assert status.corpus.status == "behind"
-        assert status.corpus.project_version == "11.0.1"
-        assert status.corpus.available_version == initial.target_version
-        assert status.next.action == "plan-project-upgrade"
-        assert status.next.command is not None
-        assert status.next.command == ("svc", "upgrade", str(root.resolve()))
-        assert not status.healthy
-
-
-def test_status_does_not_compare_cli_distribution_to_corpus_version(
+def test_status_does_not_compare_cli_distribution_to_project_schema(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with tempfile.TemporaryDirectory() as tmp:
@@ -195,7 +171,6 @@ def test_status_does_not_compare_cli_distribution_to_corpus_version(
             )
             status = inspect_status(root)
         assert status.installed_cli_version == cli_version
-        assert status.available_corpus_version == initial.target_version
         assert status.runtime.status == "installed"
         assert status.status == "healthy"
         assert status.healthy
@@ -244,8 +219,7 @@ def test_status_summarizes_declarations_without_executing_them(
     (tmp_path / PROJECT_FILE).write_text(
         json.dumps(
             {
-                "schema_version": 3,
-                "corpus_version": initial.target_version,
+                "schema_version": 4,
                 "dev": {
                     "targets": {
                         "web": {
@@ -307,7 +281,7 @@ def test_init_manages_only_a_clean_local_config_ignore_section() -> None:
 def test_unsupported_schema_and_corpus_ahead_block_init_writes() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        legacy = b'{\n  "schema_version": 1,\n  "svc_version": "10.0.0"\n}\n'
+        legacy = b'{\n  "schema_version": 3,\n  "corpus_version": "15.0.0"\n}\n'
         (root / PROJECT_FILE).write_bytes(legacy)
         blocked = plan_init(root)
         assert "invalid-project-state" in {item.code for item in blocked.blockers}
@@ -315,9 +289,11 @@ def test_unsupported_schema_and_corpus_ahead_block_init_writes() -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        (root / PROJECT_FILE).write_bytes(render_project_state("16.0.0"))
+        (root / PROJECT_FILE).write_bytes(
+            b'{"schema_version": 3, "corpus_version": "16.0.0"}'
+        )
         blocked = plan_init(root)
-        assert "corpus-baseline-ahead" in {item.code for item in blocked.blockers}
+        assert "invalid-project-state" in {item.code for item in blocked.blockers}
 
 
 def test_invalid_local_overlay_blocks_init_without_rewriting_it() -> None:

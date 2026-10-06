@@ -27,21 +27,16 @@ from .cli_output.double import (
     DoubleValidateRuntimeUnavailableOutput,
     DoubleValidateOutput,
 )
-from .cli_output.lookup import LookupOutput
 from .cli_output.project import InitApplyOutput, InitPlanOutput, RootStatusOutput
 from .cli_output.model import CliUsageOutput, MachineError
 from .cli_output.run import RunReceipt
-from .cli_output.upgrade import UpgradeApplyOutput, UpgradePlanOutput
+from .cli_output.skills import SkillsOutput, AdoptionOutput
 
 
-LookupMachineOutput: TypeAlias = LookupOutput | MachineError | CliUsageOutput
 InitMachineOutput: TypeAlias = (
     InitPlanOutput | InitApplyOutput | MachineError | CliUsageOutput
 )
 StatusMachineOutput: TypeAlias = RootStatusOutput | MachineError | CliUsageOutput
-UpgradeMachineOutput: TypeAlias = (
-    UpgradePlanOutput | UpgradeApplyOutput | MachineError | CliUsageOutput
-)
 DevIdentityMachineOutput: TypeAlias = DevIdentityOutput | MachineError | CliUsageOutput
 DevStatusMachineOutput: TypeAlias = DevStatusOutput | MachineError | CliUsageOutput
 DevEnsureMachineOutput: TypeAlias = DevEnsureOutput | MachineError | CliUsageOutput
@@ -79,12 +74,11 @@ DoubleStopMachineOutput: TypeAlias = (
 )
 
 RegisteredMachineOutput: TypeAlias = (
-    LookupOutput
+    SkillsOutput
+    | AdoptionOutput
     | InitPlanOutput
     | InitApplyOutput
     | RootStatusOutput
-    | UpgradePlanOutput
-    | UpgradeApplyOutput
     | DevIdentityOutput
     | DevStatusOutput
     | DevEnsureOutput
@@ -112,10 +106,11 @@ class OutputSchemaSpec:
 
 
 OUTPUT_SCHEMA_SPECS = {
-    "lookup": OutputSchemaSpec(2, TypeAdapter(LookupMachineOutput)),
-    "init": OutputSchemaSpec(3, TypeAdapter(InitMachineOutput)),
-    "status": OutputSchemaSpec(2, TypeAdapter(StatusMachineOutput)),
-    "upgrade": OutputSchemaSpec(2, TypeAdapter(UpgradeMachineOutput)),
+    "skills": OutputSchemaSpec(
+        1, TypeAdapter(SkillsOutput | AdoptionOutput | MachineError | CliUsageOutput)
+    ),
+    "init": OutputSchemaSpec(4, TypeAdapter(InitMachineOutput)),
+    "status": OutputSchemaSpec(3, TypeAdapter(StatusMachineOutput)),
     "dev-identity": OutputSchemaSpec(2, TypeAdapter(DevIdentityMachineOutput)),
     "dev-status": OutputSchemaSpec(2, TypeAdapter(DevStatusMachineOutput)),
     "dev-ensure": OutputSchemaSpec(2, TypeAdapter(DevEnsureMachineOutput)),

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import shutil
 
+
 from svc_cli.cli import main
 from svc_cli.analysis.models_v3 import AnalysisErrorV3
 

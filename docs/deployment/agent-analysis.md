@@ -6,9 +6,7 @@ An export produces evidence v4; omitting `--provider` selects Codex. Telemetry r
 
 Every consumer validates declared members, sizes, hashes, evidence identity, trajectory shape, and source references before use. A trajectory or material integrity failure rejects the bundle. Missing descendants are retained as collection gaps and capability issues. Analysis reads only the trajectory for common behavior; native material is used by `read` and remains available for audit or future export, not as a hidden provider-normalizer fallback.
 
-The runtime supports only analysis v3 and evidence v4. Versionless requests
-select analysis v3. Any older evidence requires recollection; neither query nor
-read contains a legacy success path.
+The runtime supports only analysis v3 and evidence v4. Versionless requests select analysis v3. Any older evidence requires recollection; neither query nor read contains a legacy success path.
 
 Source size, member size, request size, response size, and page item bounds are enforced. Exact material reads use UTF-8 when lossless and base64 otherwise, and fragments reassemble byte-for-byte across cursor pages. Export never mutates the source or overwrites an existing destination. If publication fails after creating the target, the runtime removes the incomplete target when possible.
 

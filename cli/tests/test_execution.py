@@ -43,14 +43,6 @@ def publish(store: ExecutionStore, *, domain: str = "run", capture: str = "split
     )
 
 
-def test_record_coordination_round_trip(tmp_path: Path) -> None:
-    store = ExecutionStore(tmp_path / "runtime")
-    published = publish(store)
-    store.write_coordination("run", COORDINATION, published.record.execution_id)
-    assert store.read_coordination("run", COORDINATION) == published.record.execution_id
-    assert store.read(published.record.execution_id) == published.record
-
-
 def test_publish_classifies_execution_directory_creation_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

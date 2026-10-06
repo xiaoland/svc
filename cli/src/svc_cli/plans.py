@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import tempfile
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, TypeAlias
-
-from .catalog import canonical_json, sha256_bytes
 from .errors import SvcError
 
 
@@ -19,6 +19,17 @@ FileStateKind: TypeAlias = Literal["absent", "file"]
 PlanAction: TypeAlias = Literal["create", "append", "refresh", "rewrite", "delete"]
 RollbackStatus: TypeAlias = Literal["succeeded", "conflicted", "failed"]
 LocalApplyStatus: TypeAlias = Literal["noop", "applied"]
+
+
+def sha256_bytes(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def canonical_json(value: Any) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        + "\n"
+    ).encode("utf-8")
 
 
 @dataclass(frozen=True)
@@ -237,7 +248,12 @@ def make_delete(
     )
 
 
-def apply_local_plan(plan: LocalPlan, approved_digest: str) -> LocalApplyResult:
+def apply_local_plan(
+    plan: LocalPlan,
+    approved_digest: str,
+    *,
+    allowed_parent_paths: tuple[Path, ...] = (),
+) -> LocalApplyResult:
     """Apply exactly one approved file-state transaction."""
 
     if approved_digest != plan.digest:
@@ -259,7 +275,7 @@ def apply_local_plan(plan: LocalPlan, approved_digest: str) -> LocalApplyResult:
             {"repo": str(plan.repo)},
         )
 
-    _assert_preconditions(plan)
+    _assert_preconditions(plan, allowed_parent_paths)
     if not plan.mutations:
         return LocalApplyResult(
             status="noop",
@@ -273,11 +289,16 @@ def apply_local_plan(plan: LocalPlan, approved_digest: str) -> LocalApplyResult:
     try:
         with tempfile.TemporaryDirectory(prefix="svc-plan-") as staging_directory:
             staged = _stage_after_content(plan, Path(staging_directory))
-            _assert_preconditions(plan)
+            _assert_preconditions(plan, allowed_parent_paths)
             try:
                 for mutation in plan.mutations:
                     target = _absolute_target(plan.repo, mutation.path)
-                    _assert_mutation_precondition(plan.repo.resolve(), target, mutation)
+                    _assert_mutation_precondition(
+                        plan.repo.resolve(),
+                        target,
+                        mutation,
+                        tuple(created_directories) + allowed_parent_paths,
+                    )
                     if mutation.after.state == "file":
                         _ensure_parent_directories(
                             plan.repo.resolve(), target, created_directories
@@ -405,16 +426,24 @@ def _path_state(path: Path) -> str:
     return "other"
 
 
-def _assert_preconditions(plan: LocalPlan) -> None:
+def _assert_preconditions(
+    plan: LocalPlan, allowed_parent_paths: tuple[Path, ...] = ()
+) -> None:
     root = plan.repo.resolve()
     for mutation in plan.mutations:
         _assert_mutation_precondition(
-            root, _absolute_target(plan.repo, mutation.path), mutation
+            root,
+            _absolute_target(plan.repo, mutation.path),
+            mutation,
+            allowed_parent_paths,
         )
 
 
 def _assert_mutation_precondition(
-    root: Path, path: Path, mutation: PlannedFileMutation
+    root: Path,
+    path: Path,
+    mutation: PlannedFileMutation,
+    created_directories: tuple[Path, ...] = (),
 ) -> None:
     _, actual = _read_file(path)
     if actual != mutation.before:
@@ -428,7 +457,14 @@ def _assert_mutation_precondition(
             },
         )
     for relative, expected_state in mutation.parent_preconditions:
-        actual_state = _path_state(root.joinpath(*PurePosixPath(relative).parts))
+        parent = root.joinpath(*PurePosixPath(relative).parts)
+        actual_state = _path_state(parent)
+        if (
+            expected_state == "missing"
+            and actual_state == "directory"
+            and parent in created_directories
+        ):
+            continue
         if actual_state != expected_state:
             raise SvcError(
                 "stale-plan",

@@ -1,4 +1,4 @@
-"""Console interface for the packaged SVC corpus and project integration runtime."""
+"""Console interface for project integration and runtime observation."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from ._execution import ExecutionStore
 from .analysis.cli import register as register_analysis
 from .analysis.cli import run as run_analysis
 from .analysis.protocol import AnalysisProtocolError
-from .cli_output.lookup import project_lookup
 from .cli_output.double import (
     DoubleDiagnosticOutput,
     DoubleEmitRuntimeUnavailableOutput,
@@ -50,7 +49,6 @@ from .cli_output.project import (
     project_status,
 )
 from .cli_output.run import project_run_receipt, run_exit_code
-from .cli_output.upgrade import project_upgrade_apply, project_upgrade_plan
 from .cli_delivery import deliver_error, deliver_result
 from .errors import SvcError
 from .dev.runtime import (
@@ -66,12 +64,6 @@ from .dev.runtime import (
     stop_target,
 )
 from .dev.readiness import ProbeObservation
-from .lookup import (
-    LOOKUP_DISCOVERY_HINT,
-    CorpusLookup,
-    LookupQuery,
-    LookupResponse,
-)
 from .cli_output.model import (
     CliUsageOutput,
     dump_machine_output,
@@ -93,22 +85,14 @@ from .run.runtime import (
     follow_run,
     inspect_run,
 )
-from .release import catalog, runtime_version
-from .upgrade import (
-    UpgradeApplyResult,
-    UpgradePlan,
-    apply_upgrade,
-    plan_upgrade,
+from .skills_cli import (
+    register as register_skills,
+    run as run_skills,
+    render as render_skills,
 )
+from .release import runtime_version
 from .telemetry.cli import register as register_telemetry
 from .telemetry.cli import run as run_telemetry
-from .task_packet import (
-    TASK_PACKET_GUIDANCE_PATH,
-    TASK_PACKET_TEMPLATE_PATH,
-    TaskPacket,
-    grow_task_packet,
-    init_task_packet,
-)
 
 
 EXIT_OK = 0
@@ -227,63 +211,14 @@ def _double_help_epilog(command_help: str) -> str:
 def _parser() -> argparse.ArgumentParser:
     parser = SvcArgumentParser(
         prog="svc",
-        description="Local Sustainable Vibe Coding corpus and project integration CLI.",
-        epilog=f"For local SVC guidance: {LOOKUP_DISCOVERY_HINT}",
+        description="Local Sustainable Vibe Coding project integration CLI.",
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {runtime_version()}"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    lookup = subparsers.add_parser(
-        "lookup",
-        help="Browse, search, or read the packaged SVC Corpus",
-        description=(
-            "Browse, search, or read packaged SVC Corpus guidance. Lookup does not "
-            "document SVC CLI usage; use svc <command> --help for command contracts."
-        ),
-        epilog=(
-            "--list browses one logical directory level. --keyword ranks concept "
-            "candidates; --regex returns exact path/content matches. --path prints one "
-            "exact document or a concept directory's index as raw Markdown. Search can "
-            "validly return no matches. "
-            "Default text is for Agent/Human reading; --json is compact scripts/CI output."
-        ),
-    )
-    lookup_group = lookup.add_mutually_exclusive_group(required=True)
-    lookup_group.add_argument(
-        "--list",
-        nargs="?",
-        const="",
-        dest="list_prefix",
-        metavar="PREFIX",
-        help="List immediate children of one logical Corpus directory",
-    )
-    lookup_group.add_argument(
-        "--path",
-        help=(
-            "Read one canonical Markdown path or concept directory "
-            "(a/b or a/b/ resolves to a/b/index.md)"
-        ),
-    )
-    lookup_group.add_argument(
-        "--keyword",
-        help="Rank bounded lexical candidates in the selected scope",
-    )
-    lookup_group.add_argument(
-        "--regex",
-        help="Return bounded exact regular-expression matches",
-    )
-    lookup.add_argument("--scope", choices=("path", "both"))
-    lookup.add_argument(
-        "--limit", type=_lookup_limit, help="Maximum keyword results (1-50)"
-    )
-    _add_machine_output(
-        lookup,
-        "lookup",
-        "Emit compact mode-specific JSON for scripts and CI",
-        schema_first=True,
-    )
+    register_skills(subparsers, _add_machine_output)
 
     init = subparsers.add_parser(
         "init",
@@ -296,8 +231,8 @@ def _parser() -> argparse.ArgumentParser:
         epilog=(
             "Owned effects: create a missing minimal svc.json; maintain SVC-marked blocks "
             "in .gitignore, AGENTS.md, and docs/index.md; retire a clean legacy SVC CLI "
-            "Skill. Existing configuration, Corpus baseline, svc.local.json, and unmarked "
-            "Consumer content are not rewritten. Use svc upgrade for Corpus adoption."
+            "Skill. Existing configuration, svc.local.json, and unmarked Consumer "
+            "content are not rewritten."
         ),
     )
     init.add_argument("repo", nargs="?", default=".", help="Project directory")
@@ -306,7 +241,7 @@ def _parser() -> argparse.ArgumentParser:
 
     status = subparsers.add_parser(
         "status",
-        help="Inspect CLI, config, Corpus baseline, and managed integration state",
+        help="Inspect CLI, config, and managed integration state",
         description=(
             "Inspect project SVC state without probing dev targets or changing files. "
             "Non-healthy results include one primary continuation and exit 3; --json "
@@ -317,21 +252,6 @@ def _parser() -> argparse.ArgumentParser:
     _add_machine_output(
         status, "status", "Emit the complete compact scripts/CI projection"
     )
-
-    upgrade = subparsers.add_parser(
-        "upgrade",
-        help="Plan or apply Corpus-baseline adoption",
-        description=(
-            "Plan or apply project adoption of the installed Corpus baseline."
-        ),
-        epilog=(
-            "Plans reference guidance for Agent/Human document work; apply "
-            "records only the reviewed baseline. This command does not update the CLI."
-        ),
-    )
-    upgrade.add_argument("repo", nargs="?", default=".", help="Project directory")
-    upgrade.add_argument("--apply", metavar="PLAN_DIGEST")
-    _add_machine_output(upgrade, "upgrade", "Emit compact scripts/CI JSON")
 
     dev = subparsers.add_parser(
         "dev", help="Observe, ensure, or stop declared consumer dev capabilities"
@@ -631,42 +551,6 @@ reports the last unsealed projection and does not invent terminal state."""
         schema_first=True,
     )
 
-    task = subparsers.add_parser(
-        "task",
-        help="Create a task packet or inspect its bounded local growth shape",
-        description=(
-            "Create the smallest task control surface or inspect an existing packet "
-            "without making semantic decisions or changing files."
-        ),
-    )
-    task_commands = task.add_subparsers(dest="task_command", required=True)
-    task_init = task_commands.add_parser(
-        "init",
-        help="Create one absent tasks/<task-id>/packet.md from the packet template",
-        description=(
-            "Create only an absent packet.md. Existing packets are never merged or "
-            "overwritten. After creation, perform shape preflight from the Task Packet "
-            "guidance before adding topology or supporting modules."
-        ),
-    )
-    task_init.add_argument("task_id", metavar="TASK_ID")
-    task_init.add_argument(
-        "--repo", default=".", help="Project directory (default: current directory)"
-    )
-    task_grow = task_commands.add_parser(
-        "grow",
-        help="Inspect one existing packet with a bounded read-only growth brief",
-        description=(
-            "Inventory the existing packet package to two directory levels and 100 "
-            "entries, report recognized and unknown paths, and ask work/information "
-            "topology questions. This command never edits files or decides shape."
-        ),
-    )
-    task_grow.add_argument("task_id", metavar="TASK_ID")
-    task_grow.add_argument(
-        "--repo", default=".", help="Project directory (default: current directory)"
-    )
-
     register_telemetry(subparsers)
     register_analysis(subparsers)
     return parser
@@ -693,41 +577,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             _emit_json(CliUsageOutput(message=str(error)), stream=sys.stderr)
         else:
             print(f"svc: invalid-cli-usage: {error}", file=sys.stderr)
-            if not raw_argv or raw_argv[:1] == ["lookup"]:
-                print(f"Hint: {LOOKUP_DISCOVERY_HINT}", file=sys.stderr)
         return EXIT_USAGE
     json_output = bool(getattr(args, "json_output", False))
     try:
-        if args.command == "lookup":
-            if args.limit is not None and (
-                args.list_prefix is not None or args.path is not None
-            ):
-                raise SvcError(
-                    "invalid-lookup-options",
-                    "--limit does not apply to --list or --path.",
-                )
-            if args.scope is not None and args.keyword is None and args.regex is None:
-                raise SvcError(
-                    "invalid-lookup-options",
-                    "--scope applies only to --keyword or --regex.",
-                )
-            lookup_limit = args.limit if args.limit is not None else 10
-            scope = cast(Literal["path", "both"], args.scope or "both")
-            if args.list_prefix is not None:
-                query = LookupQuery("list", args.list_prefix, limit=lookup_limit)
-            elif args.path is not None:
-                query = LookupQuery("path", args.path, limit=lookup_limit)
-            elif args.keyword is not None:
-                query = LookupQuery("keyword", args.keyword, scope, lookup_limit)
-            else:
-                query = LookupQuery("regex", args.regex, scope, lookup_limit)
-            response = CorpusLookup(catalog()).lookup(query)
+        if args.command == "skills":
+            skills_payload, skills_exit = run_skills(args)
             return deliver_result(
-                response,
+                skills_payload,
                 json_output=json_output,
-                project=project_lookup,
-                render=_render_lookup,
-                exit_code=EXIT_OK,
+                project=lambda value: value,
+                render=render_skills,
+                exit_code=skills_exit,
             )
 
         if args.command == "status":
@@ -738,29 +598,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 project=project_status,
                 render=_render_status,
                 exit_code=EXIT_OK if status_payload.healthy else EXIT_CONFLICT,
-            )
-
-        if args.command == "upgrade":
-            upgrade_plan = plan_upgrade(Path(args.repo))
-            if args.apply:
-                upgrade_payload = apply_upgrade(upgrade_plan, args.apply)
-                return deliver_result(
-                    upgrade_payload,
-                    json_output=json_output,
-                    project=project_upgrade_apply,
-                    render=_render_upgrade_apply,
-                    exit_code=EXIT_OK,
-                )
-            return deliver_result(
-                upgrade_plan,
-                json_output=json_output,
-                project=project_upgrade_plan,
-                render=_render_upgrade_plan,
-                exit_code=(
-                    EXIT_CONFLICT
-                    if upgrade_plan.status in {"migration-required", "blocked"}
-                    else EXIT_OK
-                ),
             )
 
         if args.command == "dev":
@@ -818,16 +655,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if args.command == "analysis":
             return run_analysis(args)
-
-        if args.command == "task":
-            if args.task_command == "init":
-                task_packet = init_task_packet(Path(args.repo), args.task_id)
-                _render_task_packet_init(task_packet, sys.stdout)
-                return EXIT_OK
-            _binary_output(sys.stdout).write(
-                grow_task_packet(Path(args.repo), args.task_id)
-            )
-            return EXIT_OK
 
         if args.command == "telemetry":
             return run_telemetry(args, json_output)
@@ -1560,73 +1387,6 @@ def _binary_output(stream: Any) -> Any:
     return getattr(stream, "buffer", None) or _TextBinaryAdapter(stream)
 
 
-def _lookup_limit(value: str) -> int:
-    try:
-        limit = int(value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("--limit must be an integer") from error
-    if not 1 <= limit <= 50:
-        raise argparse.ArgumentTypeError("--limit must be between 1 and 50")
-    return limit
-
-
-def _render_upgrade_plan(plan: UpgradePlan, stream: TextIO) -> None:
-    write = partial(print, file=stream)
-    write(f"svc upgrade: {plan.status}")
-    write(f"Repository: {plan.repo}")
-    if plan.status == "noop":
-        write(f"Corpus: baseline {plan.corpus.project_version} (current)")
-        return
-    if plan.status == "blocked":
-        write("No changes can be applied.")
-        _emit_blockers(plan.blockers, stream)
-        write("Next: resolve the blocker, then recompute the plan:")
-        write(f"  svc upgrade {shlex.quote(str(plan.repo))}")
-        return
-
-    assert plan.corpus.releases is not None
-    write(f"Corpus: baseline {plan.corpus.from_version} -> {plan.corpus.to_version}")
-    paths = [
-        guide.path for release in plan.corpus.releases for guide in release.guides or ()
-    ]
-    if paths:
-        write("\nRead required guidance:")
-        for path in paths:
-            write(f"  svc lookup --path {shlex.quote(path)}")
-
-    write(f"\nWould change ({len(plan.mutations)}):")
-    for operation in plan.mutations:
-        write(f"  {operation.action} {operation.path} - {operation.reason}")
-    assert plan.digest is not None
-    if plan.status == "migration-required":
-        write("\nAfter completing the migration guidance, apply this exact plan:")
-    else:
-        write("\nApply this exact plan:")
-    write(f"  svc upgrade {shlex.quote(str(plan.repo))} --apply {plan.digest}")
-
-
-def _render_upgrade_apply(payload: UpgradeApplyResult, stream: TextIO) -> None:
-    write = partial(print, file=stream)
-    write("svc upgrade: applied")
-    write(f"Repository: {payload.repo}")
-    write(
-        f"Corpus: baseline {payload.corpus.from_version} -> {payload.corpus.to_version}"
-    )
-    write(f"Applied plan: {payload.plan_digest}")
-    if payload.migration.disposition == "caller-asserted":
-        write(
-            "Migration guidance: asserted complete by caller; project-owned work not verified by SVC"
-        )
-    else:
-        write("Migration guidance: not required")
-    write(f"\nChanged ({len(payload.operations)}):")
-    for operation in payload.operations:
-        write(f"  {operation.action} {operation.path}")
-    write(f"\nVerification: {payload.verification.scope} {payload.verification.status}")
-    write("Next observation:")
-    write(f"  svc status {shlex.quote(payload.repo)}")
-
-
 def _render_init_plan(plan: InitPlan, stream: TextIO) -> None:
     write = partial(print, file=stream)
     suffix = "; no changes can be applied" if plan.status == "blocked" else ""
@@ -1640,12 +1400,6 @@ def _render_init_plan(plan: InitPlan, stream: TextIO) -> None:
             else "repair managed integration"
         )
     )
-    write(f"Corpus: {plan.corpus_version}")
-    baseline = plan.corpus_baseline
-    if baseline.disposition == "create":
-        write(f"Corpus baseline: create {baseline.version}")
-    else:
-        write(f"Corpus baseline: {baseline.version or 'unavailable'} (unchanged)")
     if plan.status == "blocked":
         write()
         _emit_blockers(plan.blockers, stream)
@@ -1668,14 +1422,6 @@ def _render_init_apply(payload: InitApplyResult, stream: TextIO) -> None:
     write = partial(print, file=stream)
     write(f"svc init: {payload.status}")
     write(f"Repository: {payload.repo}")
-    write(f"Corpus: {payload.corpus_version}")
-    if payload.corpus_baseline.disposition == "create":
-        write(f"Corpus baseline: created {payload.corpus_baseline.version}")
-    else:
-        write(
-            "Corpus baseline: "
-            f"{payload.corpus_baseline.version or 'unavailable'} (unchanged)"
-        )
     write(f"Applied plan: {payload.plan_digest}")
     if payload.operations:
         write(f"\nChanged ({len(payload.operations)}):")
@@ -1726,13 +1472,8 @@ def _init_operation_text(path: str) -> tuple[str, str, str]:
 def _render_status(payload: ProjectStatusInspection, stream: TextIO) -> None:
     write = partial(print, file=stream)
     installed = payload.installed_cli_version or "source-tree"
-    project_version = payload.corpus.project_version or "absent"
     lead = "healthy" if payload.healthy else payload.status
-    write(
-        f"SVC {lead} — CLI {installed} ({payload.resource_mode}); "
-        f"Corpus {payload.corpus.available_version}; project baseline {project_version} "
-        f"({payload.corpus.status}); configuration {payload.configuration.status}"
-    )
+    write(f"SVC {lead} — CLI {installed}; configuration {payload.configuration.status}")
     if not payload.healthy:
         write(f"Next: {payload.next.action} — {payload.next.reason}")
         if payload.next.command is not None:
@@ -1769,48 +1510,6 @@ def _render_status(payload: ProjectStatusInspection, stream: TextIO) -> None:
         write("Run: " + ", ".join(payload.run.entries))
 
 
-def _render_lookup(response: LookupResponse, stream: TextIO) -> None:
-    write = partial(print, file=stream)
-    if response.query.mode == "path":
-        assert response.document is not None
-        content = response.document.content
-        write(content, end="" if content.endswith("\n") else "\n")
-        return
-    if response.query.mode == "list":
-        for entry in response.entries:
-            if entry.kind == "directory":
-                write(f"{entry.path:<40} {entry.document_count} documents")
-            else:
-                write(f"{entry.path:<40} {entry.title}")
-        write("\nExpand: svc lookup --list <directory>")
-        write("Read:   svc lookup --path <document-or-directory>")
-        return
-    if response.query.mode == "keyword":
-        if not response.candidates:
-            write(f"No SVC Corpus matches for: {response.query.value}")
-            return
-        for candidate in response.candidates:
-            write(f"{candidate.entry.path:<40} {candidate.entry.title}")
-            if candidate.excerpt is not None:
-                write(f"  {candidate.excerpt}")
-            else:
-                write("  [path match]")
-    else:
-        if not response.matches:
-            write(f"No SVC Corpus matches for: {response.query.value}")
-            return
-        for match in response.matches:
-            if match.surface == "path":
-                write(f"[path] {match.entry.path}")
-            else:
-                write(
-                    f"{match.entry.path}:{match.line}:{match.column}: {match.excerpt}"
-                )
-    if response.truncated:
-        write(f"Results truncated at --limit {response.query.limit}.")
-    write("\nRead one: svc lookup --path <document-or-directory>")
-
-
 def _emit_blockers(blockers: Sequence[Any], stream: TextIO) -> None:
     write = partial(print, file=stream)
     if not blockers:
@@ -1820,21 +1519,6 @@ def _emit_blockers(blockers: Sequence[Any], stream: TextIO) -> None:
         path = getattr(blocker, "path", None)
         location = f" {path}:" if path else ""
         write(f"  {blocker.code}:{location} {blocker.message}")
-
-
-def _render_task_packet_init(packet: TaskPacket, stream: TextIO) -> None:
-    print(f"Created task packet: {packet.path}", file=stream)
-    print(f"Guidance: {TASK_PACKET_GUIDANCE_PATH}", file=stream)
-    print(f"Template: {TASK_PACKET_TEMPLATE_PATH}", file=stream)
-    print(
-        "Immediate shape-preflight obligation: decide the smallest credible "
-        "work/information topology before adding supporting entries.",
-        file=stream,
-    )
-    print(
-        f"Continue: svc task grow {packet.task_id} --repo {packet.root}",
-        file=stream,
-    )
 
 
 def _render_error(error: SvcError, stream: TextIO) -> None:
@@ -1891,8 +1575,6 @@ def _exit_code(error: SvcError) -> int:
     if error.code in {
         "invalid-document-path",
         "invalid-directory-prefix",
-        "invalid-lookup-options",
-        "invalid-lookup-regex",
         "invalid-task-id",
     }:
         return EXIT_USAGE
@@ -1927,19 +1609,13 @@ def _exit_code(error: SvcError) -> int:
         "execution-record-invalid",
         "execution-state-invalid",
         "execution-state-unreadable",
-        "invalid-corpus",
         "invalid-execution-coordination",
         "invalid-release",
+        "skills-source-failed",
         "postcondition-failed",
         "staging-failed",
         "output-write-failed",
         "execution-storage-failed",
-        "task-packet-inventory-failed",
-        "task-packet-parent-unavailable",
-        "task-packet-parent-unsafe",
-        "task-packet-template-invalid",
-        "task-packet-template-unavailable",
-        "task-packet-write-failed",
     }:
         return EXIT_FAILURE
     return EXIT_CONFLICT

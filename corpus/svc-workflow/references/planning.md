@@ -1,0 +1,13 @@
+# Planning
+
+Use Planning when the next useful work, dependency order, allocation, or point for reconsideration is unclear. It supplies the workflow with a limited executable route and the observations that could change it. Planning determines and revises that route; the Task Packet owns its persistent representation, dependencies, and recoverable state.
+
+Begin with the intended result, actual state, current commitment and authorization, and uncertainties that can affect the route. Work backward from what must be true for the consumer to use the result. Identify dependencies that constrain action, distinguish evidence needed to choose a route from evidence needed to judge its result, and select a coherent next horizon. An obvious local action needs no elaborate plan.
+
+Order work for a reason. Resolve a route-changing protocol, permission, data, migration, or runtime uncertainty before building dependent machinery when a small real probe can discriminate it. Prefer an early usable result or informative observation when it can expose wrong assumptions cheaply. Keep coupled work together so that preparation, implementation, repair, and verification do not become unowned gaps. Do not optimize apparent parallelism by fragmenting a result whose parts must continually correct each other.
+
+Make the next actions clear enough to execute, including their intended return, real prerequisites, and the feedback that will redirect or stop them. Plan farther only where the dependencies and choices are stable; preserve a later open choice instead of inventing certainty. Name a material external dependency or Human decision and its consequence without turning every routine action into a gate. The route should remain compatible with the current collaboration approach and actual authority.
+
+When new evidence arrives, ask what changed: the desired result, an assumption, a dependency, the realized state, the judgment basis, or only a local execution detail. Revise the affected route and retain unaffected progress. A failed ordinary step calls for local recovery; feedback contradicting a product premise calls for the corresponding design or Human decision. Continue independent authorized work while dependent action is paused.
+
+Return the next executable route, reasons for its ordering, current owners or dependency consumers when material, and the condition for reconsideration. Preserve it in the existing Task Packet at the useful resolution rather than creating a competing plan document by default. For arrangements involving multiple Agents, discover `svc-agent-collaboration` by name when available; its guidance supplements Planning without supplying authority or becoming an installation requirement.

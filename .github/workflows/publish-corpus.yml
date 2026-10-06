@@ -33,14 +33,23 @@ jobs:
       - id: release
         name: Bind the prepared Corpus version
         run: |
-          version=$(python -c 'import json; print(json.load(open("corpus/version.json"))["corpus_version"])')
+          version=$(python -c 'from pathlib import Path; from tools.corpus import read_corpus_version; print(read_corpus_version(Path("pyproject.toml")))')
           [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           python -m tools.release_notes CORPUS_CHANGELOG.md "$version" --output /tmp/corpus-release-notes.md
+          echo "archive=/tmp/svc-corpus-$version.zip" >> "$GITHUB_OUTPUT"
+          echo "checksum=/tmp/svc-corpus-$version.zip.sha256" >> "$GITHUB_OUTPUT"
           echo "tag=corpus-v$version" >> "$GITHUB_OUTPUT"
       - name: Check prepared Corpus release
         env:
           SVC_BASE_REF: ${{ github.event.before }}
         run: pdm run check-corpus-release
+      - name: Build and verify the release archive
+        env:
+          ARCHIVE: ${{ steps.release.outputs.archive }}
+          CHECKSUM: ${{ steps.release.outputs.checksum }}
+        run: |
+          pdm run build-corpus-archive --output "$ARCHIVE" --checksum "$CHECKSUM" --revision "$GITHUB_SHA"
+          pdm run check-corpus-release --archive "$ARCHIVE"
       - name: Create release tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -59,4 +68,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
-        run: gh release create "$TAG" --verify-tag --notes-file /tmp/corpus-release-notes.md --title "$TAG"
+          ARCHIVE: ${{ steps.release.outputs.archive }}
+          CHECKSUM: ${{ steps.release.outputs.checksum }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --verify-tag --draft --notes-file /tmp/corpus-release-notes.md --title "$TAG"
+          fi
+          for asset in "$ARCHIVE" "$CHECKSUM"; do
+            directory=$(mktemp -d)
+            name=$(basename "$asset")
+            if gh release download "$TAG" --pattern "$name" --dir "$directory" >/dev/null 2>&1; then
+              cmp -- "$asset" "$directory/$name"
+            else
+              gh release upload "$TAG" "$asset"
+            fi
+            rm -rf "$directory"
+          done
+          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true" ]; then
+            gh release edit "$TAG" --draft=false
+          fi
