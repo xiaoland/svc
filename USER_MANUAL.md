@@ -62,7 +62,7 @@ docs/index.md              缺失时创建，带有界 CLI 工具导航块
 
 六个 Skills 共用一个 Corpus 发布版本，可以选装。CLI 安装默认复制到项目目录，写操作必须显式选择宿主；Codex 使用 `.agents/skills`，Claude Code 使用 `.claude/skills`。`--global` 显式选择对应的用户目录。`--skill NAME` 可重复，省略时选择六个。安装、更新、移除和采用默认返回只读计划；重复相同命令并添加 `--apply <plan-digest>` 才写入。计划绑定当前文件状态，过期后必须重新审阅。
 
-v15 的六入口包含替代 Methods 的 `svc-workflow`、独立 `svc-verification`，以及 `svc-agent-collaboration`。如果曾安装开发期间的 `svc-methods` 或 `svc-sub-agents` 草稿，显式检查并移除旧名、安装对应新名、更新其余已安装项，再重新 `adopt` 刷新项目指针；修改过的文件和第三方管理器安装继续受所有权保护。开发期间的入口调整没有形成额外发布版本；当前归档合同只接受最终六入口。工作流升级与草稿安装整理见 [Skills 采用指导](corpus/migrations/agent-skills.md)，Agent 协作调整见 [协作指导](corpus/migrations/agent-collaboration.md)。下例的版本应替换为实际已发布并准备采用的目标版本。
+v15 的六入口包含替代 Methods 的 `svc-workflow`、独立 `svc-verification`，以及 `svc-agent-collaboration`。如果曾安装开发期间的 `svc-methods` 或 `svc-sub-agents` 草稿，显式检查并移除旧名、安装对应新名、更新其余已安装项，再重新 `adopt` 刷新项目指针；修改过的文件和第三方管理器安装继续受所有权保护。开发期间的入口调整没有形成额外发布版本；当前发布清单只接受最终六入口。工作流升级与草稿安装整理见 [Skills 采用指导](corpus/migrations/agent-skills.md)，Agent 协作调整见 [协作指导](corpus/migrations/agent-collaboration.md)。下例的版本应替换为实际已发布并准备采用的目标版本。
 
 ```bash
 svc skills install --repo /path/to/project --agent codex --version <target-version> --json
@@ -76,7 +76,7 @@ svc skills unadopt --repo /path/to/project --agent codex --json
 svc skills remove --repo /path/to/project --agent codex --json
 ```
 
-`--version` 指向正式 `corpus-v<version>` 发布。`check` 未指定版本时只选择最新稳定 Corpus 发布，不使用同仓库的 CLI latest Release；`status` 不访问网络。离线安装与更新用 `--archive /path/svc-corpus-<version>.zip`，默认读取相邻 `.zip.sha256`，也可用 `--checksum` 指定校验文件。发布附件必须先实际发布才能通过在线路径下载；本地源码开发不把尚未发布的版本当作可下载发行物。
+`--version` 指向正式 `corpus-v<version>` 发布。`check` 未指定版本时只选择最新稳定 Corpus 发布，不使用同仓库的 CLI latest Release；`status` 不访问网络。v16 起，在线安装和更新只下载所选 Skill ZIP，`check` 使用发布清单比较文件摘要。离线安装与更新用 `--archive /path/svc-workflow-<version>.zip`，默认选择该包内的 Skill，并读取相邻 `svc-skills-<version>.json` 及其 `.json.sha256`，用清单中的包摘要核对 ZIP；可用 `--catalog` 指定清单，`--checksum` 额外指定 ZIP 校验文件。旧整体包默认读取相邻 `.zip.sha256`。新版 CLI 仍支持已发布 v15 的整体 ZIP；旧 v15 CLI 必须先升级，才能消费新的独立包发行物。发布附件必须先实际发布才能通过在线路径下载；本地源码开发不把尚未发布的版本当作可下载发行物。
 
 更新先校验目标发行物，再比较实际目录与安装基线。本地改动、新增文件、未知目录、另一管理器安装或符号链接均阻止覆盖；CLI 不提供强制覆盖或三方合并。安装记录位于目标 Skills 根下的 `.svc/<name>.json`。`recorded_version` 是记录版本，`actual_version` 仅在文件与目标发行物匹配时确认。多目标先做整体冲突预检，再逐 Skill 执行；失败停止后续项，已成功项保留并报告真实状态。受控错误与中断按文件事务回滚当前项；掉电或强制终止后的混合状态由下次检查识别并拒绝覆盖，没有自动恢复承诺。
 
@@ -88,6 +88,12 @@ svc skills remove --repo /path/to/project --agent codex --json
 npx skills@1.7.0 add xiaoland/svc --skill svc-task-packet --agent codex --copy
 npx skills@1.7.0 add xiaoland/svc --skill svc-workflow --agent claude-code --copy
 npx openskills@1.5.0 install xiaoland/svc
+```
+
+对于支持 archive URL 的管理器，可以直接安装已发布的单 Skill 附件。例如 [Vercel Skills](https://github.com/vercel-labs/skills) 支持：
+
+```bash
+npx skills@1.7.0 add https://github.com/xiaoland/svc/releases/download/corpus-v16.0.0/svc-workflow-16.0.0.zip --agent codex --copy
 ```
 
 需要可复现内容时，按管理器支持的语法固定 `corpus-v<version>` tag 或完整 commit；不能把它们跟踪原来源的 update 当作 SVC 的明确换版。通用管理器可能覆盖本地定制；长期项目规则放在项目入口，修改 Skill 正文时使用自有 fork 并自行同步。OpenSkills 的 `sync` 管理自己的发现块，与 SVC `adopt` 的常驻规则不同。目录安装成功、宿主列出入口和 Agent 实际执行分别观察；当前已隔离验证两个管理器的目录安装和 Codex 的只读发现，未据此承诺 Claude 或模型自动触发。
@@ -181,4 +187,4 @@ schema-v3 ZIP 的权威是 `manifest.json`、`native.bin` 和 `native-index.json
 - **MINOR**：增加可选、向后兼容的能力。
 - **PATCH**：修正或澄清已有协议而不改变上述行为。
 
-Towncrier 分别记录 `.changes/cli/` 和 `.changes/corpus/`。CLI 发布通过 Trusted Publishing 发布已验证 wheel；Corpus 发布有独立 `corpus-v<version>` tag 与 GitHub Release。CLI wheel 不含框架内容，因此新 Corpus 不随 CLI 发布投递。框架版本权威是根 `pyproject.toml` 的 `[tool.svc.corpus].version`，六个 Skill 的 `metadata.version` 由发布准备命令同步；发布物提供精简 Skills ZIP、manifest 与外部 SHA-256 校验文件。MIT 声明随每个独立 Skill 与 CLI 发行物携带，详见[贡献指南](CONTRIBUTING.md)。
+Towncrier 分别记录 `.changes/cli/` 和 `.changes/corpus/`。CLI 发布通过 Trusted Publishing 发布已验证 wheel；Corpus 发布有独立 `corpus-v<version>` tag 与 GitHub Release。CLI wheel 不含框架内容，因此新 Corpus 不随 CLI 发布投递。框架版本权威是根 `pyproject.toml` 的 `[tool.svc.corpus].version`，六个 Skill 的 `metadata.version` 由发布准备命令同步；v16 起发布物提供六个独立 Skill ZIP、外部 `svc-skills-<version>.json` 清单与各自 SHA-256 校验文件，不再提供整体 Corpus ZIP。MIT 声明随每个独立 Skill 与 CLI 发行物携带，详见[贡献指南](CONTRIBUTING.md)。

@@ -135,7 +135,9 @@ def test_offline_install_check_update_remove_and_reinstall(tmp_path: Path) -> No
 def test_multi_host_preflight_preserves_all_targets_when_one_is_foreign(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(skills, "resolve_release", lambda version: release())
+    monkeypatch.setattr(
+        skills, "resolve_release", lambda version, *args, **kwargs: release()
+    )
     foreign = tmp_path / ".claude/skills/svc-workflow/SKILL.md"
     foreign.parent.mkdir(parents=True)
     foreign.write_bytes(b"foreign-manager")
@@ -180,7 +182,9 @@ def test_multi_host_runtime_failure_preserves_completed_target_and_reports_rollb
 ) -> None:
     import svc_cli.plans as transactions
 
-    monkeypatch.setattr(skills, "resolve_release", lambda version: release())
+    monkeypatch.setattr(
+        skills, "resolve_release", lambda version, *args, **kwargs: release()
+    )
     base = [
         "skills",
         "install",

@@ -1,7 +1,7 @@
 ---
 name: svc-agent-collaboration
 description: "Organize collaboration between Agents so their work advances a shared goal through usable results. Use when choosing whether or how to delegate, consulting independent judgment, continuing another session, coordinating dependencies or shared effects, adopting a return, repairing a delegation, or transferring responsibility. Applies to sub-agents and independent sessions; collaboration is a choice, not a default team."
-metadata: {"version": "15.0.0"}
+metadata: {"version": "16.0.0"}
 ---
 
 # Agent Collaboration

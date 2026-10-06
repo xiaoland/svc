@@ -74,7 +74,7 @@ def register(subparsers: Any, add_output: Callable[..., None]) -> None:
             parser.add_argument(
                 "--skill",
                 action="append",
-                help="Select one SVC Skill (repeat; default all six)",
+                help="Select one SVC Skill (repeat; default all six online or in a legacy bundle, contained Skill for a standalone ZIP)",
             )
         if name in {"install", "check", "update"}:
             source = parser.add_mutually_exclusive_group(required=name != "check")
@@ -84,10 +84,15 @@ def register(subparsers: Any, add_output: Callable[..., None]) -> None:
             source.add_argument(
                 "--archive",
                 type=Path,
-                help="Offline release ZIP with adjacent .zip.sha256",
+                help="Offline standalone ZIP with its catalog, or legacy v15 bundle with .zip.sha256",
             )
             parser.add_argument(
                 "--checksum", type=Path, help="Explicit offline SHA-256 checksum file"
+            )
+            parser.add_argument(
+                "--catalog",
+                type=Path,
+                help="External release catalog for a standalone offline ZIP",
             )
         if name in {"adopt", "unadopt"}:
             parser.add_argument(
@@ -106,13 +111,24 @@ class ReleaseFields(TypedDict):
 
 def _release(args: argparse.Namespace) -> skills.SkillArchive:
     if args.archive is not None:
-        checksum = args.checksum or args.archive.with_suffix(
-            args.archive.suffix + ".sha256"
+        archive = skills.read_release(
+            args.archive, checksum=args.checksum, catalog=args.catalog
         )
-        return skills.read_release(args.archive, checksum=checksum)
-    if args.checksum is not None:
-        raise SvcError("invalid-skills-source", "--checksum requires --archive.")
-    return skills.resolve_release(args.version)
+        if args.skill is not None and any(
+            name not in {skill.name for skill in archive.manifest.skills}
+            for name in args.skill
+        ):
+            raise skills.SkillArchiveError(
+                "Offline archive does not contain every selected Skill"
+            )
+        return archive
+    if args.checksum is not None or args.catalog is not None:
+        raise SvcError(
+            "invalid-skills-source", "--checksum and --catalog require --archive."
+        )
+    return skills.resolve_release(
+        args.version, args.skill, fetch_contents=args.skills_command != "check"
+    )
 
 
 def run(args: argparse.Namespace) -> tuple[SkillsOutput | AdoptionOutput, int]:
@@ -177,6 +193,11 @@ def run(args: argparse.Namespace) -> tuple[SkillsOutput | AdoptionOutput, int]:
             command="skills status", mode="status", status=status, targets=observed
         ), 3 if status == "attention" else 0
     archive = None if command == "remove" else _release(args)
+    selected_names = (
+        args.skill
+        if archive is None
+        else args.skill or tuple(skill.name for skill in archive.manifest.skills)
+    )
     release_fields: ReleaseFields = (
         {"target_version": None, "release_notes": None, "migration_guidance": None}
         if archive is None
@@ -272,7 +293,7 @@ def run(args: argparse.Namespace) -> tuple[SkillsOutput | AdoptionOutput, int]:
                             status="skipped",
                             message="Earlier target failed; not executed",
                         )
-                        for unit in skills.status(plan.target, args.skill)
+                        for unit in skills.status(plan.target, selected_names)
                     ),
                 )
             )

@@ -24,7 +24,7 @@ test = [
 distribution = false
 
 [tool.svc.corpus]
-version = "15.0.0"
+version = "16.0.0"
 
 [tool.pdm.workspace]
 members = ["cli"]

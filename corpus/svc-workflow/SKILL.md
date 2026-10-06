@@ -1,7 +1,7 @@
 ---
 name: svc-workflow
 description: "Organize software work with a Human and carry it through useful decisions, authorized changes, and product-relevant feedback. Use when choosing a collaboration approach; when investigation, requirements, design, planning, or implementation need reasoning; when feedback, changed premises, or incomplete evidence require a new route."
-metadata: {"version": "15.0.0"}
+metadata: {"version": "16.0.0"}
 ---
 
 # Software Work with a Human

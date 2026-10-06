@@ -1,6 +1,6 @@
 # Sustainable Vibe Coding
 
-Sustainable Vibe Coding（SVC）是 source-first 的 Agent 协作框架。框架指导以六个 Agent Skills 组织，开发协作 CLI 独立提供执行与观测工具；CLI 不携带 Corpus 正文，通过独立发行 ZIP 安装、管理和采用 SVC Skills。Vercel Skills、OpenSkills 也可以直接安装同一份 Skill 源目录。
+Sustainable Vibe Coding（SVC）是 source-first 的 Agent 协作框架。框架指导以六个 Agent Skills 组织，开发协作 CLI 独立提供执行与观测工具；CLI 不携带 Corpus 正文，通过按 Skill 独立发行的 ZIP 安装、管理和采用 SVC Skills。Vercel Skills、OpenSkills 也可以直接安装同一份 Skill 源目录。
 
 ## 开发 SVC
 

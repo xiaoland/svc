@@ -59,7 +59,7 @@ jobs:
           /tmp/svc-wheel/bin/svc double validate cli/tests/double/fixtures/language/payment.double.yaml --json
       - name: Accept separately released Skills with the built CLI
         run: |
-          pdm run build-corpus-archive --output /tmp/svc-corpus.zip
+          pdm run build-corpus-archive --output-dir /tmp/svc-skills
           mkdir -p /tmp/svc-skills-project
           python - <<'PY'
           import json
@@ -70,10 +70,11 @@ jobs:
               return json.loads(subprocess.check_output(["/tmp/svc-wheel/bin/svc", "skills", *args], text=True))
 
           scope = ("--repo", "/tmp/svc-skills-project", "--agent", "codex", "--json")
-          install = ("install", *scope, "--archive", "/tmp/svc-corpus.zip")
-          plan = svc(*install)
-          assert plan["status"] == "ready"
-          assert svc(*install, "--apply", plan["plan_digest"])["status"] == "applied"
+          for archive in sorted(Path("/tmp/svc-skills").glob("*.zip")):
+              install = ("install", *scope, "--archive", str(archive))
+              plan = svc(*install)
+              assert plan["status"] == "ready"
+              assert svc(*install, "--apply", plan["plan_digest"])["status"] == "applied"
           assert len(svc("status", *scope)["targets"][0]["units"]) == 6
           adoption = svc("adopt", *scope)
           assert svc("adopt", *scope, "--apply", adoption["plan_digest"])["status"] == "applied"

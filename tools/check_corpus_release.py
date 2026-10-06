@@ -11,7 +11,7 @@ import tarfile
 import tomllib
 from pathlib import Path
 
-from tools.build_corpus_archive import validate_archive
+from tools.build_corpus_archive import validate_artifacts
 from tools.check_skills import SKILL_NAMES, check as check_skills, skill_metadata
 from tools.corpus import read_corpus_version, require_version
 
@@ -108,7 +108,7 @@ def _version_key(version: str) -> tuple[int, int, int]:
 
 
 def check(
-    root: Path, compare_ref: str | None = None, archive: Path | None = None
+    root: Path, compare_ref: str | None = None, artifacts: Path | None = None
 ) -> None:
     version_path = root / "corpus" / "version.json"
     if version_path.exists():
@@ -142,14 +142,14 @@ def check(
                 "after publication, while an unpublished version may keep evolving: "
                 f"{old_version} -> {version}"
             )
-    if archive is not None:
-        validate_archive(root, archive)
+    if artifacts is not None:
+        validate_artifacts(root, artifacts)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--compare-ref")
-    parser.add_argument("--archive", type=Path)
+    parser.add_argument("--artifacts", type=Path)
     parser.add_argument(
         "--root", type=Path, default=Path(__file__).resolve().parents[1]
     )
@@ -157,7 +157,7 @@ def main() -> int:
     check(
         args.root,
         args.compare_ref or os.environ.get("SVC_BASE_REF"),
-        args.archive,
+        args.artifacts,
     )
     return 0
 
