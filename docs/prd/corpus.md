@@ -36,7 +36,7 @@ CLI 15 采用 hard-cutoff，拒绝旧配置而不改写文件。人工迁移须�
 
 ## Skills 分发与项目采用
 
-六个 Skill 共用一个发布版本，每个目录可单独安装并包含必需资源。CLI 直接读取正式发行 ZIP 或离线 ZIP，不依赖第三方管理器，也不把 Corpus 重新纳入 wheel。Vercel Skills 和 OpenSkills 可以安装相同 Git 源目录；CLI 能使用其实际入口建立项目采用，但不接管文件或锁记录。
+六个 Skill 共用一个发布版本，每个目录可单独安装并包含必需资源。v16 起每个 Skill 有独立的纯源码 ZIP，共同发布清单绑定版本、源码 revision 和包摘要；CLI 按选择获取正式发行 ZIP 或读取离线 ZIP，不依赖第三方管理器，也不把 Corpus 重新纳入 wheel。Vercel Skills 和 OpenSkills 可以安装相同 Git 源目录；CLI 能使用其实际入口建立项目采用，但不接管文件或锁记录。
 
 `skills install/update/remove` 以明确宿主、项目或全局范围和 Skill 选择产生精确计划；只对原样、明确归 CLI 的目录执行更新与移除。`status` 观察本地基线，`check` 比较明确目标或最新稳定 Corpus 发布；CLI 与 Corpus 发布版本独立，latest CLI Release 不能充当 Skills 更新。未知来源、修改或新增内容保留。多项执行中的成功、失败与未执行项保持可区分。
 

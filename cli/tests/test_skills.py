@@ -104,6 +104,61 @@ def release(
     return parse_release(release_bytes(version=version, body=body, names=names))
 
 
+def standalone_files(
+    *,
+    version: str = "16.0.0",
+    body: bytes = b"# SVC\n",
+    names: tuple[str, ...] = ("svc-workflow",),
+) -> dict[str, bytes]:
+    legacy = release_bytes(version=version, body=body, names=names)
+    assets: dict[str, bytes] = {}
+    entries = []
+    with zipfile.ZipFile(io.BytesIO(legacy)) as stream:
+        for name in RELEASE_SKILLS:
+            prefix = f"corpus/{name}/"
+            files = {
+                path.removeprefix("corpus/"): stream.read(path)
+                for path in stream.namelist()
+                if path.startswith(prefix)
+            }
+            files[f"{name}/LICENSE"] = b"MIT fixture license\n"
+            output = io.BytesIO()
+            with zipfile.ZipFile(
+                output, "w", compression=zipfile.ZIP_DEFLATED
+            ) as archive:
+                for path, content in files.items():
+                    archive.writestr(path, content)
+            filename = f"{name}-{version}.zip"
+            raw = output.getvalue()
+            assets[filename] = raw
+            entries.append(
+                {
+                    "name": name,
+                    "path": name,
+                    "files": {
+                        path.removeprefix(f"{name}/"): hashlib.sha256(
+                            content
+                        ).hexdigest()
+                        for path, content in files.items()
+                    },
+                    "archive": filename,
+                    "archive_sha256": hashlib.sha256(raw).hexdigest(),
+                }
+            )
+    assets[f"svc-skills-{version}.json"] = json.dumps(
+        {
+            "schema_version": 2,
+            "version": version,
+            "repository": REPOSITORY,
+            "revision": "a" * 40,
+            "skills": entries,
+        }
+    ).encode()
+    for filename, raw in tuple(assets.items()):
+        assets[f"{filename}.sha256"] = hashlib.sha256(raw).hexdigest().encode()
+    return assets
+
+
 def test_default_selection_does_not_take_over_unrelated_skill(tmp_path: Path) -> None:
     target = SkillTarget(tmp_path)
     unrelated = target.skills_root / "svc-custom"
@@ -236,10 +291,17 @@ def test_latest_release_filters_pages_prereleases_and_non_corpus_tags(
             return None
 
         def read(self, limit: int = -1) -> bytes:
-            return json.dumps(self.value).encode()
+            return (
+                self.value
+                if isinstance(self.value, bytes)
+                else json.dumps(self.value).encode()
+            )
 
     def open_url(request: object, timeout: float = 0.0) -> Response:
         url = request.full_url if hasattr(request, "full_url") else str(request)
+        if "page=" not in url:
+            downloads.append(url)
+            return Response(assets[url.rsplit("/", 1)[1]])
         page = int(url.rsplit("page=", 1)[1])
         if page == 1:
             value = [{"tag_name": "cli-v99.0.0", "draft": False, "prerelease": False}]
@@ -260,17 +322,15 @@ def test_latest_release_filters_pages_prereleases_and_non_corpus_tags(
 
     monkeypatch.setattr(skills.urllib.request, "urlopen", open_url)
 
-    selected = release(version="1.10.0")
+    assets = standalone_files(version="1.10.0")
     downloads = []
-
-    def download(source, **kwargs):
-        downloads.append(source)
-        return selected
-
-    monkeypatch.setattr(skills, "read_release", download)
-    assert skills.resolve_release().manifest.version == "1.10.0"
-    assert len(downloads) == 1
-    assert "/corpus-v1.10.0/" in downloads[0]
+    assert skills.resolve_release(names=["svc-workflow"]).manifest.version == "1.10.0"
+    assert {url.rsplit("/", 1)[1] for url in downloads} == {
+        "svc-skills-1.10.0.json",
+        "svc-skills-1.10.0.json.sha256",
+        "svc-workflow-1.10.0.zip",
+    }
+    assert all("/corpus-v1.10.0/" in url for url in downloads)
 
 
 def test_resolve_release_rejects_archive_with_wrong_requested_version(
@@ -280,7 +340,7 @@ def test_resolve_release_rejects_archive_with_wrong_requested_version(
     monkeypatch.setattr(skills, "read_release", lambda *args, **kwargs: wrong)
 
     with pytest.raises(SkillArchiveError):
-        skills.resolve_release("1.0.0")
+        skills.resolve_release("15.0.0")
 
 
 def test_source_network_errors_are_structured(monkeypatch: pytest.MonkeyPatch) -> None:

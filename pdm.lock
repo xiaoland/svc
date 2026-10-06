@@ -1048,7 +1048,7 @@ files = [
 
 [[package]]
 name = "sustainable-vibe-coding"
-version = "15.0.0"
+version = "16.0.0"
 requires_python = ">=3.11"
 editable = true
 path = "./cli"
@@ -1064,7 +1064,7 @@ dependencies = [
 
 [[package]]
 name = "sustainable-vibe-coding"
-version = "15.0.0"
+version = "16.0.0"
 extras = ["double"]
 requires_python = ">=3.11"
 editable = true

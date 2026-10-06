@@ -76,7 +76,7 @@ CLI 输出 schema 仍维护自己的结果版本；它要求的 package major �
 2. 维护者更新 `cli/pyproject.toml` 静态版本，准备 CLI 发布 PR 并生成 changelog：
 
    ```console
-   pdm run towncrier build --config towncrier.cli.toml --version 15.0.0 --yes
+   pdm run towncrier build --config towncrier.cli.toml --version 16.0.0 --yes
    pdm run check
    ```
 
@@ -84,9 +84,11 @@ CLI 输出 schema 仍维护自己的结果版本；它要求的 package major �
 3. Corpus 发布 PR 使用功能变更已接纳的 Corpus 版本并消费其片段：
 
    ```console
-   pdm run towncrier build --config towncrier.corpus.toml --version 15.0.0 --yes
+   pdm run towncrier build --config towncrier.corpus.toml --version 16.0.0 --yes
    pdm run prepare-corpus-release
    pdm run check
    ```
 
-   提交并合并包含 `CORPUS_CHANGELOG.md`、六个 Skill 元数据和许可副本的 release PR 后，发布 workflow 以同一 commit 创建 `corpus-v<version>`。workflow 只读校验已提交源文件，发布物包含六个 Skill 与根 `manifest.json` 的精简 ZIP 及外部 SHA-256 校验文件；CLI wheel 不再携带 Corpus，归档重跑不得覆盖不同内容。
+   可先用 `pdm run build-corpus-archive --output-dir /tmp/svc-skills-release` 构建全部附件，再用 `pdm run check-corpus-release --artifacts /tmp/svc-skills-release` 校验。构建要求版本、Skill 元数据和正文已提交且与 HEAD 相符。
+
+   提交并合并包含 `CORPUS_CHANGELOG.md`、六个 Skill 元数据和许可副本的 release PR 后，发布 workflow 以同一 commit 创建 `corpus-v<version>`。workflow 只读校验已提交源文件，从 v16 起，发布物为六个 `<skill-name>-<version>.zip` 及各自 `.sha256`，加上 `svc-skills-<version>.json` 与其 `.sha256`；每个 ZIP 仅含 `<skill-name>/` 的完整源码目录，外部 schema-2 catalog 记录共同发布身份、逐文件摘要和各 ZIP 摘要，不再生成整体 Corpus ZIP；CLI wheel 不再携带 Corpus，归档重跑不得覆盖不同内容。

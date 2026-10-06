@@ -1,7 +1,7 @@
 ---
 name: svc-taste
 description: "Apply consequence-based judgment to real design and implementation trade-offs. Use when alternatives affect authority, data, state, boundaries, naming, dependencies, abstraction, performance, product experience, or future change cost, including choices uncovered while implementing. Keep project truth and Human preferences distinct from rebuttable heuristics."
-metadata: {"version": "15.0.0"}
+metadata: {"version": "16.0.0"}
 ---
 
 # Taste and Design Judgment

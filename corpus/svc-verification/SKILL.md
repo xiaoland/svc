@@ -1,7 +1,7 @@
 ---
 name: svc-verification
 description: "Establish, use, and improve criteria, evidence, and feedback for product iteration. Use during implementation or qualification when reliable feedback is needed; when checks pass without establishing the user outcome, reject a valid implementation, hide a critical assumption, or give slow or misleading feedback; or when existing evidence or checks need reuse or revision."
-metadata: {"version": "15.0.0"}
+metadata: {"version": "16.0.0"}
 ---
 
 # Verification
