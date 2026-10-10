@@ -1,7 +1,7 @@
 ---
 name: svc-task-packet
 description: "Use for every non-trivial task: starting, resuming, updating plans or task state, coordinating results, and checking remaining work before closing."
-metadata: {"version": "17.0.0"}
+metadata: {"version": "16.0.1"}
 ---
 
 # Task Packet

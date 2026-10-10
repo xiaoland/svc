@@ -1,8 +1,8 @@
 # Adopt the Staged Collaboration Default
 
-Target Corpus release: 17.0.0.
+Target Corpus release: 16.0.1.
 
-Use this guide when adopting the changed collaboration default from Corpus 16 or earlier. Previously, Workflow left the mode to the project's agreement or the Human's instruction and requested a decision when an unresolved mode choice affected a consequential action. Every non-trivial Task now requires reading and using [svc-workflow](../svc-workflow/SKILL.md), whose short entry owns the staged collaboration default without requiring the Human to name or select a mode. References supply depth only when needed.
+Use this guide when adopting the changed collaboration default from Corpus 16.0.0 or earlier. Previously, Workflow left the mode to the project's agreement or the Human's instruction and requested a decision when an unresolved mode choice affected a consequential action. Every non-trivial Task now requires reading and using [svc-workflow](../svc-workflow/SKILL.md), whose short entry owns the staged collaboration default without requiring the Human to name or select a mode. References supply depth only when needed.
 
 Add the Workflow reading rule and its actual adopted entry pointer to the persistent Consumer instructions, alongside the existing Task Packet rule. The [root instruction asset](../svc-specs/assets/AGENTS.root.template.md) supplies the updated starting shape. The Workflow description declares the mandatory trigger; host discovery alone does not guarantee that it will be selected or read.
 

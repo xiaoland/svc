@@ -1,7 +1,7 @@
 ---
 name: svc-specs
 description: "Maintain the canonical owner of durable project knowledge. Use when project work establishes or changes product commitments, cross-unit technical contracts, unit-internal design, operational knowledge, local Agent instructions, or coordination extensions; when a durable claim needs an owner; or when deciding whether code, configuration, schemas, and tests make a new document unnecessary."
-metadata: {"version": "17.0.0"}
+metadata: {"version": "16.0.1"}
 ---
 
 # Specifications

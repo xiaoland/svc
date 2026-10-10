@@ -1,7 +1,7 @@
 ---
 name: svc-agent-collaboration
 description: "Use when deciding whether to delegate to other Agents, arranging or coordinating their work or sessions, seeking independent Agent judgment, adopting their results, or handing off responsibility."
-metadata: {"version": "17.0.0"}
+metadata: {"version": "16.0.1"}
 ---
 
 # Agent Collaboration
