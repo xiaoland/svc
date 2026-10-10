@@ -8,6 +8,7 @@ Current guides:
 
 - [Agent collaboration](agent-collaboration.md): replace the `svc-sub-agents` address and role-based guidance with collaboration across execution forms, including installation and adoption changes.
 - [Six Agent Skills](agent-skills.md): replace concept-directory and CLI-mediated navigation, replace Methods with Workflow while retaining independent V&V, and align draft installations while preserving task and authority obligations.
+- [Workflow collaboration](workflow-collaboration.md): adopt the default staged collaboration for non-trivial Tasks while preserving established iterative agreements and existing implementation authority.
 - [Coding Agent debugger and profiler evidence](analysis-debugger-corpus.md): adopt the current evidence and analysis contracts when exporting or consuming that evidence.
 
 Version classification follows Consumer behavior:

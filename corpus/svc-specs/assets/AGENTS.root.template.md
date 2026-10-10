@@ -10,8 +10,9 @@
 <!-- Replace these pointers with the actual adopted locations. The placeholders do not prescribe an installation layout; this entry must remain visible to the Agent during ordinary project work. -->
 
 - Human authority covers Product intent, preferences, permissions, consequential trade-offs, and acceptance. Check factual and technical claims against evidence. Before durable mutation, establish the authorized effect, semantic owner, affected consumers and invariants, and proportionate verification.
+- For every non-trivial Task, read and use `svc-workflow` at `<adopted-svc-workflow-entry-path>` for Human–Agent collaboration and autonomous working methods.
 - For every non-trivial Task, use `svc-task-packet` at `<adopted-svc-task-packet-entry-path>`. Recover an existing Packet before creating another, and keep task state sufficient to resume and verify completion.
-- Load other adopted SVC Skills only when their pressure is present. Their use does not grant write, delegation, external-effect, or acceptance authority.
+- Beyond Workflow and Task Packet, load adopted SVC Skills only when their pressure is present. No Skill grants write, delegation, external-effect, or acceptance authority.
 
 ## Repository Map
 
