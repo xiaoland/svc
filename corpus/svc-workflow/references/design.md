@@ -21,7 +21,7 @@ Start with a representative journey or state transition where a decision matters
 
 They are independent views of one solution, not phases or mandatory files. Start from the local design pressure, then load only the methods, taste, examples, and counter-pressure that could change that judgment.
 
-When the solution needs a judgment basis or observable boundary, use [Verification Design](verification-design.md). It keeps expected behavior, technical arrangements, and the means of judging them coherent; discover `svc-verification` by name through the host when criteria, evidence, or feedback need specialist reasoning. Its guidance is optional rather than a required next phase; Design still owns a coherent solution and must expose any unresolved judgment or observation gap when that Skill is unavailable.
+When the solution needs a judgment basis or observable boundary, use [Verification Design](verification-design.md). It keeps expected behavior, technical arrangements, and the means of judging them coherent; discover `svc-verification` by name through the host when a requirement has no clear judgment rule, the proposed observations cannot distinguish success from a relevant failure, or evidence selection or reuse is uncertain. Adequate existing criteria and observations need no additional guidance. That Skill is not a required next phase; Design still owns a coherent solution and must expose any unresolved judgment or observation gap when it is unavailable.
 
 ## Return at the Useful Resolution
 

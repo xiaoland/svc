@@ -1,6 +1,6 @@
 # Iterative Collaboration
 
-Read this when product experience and new feedback continuously shape the current scope or route, or when an increment needs to be useful without freezing the requirements. It expands the workflow's feedback guidance. Return a consumable increment, investigation, or proposal with its evidence, experience entry when relevant, and unresolved choices; iteration does not require a fixed sprint, backlog, or ceremony.
+Read this when an established project agreement or direct Human instruction selects iterative collaboration and product experience or new feedback needs to shape the current scope or route. It expands the workflow's feedback guidance. Otherwise, non-trivial Tasks use the workflow's staged collaboration default; feedback alone does not select this approach. Return a consumable increment, investigation, or proposal with its evidence, experience entry when relevant, and unresolved choices; iteration does not require a fixed sprint, backlog, or ceremony.
 
 Iterative collaboration keeps the goal and authority shared while revising how the next useful result will be reached. It is valuable when actual use can expose needs that an upfront description cannot settle. Starting implementation establishes a current route, not permanent correctness of the requirements. This flexibility still needs coherent choices and known effect boundaries; it does not authorize every suggestion or make rapid code changes the definition of progress.
 

@@ -22,6 +22,8 @@ Prefer one stable term for one concept and concrete nouns and verbs. Make subjec
 
 Optimize semantic compression, not word count. A longer phrase is cheaper when it prevents ambiguity, rereading, or wrong action. Admit an SVC-specific term only when its recurring coordination value exceeds learning, recall, and translation cost. Keep Agent-only methods and specialist depth out of the ordinary Human collaboration surface. Write each prose paragraph on one semantic line; do not hard-wrap at a fixed column width. Preserve genuine list, table, and code structure.
 
+When authoring Taste guidance, state the recurring pressure, desired consequence, preferred default and causal reason, cost and counter-pressure, conditions that weaken it, and an observable projection or counterexample when useful. Add domain entries only when recurring content and retrieval value justify their owner and maintenance cost. Keep the consumer's judgment criteria in the Skill; authoring guidance here must not become a runtime prerequisite.
+
 ## Match the Carrier to the Relationship
 
 Use prose for one causal claim, bullets for independent rules, tables for exact mappings, topology for ownership or dependency, sequence diagrams for timing or authority handoff, and examples with counterexamples for boundaries. Use the smallest carrier that preserves the relationship. Do not add diagrams as decoration or duplicate every edge in prose.

@@ -1,28 +1,14 @@
 ---
 name: svc-specs
-description: "Find and maintain the canonical owner of durable project knowledge. Use when establishing or changing product commitments, cross-unit contracts, unit-internal design, operational knowledge, local Agent instructions, or admitted coordination extensions; or deciding whether code, configuration, schemas, and tests make a new document unnecessary."
-metadata: {"version": "16.0.0"}
+description: "Maintain the canonical owner of durable project knowledge. Use when project work establishes or changes product commitments, cross-unit technical contracts, unit-internal design, operational knowledge, local Agent instructions, or coordination extensions; when a durable claim needs an owner; or when deciding whether code, configuration, schemas, and tests make a new document unnecessary."
+metadata: {"version": "17.0.0"}
 ---
 
 # Specifications
 
-Recover the intended benefit behind Human wording. Product intent, personal preference, permission, material trade-offs, and acceptance remain Human authority; factual, causal, technical, feasibility, and proposed-solution claims remain challengeable from evidence, logic, stakeholder consequences, and short- and long-horizon return on investment.
-
-Proceed autonomously with safe exploration, review, and design. Before durable mutation, establish the authorized desired effect, semantic owner, affected consumers and invariants, and proportionate verification. Ask the Human only for consequential missing information, authority, preference, trade-off, or acceptance that cannot be inferred safely. Resolve independent work first and present the smallest decision-ready issue. This Skill grants no write, delegation, external-effect, or acceptance authority.
-
-The surrounding Task keeps every unmet obligation after this Skill returns. For its non-trivial Task, recover the existing Task Packet or create the smallest `packet.md` at the project's authorized task location. Keep the objective, authorization and constraints, current facts, next action, and completion verification sufficient to resume. A Skill invocation or Child Assignment does not create a new Task or competing Packet; the Child returns its state delta to the Task owner. Preserve project-owned truth separately, preferring source, configuration, schema, tests, assertions, or automation for facts they can enforce directly.
-
-Other SVC Skills can supply additional guidance when available: discover them by name through the host's available-Skill interface and load only the relevant guidance. They are not prerequisites for this Skill. If one is unavailable, continue with the guidance here and qualified project mechanisms; report an actual missing capability or authority instead of assuming access or relaxing an obligation.
-
-A Unit is the smallest responsibility that can be delivered or deployed independently, such as an application, service, or library. The nearest local `AGENTS.md` may preserve a repeated fragile seam in one physical subtree.
-
 ## Find the Existing Authority
 
-First identify the durable claim and its consumer, then search the project's existing owners. Prefer source, configuration, schema, test, assertion, or automation when it can enforce the fact directly. Use the registry below to choose only the reference whose admission rule matches the claim; do not generate a document family by default.
-
-Update the canonical owner before repairing its projections. Preserve provisional findings and active work in the Task Packet in `svc-task-packet` rather than promoting them to durable truth. Return the updated owner and relevant consistency checks, or the reason no new durable document is warranted. Stop when the changed claim and its dependent projections agree; missing Product intent or mutation authority goes back to the Human under the authority boundaries above.
-
-Use the [root instruction asset](assets/AGENTS.root.template.md) when establishing a Consumer project's Agent entry. Choose other assets only through the applicable reference; their presence does not admit a new owner.
+Identify the durable claim and its consumer, then find its existing owner. Prefer source, configuration, schema, tests, assertions, or automation that enforce the fact. Use the table to select only references whose admission rules match; do not create a document family by default.
 
 | Truth | Durable owner | Admission |
 | --------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -34,16 +20,29 @@ Use the [root instruction asset](assets/AGENTS.root.template.md) when establishi
 | Runtime, packaging, observability, migration, or recovery truth | [Deployment](references/deployment.md) | operational behavior is non-trivial |
 | Repository development, contribution, or release workflow | root `AGENTS.md`, `CONTRIBUTING.md`, executable configuration, or release source | keep the instruction at the entry used by its consumer |
 
-Before adding a durable surface, require stable useful content, a real consumer, expensive rediscovery or risk, one canonical owner, and no cheaper executable authority. Keep evidence, provisional decisions, active Plans, and bounded artifacts in the Task Packet in `svc-task-packet`.
+A Unit is the smallest independently deliverable or deployable responsibility, such as an application, service, or library. The table assigns ownership, not a required document ladder; update only owners whose claims changed.
 
-Product Requirement Document owns what and why. Product TDD owns admitted cross-unit technical contracts. Unit TDD owns admitted unit-internal design. Deployment owns operational reality. These are semantic projections, not a required document ladder; one change updates only the owners whose claims actually changed.
+## Maintain the Claim and Its Projections
 
+Before durable mutation, establish the authorized effect, owner, affected consumers, invariants, and proportionate verification. Finding an owner grants no write permission. Ask the Human for missing Product intent or authority; continue independent authorized work.
+
+Add a durable surface only when it has stable useful content, a consumer, costly rediscovery or risk, one canonical owner, and no cheaper executable authority. Keep provisional findings, decisions, active Plans, evidence, and task artifacts in the Packet, not as durable truth.
+
+Update the canonical owner, then its projections. Return the owner and consistency checks, or explain why no new document is needed. Stop when the changed claim and its projections agree; other Task obligations remain.
+
+Use the [root instruction asset](assets/AGENTS.root.template.md) to establish a Consumer project's Agent entry. Select other assets through the applicable reference; an available template does not justify a new owner.
 
 ## Extensions
 
-Extensions are optional, they add pressure-specific coordination contracts without replacing the core owner model or the authority boundaries above. Use one only when its admission rule is satisfied; mono-repository work and ordinary semantic ownership remain the default.
+Extensions add optional coordination contracts, not authority or replacements for core owners. Use them only when their admission rules hold; mono-repository work and ordinary ownership remain the default.
 
 - [Alignment](references/alignment.md) addresses repeated costly coordination drift in references, boundaries, operations, state, or evidence after normal owners and stable anchors are already insufficient.
 - [Multi-repo](references/multi-repo.md) addresses one product spanning repositories when shared truth otherwise drifts and freshness can be enforced mechanically.
 
 An extension does not own Product/Technical/runtime truth, evidence, Working Methods, or acceptance. Do not create an extension for a one-off Task or to hide an unresolved core owner.
+
+## Authority and Task Continuity
+
+Recover the claim's intended benefit. Human intent, preferences, permissions, material trade-offs, and acceptance remain Human authority; factual and solution claims remain open to evidence and reasoning. Continue safe investigation; ask only for consequential missing Human input as the smallest decision-ready issue. This Skill grants no write, delegation, external-effect, or acceptance authority.
+
+For every non-trivial Task, recover its Packet or create the smallest `packet.md` at the project's authorized location. Preserve objective, authority and constraints, current facts, next action, and completion evidence. An invocation or Child Assignment creates no competing Task or Packet; return state changes to the Task owner. Discover `svc-task-packet` by name when recovery or state organization needs guidance. Other Skills are optional, not prerequisites; use qualified project mechanisms and report actual capability or authority gaps without relaxing obligations.
