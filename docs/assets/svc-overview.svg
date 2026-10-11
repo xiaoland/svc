@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 650" width="1200" height="650" role="img" aria-labelledby="title desc">
+  <title id="title">SVC: Agent Skills and Developer CLI</title>
+  <desc id="desc">Human and Agent use Skills for guidance and CLI for deterministic tools. The project retains its own source, task state, and evidence.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F9FBFA"/><stop offset="1" stop-color="#F1F7F5"/></linearGradient>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" fill="#8CA99E"/></marker>
+  </defs>
+  <rect width="1200" height="650" rx="24" fill="url(#background)"/>
+  <rect x="24" y="24" width="1152" height="602" rx="18" fill="none" stroke="#DBE7E1"/>
+  <text x="62" y="80" fill="#157B64" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="700" letter-spacing="2">SUSTAINABLE VIBE CODING</text>
+  <text x="62" y="121" fill="#1B2E28" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="30" font-weight="650">一套工作指导 · 一组可确定的工具</text>
+
+  <rect x="424" y="150" width="352" height="74" rx="16" fill="#1F3B33"/>
+  <circle cx="470" cy="187" r="17" fill="#356657"/>
+  <path d="M460 190 l8 -8 l6 6 l8 -10" stroke="#B3F2D5" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="508" y="183" fill="#F7FFFB" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="650">使用者 + Agent</text>
+  <text x="508" y="204" fill="#B4D1C6" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="13">任务意图 · 判断与决策</text>
+
+  <path d="M600 224 V246 H320 V274" stroke="#8CA99E" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M600 246 H880 V274" stroke="#8CA99E" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <g>
+    <rect x="62" y="277" width="518" height="178" rx="18" fill="#FFFFFF" stroke="#DCE9E3"/>
+    <rect x="620" y="277" width="518" height="178" rx="18" fill="#FFFFFF" stroke="#DCE9E3"/>
+  </g>
+  <rect x="83" y="297" width="7" height="40" rx="4" fill="#21A27E"/>
+  <text x="109" y="322" fill="#1B2E28" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="700">Agent Skills</text>
+  <text x="109" y="353" fill="#536D63" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="17">帮助判断如何推进工程工作</text>
+  <rect x="108" y="377" width="416" height="48" rx="10" fill="#F1F8F5"/>
+  <text x="128" y="397" fill="#29564A" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="15">任务 · 工作流 · 验证</text>
+  <text x="128" y="416" fill="#29564A" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="15">协作 · 项目知识 · 设计取舍</text>
+
+  <rect x="642" y="297" width="7" height="40" rx="4" fill="#4B83A0"/>
+  <text x="668" y="322" fill="#1B2E28" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="700">SVC CLI</text>
+  <text x="668" y="353" fill="#536D63" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="17">执行和观察可确定的工程操作</text>
+  <rect x="668" y="377" width="410" height="48" rx="10" fill="#F1F6F9"/>
+  <text x="688" y="397" fill="#32566B" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="15">init · skills · dev · run</text>
+  <text x="688" y="416" fill="#32566B" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="15">telemetry · analysis · double</text>
+
+  <path d="M320 456 V480 Q320 491 331 491 H600 V505" stroke="#8CA99E" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M880 456 V480 Q880 491 869 491 H600" stroke="#8CA99E" stroke-width="2" fill="none"/>
+
+  <rect x="190" y="507" width="820" height="76" rx="15" fill="#E0EDE6" stroke="#C9DCD1"/>
+  <text x="600" y="537" text-anchor="middle" fill="#1F4035" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="700">项目保留自己的事实与状态</text>
+  <text x="600" y="564" text-anchor="middle" fill="#49695B" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="16">源代码 / 配置与文档　　 ·　　 临时任务状态　　 ·　　 验证证据</text>
+  <text x="600" y="613" text-anchor="middle" fill="#6F8980" font-family="Inter, Noto Sans CJK SC, sans-serif" font-size="14">Skills 提供指导；CLI 提供工具；产品决策与授权仍由使用者决定。</text>
+</svg>
