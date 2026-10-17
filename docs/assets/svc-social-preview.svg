@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="Sustainable Vibe Coding social preview">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0B1714"/><stop offset="1" stop-color="#17352C"/></linearGradient>
+    <linearGradient id="glow" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#25C69B" stop-opacity=".08"/><stop offset="1" stop-color="#72E2B7" stop-opacity=".30"/></linearGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <circle cx="1100" cy="120" r="285" fill="url(#glow)"/>
+  <g stroke="#355F50" fill="none" stroke-width="1.6" opacity=".5">
+    <path d="M870 110 L1037 205 L1170 110 M870 110 L930 330 L1110 425 L1170 110 M930 330 L800 475 L1110 425 M1037 205 L930 330 M1037 205 L1110 425"/>
+  </g>
+  <g fill="#62D7AE"><circle cx="870" cy="110" r="8"/><circle cx="1037" cy="205" r="8"/><circle cx="1170" cy="110" r="8"/><circle cx="930" cy="330" r="8"/><circle cx="1110" cy="425" r="8"/><circle cx="800" cy="475" r="8"/></g>
+  <rect x="66" y="66" width="1148" height="508" rx="14" stroke="#6DA28A" stroke-opacity=".24" fill="none"/>
+  <rect x="104" y="103" width="52" height="5" rx="2.5" fill="#68E8B8"/>
+  <text x="104" y="170" font-family="Inter, Noto Sans CJK SC, sans-serif" fill="#9BBDAF" font-size="22" letter-spacing="3">SUSTAINABLE VIBE CODING</text>
+  <text x="93" y="344" font-family="Inter, Noto Sans CJK SC, sans-serif" fill="#F3FFF8" font-size="180" font-weight="750" letter-spacing="-12">SVC</text>
+  <text x="106" y="414" font-family="Inter, Noto Sans CJK SC, sans-serif" fill="#BFE4D1" font-size="30" font-weight="500">Keep the engineering, not just the code.</text>
+  <path d="M106 462 H657" stroke="#35584A" stroke-width="2"/>
+  <text x="106" y="506" font-family="Inter, Noto Sans CJK SC, sans-serif" fill="#D0E2D9" font-size="20">Agent Skills</text>
+  <circle cx="277" cy="499" r="4" fill="#62D7AE"/>
+  <text x="300" y="506" font-family="Inter, Noto Sans CJK SC, sans-serif" fill="#D0E2D9" font-size="20">Developer CLI</text>
+  <circle cx="500" cy="499" r="4" fill="#62D7AE"/>
+  <text x="523" y="506" font-family="Inter, Noto Sans CJK SC, sans-serif" fill="#D0E2D9" font-size="20">MIT</text>
+  <text x="105" y="564" font-family="Inter, Noto Sans CJK SC, sans-serif" fill="#7EA595" font-size="17">github.com/xiaoland/svc</text>
+</svg>
