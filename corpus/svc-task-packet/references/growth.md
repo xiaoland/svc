@@ -1,10 +1,10 @@
 # Grow a Task Packet
 
-Use this guidance when the current packet shape makes Human recovery, Agent retrieval, local planning, or concurrent editing materially harder. Growth is an in-place semantic refactor, not a scale score, lifecycle event, or CLI decision.
+Use this guidance when the lightweight shape check in [Task Packet](../SKILL.md) exposes current or foreseeable pressure on Human recovery, Agent retrieval, local planning, or concurrent editing. It helps select and migrate to a sufficient shape. Growth is an in-place semantic refactor, not a scale score, lifecycle event, or CLI decision.
 
 ## Run a Shape Preflight Early
 
-After creating or recovering the minimal Packet, ask:
+Expand the entry's lightweight check only for the pressure identified:
 
 1. Can short `packet.md` plus one linear Plan control the foreseeable work?
 2. Are there persistent concern axes that need Track continuity?

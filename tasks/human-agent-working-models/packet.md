@@ -1,6 +1,38 @@
 # Agent 工作方式与人机协作流程
 
-当前状态：独立 svc-verification 恢复与六入口同步已完成，Workflow 按名称发现它。必要检查通过，尚未授权提交。已有 verification、Agent collaboration 与 v15 版本修正工作保留。当前仍为未发布的 v15，不因本任务另升版本。
+版本纠正：用户确认本轮仍是16.0.1。此前按默认协作行为变化推断为 major 并升至17.0.0的判断未获用户确认，现已撤回；根版本、六入口 metadata 和采用指导统一回16.0.1。以下17.0.0及v17表述属于已被覆盖的历史判断，不代表当前发布目标。沿用用户的提交整理授权，补一个纠正提交，不改写前三个提交，不推送或发布。
+
+提交整理：用户已授权用几个提交整理工作区。最终内容按框架规则与六入口、消费者采用指导、任务证据三组提交；沿用 Corpus 17.0.0，不发布或更新安装副本。规则与入口提交为6c7095f，采用指导提交为041929b；本记录随第三个任务证据提交留存。下文“不提交”等限制是各轮当时的授权记录，已由本次明确提交授权覆盖。提交前核对全部 tracked 与 untracked 变更，均属于本次工作；`pdm run check-corpus-release --compare-ref corpus-v16.0.0` 和 `git diff --check` 通过。提交后核对工作区状态。
+
+当前状态：用户授权的六入口措辞精简已完成。仅收紧 SKILL.md 正文的重复、抽象和冗长表达，保持结构、description、触发与授权条件、例外、参考和完成责任；未向 references 转移必需内容。六份入口由4214词降至3834词，减少380词（约9%），含元数据及 Markdown 标记，仅为规模观察，不是可读性或行为效果证据。发布说明并入现有核心重排片段，沿用17.0.0；未提交、发布或更新安装副本。
+
+本批核对重点：恢复任务仍包括完成验证范围；阶段可沿用既有授权，交付不等于接受；Packet 创建仍有路径与状态保护；事实所有权不授予写权限；Taste 的候选方法保持可选；Agent owner 修复失败仍受原授权边界约束；Verification 保留 oracle 双向责任、适用证据复用、必要观察和无法建立结论时的返回。修改中发现可能过强或变宽的缩写已修正。`pdm run check-corpus-release --compare-ref corpus-v16.0.0` 和 `git diff --check` 通过。未做真实 Agent 执行实验或无关 CLI 全量回归；当前授权范围已完成。下文为前批历史记录。
+
+当前状态：用户授权的六入口核心重排已完成。专业首动作前置，Packet／Specs／Taste 的252词共同前言拆除，必要责任就近保留；Verification 显露主张、已有证据、必要观察和限定结论，Agent Collaboration 按选择、委派、协调、采用责任组织。Workflow 提前恢复当前任务，Taste 仅作者扩展指导移至维护者合同，消费者判断依据仍就地可用。沿用17.0.0，description、CLI、安装副本未改；未提交或发布。下文为前批和历史记录。
+
+本批组织判断采用原 advisor 的建议：不将所有权限限制堆到文末；已有适用证据可直接进入结论；Taste 的因果理由、代价和反向条件不能随作者指导迁出。逐入口读回确认仍保留独立使用的授权、任务连续性、条件参考和诚实返回；Specs 找到 owner 不等于获得写权限，已有可执行事实可不增文档，普通子 Agent 修复仍回原 owner，目录隔离不等于效果隔离。与前批场景一并走读，小型 Packet 无增长阅读义务、已有授权无需重新确认、跨会话行为证据缺口不能由绿色提示补足。静态检查通过不代表真实宿主触发或执行改进；未增加字面断言测试或运行无关 CLI 全量回归。当前授权范围无剩余实现义务。
+
+本批完成证据：`pdm run check-corpus-release --compare-ref corpus-v16.0.0` 与 `git diff --check` 均返回0；六入口 `wc -w` 从4643降至4214，包含 frontmatter 和 Markdown 标记，仅反映规模，不是认知负担或执行效果的实验。检查涉及当前整套工作区，前批变更保留。
+
+当前状态：用户授权的第一批“阶段职责和参考条件”改进已完成。Workflow 以 Realize with feedback 区分实现反馈与交付核证；Task Packet 入口保留轻量形状检查；Verification 读取条件改为可识别缺口；Taste 和 Workflow 实现路由补齐性能条件。权威源、相关参考和发布片段同步，沿用未发布17.0.0。既有审查和 advisor 判断为本轮依据；未重排六入口通用前言或扩展审查范围。不提交、发布或更新安装副本。以下段落为历史记录，旧授权状态不覆盖当前状态。
+
+本批验证：源文走读覆盖已有授权直接推进；局部检查通过却缺少跨会话持久性证据时补齐缺口；充分适用的证据直接复用；简单线性 Packet 无需增长参考；已知独立计划所有者和共享依赖及早读取增长指导；仅性能取舍也能进入 Taste 参考；Verification 不可用时保留本地最低验证责任。未发现源内旧阶段名或 specialist reasoning／specialist improvement 路由残留。`pdm run check-corpus-release --compare-ref corpus-v16.0.0` 与 `git diff --check` 通过。上述为语义走读和静态检查，不是真实 Agent 行为实验；没有运行无关 CLI 全量回归。当前批准范围无剩余实现义务。
+
+六入口审查已完成：[审查报告](skill-entry-audit.md) 保存逐入口依据、外部参照、建议和限制。用户授权为调查与报告，本轮未修改 Corpus 源。读取当前六入口并核对相关参考，matt-skills curated HEAD 为05cfa8b、上游为49dd158；主 owner 负责 Workflow／Verification／Agent Collaboration 与外部原文，独立审查者负责 Packet／Specs／Taste，advisor 仅判断独立安装与压缩通用前言的取舍。关键发现为三个入口相同252词通用前言、Workflow两个verify阶段未区分职责、Packet早期preflight依赖增长参考，以及Verification／Agent Collaboration动作结构不易定位。建议先修行为边界，再按各自领域结构重排；不把六入口统一阶段化，不将单词遗漏直接判为触发缺失。源diff摘要前后一致；仅任务材料变化。静态审查不证明宿主触发率或实际执行效果，后续实施尚未授权。
+
+最新命名修正已完成：用户要求第三阶段使用 verify 对齐 Verification。入口和 staged reference 已统一为 Verify and deliver（验证与交付），并明确其产出是符合性与实际用途证据，验证及交付不等于人类接受；验证仍可贯穿各阶段。发布片段同步。`pdm run check-corpus-release --compare-ref corpus-v16.0.0` 与 `git diff --check` 通过；未提交、发布或更新安装副本。
+
+当前状态（2026-10-10）：用户授权的非平凡任务默认阶段确认式改进已完成。Workflow 权威入口、两种流程参考和导航已同步，发布片段及采用指导已补齐；已有 description 调整保留。既有明确授权不因默认模式或阶段边界失效，已有项目迭代约定或人类直接指令优先。Corpus 未发布目标为17.0.0，六个 metadata 已同步。不提交或发布。下文 v15 状态是先前实施记录，不代表当前发行目标。
+
+追加工作已完成：用户要求精简 Workflow 入口，将简短默认模式保留在 SKILL.md，并用 description 明确每个非平凡任务必读。入口由原1237英文词压缩至约670词，保留默认步骤、必要授权与验证责任、条件方法路由和返回边界；补齐导航、消费者 AGENTS 模板及 v17 采用说明的必读规则。展开解释继续由当前流程与方法参考承接，不新增参考文件。advisor 的信息取舍建议已结合入口独立责任采用；普通已明确工作无须另外生成方案，方法不形成固定阶段或审批关卡。继续使用未发布17.0.0，原默认模式片段合并说明。源读回、`pdm run check-corpus-release --compare-ref corpus-v16.0.0` 和 `git diff --check` 通过；未执行真实宿主触发实验，必读规则不构成实际加载效果证据。不修改其它 Skill 的 description，不提交、发布或更新安装副本。
+
+最新澄清已完成：用户指出 description 将意义缩小为人机协作。已修正 description、标题、入口介绍和方法选择说明，明确协作模式治理人机承诺与反馈，Explore／Design／Planning／Implementation 按当前缺口指导 Agent 自主工作；人类不在场不妨碍在既有授权内运用方法。导航、消费者模板、采用指导和原发布片段同步此范围。授权与必要人类决定的边界不变。`pdm run check-corpus-release --compare-ref corpus-v16.0.0` 和 `git diff --check` 再次通过；不增加新文档或新方法，未验证宿主实际自动加载效果。
+
+阶段入口追加工作已完成：用户要求阶段式入口以 stage 为核心、更精简且一目了然，独立于参考即可开始；迭代式只告知其存在。采用 advisor 对明确承诺而非强制重新提案的判断，默认模式改为 Clarify and confirm／Realize and verify／Judge and deliver 的三行表，每阶段有返回和推进条件；已有承诺允许直接进入最早未满足阶段，只调查或提案的授权可以在对应返回结束。详细反馈、整体节奏调整和阶段说明由已有 staged reference 承接，入口明确仅按需展开；方法继续在任意阶段递归组合。源读回、阶段名称与引用检查、`pdm run check-corpus-release --compare-ref corpus-v16.0.0` 和 `git diff --check` 通过。无运行时状态、模板或新参考，沿用17.0.0；未进行真实 Agent 行为验证，不提交、发布或更新已安装副本。
+
+本轮方案与判据：直接在 Workflow 所有默认规则，不扩散为其它五入口的重复条款，也不增加消费者模板、阶段状态机或审批配置。Task 仍是单一内容修改及其发布同步，由当前 owner 集成；advisor 只提供默认、授权和 Behavioral SemVer 的独立判断。无既有约定且有实质选择的任务应先交付建议并核对；明确方案和实施授权的任务直接推进；已有迭代约定继续执行；前提变化只暂停依赖部分；已承诺行为的缺陷直接修复。最近已发布 corpus-v16.0.0，此次改变默认行为须 major，未发布目标改为17.0.0，原 description 片段保留，CLI 版本不变。验证采用交互逻辑走读和现有 Corpus 结构、引用、许可、元数据及版本检查，不把静态检查当作真实 Agent 行为证据。
+
+本轮完成证据：`pdm run prepare-corpus-release` 同步六个 metadata；`pdm run check-corpus-release --compare-ref corpus-v16.0.0` 和 `git diff --check` 通过。读回入口、流程参考、导航和新迁移指导，以上五种情形均有对应动作与暂停边界；移除了原先模式不明时先请求模式决定的规则。无源码运行逻辑变化，未新增字面断言测试或运行全量 CLI 回归；未进行真实 Agent 执行实验或更新本机已安装副本，静态检查不证明自动执行效果。当前授权范围无剩余实现义务，下一步交付结果。
 
 当前目标是将原 svc-methods 升级为规范 Agent 工作方式及其与人协作方式的 svc-workflow，专业 V&V 保持独立 svc-verification，通过名字按需发现。原合并方案已被用户修订。用户提出 svc-sop 或其它合适名称，要求支持瀑布式与敏捷式流程，并以共通方法支撑：Explore、Design（产品、技术、验证）、Planning、Implementation 等。
 
