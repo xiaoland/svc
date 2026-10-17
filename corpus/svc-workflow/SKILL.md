@@ -1,7 +1,7 @@
 ---
 name: svc-workflow
 description: "Read and use for every non-trivial Task: guide Human–Agent collaboration and autonomous Agent work through exploration, design, planning, and implementation."
-metadata: {"version": "16.0.1"}
+metadata: {"version": "16.0.2"}
 ---
 
 # Software Workflow and Methods

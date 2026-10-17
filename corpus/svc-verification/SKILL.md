@@ -1,7 +1,7 @@
 ---
 name: svc-verification
 description: "Use when designing or performing verification, judging whether results meet requirements and user goals, or reusing or changing tests, checks, and evidence."
-metadata: {"version": "16.0.1"}
+metadata: {"version": "16.0.2"}
 ---
 
 # Verification

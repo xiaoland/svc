@@ -1,39 +1,31 @@
 ---
 name: svc-agent-collaboration
-description: "Use when deciding whether to delegate to other Agents, arranging or coordinating their work or sessions, seeking independent Agent judgment, adopting their results, or handing off responsibility."
-metadata: {"version": "16.0.1"}
+description: "Use when choosing or assigning work across Agents, accepting delegated responsibility, delivering or adopting results, coordinating shared effects, seeking independent Agent judgment, or handing off responsibility."
+metadata: {"version": "16.0.2"}
 ---
 
 # Agent Collaboration
 
-Start with the needed result or decision, its owner, consumer, and reason to collaborate. Enter at the current responsibility: choosing an owner, assigning or coordinating work, adopting a return, or handing off. Continuing work needs no reassignment.
+## Assign a Complete Outcome
 
-## Choose Collaboration and an Owner
+Start with the needed outcome, owner, consumer, and reason to collaborate. Compare context isolation, independent judgment, and parallelism with transfer, waiting, correction, and integration costs; direct work or deterministic tools may suffice.
 
-Other Agents can absorb local material, pursue feedback, or challenge explanations while the overall owner continues. Parallelism is one benefit, not the definition of collaboration. Weigh the benefit against transfer, waiting, correction, integration, mistaken acceptance, and repeated work, including divergent context and overlapping effects. Compare with direct work and available deterministic tools; no score or restriction to easy tasks is required.
+Assign one owner a complete, usable outcome: purpose, current decisions and state, starting points, completion criteria, authority, and effect limits. Keep connected investigation, design, implementation, operation, repair, and verification together. For unclear work boundaries or capability needs, read [Delegation](references/delegation.md).
 
-Keep small work tied to current reasoning with its owner when useful. A coherent investigation, implementation, or interaction may fit a sub-agent; durable context, a separate lifecycle, or direct Human interaction may favor an independent session. Match capabilities, tools, context, and feedback to the work. Reuse the owner of a continuing outcome. Creation, messaging, writes, and external effects require project and tool authorization; this Skill grants none.
+## Execute Independently and Return
 
-Independent judgment is useful when it can change a consequential choice. Give the original goal, evidence entrances, and decision to resolve rather than requesting endorsement. Ordinary execution failures remain with their owner.
+The assigned Agent independently resolves local uncertainty and recoverable failures, verifies its work, and delivers one final return. When the host delivers that return automatically, do not separately message the completion content. The caller continues its own work without requesting progress or directing each step.
 
-## Assign a Complete Responsibility
+Interact during execution only for a changed premise or blocker that cannot wait until final delivery, or a usable result that releases an actual dependency early. When progress depends on a missing Human-specific fact, authority, or consequential goal or tradeoff decision, raise the smallest decision-ready issue and continue unaffected authorized work. Informational messages need no acknowledgment; needed decisions and responsibility transfers require a response, and silence grants no authority. For these exceptions or overlapping effects, read [Coordination](references/coordination.md).
 
-Give the purpose, latest decisions, known state, relevant starting points, completion criteria, necessary authority, and effect limits. Supply enough context to preserve intent without doing the investigation first. Keep connected investigation, design, implementation, operation, repair, and verification with one stable owner; splitting them can turn each failure into a handoff. The owner resolves local details and recoverable failures within those limits. Escalate missing Human-specific facts, authority, or consequential goal or tradeoff changes as the smallest decision-ready issue. For substantial assignments or hard-to-use returns, read [Delegation and Adoption](references/delegation-and-adoption.md).
+## Adopt and Continue
 
-## Coordinate Effects and Handoffs
+Adopt through evidence or reasoning whose meaning and limits you understand, without repeating the entire investigation. Agent agreement and action reports alone prove no result. Return concrete repair reasons to the same owner. For an unclear basis for adoption, read [Adoption](references/adoption.md).
 
-The overall Task owner retains integration, cross-workstream priorities, the Human relationship, and unresolved obligations. Dependency owners may coordinate directly where authorized. Before concurrent action, assign responsibility for shared mutable targets and overlapping effects; separate directories do not isolate shared services or external resources. Artifact delivery or status updates do not transfer responsibility. For continuing sessions, dependency coordination, or owner changes, read [Coordination and Handoff](references/coordination-and-handoff.md).
+A final return ends an execution turn, not responsibility for an unfinished outcome. Reuse the owner for repairs; after completion, reuse its context when helpful and establish the new outcome and authority limits. Reuse grants no permanent domain ownership or additional authority.
 
-## Adopt, Repair, and Finish
+The overall Task owner retains integration, cross-task priorities, Human communication, and unresolved obligations. Human goals, preferences, permissions, consequential tradeoffs, and acceptance retain their authority. Creation, messaging, writes, and external effects follow project and tool authorization; this Skill grants none. Before replacing an owner or recovering interrupted work, read [Handoff](references/handoff.md).
 
-Adopt a return through an observation or argument whose meaning, conditions, and limits you understand. A useful return can condense a difficult search into a query, relationship, explanation, or candidate with evidence. Links, Agent agreement, or a launch receipt alone do not prove the result; repeating all work can erase the gain. Reuse applicable evidence, investigate contradictions, and return specific repair reasons to the same owner. Accept what is supported, seek evidence that resolves the gap, or leave the claim unresolved.
+For every non-trivial Task, recover its Packet or create the smallest `packet.md` at the authorized location. Preserve goal, decisions, authorization, owners, evidence, pending effects, and next action. Delegation creates no competing Task or Packet; return state changes to the Task owner and retain durable truth at its project owner.
 
-Finish when the result is adopted and integrated, or no feasible, authorized continuation can resolve a material gap at proportionate cost. If blocked, return the supported partial result, unmet condition, current owner, pending effects, and smallest next decision or action. Distinguish assignment, execution, and evidence-supported outcomes. Returning does not discharge the Task's other obligations.
-
-## Authority and Task Continuity
-
-Human goals, preferences, permissions, consequential tradeoffs, and acceptance retain their authority; factual and causal claims remain open to evidence and reasoning. Do not turn an Agent role, confident statement, or vote into permission or proof.
-
-For every non-trivial Task, recover its Packet or create the smallest `packet.md` at the authorized task location. Preserve goal, decisions, authorization, owners, evidence locations, pending effects, and next action. An assignment or invocation creates no competing Task or Packet; return state changes to the Task owner and keep durable truth at its project owner.
-
-Discover Skills by name through the host: `svc-workflow` for Human collaboration, investigation, design, planning, and implementation; `svc-verification` for criteria, evidence, and feedback; `svc-task-packet` for state and recovery. They are optional guidance, not dependencies. If absent, use the boundaries here and qualified project mechanisms; report actual capability gaps without relaxing obligations.
+The overall Task owner finishes the collaboration when the outcome is adopted and integrated. If no feasible, authorized continuation can close a material gap at proportionate cost, return the supported partial result, unmet condition, current owner, pending effects, and smallest next action. Preserve the surrounding Task's remaining obligations.

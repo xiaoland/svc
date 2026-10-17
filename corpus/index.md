@@ -15,7 +15,7 @@ Read Workflow for every non-trivial Task and maintain its Task Packet. Load addi
 | [svc-task-packet](svc-task-packet/SKILL.md) | Start, recover, maintain, grow, and close every non-trivial Task |
 | [svc-workflow](svc-workflow/SKILL.md) | Read and use for every non-trivial Task; guide Human–Agent collaboration and autonomous work with Explore, Design, Planning, and Implementation |
 | [svc-verification](svc-verification/SKILL.md) | Establish, use, or improve criteria, evidence, and feedback; judge conformance, fitness, and evidence reuse |
-| [svc-agent-collaboration](svc-agent-collaboration/SKILL.md) | Arrange useful work across Agents, adopt results, coordinate dependencies, or transfer responsibility |
+| [svc-agent-collaboration](svc-agent-collaboration/SKILL.md) | Assign or accept Agent work, seek independent judgment, adopt results, coordinate dependencies, or transfer responsibility |
 | [svc-specs](svc-specs/SKILL.md) | Find or update the canonical owner of durable project knowledge |
 | [svc-taste](svc-taste/SKILL.md) | Judge real design or implementation alternatives by their consequences |
 

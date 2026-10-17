@@ -1,7 +1,7 @@
 ---
 name: svc-taste
 description: "Use when choosing between design or implementation options affecting user experience, permissions, data ownership, state, boundaries, naming, dependencies, performance, or maintenance."
-metadata: {"version": "16.0.1"}
+metadata: {"version": "16.0.2"}
 ---
 
 # Taste and Design Judgment
