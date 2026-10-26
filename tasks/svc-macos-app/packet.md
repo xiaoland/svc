@@ -20,7 +20,7 @@ App 唯一版本源为 `macos/VERSION`，当前 `0.1.0`；构建号取 Git 主�
 
 `tools/macos_app.py` 先构建并验证候选，再正常退出和替换旧 App。替换失败恢复旧包；恢复本身失败则保留备份路径，禁止自动清理唯一旧包。配套 CLI wheel 按摘要安装到用户 Library/Application Support 下的独立环境，同一 wheel 复用，重装不依赖工作树 `.venv`。
 
-`.github/workflows/macos.yml` 在 arm64 runner 验证仓库和原生行为、构建 App 与同源 CLI、再以实际 wheel 验收真实服务。main 的发布记录变更或手动运行触发 GitHub prerelease。发布器核对 commit、tag、完整附件集合和 SHA-256，恢复同内容草稿，拒绝移动 tag 或覆盖不同附件。草稿查询使用分页 Release 列表，避免只返回已发布 Release 的 tag endpoint。
+`.github/workflows/macos.yml` 在 arm64 runner 验证仓库和原生行为、构建 App 与同源 CLI、再以实际 wheel 验收真实服务。main 的发布记录变更或手动运行触发 GitHub prerelease。发布器核对 commit、tag、完整附件集合和 SHA-256，恢复同内容草稿，拒绝移动 tag 或覆盖不同附件。草稿通过 gh 原生 pending tag 查询定位，再按准确 REST ID 读取；不依赖 tag endpoint 或 Release 列表的草稿可见性。
 
 公开包使用 ad-hoc 签名，支持 macOS 14+ Apple Silicon，未公证；它不携带本机 CLI 路径、PATH、调试源码路径或开发证书。尚无 Developer ID 分发身份，不能承诺通过其他机器的 Gatekeeper。
 
@@ -41,3 +41,5 @@ App 唯一版本源为 `macos/VERSION`，当前 `0.1.0`；构建号取 Git 主�
 新增的 [App 与 CLI 合同](../../docs/product-tdd/macos-client.md) 持久保存职责、公开 argv/JSON 边界、schema 兼容、停止权限、生命周期和配套发行关系；README、产品文档、部署导航、App README 和 CONTRIBUTING 已链接到同一所有者。
 
 PR #37 的 Linux 通用 CI 通过。首次 macOS15 runner 有 7 项 HTTPServer 子进程就绪超时；官方 setup-python#1223 记录了同系统 loopback 反向解析延迟。独立进程堆栈确认 getfqdn 阻塞，hosts 映射实验无效且已移除；改用 PDM 安装的同版本独立 CPython 3.12.10，并以独立进程在 10 秒内创建 HTTPServer 验证该前提，然后照常执行全部检查，没有放宽业务超时或跳过测试。远端 macos-v* tag 已加入既有的更新／删除保护。
+
+PR #37 已合入 main（8d3d331537f3f18833477ad7694224670450d67c），其主线验收和归档通过。本机开发签名 App 已同步该提交并后台运行。CD 创建空草稿后无法从列表读回；当前 hotfix 改用 gh 原生草稿解析，待新 PR 与 CI 后移除仅由本任务创建、尚无 tag 和附件的空草稿，再以新 main commit 完成首次 0.1.0 CD。App 与 CLI 的持久合同已在主线。

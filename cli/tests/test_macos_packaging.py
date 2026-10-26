@@ -4,6 +4,7 @@ import hashlib
 import json
 import plistlib
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -203,14 +204,21 @@ def test_publish_recovers_draft_or_preserves_identical_published_assets(
 
     def gh(*args: str) -> str:
         nonlocal exists
-        if args[0] == "api":
+        if args[1] == "view":
             assert args == (
-                "api",
-                "repos/owner/repo/releases?per_page=100",
-                "--paginate",
-                "--slurp",
+                "release",
+                "view",
+                "macos-v0.1.0",
+                "--repo",
+                "owner/repo",
+                "--json",
+                "apiUrl",
             )
-            return json.dumps([[{"tag_name": "unrelated"}], [state] if exists else []])
+            if not exists:
+                raise subprocess.CalledProcessError(1, args, stderr="release not found")
+            return json.dumps(
+                {"apiUrl": "https://api.github.com/repos/owner/repo/releases/123"}
+            )
         action = args[1]
         if action == "download":
             destination = Path(args[args.index("--dir") + 1])
@@ -256,3 +264,21 @@ def test_release_tag_cannot_move_to_another_commit(
     )
     with pytest.raises(ValueError, match="禁止覆盖"):
         release.validate_tag("owner/repo", "macos-v0.1.0", SHA)
+
+
+@pytest.mark.parametrize(
+    "message,missing",
+    [("release not found", True), ("HTTP 401: bad credentials", False)],
+)
+def test_release_lookup_distinguishes_absence_from_access_failure(
+    monkeypatch: pytest.MonkeyPatch, message: str, missing: bool
+) -> None:
+    def fail(*args: str) -> str:
+        raise subprocess.CalledProcessError(1, args, stderr=message)
+
+    monkeypatch.setattr(release, "gh", fail)
+    if missing:
+        assert release.find_release("owner/repo", "macos-v0.1.0") is None
+    else:
+        with pytest.raises(subprocess.CalledProcessError):
+            release.find_release("owner/repo", "macos-v0.1.0")

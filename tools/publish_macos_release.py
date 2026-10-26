@@ -15,7 +15,9 @@ from tools.release_notes import release_section
 
 
 def gh(*args: str) -> str:
-    return subprocess.check_output(["gh", *args], text=True).strip()
+    return subprocess.check_output(
+        ["gh", *args], text=True, stderr=subprocess.PIPE
+    ).strip()
 
 
 def optional_api(path: str) -> dict[str, Any] | None:
@@ -84,13 +86,19 @@ def validate_tag(repo: str, tag: str, revision: str) -> None:
 
 
 def find_release(repo: str, tag: str) -> dict[str, Any] | None:
-    # The tag endpoint omits drafts; listing includes drafts visible to the token.
-    pages = json.loads(
-        gh("api", f"repos/{repo}/releases?per_page=100", "--paginate", "--slurp")
-    )
-    return next(
-        (item for page in pages for item in page if item["tag_name"] == tag), None
-    )
+    # gh resolves pending draft tags through GraphQL, then exposes their exact REST ID.
+    try:
+        metadata = json.loads(
+            gh("release", "view", tag, "--repo", repo, "--json", "apiUrl")
+        )
+    except subprocess.CalledProcessError as error:
+        if (
+            error.returncode == 1
+            and "release not found" in (error.stderr or "").lower()
+        ):
+            return None
+        raise
+    return optional_api(metadata["apiUrl"])
 
 
 def publish(repo: str, directory: Path, revision: str, changelog: Path) -> None:
