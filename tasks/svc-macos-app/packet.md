@@ -40,4 +40,4 @@ App 唯一版本源为 `macos/VERSION`，当前 `0.1.0`；构建号取 Git 主�
 
 新增的 [App 与 CLI 合同](../../docs/product-tdd/macos-client.md) 持久保存职责、公开 argv/JSON 边界、schema 兼容、停止权限、生命周期和配套发行关系；README、产品文档、部署导航、App README 和 CONTRIBUTING 已链接到同一所有者。
 
-PR #37 的 Linux 通用 CI 通过。首次 macOS15 runner 有 7 项 HTTPServer 子进程就绪超时；官方 setup-python#1223 记录了同系统 loopback 反向解析延迟。工作流在临时 runner 配置明确的 loopback FQDN，并以独立进程在 10 秒内创建 HTTPServer 验证该前提，然后照常执行全部检查，没有放宽业务超时或跳过测试。远端 macos-v* tag 已加入既有的更新／删除保护。
+PR #37 的 Linux 通用 CI 通过。首次 macOS15 runner 有 7 项 HTTPServer 子进程就绪超时；官方 setup-python#1223 记录了同系统 loopback 反向解析延迟。独立进程堆栈确认 getfqdn 阻塞，hosts 映射实验无效且已移除；改用 PDM 安装的同版本独立 CPython 3.12.10，并以独立进程在 10 秒内创建 HTTPServer 验证该前提，然后照常执行全部检查，没有放宽业务超时或跳过测试。远端 macos-v* tag 已加入既有的更新／删除保护。

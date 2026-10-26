@@ -31,20 +31,13 @@ jobs:
           version: 2.28.0
           cache: true
       - run: test "$(uname -m)" = arm64
-      - name: Configure runner loopback resolution
-        # setup-python#1223: reverse lookup of a bare localhost can stall HTTPServer startup on macOS 15+.
+      - name: Select standalone CPython for local server tests
+        # setup-python#1223: framework Python can stall getfqdn on macOS 15+ runners.
         run: |
-          python - <<'PYTHON'
-          import os
-          from pathlib import Path
-          original = Path("/etc/hosts").read_text()
-          Path(os.environ["RUNNER_TEMP"], "svc-hosts").write_text(
-              "127.0.0.1 localhost.localdomain localhost\n" + original
-          )
-          PYTHON
-          sudo cp "$RUNNER_TEMP/svc-hosts" /etc/hosts
-          sudo dscacheutil -flushcache
-          python - <<'PYTHON'
+          pdm config python.install_root "$RUNNER_TEMP/svc-python"
+          pdm python install 3.12.10
+          pdm use --no-version-file -f "$RUNNER_TEMP/svc-python/cpython@3.12.10/bin/python3"
+          pdm run python - <<'PYTHON'
           import subprocess, sys
           code = "import faulthandler; faulthandler.dump_traceback_later(5); from http.server import HTTPServer, BaseHTTPRequestHandler; server = HTTPServer(('127.0.0.1', 0), BaseHTTPRequestHandler); print('loopback HTTPServer ready'); server.server_close()"
           try:
@@ -71,7 +64,7 @@ jobs:
         run: pdm run python -m tools.macos_app archive --require-clean --output dist/macos-release
       - name: Accept the packaged CLI and native controls together
         run: |
-          python -m venv "$RUNNER_TEMP/svc-release-cli"
+          pdm run python -m venv "$RUNNER_TEMP/svc-release-cli"
           "$RUNNER_TEMP/svc-release-cli/bin/pip" install dist/macos-release/*.whl
           SVC_TEST_CLI="$RUNNER_TEMP/svc-release-cli/bin/svc" swift test --package-path macos --filter 'realCLIService|nativeButtonsControlRealServer'
       - id: release
