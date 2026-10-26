@@ -14,6 +14,7 @@ import pytest
 
 from svc_cli._execution import ExecutionStore
 from svc_cli.config import ExecProbe, HttpProbe, TargetConfig
+from svc_cli.cli_output.dev import project_dev_status
 from svc_cli.dev.runtime import (
     DevEnsureResult,
     DevStopResult,
@@ -34,6 +35,36 @@ class _Response:
 
     def close(self) -> None:
         pass
+
+
+@pytest.mark.parametrize("kind", ["absent", "manual", "exec"])
+def test_status_reports_stop_capability_without_executing_cleanup(
+    tmp_path: Path, kind: str
+) -> None:
+    marker = tmp_path / "stopped"
+    target: dict[str, object] = {
+        "scope": "repository",
+        "probe": {"kind": "exec", "argv": [sys.executable, "-c", "pass"]},
+        "provision": {"kind": "manual"},
+    }
+    if kind != "absent":
+        target["stop"] = (
+            {"kind": "manual"}
+            if kind == "manual"
+            else {
+                "kind": "exec",
+                "argv": [
+                    sys.executable,
+                    "-c",
+                    f"from pathlib import Path; Path({str(marker)!r}).touch()",
+                ],
+            }
+        )
+    write_project_config(tmp_path, dev_targets={"app": target})
+    payload = project_dev_status(inspect_dev_status(tmp_path)).as_dict()
+    assert payload["schema_version"] == 3
+    assert payload["targets"][0]["stop"] == {"kind": kind}
+    assert not marker.exists()
 
 
 def test_http_probe_enforces_loopback_and_treats_redirect_as_an_observation() -> None:

@@ -92,3 +92,27 @@ CLI 输出 schema 仍维护自己的结果版本；它要求的 package major �
    可先用 `pdm run build-corpus-archive --output-dir /tmp/svc-skills-release` 构建全部附件，再用 `pdm run check-corpus-release --artifacts /tmp/svc-skills-release` 校验。构建要求版本、Skill 元数据和正文已提交且与 HEAD 相符。
 
    提交并合并包含 `CORPUS_CHANGELOG.md`、六个 Skill 元数据和许可副本的 release PR 后，发布 workflow 以同一 commit 创建 `corpus-v<version>`。workflow 只读校验已提交源文件，从 v16 起，发布物为六个 `<skill-name>-<version>.zip` 及各自 `.sha256`，加上 `svc-skills-<version>.json` 与其 `.sha256`；每个 ZIP 仅含 `<skill-name>/` 的完整源码目录，外部 schema-2 catalog 记录共同发布身份、逐文件摘要和各 ZIP 摘要，不再生成整体 Corpus ZIP；CLI wheel 不再携带 Corpus，归档重跑不得覆盖不同内容。
+
+
+## macOS 版本与发布
+
+App 与 CLI 的职责、公开调用和运行时兼容性由 [跨单元合同](docs/product-tdd/macos-client.md) 拥有。
+
+macOS App 使用独立的 `macos/VERSION` 与 `macos-v<version>` tag。版本遵循 SemVer；首版 `0.1.0` 是 macOS 14+ Apple Silicon 开发预览。构建号由 Git 主线提交计数生成，包和 `release.json` 记录准确 commit；本地未提交源码标记为 `-dirty`，不能发布。
+
+功能变化向 `.changes/macos/` 添加中文 Towncrier 片段。准备发布时更新 `macos/VERSION`，在仓库根目录执行：
+
+```console
+mkdir -p .changes/macos
+pdm run towncrier build --config towncrier.macos.toml --version 0.1.0 --yes
+pdm run check
+SVC_TEST_CLI="$PWD/.venv/bin/svc" swift test --package-path macos
+```
+
+版本须等于 `macos/VERSION`。将生成的 `MACOS_CHANGELOG.md` 与版本、实现一起通过 PR 合入 `main`；macOS workflow 先执行仓库检查、后台原生测试和配套 wheel 的真实服务验收，再发布 GitHub prerelease。普通功能合并只验证和归档，只有发布记录变更或在 `main` 手动运行 workflow 才发布。重试同一次失败运行可以继续已校验的草稿；不同 commit、同名不同内容或已发布但缺失附件均会被拒绝，不移动 tag，不覆盖附件。新的发布使用新版本。
+
+每次发布包含 App ZIP、同一 commit 的 CLI wheel、`INSTALL.md`、`release.json` 和 `SHA256SUMS`。macOS CD 不发布 PyPI；CLI schema 或 package 变化仍遵守 CLI 的版本规则。当前 dev-status schema 3 要求配套 CLI 17.0.0，预览安装时必须使用随附 wheel，不能用旧版 PyPI CLI 替代。
+
+公开预览使用 ad-hoc 签名，不含本机路径或私钥，也未经公证，不能承诺通过其他机器的 Gatekeeper。Developer ID 分发与公证需要另行配置有效身份和凭据。当前工作流只需 GitHub 自带的短期 token；本机 Apple Development 私钥不上传到 CI。
+
+本机迭代运行 `./script/build_and_run.sh --verify`，会使用钥匙串的开发身份重新安装到 `/Applications/SVC.app` 并后台启动。仅安装用 `--install`，只构建用 `--build-only`。设置与运行中的开发服务器保留；安装前的正常退出会等待未完成的控制操作。详细运行合同由 `macos/README.md` 拥有。

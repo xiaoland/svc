@@ -77,6 +77,8 @@ def test_cli_export_query_and_read_contract(tmp_path: Path) -> None:
             "telemetry",
             "agent-thread",
             "export",
+            "--home",
+            str(tmp_path / "codex"),
             "--source",
             str(source),
             "--output",

@@ -9,6 +9,8 @@ SVC 由两个可以独立使用的部分组成：
 - **Agent Skills**：为任务推进、人机协作、验证、知识维护和设计取舍提供按需加载的工作指导。
 - **开发协作 CLI**：提供 Skills 安装与采用、开发环境管理、项目命令执行和 Agent 执行证据分析等确定性工具。
 
+[macOS 菜单栏 App](macos/README.md) 是 CLI 开发服务器能力的可选图形客户端，需要兼容的 CLI 安装；App 与 CLI 各自维护版本，通过公开 JSON 协议协作。职责与兼容规则见 [App 与 CLI 合同](docs/product-tdd/macos-client.md)。
+
 它不规定所有项目必须遵守同一套开发流水线，也不接管项目自己的代码、文档和决策权限。
 
 [快速开始](#快速开始) · [六个-skills](#六个-skills) · [cli-能做什么](#cli-能做什么) · [用户手册](USER_MANUAL.md) · [发布记录](https://github.com/xiaoland/svc/releases)
@@ -111,5 +113,7 @@ SVC 保留使用者已有文件和权限边界：CLI 的受管写操作需要明
 - [CLI 变更记录](CLI_CHANGELOG.md) / [Corpus 变更记录](CORPUS_CHANGELOG.md)：独立发行历史
 
 在源码仓库中参与开发，需要 Python 3.11+ 与 PDM 2.28+。构建和检查命令见[贡献指南](CONTRIBUTING.md)，避免与使用者的安装步骤混淆。
+
+原生 macOS 菜单栏面板可统一查阅和控制本机项目声明的开发服务器，构建与使用入口见 [macOS App](macos/README.md)。
 
 本项目采用 [MIT 许可证](LICENSE)。

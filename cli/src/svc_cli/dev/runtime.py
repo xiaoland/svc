@@ -125,6 +125,7 @@ class DevTargetObservation(ValueModel):
     probe: ProbeObservation
     access: tuple[str, ...]
     provision: DevProvisionSummary
+    stop: DevStopDeclaration
     continuation: (
         Literal["blocked-unhealthy-responder", "manual-action-required", "ensure"]
         | None
@@ -515,6 +516,9 @@ def inspect_dev_status(
                     for value in target.access
                 ),
                 provision=_provision_projection(target),
+                stop=DevStopDeclaration(
+                    kind=target.stop.kind if target.stop is not None else "absent"
+                ),
                 continuation=_dev_continuation(target, observed),
                 probe_argv=resolved_probe.argv,
             )

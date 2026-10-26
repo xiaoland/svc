@@ -20,7 +20,9 @@
 - 许可权威源与发布副本：根 `LICENSE`；六个 Skill 与 CLI 的 `LICENSE` 必须由发布准备同步并由检查器核对
 - 消费者 runtime、工具项目集成与 CLI 静态资源：`cli/src/svc_cli/`；测试位于 `cli/tests/`
 - CLI 归档构建：`cli/pyproject.toml`；构建与运行不得依赖 Corpus
-- 仓库检查与构建工具：`tools/`；自动化测试仅位于 `cli/tests/`
+- macOS 发布：`macos/VERSION`、`towncrier.macos.toml`、`.changes/macos/`、`MACOS_CHANGELOG.md`、`.github/workflows/macos.yml`；安装与归档由 `tools/macos_app.py` 拥有，发布由 `tools/publish_macos_release.py` 拥有
+- macOS 菜单栏 App：`macos/`；原生测试位于 `macos/Tests/`，构建运行入口为 `script/build_and_run.sh`
+- 仓库检查与构建工具：`tools/`；Python 自动化测试位于 `cli/tests/`
 - 任务工作与留存证据：`tasks/`；保留方式由任务决定，任务材料不属于 Corpus
 
 ## 开发流程
