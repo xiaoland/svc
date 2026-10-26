@@ -112,7 +112,7 @@ OUTPUT_SCHEMA_SPECS = {
     "init": OutputSchemaSpec(4, TypeAdapter(InitMachineOutput)),
     "status": OutputSchemaSpec(3, TypeAdapter(StatusMachineOutput)),
     "dev-identity": OutputSchemaSpec(2, TypeAdapter(DevIdentityMachineOutput)),
-    "dev-status": OutputSchemaSpec(2, TypeAdapter(DevStatusMachineOutput)),
+    "dev-status": OutputSchemaSpec(3, TypeAdapter(DevStatusMachineOutput)),
     "dev-ensure": OutputSchemaSpec(2, TypeAdapter(DevEnsureMachineOutput)),
     "dev-stop": OutputSchemaSpec(2, TypeAdapter(DevStopMachineOutput)),
     "run": OutputSchemaSpec(2, TypeAdapter(RunMachineOutput)),

@@ -81,6 +81,7 @@ class DevTargetObservation(MachineModel):
     probe: ProbeObservation
     access: tuple[str, ...]
     provision: DevProvisionOutput
+    stop: DevStopDeclaration
     continuation: (
         Literal["blocked-unhealthy-responder", "manual-action-required", "ensure"]
         | None
@@ -100,7 +101,7 @@ DevTargetStatus: TypeAlias = DevTargetObservation | DevTargetError
 class DevStatusOutput(MachineModel):
     machine_exclude_none = True
 
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     command: Literal["dev status"] = "dev status"
     healthy: bool
     status: Literal[
@@ -227,6 +228,7 @@ def _target(value: ServiceDevTargetStatus) -> DevTargetStatus:
         probe=value.probe,
         access=value.access,
         provision=_provision(value.provision),
+        stop=DevStopDeclaration(kind=value.stop.kind),
         continuation=value.continuation,
         probe_argv=value.probe_argv,
     )

@@ -85,8 +85,8 @@
           "title": "Reason"
         },
         "schema_version": {
-          "const": 2,
-          "default": 2,
+          "const": 3,
+          "default": 3,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -132,6 +132,25 @@
         "workspace"
       ],
       "title": "DevStatusOutput",
+      "type": "object"
+    },
+    "DevStopDeclaration": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "absent",
+            "manual",
+            "exec"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "DevStopDeclaration",
       "type": "object"
     },
     "DevTargetError": {
@@ -220,6 +239,9 @@
           ],
           "title": "Provision"
         },
+        "stop": {
+          "$ref": "#/$defs/DevStopDeclaration"
+        },
         "target": {
           "title": "Target",
           "type": "string"
@@ -231,7 +253,8 @@
         "capability",
         "probe",
         "access",
-        "provision"
+        "provision",
+        "stop"
       ],
       "title": "DevTargetObservation",
       "type": "object"
@@ -477,7 +500,7 @@
       "type": "object"
     }
   },
-  "$id": "urn:svc:cli-output:dev-status:v2",
+  "$id": "urn:svc:cli-output:dev-status:v3",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "anyOf": [
     {
@@ -491,5 +514,5 @@
     }
   ],
   "title": "SVC dev-status machine output",
-  "x-svc-result-schema-version": 2
+  "x-svc-result-schema-version": 3
 }

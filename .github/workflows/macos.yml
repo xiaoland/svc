@@ -1,0 +1,109 @@
+name: macOS App
+
+on:
+  pull_request:
+    paths: ["macos/**", "script/**", "tools/macos_app.py", "tools/publish_macos_release.py", "cli/**", "pdm.lock", "MACOS_CHANGELOG.md", ".github/workflows/macos.yml"]
+  push:
+    branches: [main]
+    paths: ["macos/**", "script/**", "tools/macos_app.py", "tools/publish_macos_release.py", "cli/**", "pdm.lock", "MACOS_CHANGELOG.md", ".github/workflows/macos.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: svc-macos-${{ github.event.pull_request.number || 'release' }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: macos-15
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pdm-project/setup-pdm@973541a5febeafcfdadf8a51211435be6ecfd90f # v4.5
+        with:
+          python-version: "3.12"
+          version: 2.28.0
+          cache: true
+      - run: test "$(uname -m)" = arm64
+      - name: Select standalone CPython for local server tests
+        # setup-python#1223: framework Python can stall getfqdn on macOS 15+ runners.
+        run: |
+          pdm config python.install_root "$RUNNER_TEMP/svc-python"
+          pdm python install 3.12.10
+          pdm use --no-version-file -f "$RUNNER_TEMP/svc-python/cpython@3.12.10/bin/python3"
+          pdm run python - <<'PYTHON'
+          import subprocess, sys
+          code = "import faulthandler; faulthandler.dump_traceback_later(5); from http.server import HTTPServer, BaseHTTPRequestHandler; server = HTTPServer(('127.0.0.1', 0), BaseHTTPRequestHandler); print('loopback HTTPServer ready'); server.server_close()"
+          try:
+              result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=10)
+          except subprocess.TimeoutExpired as error:
+              print(error.stderr)
+              raise
+          print(result.stdout)
+          print(result.stderr)
+          result.check_returncode()
+          PYTHON
+      - run: pdm lock --check
+      - run: pdm install --frozen-lockfile -d -G quality -G test -G double
+      - name: Check isolated source and public contracts
+        env:
+          SVC_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          pdm run check
+          pdm run python -m tools.macos_app check --require-clean
+      - name: Native tests without foreground activation
+        run: |
+          SVC_TEST_CLI="$PWD/.venv/bin/svc" swift test --package-path macos
+      - name: Build source-bound preview assets
+        run: pdm run python -m tools.macos_app archive --require-clean --output dist/macos-release
+      - name: Accept the packaged CLI and native controls together
+        run: |
+          pdm run python -m venv "$RUNNER_TEMP/svc-release-cli"
+          "$RUNNER_TEMP/svc-release-cli/bin/pip" install dist/macos-release/*.whl
+          SVC_TEST_CLI="$RUNNER_TEMP/svc-release-cli/bin/svc" swift test --package-path macos --filter 'realCLIService|nativeButtonsControlRealServer'
+      - id: release
+        name: Detect an authorized prepared release on main
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          publish=false
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            if [[ "$EVENT" == workflow_dispatch ]]; then
+              publish=true
+            elif [[ "$EVENT" == push ]] && git diff --name-only "$BEFORE" "$GITHUB_SHA" -- MACOS_CHANGELOG.md | grep -q MACOS_CHANGELOG.md; then
+              publish=true
+            fi
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: svc-macos-release
+          path: dist/macos-release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: verify
+    if: needs.verify.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: svc-macos-release
+          path: dist/macos-release
+      - name: Publish immutable GitHub preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m tools.publish_macos_release --repo "$GITHUB_REPOSITORY" --revision "$GITHUB_SHA" --artifacts dist/macos-release

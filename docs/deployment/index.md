@@ -8,6 +8,7 @@ Current operational projections are:
 
 - [Skills release and installation](skills.md)
 - [local shared execution](execution.md)
+- [macOS App 安装、CLI 环境与重装](../../macos/README.md)
 - [Double runtime](double.md)
 - [Agent evidence runtime](agent-analysis.md)
 
