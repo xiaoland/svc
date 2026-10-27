@@ -1,0 +1,51 @@
+{
+  "activation_events" : 0,
+  "active_samples" : 0,
+  "completed" : true,
+  "events" : [
+    {
+      "kind" : "appeared",
+      "pid" : 30489,
+      "time" : 1793109780.9548349
+    },
+    {
+      "active" : false,
+      "kind" : "active-state",
+      "pid" : 30489,
+      "time" : 1793109780.9549551
+    },
+    {
+      "kind" : "disappeared",
+      "pid" : 30489,
+      "time" : 1793109782.8547912
+    },
+    {
+      "kind" : "appeared",
+      "pid" : 31702,
+      "time" : 1793109783.426476
+    },
+    {
+      "active" : false,
+      "kind" : "active-state",
+      "pid" : 31702,
+      "time" : 1793109783.4266229
+    }
+  ],
+  "notification_count" : 0,
+  "notification_kinds" : {
+
+  },
+  "running" : [
+    {
+      "accessory" : true,
+      "active" : false,
+      "path" : "\/Applications\/SVC.app",
+      "pid" : 31702
+    }
+  ],
+  "samples" : 1649,
+  "seen_pids" : [
+    30489,
+    31702
+  ]
+}

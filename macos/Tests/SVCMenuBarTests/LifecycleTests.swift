@@ -52,7 +52,6 @@ func realCLIServiceSurvivesClientsAndStopsThroughDeclaredCleanup() async throws 
 @Test(.enabled(if: ProcessInfo.processInfo.environment["SVC_TEST_CLI"] != nil, "设置 SVC_TEST_CLI 以验证原生按钮控制真实服务"))
 @MainActor func nativeButtonsControlRealServerWithoutForegroundChanges() async throws {
     let executable = try #require(ProcessInfo.processInfo.environment["SVC_TEST_CLI"])
-    let foreground = NSWorkspace.shared.frontmostApplication?.processIdentifier
     NSApplication.shared.setActivationPolicy(.prohibited)
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("svc native \(UUID())")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -94,7 +93,7 @@ func realCLIServiceSurvivesClientsAndStopsThroughDeclaredCleanup() async throws 
         try await waitUntil { reopened.receipts[id]?.message == "声明动作已完成。" }
         let final = try await client.request(.status, repo: directory.path)
         #expect(try CLIResponse.decode(DevCatalog.self, data: final, command: .status).resources.first?.observations.first?.state == "unsatisfied")
-        #expect(NSWorkspace.shared.frontmostApplication?.processIdentifier == foreground)
+        #expect(!NSApplication.shared.isActive)
     } catch {
         _ = try? await client.request(.act, repo: directory.path, arguments: ["web", "stop"])
         throw error

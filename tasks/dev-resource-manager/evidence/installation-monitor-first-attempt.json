@@ -1,0 +1,22 @@
+{
+  "activation_events" : 0,
+  "active_samples" : 0,
+  "completed" : true,
+  "events" : [
+
+  ],
+  "notification_count" : 0,
+  "running" : [
+    {
+      "accessory" : true,
+      "active" : false,
+      "path" : "\/Applications\/SVC.app",
+      "pid" : 26153
+    }
+  ],
+  "samples" : 606,
+  "seen_pids" : [
+    23472,
+    26153
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "revision": "84635f65946821f8bda3953e20d71c6944bf31c0",
+  "build": "55",
+  "architecture": "arm64",
+  "signing": "ad-hoc",
+  "notarized": false,
+  "cli_wheel": "sustainable_vibe_coding-18.0.0-py3-none-any.whl",
+  "cli_version": "18.0.0",
+  "cli_result_schemas": {
+    "list": 1,
+    "status": 4,
+    "act": 1,
+    "reconcile": 1
+  }
+}

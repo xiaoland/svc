@@ -1,0 +1,13 @@
+Building for production...
+[0/4] Write sources
+[1/4] Write swift-version--FE76C4972A19952.txt
+[3/5] Compiling SVCMenuBar SVCMenuBarApp.swift
+[3/5] Write Objects.LinkFileList
+[4/5] Linking SVCMenuBar
+Build complete! (9.42s)
+/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-macos-release-mmtbcz79/.svc-build-tsz4wkxd/SVC.app: replacing existing signature
+Building wheel...
+Built wheel at /Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/dist/dev-resource-manager/accepted-release/sustainable_vibe_coding-18.0.0-py3-none-any.whl
+INFO: PDM 2.28.0 is installed, while 2.29.4 is available.
+Please run `pdm self update` to upgrade.
+Run `pdm config check_update false` to disable the check.

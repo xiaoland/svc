@@ -1,0 +1,4 @@
+e387f59519672d46714a757f9444cd80a3834ce1698f9ee62fe004fad9e640ff  INSTALL.md
+f24aa19ece768892b3448eb27a7d4ef9cfaa7a9976762459da9b7a3c3979cde7  SVC-0.2.0-macos-arm64.zip
+86a2d28721d20066ab41f5b8dfccb119a722df57fcf68502ee144ab399e6cfe2  release.json
+497baae825de6d13c622a8a9620a7ae5b3847132b9e98ac0d6ae75befe038c6e  sustainable_vibe_coding-18.0.0-py3-none-any.whl

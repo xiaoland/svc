@@ -1,0 +1,55 @@
+Building wheel...
+Built wheel at /var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-cli-wheel-vpssj9vn/sustainable_vibe_coding-18.0.0-py3-none-any.whl
+INFO: PDM 2.28.0 is installed, while 2.29.4 is available.
+Please run `pdm self update` to upgrade.
+Run `pdm config check_update false` to disable the check.
+Processing /var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-cli-wheel-vpssj9vn/sustainable_vibe_coding-18.0.0-py3-none-any.whl
+Collecting pydantic<3,>=2.13 (from sustainable-vibe-coding==18.0.0)
+  Using cached pydantic-2.14.1-py3-none-any.whl.metadata (133 kB)
+Collecting platformdirs<5,>=4 (from sustainable-vibe-coding==18.0.0)
+  Using cached platformdirs-4.13.6-py3-none-any.whl.metadata (5.4 kB)
+Collecting filelock<4,>=3.29 (from sustainable-vibe-coding==18.0.0)
+  Using cached filelock-3.32.7-py3-none-any.whl.metadata (2.0 kB)
+Collecting python-dotenv<2,>=1.2 (from sustainable-vibe-coding==18.0.0)
+  Using cached python_dotenv-1.2.4-py3-none-any.whl.metadata (29 kB)
+Collecting urllib3<3,>=2.7 (from sustainable-vibe-coding==18.0.0)
+  Using cached urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting annotated-types>=0.6.0 (from pydantic<3,>=2.13->sustainable-vibe-coding==18.0.0)
+  Using cached annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+Collecting pydantic-core==2.50.1 (from pydantic<3,>=2.13->sustainable-vibe-coding==18.0.0)
+  Using cached pydantic_core-2.50.1-cp312-cp312-macosx_11_0_arm64.whl.metadata (6.5 kB)
+Collecting typing-extensions>=4.16.0 (from pydantic<3,>=2.13->sustainable-vibe-coding==18.0.0)
+  Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting typing-inspection>=0.4.4 (from pydantic<3,>=2.13->sustainable-vibe-coding==18.0.0)
+  Using cached typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+Using cached filelock-3.32.7-py3-none-any.whl (100 kB)
+Using cached platformdirs-4.13.6-py3-none-any.whl (32 kB)
+Using cached pydantic-2.14.1-py3-none-any.whl (488 kB)
+Using cached pydantic_core-2.50.1-cp312-cp312-macosx_11_0_arm64.whl (2.0 MB)
+Using cached python_dotenv-1.2.4-py3-none-any.whl (23 kB)
+Using cached urllib3-2.8.0-py3-none-any.whl (135 kB)
+Using cached annotated_types-0.8.0-py3-none-any.whl (13 kB)
+Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Using cached typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+Installing collected packages: urllib3, typing-extensions, python-dotenv, platformdirs, filelock, annotated-types, typing-inspection, pydantic-core, pydantic, sustainable-vibe-coding
+Successfully installed annotated-types-0.8.0 filelock-3.32.7 platformdirs-4.13.6 pydantic-2.14.1 pydantic-core-2.50.1 python-dotenv-1.2.4 sustainable-vibe-coding-18.0.0 typing-extensions-4.16.0 typing-inspection-0.4.4 urllib3-2.8.0
+Building for debugging...
+[0/6] Write sources
+[1/6] Write SVCMenuBar-entitlement.plist
+[2/6] Write swift-version--FE76C4972A19952.txt
+[4/16] Compiling SVCMenuBar SettingsView.swift
+[5/16] Compiling SVCMenuBar MenuPanel.swift
+[6/16] Compiling SVCMenuBar ReceiptView.swift
+[7/16] Compiling SVCMenuBar ResourceActionButton.swift
+[8/16] Compiling SVCMenuBar AppStore.swift
+[9/16] Emitting module SVCMenuBar
+[10/16] Compiling SVCMenuBar DevModels.swift
+[11/16] Compiling SVCMenuBar CLIClient.swift
+[12/16] Compiling SVCMenuBar SVCMenuBarApp.swift
+[13/16] Compiling SVCMenuBar ResourceRow.swift
+[13/16] Write Objects.LinkFileList
+[14/16] Linking SVCMenuBar
+[15/16] Applying SVCMenuBar
+Build complete! (12.38s)
+/private/tmp/svc-resource-install-20261027/dist/macos/local/.svc-build-bcui32xv/SVC.app: replacing existing signature
+/Applications/SVC.app

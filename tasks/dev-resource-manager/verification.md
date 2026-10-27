@@ -144,7 +144,7 @@
 
 ## 第 6 阶段正式验收
 
-用户授权本阶段验收、提交与本机安装／重装，未授权本轮公开发布。以下结果接续上面的历史反馈；不将尚未执行的安装写成通过。
+用户授权本阶段验收、提交与本机安装／重装，未授权本轮公开发布。以下结果接续上面的历史反馈；本阶段验收与本机交付现已完成。
 
 使用 [accept_resources.py](scripts/accept_resources.py) 从真实 CLI 入口运行隔离控制者，保留 [原始结果](evidence/accept-resources.json)。锁内重载、指针发布和记录故障通过临时 Python wrapper 注入；没有修改产品模块或增加生产故障开关。资源效果、子进程存活、日志、返回对象和退出码共同作为判据。脚本收集观察，不加入自动化测试套件，也不声称提供长期回归覆盖。
 
@@ -157,9 +157,24 @@
 | A13 | settled 落盘后崩溃保留已结算事实，下一独立有限请求正常执行。pending 元数据写入失败没有启动，指针发布后崩溃持续阻断；启动记录失败的 wait 仍等待真实结束。缺失 act 元数据按损坏处理，返回 4 且不执行；持续 owner-lost 和精确 ID／显式确认沿用第 5 阶段真实跨进程证据。 |
 | A14–A15 | [原生结果](evidence/acceptance-native-observations.json)来自实际 View／Store／CLIClient 和产品 AppDelegate 的 accessory 宿主。七次语义寻址、重绑定、共享入口回执、手动方面、重开偏好及清除旧快照均符合合同。实际 NSApp 退出请求返回等待，取消退出后原操作完成；内部／外部激活及键窗口事件均为 0。 |
 | A16 | 使用真实公开 CLI 17 wheel 的旧 owner 与新 CLI 18 竞争，持锁时仅 old started；排空后新版才执行。随后在无活跃／未决执行时演练 scope 和 owner 变更，不把迁移前提扩张为任意热改身份安全。 |
-| A17 | 实际 0／3／4／130 分支及旧配置迁移消息核对完成。发现 invalid-dev-configuration 与 dev-record-invalid 被误映射为 3，修正为 4，并使 App 解码结构化错误而非展示原始 JSON。最终安装制品的版本／来源／协议在下方补录。 |
-| A18 | 修复后仓库检查 260 项及原生 13 项全部通过，无条件跳过。run／double 的既有合同仍成立；开发签名安装、重复安装与真实偏好核对进行中。 |
+| A17 | 实际 0／3／4／130 分支及旧配置迁移消息核对完成。发现 invalid-dev-configuration 与 dev-record-invalid 被误映射为 3，修正为 4，并使 App 解码结构化错误而非展示原始 JSON。最终安装制品的版本／来源／协议见下方记录。 |
+| A18 | 修复后仓库检查 260 项及原生 13 项全部通过，无条件跳过。run／double 的既有合同仍成立；开发签名安装、重复安装与真实偏好核对通过，见下方记录。 |
 
 原生宿主最初直接在 NSApp.terminate 返回后调用 cancelQuit，因 AppKit 的嵌套事件循环而挂起；[首次记录](evidence/native-quit-harness-first-attempt.txt)和 [sample](evidence/native-quit-harness-sample.txt)保留。将取消安排到 modal runloop 后取得上述结果，产品退出实现没有因此改变。离屏已审查 [人工详情](evidence/acceptance-manual-details.png)、[等待退出](evidence/acceptance-waiting-dark.png)、[迁移错误](evidence/acceptance-migration-light.png)、[深色结果](evidence/acceptance-after-actions-rows-dark.png)和 [浅色资源](evidence/acceptance-resources-rows-light.png)。
 
 系统菜单栏锚定、主动打开和设置窗口实现未改，仅图标描述由“开发服务器”改为“开发资源”，因此沿用上次任务的入口证据。本轮不主动触发 Finder reopen、文件选择器或外部链接来打扰前台；这些系统交互没有新增通过声明。实际安装进程的后台启动和重启由独立 NSWorkspace 观察补充，不能用隔离宿主替代。
+
+
+### 安装制品与最终判断
+
+源码提交为 `84635f65946821f8bda3953e20d71c6944bf31c0`。从该提交的干净临时 worktree 构建并安装 App 0.2.0／CLI 18.0.0；安装来源不含 `-dirty`。App 位于 `/Applications/SVC.app`，使用本机 Apple Development 身份、Team ID `7J9DJNJ782` 和 hardened runtime，`codesign --verify --strict` 通过。CLI 位于用户 Library 的隔离 runtime，wheel SHA-256 为 `497baae825de6d13c622a8a9620a7ae5b3847132b9e98ac0d6ae75befe038c6e`；87 个包内源文件逐项与本次源码一致，list/status/act/reconcile 的结果版本分别为 1/4/1/1。
+
+[首次安装](evidence/installed-first.json)、[重复安装](evidence/installed-second.json)和 [最终安装](evidence/installed-final.json)均保留全部已有偏好，项目数仍为 2，真实项目配置摘要未变。重复安装复用同一 wheel/runtime。最后一次安装使用该干净 checkout 的 Python 直接调用同一安装模块，避免把临时 checkout 的 `.venv/bin` 留在 App 默认 PATH 中；临时 checkout 可在交付后删除。后续常规迭代继续使用 `script/build_and_run.sh --verify`。
+
+[正式进程观察](evidence/installation-lifecycle.json)记录 PID 30489 消失、31702 出现，两者 `isActive` 的初始值与后续 KVO 观察均未出现 true；SVC 激活通知为 0，1649 次辅助采样也均 inactive，最终 accessory／`--background` 进程仍运行。观察脚本同时使用 `runningApplications` 和 `isActive` 的 KVO，覆盖本次实际重装。最初的 launch／terminate 通知方法不适用于 LSUIElement；这来自 [Apple 的系统合同](https://developer.apple.com/documentation/appkit/nsworkspace/didlaunchapplicationnotification)，不构成产品失败。advisor 复核后纠正了观察方法；主队列饥饿仅是曾考虑的假说，没有被证明。
+
+使用安装后的 Library CLI 运行原生检查，13 项全部通过，详见 [最终日志](evidence/installed-native-check.txt)。此前一份 [失败日志](evidence/installed-native-first-attempt.txt)来自旧断言要求桌面前台 PID 前后相同，当时 PixPin 与 Helium 发生切换。按用户允许迁移既有断言的授权，三处前台比较改为被测进程未激活；没有增加用例。该即时断言不替代上面的生产 KVO 证据。修复后的原生检查仍为 13 项，仓库 Python／共享执行的 260 项检查无需因这个 Swift 测试判据变更重复运行。
+
+同源发行归档也已构建并检查摘要，记录见 [manifest](evidence/accepted-release.json)与 [SHA256SUMS](evidence/accepted-release-sha256.txt)，实际文件位于 `dist/dev-resource-manager/accepted-release/`。发行 ZIP 仍为 ad-hoc、未公证，与本机开发签名安装不同；未推送、创建 tag 或发布 GitHub Release。
+
+A01–A18 在上述明确范围内支持交付，四条资源旅程通过。第 6 阶段验收完成；这记录 Agent 按授权执行的验收判断，不代替用户使用后的反馈。真实项目和设备未被改造或操作；已有两个 InKCre 来源仍为 schema 4，新版显示可执行迁移说明，需按用户手册人工迁移后再控制。Finder reopen、文件选择器与外部应用打开未在本轮主动触发，沿用未变系统入口的历史证据；这些限制不扩展为新的通过声明。

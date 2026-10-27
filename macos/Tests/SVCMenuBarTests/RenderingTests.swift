@@ -8,7 +8,6 @@ import Testing
 @MainActor func offscreenPanelRendersWithoutActivatingApplication() async throws {
     let directory = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["SVC_RENDER_DIR"]))
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    let foregroundBefore = NSWorkspace.shared.frontmostApplication?.processIdentifier
     let application = NSApplication.shared
     application.setActivationPolicy(.prohibited)
     let defaults = preferences(["/Users/developer/Projects/atlas"])
@@ -34,7 +33,7 @@ import Testing
 
         #expect(host.window == nil)
     }
-    #expect(NSWorkspace.shared.frontmostApplication?.processIdentifier == foregroundBefore)
+    #expect(!NSApplication.shared.isActive)
 }
 
 private func renderData() throws -> Data {
@@ -55,7 +54,6 @@ private func renderData() throws -> Data {
 }
 
 @Test @MainActor func hiddenNativeControlsInvokeActionsWithoutTakingFocus() async throws {
-    let foreground = NSWorkspace.shared.frontmostApplication?.processIdentifier
     NSApplication.shared.setActivationPolicy(.prohibited)
     let defaults = preferences(["/tmp/native-control"])
     let store = AppStore(preferences: defaults) { _, command, _, _ in
@@ -81,6 +79,6 @@ private func renderData() throws -> Data {
     try await waitUntil { store.receipts["entry-web"] != nil }
     #expect(store.receipts["entry-web"]?.message == "声明动作已完成。")
     #expect(!window.isKeyWindow && window.alphaValue == 0)
-    #expect(NSWorkspace.shared.frontmostApplication?.processIdentifier == foreground)
+    #expect(!NSApplication.shared.isActive)
     window.close()
 }

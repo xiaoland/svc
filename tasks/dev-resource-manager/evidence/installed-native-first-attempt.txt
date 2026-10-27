@@ -1,0 +1,38 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write swift-version--FE76C4972A19952.txt
+Build complete! (0.11s)
+Test Suite 'All tests' started at 2026-10-27 21:55:24.841.
+Test Suite 'All tests' passed at 2026-10-27 21:55:24.842.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test targetConfigurationErrorsDoNotBecomeHealthy() started.
+􀟈  Test missingCLIIsAnActionableError() started.
+􀟈  Test realCLIServiceSurvivesClientsAndStopsThroughDeclaredCleanup() started.
+􀟈  Test staleRefreshCannotReplaceNewConfigurationOrRemovedProject() started.
+􀟈  Test nativeButtonsControlRealServerWithoutForegroundChanges() started.
+􀟈  Test failedOperationReleasesQuitWait() started.
+􀟈  Test sharedOperationsInvalidateOlderReadsAndQuitCanBeCancelled() started.
+􀟈  Test processClientHandlesSpacesNonzeroJSONAndLargeStderr() started.
+􀟈  Test offscreenPanelRendersWithoutActivatingApplication() started.
+􀟈  Test hiddenNativeControlsInvokeActionsWithoutTakingFocus() started.
+􀟈  Test readinessIsNotProcessLivenessAndStopRequiresDeclaration() started.
+􀟈  Test incompatibleOrIncompleteContractsFailClearly() started.
+􀟈  Test operationReceiptRemainsReachableAfterRefreshFails() started.
+􁁛  Test targetConfigurationErrorsDoNotBecomeHealthy() passed after 0.001 seconds.
+􁁛  Test readinessIsNotProcessLivenessAndStopRequiresDeclaration() passed after 0.001 seconds.
+􁁛  Test missingCLIIsAnActionableError() passed after 0.001 seconds.
+􁁛  Test incompatibleOrIncompleteContractsFailClearly() passed after 0.004 seconds.
+􁁛  Test offscreenPanelRendersWithoutActivatingApplication() passed after 0.397 seconds.
+􁁛  Test hiddenNativeControlsInvokeActionsWithoutTakingFocus() passed after 0.438 seconds.
+􁁛  Test failedOperationReleasesQuitWait() passed after 0.439 seconds.
+􁁛  Test operationReceiptRemainsReachableAfterRefreshFails() passed after 0.449 seconds.
+􁁛  Test sharedOperationsInvalidateOlderReadsAndQuitCanBeCancelled() passed after 0.451 seconds.
+􁁛  Test staleRefreshCannotReplaceNewConfigurationOrRemovedProject() passed after 0.451 seconds.
+􁁛  Test processClientHandlesSpacesNonzeroJSONAndLargeStderr() passed after 0.701 seconds.
+􁁛  Test realCLIServiceSurvivesClientsAndStopsThroughDeclaredCleanup() passed after 2.443 seconds.
+􀢄  Test nativeButtonsControlRealServerWithoutForegroundChanges() recorded an issue at LifecycleTests.swift:97:9: Expectation failed: (NSWorkspace.shared.frontmostApplication?.processIdentifier → 583) == (foreground → 3413)
+􀢄  Test nativeButtonsControlRealServerWithoutForegroundChanges() failed after 2.780 seconds with 1 issue.
+􀢄  Test run with 13 tests in 0 suites failed after 2.780 seconds with 1 issue.
