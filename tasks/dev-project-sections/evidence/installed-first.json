@@ -1,0 +1,27 @@
+{
+  "phase": "first",
+  "app_version": "0.3.0",
+  "source_revision": "bbb7886542749735f672d5586cbdce146e23540b",
+  "build_profile": "local",
+  "bundle_id": "dev.svc.menubar",
+  "cli_path": "/Users/lanzhijiang/Library/Application Support/SVC/runtimes/d7a3d52520769d9796b5/bin/svc",
+  "cli_version": "svc 18.0.0",
+  "wheel_sha256": "d7a3d52520769d9796b526f2b47548d5202e8cf77b0e4e9cda3ccb4f54e6ac89",
+  "schema_versions": {
+    "list": 1,
+    "status": 4,
+    "act": 1,
+    "reconcile": 1
+  },
+  "all_preferences_preserved": true,
+  "project_count": 2,
+  "projects_and_cli_preferences_preserved": true,
+  "project_configuration_unchanged": true,
+  "cli_source_file_count": 87,
+  "cli_source_mismatches": [],
+  "signature_valid": true,
+  "apple_development_identity": true,
+  "hardened_runtime": true,
+  "team_id": "7J9DJNJ782",
+  "running_processes": "86357 /Applications/SVC.app/Contents/MacOS/SVCMenuBar --background"
+}

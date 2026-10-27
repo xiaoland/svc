@@ -2,7 +2,7 @@
 
 2026-10-27：用户要求增加 Section，将多个 project 聚合在一起。此前资源管理器任务已完成，本任务是新的呈现能力；沿用已明确的 staged collaboration，第 1 阶段方案已返回；用户随后明确“开始，并且可以直接推进到实现完成”，授权按该范围连续完成第 2–6 阶段。沿用本会话已有的自由提交、安装和验收授权，不再逐阶段确认；不新增自动化测试的约束继续保留，既有测试可迁移或删除，独立观察脚本可用。
 
-工作区分支为 `feat/dev-resource-manager`，起点 `62ef1cf`。`tasks/svc-macos-app/packet.md` 的既有改动不属于本任务。实现位于本任务分支 `feat/dev-project-sections`；真实用户偏好和项目配置尚未修改，接下来按授权提交与安装。
+工作区分支为 `feat/dev-resource-manager`，起点 `62ef1cf`。`tasks/svc-macos-app/packet.md` 的既有改动不属于本任务。实现位于本任务分支 `feat/dev-project-sections`；实现和验收已经提交，App 0.3.0 已安装并重装验证；真实用户偏好和项目配置保持原样。
 
 ## 目标与已有事实
 
@@ -63,4 +63,16 @@ MenuPanel 顶部添加菜单提供“添加项目”和“新建 Section”；Se
 
 仓库检查 260 项通过，原生 13 项通过且未跳过实际 CLI／渲染分组，见 [仓库日志](evidence/repository-check.txt)和 [原生日志](evidence/native-check.txt)。最后将排序步长校验从 abs(offset) 改为显式 ±1，行为范围相同且不会对极小整数溢出；安装时会再次构建和核对最终来源。
 
-第 6 阶段正在完成干净提交构建、开发签名安装／重装与偏好保留。未推送或公开发布。
+## 最终交付（第 6 阶段）
+
+源码提交 `bbb7886` 从干净临时 worktree 构建，App 0.3.0 已安装到 `/Applications/SVC.app` 并完成重复安装。两次都使用本机 Apple Development 身份和 hardened runtime，签名严格校验通过；包记录完整源码提交且没有 dirty 标记。配套 CLI 仍为 18.0.0，87 个包内源文件与仓库源码相同，四个结果 schema 保持 1/4/1/1，CLI 未因 Section 升版。
+
+[首次安装](evidence/installed-first.json)和 [重装结果](evidence/installed-second.json)确认全部偏好相同、现有项目仍为 2 个、真实项目配置摘要未变。重复安装复用同一 CLI runtime。构建临时 worktree 已删除，App 的默认 PATH 不含该临时路径，CLI 仍可运行。wheel SHA-256 为 `d7a3d52520769d9796b526f2b47548d5202e8cf77b0e4e9cda3ccb4f54e6ac89`。
+
+[正式进程观察](evidence/installation-lifecycle.json)使用上一任务已核验的 runningApplications／isActive KVO 脚本，记录原 PID 31702 退出、86357 启动，再由重装替换为 89142。三个进程均没有 active=true 事件，SVC 激活通知为 0，8213 次辅助采样也均 inactive；最终进程以 accessory／--background 运行。没有操作前台鼠标键盘或打开实际菜单栏面板。
+
+首次新 runtime 的协议检查曾在 Python 导入原生依赖时等待约两分钟，[sample](evidence/cli-startup-sample.txt)显示 dyld 映射原生库期间停在 fcntl，之后自行恢复。安装器保留旧 App，直到全部检查和构建通过才替换；没有跳过校验、修改系统安全设置或将该等待解释为 Section 产品问题。具体系统原因未进一步确认。
+
+安装后的 CLI 与最终源码再次完成 [Section 原生观察](evidence/observations.json)，源文件摘要逐项相同；原生 13 项再次全部通过，见 [安装后日志](evidence/installed-native-check.txt)。S1–S5 在已说明的原生宿主、Store 命令与标准菜单连接范围内支持交付。没有新增或修改任何自动化测试用例，新增材料均为独立观察脚本。菜单栏锚定、文件选择器和用户主动打开路径未改，沿用既有系统入口证据。
+
+本次已授权工作完成，产品和使用说明已更新，未推送、打 tag 或发布 GitHub Release。真实项目保持未分组；使用入口是面板顶部“＋ → 新建 Section”，再从项目菜单选择“移到 Section”。已有项目的 schema 4 配置仍需按此前迁移说明处理，分组本身不依赖资源配置迁移。

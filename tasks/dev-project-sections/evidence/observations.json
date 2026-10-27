@@ -27,21 +27,21 @@
   "legacy_not_rewritten": true,
   "legacy_ungrouped": true,
   "membership": [
-    "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-sections-f4zc_8m2/alpha",
-    "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-sections-f4zc_8m2/beta"
+    "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-sections-g_cttcgc/alpha",
+    "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-sections-g_cttcgc/beta"
   ],
   "native_collapse": true,
   "native_editor_saved": true,
   "native_menu_inventory": [],
   "preferences_preserved": true,
   "receipt_after_move": {
-    "path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-sections-f4zc_8m2/alpha",
+    "path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-sections-g_cttcgc/alpha",
     "status": "completed"
   },
   "reopened_collapsed": true,
   "reopened_members": [
-    "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-sections-f4zc_8m2/alpha",
-    "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-sections-f4zc_8m2/beta"
+    "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-sections-g_cttcgc/alpha",
+    "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-sections-g_cttcgc/beta"
   ],
   "reopened_order": [
     "工具与多个项目组成的很长分组名称用于检查菜单栏宽度",
@@ -56,7 +56,7 @@
     "macos/Sources/SVCMenuBar/Models/DevModels.swift": "7d59da63ffc14d3feb662b30a29dae4f3653f77ffce5b626fe1025a5416767a8",
     "macos/Sources/SVCMenuBar/Models/ProjectOrganization.swift": "657aae84324a7f7172a35383c245a8ec6a078f1d02d668b1d721ffa9fe3d9799",
     "macos/Sources/SVCMenuBar/Services/CLIClient.swift": "a7603d3c309853c6e3ca88a451cf31c2dbd130a0c08ba461d4eaa8fbd262b1d1",
-    "macos/Sources/SVCMenuBar/Stores/AppStore.swift": "01fc2bcb78a9cae745c620a207e4740c7a6d360f22cd65b5a5837fee597988b3",
+    "macos/Sources/SVCMenuBar/Stores/AppStore.swift": "653a08e11d2cf09d9205f6baf2e7a0319b4e2c04c883457049ba95cc932efecb",
     "macos/Sources/SVCMenuBar/Views/MenuPanel.swift": "7ff6586791cb2145bf82cc4955171da7241367e080653aed2f4fd8b9e8683cdd",
     "macos/Sources/SVCMenuBar/Views/ProjectSectionView.swift": "d9d1dde2fd563965eaee17aece9cd95c13efcf9d827c7c388500737b781b33e0",
     "macos/Sources/SVCMenuBar/Views/ProjectView.swift": "8f44171ce4de452e3172601cf7423dd34159bc82538a22d1d86d68091cffa840",
@@ -66,5 +66,5 @@
     "macos/Sources/SVCMenuBar/Views/SectionNameEditor.swift": "0e08336321ee988fc4d0f03ea9e280fa273f37533839abfa9448e1b2b3bfd762",
     "macos/Sources/SVCMenuBar/Views/SettingsView.swift": "a072d0a3a7a4c7b579bb37d3d44c8b898de5e401413087d2f5ce11a59e6eea75"
   },
-  "cli": "/Users/lanzhijiang/Library/Application Support/SVC/runtimes/497baae825de6d13c622/bin/svc"
+  "cli": "/Users/lanzhijiang/Library/Application Support/SVC/runtimes/d7a3d52520769d9796b5/bin/svc"
 }
