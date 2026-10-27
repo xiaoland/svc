@@ -1,0 +1,127 @@
+{
+  "actions": [
+    {
+      "action": "destroy",
+      "button": "c313e114165cea7975517e9e1703ce513e8c54e2c0eccb119f16c59d5a71e2dc/destroy",
+      "key_window": false,
+      "message": "声明动作已完成。",
+      "resource": "shared",
+      "status": "completed"
+    },
+    {
+      "action": "disconnect",
+      "button": "b163385c7c813fff9da9d228b989dc52af7f73528acca554829e9bbd7a56764a/disconnect",
+      "key_window": false,
+      "message": "声明动作已完成。",
+      "resource": "connection",
+      "status": "completed"
+    },
+    {
+      "action": "update",
+      "button": "3bd49a2289e418159be93c0d26c9f84b8a0cd87d70f4e3274b54330059ebe25b/update",
+      "key_window": false,
+      "message": "声明动作已完成。",
+      "resource": "install",
+      "status": "completed"
+    },
+    {
+      "action": "manual",
+      "button": "3bd49a2289e418159be93c0d26c9f84b8a0cd87d70f4e3274b54330059ebe25b/manual",
+      "key_window": false,
+      "message": "需要人工操作。",
+      "resource": "install",
+      "status": "manual"
+    },
+    {
+      "action": "stop",
+      "button": "2781daf36fd7f06f63b3269d661f600f5cbd10a2b293402bc125251bb2face61/stop",
+      "key_window": false,
+      "message": "声明动作已完成。",
+      "resource": "wait",
+      "status": "completed"
+    },
+    {
+      "action": "reject",
+      "button": "2781daf36fd7f06f63b3269d661f600f5cbd10a2b293402bc125251bb2face61/reject",
+      "key_window": false,
+      "message": "控制者拒绝或执行失败（退出 7）。",
+      "resource": "wait",
+      "status": "failed"
+    }
+  ],
+  "activation_events": 0,
+  "active": false,
+  "cancel_quit_reply": false,
+  "external_activation_events": 0,
+  "initial_resources": [
+    "shared",
+    "connection",
+    "install",
+    "wait"
+  ],
+  "key_window_events": 0,
+  "launcher_exit": 0,
+  "observations": [
+    {
+      "resource": "shared",
+      "states": []
+    },
+    {
+      "resource": "connection",
+      "states": [
+        {
+          "key": "reachable",
+          "stale": "false",
+          "state": "unknown",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "resource": "install",
+      "states": [
+        {
+          "key": "version",
+          "stale": "false",
+          "state": "satisfied",
+          "value": "1.0"
+        },
+        {
+          "key": "running",
+          "stale": "false",
+          "state": "unsatisfied",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "resource": "wait",
+      "states": []
+    }
+  ],
+  "operation_survived_cancel_quit": true,
+  "policy": "accessory",
+  "reopened_has_old_snapshot": false,
+  "reopened_preferences": [
+    "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-native-observe-c1z30y1q/开发资源与很长名称的隔离项目"
+  ],
+  "reopened_resources": 4,
+  "effects": {
+    "data_deleted": true,
+    "connection_removed": true,
+    "installed_version": "2.0",
+    "wait_finished": true
+  },
+  "cli_path": "/private/tmp/svc-resource-manager-cli-20261027/bin/svc",
+  "source_hashes": {
+    "macos/Sources/SVCMenuBar/Models/DevModels.swift": "3f44379059d93514783676004199e9d041cad5ce7d8acf3419d59d7e201f34c9",
+    "macos/Sources/SVCMenuBar/Services/CLIClient.swift": "01c7500390c751911641c2a0097a834c576217d7f8c1597ef8d245c022007bd5",
+    "macos/Sources/SVCMenuBar/Stores/AppStore.swift": "ade179b8963949e547c72e5fa17cf83d5ba189d229769b4f6af9b7bb826bb1a6",
+    "macos/Sources/SVCMenuBar/Views/MenuPanel.swift": "0e451708db90f7bf58eac5fd2319b612a8d57903b153c1d911957e4214a50c44",
+    "macos/Sources/SVCMenuBar/Views/ReceiptView.swift": "5f35862371188084a548d6a046d6c2b79ab2986db572059110d45115f1a6118e",
+    "macos/Sources/SVCMenuBar/Views/ResourceActionButton.swift": "bdc2915de4f52da2f7ae9648337b422ad4219e913c834e7cd6763bb0a6011991",
+    "macos/Sources/SVCMenuBar/Views/ResourceRow.swift": "609b51398aa01149ed2dff48842d11e85d59f241def9b50d6cd6185efe88595e",
+    "macos/Sources/SVCMenuBar/Views/SettingsView.swift": "a072d0a3a7a4c7b579bb37d3d44c8b898de5e401413087d2f5ce11a59e6eea75"
+  },
+  "limit": "Actual product views/store/client in isolated accessory host; no installed-app menu interaction."
+}

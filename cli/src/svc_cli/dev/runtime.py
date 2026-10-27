@@ -1,1441 +1,670 @@
-"""Dev capability coordination over neutral private process attempts."""
+"""Resource observations and explicit actions over local execution ownership."""
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
 import signal
 import threading
 import time
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterator, Literal, TypeAlias
+from typing import Iterator
 
-from filelock import BaseFileLock, Timeout
-
+from filelock import Timeout
 from .._execution import (
-    ACTIVE_STATES,
-    ExecutionRecord,
-    ExecutionState,
     ExecutionStore,
     LaunchSpec,
     OwnedExecution,
-    mark_owner_lost,
-    reconcile_owner_loss,
-    release_owned,
+    ExecutionRecord,
     start_isolated,
-    terminate_owned,
-    wait_execution,
     wait_owned,
+    terminate_owned,
+    release_owned,
+    settle_unstarted_interruption,
 )
-from ..config import (
-    ConfigError,
-    ExecProvision,
-    ExecStop,
-    ManualProvision,
-    ManualStop,
-    TargetConfig,
-    load_config,
+from ..config import ExecAction, ManualAction, declaration_digest_value
+from ..errors import SvcError
+from . import records
+from .models import ActionReceipt, CatalogResult, ResourceView, Submission, Observation
+from .resources import (
+    Resource,
+    declarations,
+    resolve_entry,
+    resolve_resource,
+    validate_access_url,
 )
-from ..errors import Failure, SvcError
-from ..model import ValueModel
-from ..workspace import WorkspaceIdentity, resolve_workspace_identity
-from .identity import (
-    CapabilityIdentity,
-    interpolate_dev_argv,
-    interpolate_dev_value,
-    resolve_capability_identity,
-)
-from .readiness import (
-    ProbeObservation,
-    probe_target,
-    resolve_dev_cwd,
-    resolve_probe,
-)
+from .observations import observe_resource, satisfied, utc_now
 
 
-DevSelectedCallback = Callable[[ExecutionRecord, str, str], None]
-DevEnsureStatus: TypeAlias = (
-    ExecutionState
-    | Literal[
-        "reused",
-        "manual-action-required",
-        "lock-timeout",
-        "activation-timeout",
-        "activation-failed",
-        "started",
-        "readiness-timeout",
-        "child-exit",
-        "joined",
-        "conflict",
-        "waiting",
-    ]
-)
-
-
-class DevLogReference(ValueModel):
-    path: str
-    bytes: int
-
-
-class DevMergedLogs(ValueModel):
-    merged: DevLogReference
-
-
-class DevAttempt(ValueModel):
-    caller_role: Literal["owner", "follower"]
-    execution_id: str
-    state: ExecutionState
-    argv: tuple[str, ...]
-    cwd: str
-    logs: DevMergedLogs
-    duration_ms: int | None = None
-    exit_code: int | None = None
-    requested_signal: str | None = None
-    termination_signal: str | None = None
-    failure_reason: str | None = None
-    timed_out: bool | None = None
-
-
-class ManualProvisionSummary(ValueModel):
-    kind: Literal["manual"] = "manual"
-
-
-class ExecProvisionSummary(ValueModel):
-    kind: Literal["exec"] = "exec"
-    mode: Literal["run", "activate"]
-
-
-DevProvisionSummary: TypeAlias = ManualProvisionSummary | ExecProvisionSummary
-
-
-class DevStopDeclaration(ValueModel):
-    kind: Literal["absent", "manual", "exec"]
-
-
-class DevIdentityResult(ValueModel):
-    workspace: WorkspaceIdentity
-
-
-class DevTargetObservation(ValueModel):
-    target: str
-    effective_target_digest: str
-    capability: CapabilityIdentity
-    probe: ProbeObservation
-    access: tuple[str, ...]
-    provision: DevProvisionSummary
-    stop: DevStopDeclaration
-    continuation: (
-        Literal["blocked-unhealthy-responder", "manual-action-required", "ensure"]
-        | None
-    ) = None
-    probe_argv: tuple[str, ...] | None = None
-
-
-class DevTargetFailure(ValueModel):
-    target: str
-    effective_target_digest: str
-    error: Failure
-
-
-DevTargetStatus: TypeAlias = DevTargetObservation | DevTargetFailure
-
-
-class DevStatusResult(ValueModel):
-    healthy: bool
-    status: Literal[
-        "healthy", "action-required", "invalid-configuration", "not-configured"
-    ]
-    workspace: WorkspaceIdentity
-    reason: str | None = None
-    targets: tuple[DevTargetStatus, ...] | None = None
-
-
-class DevEnsureContext(ValueModel):
-    target: str
-    ready: bool
-    effective_target_digest: str
-    workspace: WorkspaceIdentity
-    capability: CapabilityIdentity
-    access: tuple[str, ...]
-    provision: DevProvisionSummary
-    probe: ProbeObservation
-    probe_argv: tuple[str, ...] | None = None
-
-    def result(
-        self,
-        status: DevEnsureStatus,
-        *,
-        ready: bool | None = None,
-        probe: ProbeObservation | None = None,
-        attempt: DevAttempt | None = None,
-        caller_status: Literal["detached"] | None = None,
-        cleanup: Literal["completed", "unknown"] | None = None,
-        execution_id: str | None = None,
-    ) -> "DevEnsureResult":
-        return DevEnsureResult(
-            target=self.target,
-            ready=self.ready if ready is None else ready,
-            status=status,
-            effective_target_digest=self.effective_target_digest,
-            workspace=self.workspace,
-            capability=self.capability,
-            access=self.access,
-            provision=self.provision,
-            probe=self.probe if probe is None else probe,
-            probe_argv=self.probe_argv,
-            attempt=attempt,
-            caller_status=caller_status,
-            cleanup=cleanup,
-            execution_id=execution_id,
-        )
-
-
-class DevEnsureResult(ValueModel):
-    target: str
-    ready: bool | None
-    status: DevEnsureStatus
-    effective_target_digest: str
-    workspace: WorkspaceIdentity
-    capability: CapabilityIdentity
-    access: tuple[str, ...]
-    provision: DevProvisionSummary
-    probe: ProbeObservation | None = None
-    probe_argv: tuple[str, ...] | None = None
-    attempt: DevAttempt | None = None
-    caller_status: Literal["detached"] | None = None
-    cleanup: Literal["completed", "unknown"] | None = None
-    execution_id: str | None = None
-
-
-class DevStopResult(ValueModel):
-    target: str
-    effective_target_digest: str
-    workspace: WorkspaceIdentity
-    capability: CapabilityIdentity
-    stop: DevStopDeclaration
-    status: Literal[
-        "manual-action-required",
-        "waiting",
-        "stop-failed",
-        "stop-unverified",
-        "still-ready",
-        "stopped",
-    ]
-    ready: bool | None
-    probe: ProbeObservation | None = None
-    probe_error: Failure | None = None
-    caller_status: Literal["detached", "interrupted"] | None = None
-    attempt: DevAttempt | None = None
-
-    def with_attempt(self, attempt: DevAttempt) -> "DevStopResult":
-        return DevStopResult(
-            target=self.target,
-            effective_target_digest=self.effective_target_digest,
-            workspace=self.workspace,
-            capability=self.capability,
-            stop=self.stop,
-            status=self.status,
-            ready=self.ready,
-            probe=self.probe,
-            probe_error=self.probe_error,
-            caller_status=self.caller_status,
-            attempt=attempt,
-        )
-
-    def with_caller_status(
-        self, caller_status: Literal["detached", "interrupted"]
-    ) -> "DevStopResult":
-        return DevStopResult(
-            target=self.target,
-            effective_target_digest=self.effective_target_digest,
-            workspace=self.workspace,
-            capability=self.capability,
-            stop=self.stop,
-            status=self.status,
-            ready=self.ready,
-            probe=self.probe,
-            probe_error=self.probe_error,
-            caller_status=caller_status,
-            attempt=self.attempt,
-        )
-
-
-class _SettledEnsure(Exception):
-    """Private unwind signal for an expected ensure result."""
-
-    def __init__(self, result: DevEnsureResult) -> None:
-        super().__init__(result.status)
-        self.result = result
-
-
-def ensure_target(
-    repo: Path,
-    target_name: str,
-    *,
-    namespace: str | None = None,
-    store: ExecutionStore | None = None,
-    on_selected: DevSelectedCallback | None = None,
-) -> DevEnsureResult:
-    """Ensure one capability without taking over an unowned process."""
-
-    try:
-        resolved = load_config(repo)
-    except ConfigError as error:
-        raise SvcError(
-            "invalid-project-configuration",
-            "Cannot load declared dev configuration.",
-            {"reason": str(error)},
-        ) from error
-    if resolved.effective.dev is None:
-        raise SvcError(
-            "dev-not-configured", "This project has no declared dev configuration."
-        )
-    targets = resolved.effective.dev.targets
-    if target_name not in targets:
-        raise SvcError(
-            "unknown-dev-target",
-            "The dev configuration has no such target.",
-            {"target": target_name, "available_targets": sorted(targets)},
-        )
-    target = targets[target_name]
-    workspace = resolve_workspace_identity(repo, namespace=namespace)
-    resolved_probe = resolve_probe(target, workspace, target_name=target_name)
-    identity = resolve_capability_identity(
-        workspace,
-        scope=target.scope,
-        target=target_name,
-        endpoint_identity=resolved_probe.endpoint_identity,
-        host_key=target.host_key,
-    )
-    target_digest = _effective_target_digest(target)
-    intent_digest = _ensure_intent_digest(target, identity)
-    deadline = time.monotonic() + target.readiness_timeout
-    authority = store or ExecutionStore()
-    lock = authority.coordination_lock("dev", identity.capability_id)
-    pointer_before = authority.read_coordination("dev", identity.capability_id)
-    pointer_before_active = (
-        pointer_before is not None
-        and _same_dev_intent(
-            authority.read(pointer_before), "ensure", target_name, intent_digest
-        )
-        and authority.read(pointer_before).state in ACTIVE_STATES
-    )
-    try:
-        try:
-            lock.acquire(timeout=0)
-        except Timeout:
-            return _join_dev_attempt(
-                authority,
-                lock,
-                pointer_before,
-                pointer_before_active,
-                target,
-                workspace,
-                target_name,
-                identity,
-                target_digest,
-                intent_digest,
-                deadline,
-                on_selected,
-            )
-        try:
-            return _ensure_under_lock(
-                authority,
-                target,
-                workspace,
-                target_name,
-                identity,
-                target_digest,
-                intent_digest,
-                deadline,
-                on_selected,
-            )
-        finally:
-            lock.release()
-    except _SettledEnsure as settled:
-        return settled.result
-
-
-def stop_target(
-    repo: Path,
-    target_name: str,
-    *,
-    namespace: str | None = None,
-    store: ExecutionStore | None = None,
-    on_selected: DevSelectedCallback | None = None,
-) -> DevStopResult:
-    """Run only the target's declared bounded stop action."""
-
-    try:
-        resolved = load_config(repo)
-    except ConfigError as error:
-        raise SvcError(
-            "invalid-project-configuration",
-            "Cannot load declared dev configuration.",
-            {"reason": str(error)},
-        ) from error
-    if resolved.effective.dev is None:
-        raise SvcError(
-            "dev-not-configured", "This project has no declared dev configuration."
-        )
-    targets = resolved.effective.dev.targets
-    if target_name not in targets:
-        raise SvcError(
-            "unknown-dev-target",
-            "The dev configuration has no such target.",
-            {"target": target_name, "available_targets": sorted(targets)},
-        )
-    target = targets[target_name]
-    workspace = resolve_workspace_identity(repo, namespace=namespace)
-    resolved_probe = resolve_probe(target, workspace, target_name=target_name)
-    identity = resolve_capability_identity(
-        workspace,
-        scope=target.scope,
-        target=target_name,
-        endpoint_identity=resolved_probe.endpoint_identity,
-        host_key=target.host_key,
-    )
-    target_digest = _effective_target_digest(target)
-    intent_digest = _stop_intent_digest(target, identity)
-    authority = store or ExecutionStore()
-    lock = authority.coordination_lock("dev", identity.capability_id)
-    pointer_before = authority.read_coordination("dev", identity.capability_id)
-    pointer_before_active = (
-        pointer_before is not None
-        and _same_dev_intent(
-            authority.read(pointer_before), "stop", target_name, intent_digest
-        )
-        and authority.read(pointer_before).state in ACTIVE_STATES
-    )
-    try:
-        lock.acquire(timeout=0)
-    except Timeout:
-        return _join_or_claim_stop(
-            authority,
-            lock,
-            pointer_before,
-            pointer_before_active,
-            target,
-            workspace,
-            target_name,
-            identity,
-            target_digest,
-            intent_digest,
-            on_selected,
-        )
-    try:
-        current_id = authority.read_coordination("dev", identity.capability_id)
-        if current_id is not None:
-            current = authority.read(current_id)
-            if current.state in ACTIVE_STATES:
-                current = mark_owner_lost(authority, current)
-            if _same_dev_intent(current, "stop", target_name, intent_digest):
-                return _stop_result(
-                    target,
-                    workspace,
-                    target_name,
-                    identity,
-                    target_digest,
-                    current,
-                    authority,
-                    caller_role="follower",
-                )
-        return _own_stop(
-            authority,
-            target,
-            workspace,
-            target_name,
-            identity,
-            target_digest,
-            intent_digest,
-            on_selected,
-        )
-    finally:
-        lock.release()
-
-
-def inspect_dev_identity(
-    repo: Path, *, namespace: str | None = None
-) -> DevIdentityResult:
-    workspace = resolve_workspace_identity(repo, namespace=namespace)
-    return DevIdentityResult(workspace=workspace)
-
-
-def inspect_dev_status(
-    repo: Path,
-    target_name: str | None = None,
-    *,
-    namespace: str | None = None,
-) -> DevStatusResult:
-    workspace = resolve_workspace_identity(repo, namespace=namespace)
-    try:
-        resolved = load_config(repo)
-    except ConfigError as error:
-        return DevStatusResult(
-            healthy=False,
-            status="invalid-configuration",
-            reason=str(error),
-            workspace=workspace,
-        )
-    if resolved.effective.dev is None:
-        return DevStatusResult(
-            healthy=False,
-            status="not-configured",
-            workspace=workspace,
-        )
-    targets = resolved.effective.dev.targets
-    names = (target_name,) if target_name is not None else tuple(sorted(targets))
-    entries: list[DevTargetStatus] = []
-    for name in names:
-        target = targets.get(name)
-        if target is None:
-            raise SvcError(
-                "unknown-dev-target",
-                "The dev configuration has no such target.",
-                {"target": name},
-            )
-        try:
-            resolved_probe = resolve_probe(target, workspace, target_name=name)
-            observed = probe_target(target, workspace, target_name=name)
-            identity = resolve_capability_identity(
-                workspace,
-                scope=target.scope,
-                target=name,
-                endpoint_identity=resolved_probe.endpoint_identity,
-                host_key=target.host_key,
-            )
-            entry = DevTargetObservation(
-                target=name,
-                effective_target_digest=_effective_target_digest(target),
-                capability=identity,
-                probe=observed,
-                access=tuple(
-                    interpolate_dev_value(value, workspace, target=name)
-                    for value in target.access
-                ),
-                provision=_provision_projection(target),
-                stop=DevStopDeclaration(
-                    kind=target.stop.kind if target.stop is not None else "absent"
-                ),
-                continuation=_dev_continuation(target, observed),
-                probe_argv=resolved_probe.argv,
-            )
-            entries.append(entry)
-        except SvcError as error:
-            entries.append(
-                DevTargetFailure(
-                    target=name,
-                    effective_target_digest=_effective_target_digest(target),
-                    error=error.snapshot(),
-                )
-            )
-    healthy = bool(entries) and all(_entry_is_healthy(entry) for entry in entries)
-    return DevStatusResult(
-        status="healthy" if healthy else "action-required",
-        healthy=healthy,
-        workspace=workspace,
-        targets=tuple(entries),
-    )
-
-
-def _join_or_claim_stop(
-    store: ExecutionStore,
-    lock: BaseFileLock,
-    pointer_before: str | None,
-    pointer_before_active: bool,
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    identity: CapabilityIdentity,
-    target_digest: str,
-    intent_digest: str,
-    on_selected: DevSelectedCallback | None,
-) -> DevStopResult:
-    while True:
-        current_id = store.read_coordination("dev", identity.capability_id)
-        if current_id is not None:
-            current = store.read(current_id)
-            if _same_dev_intent(current, "stop", target_name, intent_digest) and (
-                current.state in ACTIVE_STATES
-                or current_id != pointer_before
-                or pointer_before_active
-            ):
-                _notify_dev_selected(store, current, "follower", on_selected)
-                try:
-                    settled = wait_execution(store, current.execution_id)
-                except KeyboardInterrupt:
-                    return _detached_stop_result(
-                        target,
-                        workspace,
-                        target_name,
-                        identity,
-                        target_digest,
-                        current,
-                        store,
-                    )
-                return _stop_result(
-                    target,
-                    workspace,
-                    target_name,
-                    identity,
-                    target_digest,
-                    settled,
-                    store,
-                    caller_role="follower",
-                )
-        try:
-            lock.acquire(timeout=0)
-        except Timeout:
-            time.sleep(0.02)
-            continue
-        try:
-            after = store.read_coordination("dev", identity.capability_id)
-            if after is not None and after != pointer_before:
-                record = store.read(after)
-                if _same_dev_intent(record, "stop", target_name, intent_digest):
-                    if record.state in ACTIVE_STATES:
-                        record = mark_owner_lost(store, record)
-                    return _stop_result(
-                        target,
-                        workspace,
-                        target_name,
-                        identity,
-                        target_digest,
-                        record,
-                        store,
-                        caller_role="follower",
-                    )
-            if pointer_before is not None and pointer_before_active:
-                record = store.read(pointer_before)
-                if _same_dev_intent(record, "stop", target_name, intent_digest):
-                    if record.state in ACTIVE_STATES:
-                        record = mark_owner_lost(store, record)
-                    return _stop_result(
-                        target,
-                        workspace,
-                        target_name,
-                        identity,
-                        target_digest,
-                        record,
-                        store,
-                        caller_role="follower",
-                    )
-            return _own_stop(
-                store,
-                target,
-                workspace,
-                target_name,
-                identity,
-                target_digest,
-                intent_digest,
-                on_selected,
-            )
-        finally:
-            lock.release()
-
-
-def _own_stop(
-    store: ExecutionStore,
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    identity: CapabilityIdentity,
-    target_digest: str,
-    intent_digest: str,
-    on_selected: DevSelectedCallback | None,
-) -> DevStopResult:
-    action = target.stop
-    if action is None or isinstance(action, ManualStop):
-        observed, probe_error = _final_probe(target, workspace, target_name)
-        return _stop_payload(
-            target_name,
-            workspace,
-            identity,
-            target_digest,
-            status="manual-action-required",
-            ready=observed.healthy if observed is not None else None,
-            stop_kind="manual" if isinstance(action, ManualStop) else "absent",
-            probe=observed,
-            probe_error=probe_error,
-        )
-    assert isinstance(action, ExecStop)
-    argv = interpolate_dev_argv(action.argv, workspace, target=target_name)
-    cwd = resolve_dev_cwd(workspace.root, action.cwd, workspace, target_name)
-    environment = _dev_environment(action.env, workspace, target_name)
-    published = store.publish(
-        domain="dev",
-        operation="stop",
-        subject=target_name,
-        workspace_instance=workspace.instance,
-        intent_digest=intent_digest,
-        coordination_key=identity.capability_id,
-        argv=argv,
-        cwd=cwd,
-        capture="merged",
-    )
-    store.write_coordination(
-        "dev", identity.capability_id, published.record.execution_id
-    )
-    _notify_dev_selected(store, published.record, "owner", on_selected)
-    started = start_isolated(store, published, LaunchSpec(argv, cwd, environment))
-    if isinstance(started, ExecutionRecord):
-        raise SvcError(
-            "execution-launch-failed",
-            "SVC could not launch the declared stop action.",
-            {
-                "execution_id": started.execution_id,
-                "reason": started.failure_reason or "unknown",
-                "logs": {"merged": store.log_reference(started, "merged").as_dict()},
-            },
-        )
-    try:
-        settled = wait_owned(store, started, timeout=action.timeout)
-    except KeyboardInterrupt:
-        settled = terminate_owned(store, started, requested_signal=signal.SIGINT)
-        result = _stop_result(
-            target,
-            workspace,
-            target_name,
-            identity,
-            target_digest,
-            settled,
-            store,
-            caller_role="owner",
-        )
-        return result.with_caller_status("interrupted")
-    if settled is None:
-        settled = terminate_owned(store, started)
-        return _stop_result(
-            target,
-            workspace,
-            target_name,
-            identity,
-            target_digest,
-            settled,
-            store,
-            caller_role="owner",
-            timed_out=True,
-        )
-    return _stop_result(
-        target,
-        workspace,
-        target_name,
-        identity,
-        target_digest,
-        settled,
-        store,
-        caller_role="owner",
-    )
-
-
-def _stop_result(
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    identity: CapabilityIdentity,
-    target_digest: str,
-    record: ExecutionRecord,
-    store: ExecutionStore,
-    *,
-    caller_role: Literal["owner", "follower"],
-    timed_out: bool = False,
-) -> DevStopResult:
-    observed, probe_error = _final_probe(target, workspace, target_name)
-    ready = observed.healthy if observed is not None else None
-    action_succeeded = record.state == "exited" and record.exit_code == 0
-    status: Literal["stop-failed", "stop-unverified", "still-ready", "stopped"]
-    if not action_succeeded or timed_out:
-        status = "stop-failed"
-    elif ready is None:
-        status = "stop-unverified"
-    elif ready:
-        status = "still-ready"
-    else:
-        status = "stopped"
-    result = _stop_payload(
-        target_name,
-        workspace,
-        identity,
-        target_digest,
-        status=status,
-        ready=ready,
-        stop_kind="exec",
-        probe=observed,
-        probe_error=probe_error,
-    )
-    return result.with_attempt(
-        _attempt_projection(record, store, caller_role=caller_role, timed_out=timed_out)
-    )
-
-
-def _detached_stop_result(
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    identity: CapabilityIdentity,
-    target_digest: str,
-    record: ExecutionRecord,
-    store: ExecutionStore,
-) -> DevStopResult:
-    result = _stop_payload(
-        target_name,
-        workspace,
-        identity,
-        target_digest,
-        status="waiting",
-        ready=None,
-        stop_kind="exec",
-        probe=None,
-        probe_error=None,
-    )
-    return result.with_attempt(
-        _attempt_projection(record, store, caller_role="follower")
-    ).with_caller_status("detached")
-
-
-def _stop_payload(
-    target_name: str,
-    workspace: WorkspaceIdentity,
-    identity: CapabilityIdentity,
-    target_digest: str,
-    *,
-    status: Literal[
-        "manual-action-required",
-        "waiting",
-        "stop-failed",
-        "stop-unverified",
-        "still-ready",
-        "stopped",
-    ],
-    ready: bool | None,
-    stop_kind: Literal["absent", "manual", "exec"],
-    probe: ProbeObservation | None,
-    probe_error: Failure | None,
-) -> DevStopResult:
-    return DevStopResult(
-        target=target_name,
-        effective_target_digest=target_digest,
-        workspace=workspace,
-        capability=identity,
-        stop=DevStopDeclaration(kind=stop_kind),
-        status=status,
-        ready=ready,
-        probe=probe,
-        probe_error=probe_error,
-    )
-
-
-def _attempt_projection(
-    record: ExecutionRecord,
-    store: ExecutionStore,
-    *,
-    caller_role: Literal["owner", "follower"],
-    timed_out: bool = False,
-) -> DevAttempt:
-    log = store.log_reference(record, "merged")
-    return DevAttempt(
-        caller_role=caller_role,
-        execution_id=record.execution_id,
-        state=record.state,
-        argv=record.argv,
-        cwd=record.cwd,
-        logs=DevMergedLogs(merged=DevLogReference(path=log.path, bytes=log.bytes)),
-        duration_ms=record.duration_ms,
-        exit_code=record.exit_code,
-        requested_signal=record.requested_signal,
-        termination_signal=record.termination_signal,
-        failure_reason=record.failure_reason,
-        timed_out=True if timed_out else None,
-    )
-
-
-def _final_probe(
-    target: TargetConfig, workspace: WorkspaceIdentity, target_name: str
-) -> tuple[ProbeObservation | None, Failure | None]:
-    try:
-        return probe_target(target, workspace, target_name=target_name), None
-    except SvcError as error:
-        return None, error.snapshot()
-
-
-def _ensure_under_lock(
-    store: ExecutionStore,
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    identity: CapabilityIdentity,
-    target_digest: str,
-    intent_digest: str,
-    deadline: float,
-    on_selected: DevSelectedCallback | None,
-) -> DevEnsureResult:
-    current_id = store.read_coordination("dev", identity.capability_id)
-    if current_id is not None:
-        current = store.read(current_id)
-        if current.state in ACTIVE_STATES:
-            mark_owner_lost(store, current)
-
-    observed = probe_target(
-        target,
-        workspace,
-        target_name=target_name,
-        timeout=_remaining(deadline),
-    )
-    base = _result_base(target, target_digest, workspace, identity, observed)
-    if observed.healthy:
-        return base.result("reused")
-    if observed.responded:
-        raise _occupied_error(base)
-
-    provision = target.provision
-    if isinstance(provision, ManualProvision):
-        raise _SettledEnsure(base.result("manual-action-required"))
-    launched = _provision(
-        store,
-        provision,
-        workspace,
-        target_name,
-        identity,
-        intent_digest,
-        base,
-        on_selected,
-        timeout=_remaining(deadline),
-    )
-    if isinstance(launched, ExecutionRecord):
-        return _wait_for_external_readiness(
-            target, workspace, target_name, deadline, base, launched, store
-        )
-    with _cleanup_on_interrupt(store, launched, base):
-        return _wait_for_owned_readiness(
-            store,
-            target,
-            workspace,
-            target_name,
-            deadline,
-            base,
-            launched,
-        )
-
-
-def _join_dev_attempt(
-    store: ExecutionStore,
-    lock: BaseFileLock,
-    pointer_before: str | None,
-    pointer_before_active: bool,
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    identity: CapabilityIdentity,
-    target_digest: str,
-    intent_digest: str,
-    deadline: float,
-    on_selected: DevSelectedCallback | None,
-) -> DevEnsureResult:
-    while _remaining(deadline) > 0:
-        current_id = store.read_coordination("dev", identity.capability_id)
-        if current_id is not None:
-            current = store.read(current_id)
-            if _same_dev_intent(current, "ensure", target_name, intent_digest) and (
-                current.state in ACTIVE_STATES
-                or current_id != pointer_before
-                or pointer_before_active
-            ):
-                return _join_ensure_attempt(
-                    store,
-                    target,
-                    workspace,
-                    target_name,
-                    identity,
-                    target_digest,
-                    deadline,
-                    current,
-                    on_selected,
-                )
-        try:
-            lock.acquire(timeout=0)
-        except Timeout:
-            time.sleep(min(0.02, _remaining(deadline)))
-            continue
-        try:
-            after = store.read_coordination("dev", identity.capability_id)
-            if after is not None and after != pointer_before:
-                record = store.read(after)
-                if _same_dev_intent(record, "ensure", target_name, intent_digest):
-                    if record.state in ACTIVE_STATES:
-                        record = mark_owner_lost(store, record)
-                    return _join_ensure_attempt(
-                        store,
-                        target,
-                        workspace,
-                        target_name,
-                        identity,
-                        target_digest,
-                        deadline,
-                        record,
-                        on_selected,
-                    )
-            if pointer_before is not None and pointer_before_active:
-                previous = store.read(pointer_before)
-                if _same_dev_intent(previous, "ensure", target_name, intent_digest):
-                    if previous.state in ACTIVE_STATES:
-                        previous = mark_owner_lost(store, previous)
-                    return _join_ensure_attempt(
-                        store,
-                        target,
-                        workspace,
-                        target_name,
-                        identity,
-                        target_digest,
-                        deadline,
-                        previous,
-                        on_selected,
-                    )
-            return _ensure_under_lock(
-                store,
-                target,
-                workspace,
-                target_name,
-                identity,
-                target_digest,
-                intent_digest,
-                deadline,
-                on_selected,
-            )
-        finally:
-            lock.release()
-    base = _result_base(
-        target,
-        target_digest,
-        workspace,
-        identity,
-        probe_target(target, workspace, target_name=target_name, timeout=0),
-    )
-    raise _SettledEnsure(base.result("lock-timeout"))
-
-
-def _provision(
-    store: ExecutionStore,
-    provision: ExecProvision,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    identity: CapabilityIdentity,
-    intent_digest: str,
-    base: DevEnsureContext,
-    on_selected: DevSelectedCallback | None,
-    *,
-    timeout: float,
-) -> OwnedExecution | ExecutionRecord:
-    argv = interpolate_dev_argv(provision.argv, workspace, target=target_name)
-    cwd = resolve_dev_cwd(workspace.root, provision.cwd, workspace, target_name)
-    environment = _dev_environment(provision.env, workspace, target_name)
-    published = store.publish(
-        domain="dev",
-        operation="ensure",
-        subject=target_name,
-        workspace_instance=workspace.instance,
-        intent_digest=intent_digest,
-        coordination_key=identity.capability_id,
-        argv=argv,
-        cwd=cwd,
-        capture="merged",
-    )
-    store.write_coordination(
-        "dev", identity.capability_id, published.record.execution_id
-    )
-    _notify_dev_selected(store, published.record, "owner", on_selected)
-    started = start_isolated(store, published, LaunchSpec(argv, cwd, environment))
-    if isinstance(started, ExecutionRecord):
-        raise SvcError(
-            "execution-launch-failed",
-            "SVC could not launch the declared provision action.",
-            {
-                "execution_id": started.execution_id,
-                "reason": started.failure_reason or "unknown",
-                "logs": {"merged": store.log_reference(started, "merged").as_dict()},
-            },
-        )
-    if provision.mode == "run":
-        return started
-    settled = wait_owned(store, started, timeout=max(0.01, timeout))
-    if settled is None:
-        terminated = terminate_owned(store, started)
-        raise _SettledEnsure(
-            base.result(
-                "activation-timeout",
-                attempt=_attempt_projection(
-                    terminated, store, caller_role="owner", timed_out=True
-                ),
-                cleanup=(
-                    "completed" if terminated.state == "interrupted" else "unknown"
-                ),
-            )
-        )
-    if settled.state != "exited" or settled.exit_code != 0:
-        raise _SettledEnsure(
-            base.result(
-                "activation-failed",
-                attempt=_attempt_projection(settled, store, caller_role="owner"),
-            )
-        )
-    return settled
-
-
-def _wait_for_external_readiness(
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    deadline: float,
-    base: DevEnsureContext,
-    attempt: ExecutionRecord,
-    store: ExecutionStore,
-) -> DevEnsureResult:
-    while _remaining(deadline) > 0:
-        observed = probe_target(
-            target,
-            workspace,
-            target_name=target_name,
-            timeout=_remaining(deadline),
-        )
-        if observed.healthy:
-            return base.result(
-                "started",
-                ready=True,
-                probe=observed,
-                attempt=_attempt_projection(attempt, store, caller_role="owner"),
-            )
-        time.sleep(min(target.poll_interval, _remaining(deadline)))
-    raise _SettledEnsure(base.result("readiness-timeout"))
-
-
-def _wait_for_owned_readiness(
-    store: ExecutionStore,
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    deadline: float,
-    base: DevEnsureContext,
-    owned: OwnedExecution,
-) -> DevEnsureResult:
-    while _remaining(deadline) > 0:
-        if owned.process.poll() is not None:
-            settled = wait_owned(store, owned)
-            raise _SettledEnsure(
-                base.result(
-                    "child-exit",
-                    attempt=_attempt_projection(
-                        settled if settled is not None else owned.record,
-                        store,
-                        caller_role="owner",
-                    ),
-                    cleanup="completed",
-                )
-            )
-        observed = probe_target(
-            target,
-            workspace,
-            target_name=target_name,
-            timeout=_remaining(deadline),
-        )
-        if observed.healthy:
-            try:
-                released = release_owned(store, owned)
-            except SvcError:
-                with suppress(SvcError):
-                    terminate_owned(store, owned)
-                raise
-            return base.result(
-                "started",
-                ready=True,
-                probe=observed,
-                attempt=_attempt_projection(released, store, caller_role="owner"),
-            )
-        time.sleep(min(target.poll_interval, _remaining(deadline)))
-    terminated = terminate_owned(store, owned)
-    raise _SettledEnsure(
-        base.result(
-            "readiness-timeout",
-            attempt=_attempt_projection(terminated, store, caller_role="owner"),
-            cleanup=("completed" if terminated.state == "interrupted" else "unknown"),
-        )
-    )
-
-
-def _await_capability_after_attempt(
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    identity: CapabilityIdentity,
-    target_digest: str,
-    deadline: float,
-    record: ExecutionRecord,
-    *,
-    store: ExecutionStore | None = None,
-) -> DevEnsureResult:
-    authority = store
-    while record.state in ACTIVE_STATES and _remaining(deadline) > 0:
-        time.sleep(min(0.02, _remaining(deadline)))
-        if authority is None:
-            break
-        record = reconcile_owner_loss(authority, authority.read(record.execution_id))
-    while _remaining(deadline) > 0:
-        observed = probe_target(
-            target,
-            workspace,
-            target_name=target_name,
-            timeout=_remaining(deadline),
-        )
-        base = _result_base(target, target_digest, workspace, identity, observed)
-        if observed.healthy:
-            attempt = (
-                _attempt_projection(record, authority, caller_role="follower")
-                if authority is not None
-                else None
-            )
-            return base.result("joined", attempt=attempt)
-        if observed.responded:
-            raise _occupied_error(base)
-        if record.state not in {"released", "owner-lost", "exited"}:
-            raise _attempt_error(record, base, authority)
-        time.sleep(min(target.poll_interval, _remaining(deadline)))
-    observed = probe_target(target, workspace, target_name=target_name, timeout=0)
-    base = _result_base(target, target_digest, workspace, identity, observed)
-    if record.state == "owner-lost":
-        raise _SettledEnsure(
-            base.result("owner-lost", execution_id=record.execution_id)
-        )
-    raise _SettledEnsure(
-        base.result("readiness-timeout", execution_id=record.execution_id)
-    )
-
-
-def _join_ensure_attempt(
-    store: ExecutionStore,
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    target_name: str,
-    identity: CapabilityIdentity,
-    target_digest: str,
-    deadline: float,
-    record: ExecutionRecord,
-    on_selected: DevSelectedCallback | None,
-) -> DevEnsureResult:
-    _notify_dev_selected(store, record, "follower", on_selected)
-    try:
-        return _await_capability_after_attempt(
-            target,
-            workspace,
-            target_name,
-            identity,
-            target_digest,
-            deadline,
-            record,
-            store=store,
-        )
-    except KeyboardInterrupt:
-        return DevEnsureResult(
-            target=target_name,
-            ready=None,
-            status="waiting",
-            caller_status="detached",
-            effective_target_digest=target_digest,
-            workspace=workspace,
-            capability=identity,
-            access=tuple(
-                interpolate_dev_value(value, workspace, target=target_name)
-                for value in target.access
-            ),
-            provision=_provision_projection(target),
-            attempt=_attempt_projection(
-                store.read(record.execution_id), store, caller_role="follower"
-            ),
-        )
-
-
-def _attempt_error(
-    record: ExecutionRecord,
-    base: DevEnsureContext,
-    store: ExecutionStore | None,
-) -> _SettledEnsure:
-    attempt = (
-        _attempt_projection(record, store, caller_role="follower")
-        if store is not None
-        else None
-    )
-    return _SettledEnsure(
-        base.result(
-            record.state,
-            attempt=attempt,
-            execution_id=record.execution_id,
-        )
-    )
+@dataclass
+class InterruptRequest:
+    number: int | None = None
 
 
 @contextmanager
-def _cleanup_on_interrupt(
-    store: ExecutionStore,
-    owned: OwnedExecution,
-    base: DevEnsureContext,
-) -> Iterator[None]:
-    if threading.current_thread() is not threading.main_thread():
-        yield
-        return
-    previous = {
-        number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)
-    }
+def interruptions() -> Iterator[InterruptRequest]:
+    request = InterruptRequest()
+    previous = {}
 
-    def interrupt(_number: int, _frame: object) -> None:
-        raise KeyboardInterrupt
+    def receive(number: int, _frame: object) -> None:
+        request.number = number
 
+    if threading.current_thread() is threading.main_thread():
+        for number in (signal.SIGINT, signal.SIGTERM):
+            previous[number] = signal.signal(number, receive)
     try:
-        for number in previous:
-            signal.signal(number, interrupt)
-        try:
-            yield
-        except KeyboardInterrupt as error:
-            terminated = terminate_owned(store, owned)
-            raise _SettledEnsure(
-                base.result(
-                    "interrupted",
-                    attempt=_attempt_projection(terminated, store, caller_role="owner"),
-                    cleanup=(
-                        "completed" if terminated.state == "interrupted" else "unknown"
-                    ),
-                )
-            ) from error
+        yield request
     finally:
         for number, handler in previous.items():
             signal.signal(number, handler)
 
 
-def _occupied_error(base: DevEnsureContext) -> _SettledEnsure:
-    return _SettledEnsure(base.result("conflict"))
-
-
-def _entry_is_healthy(entry: DevTargetStatus) -> bool:
-    return isinstance(entry, DevTargetObservation) and entry.probe.healthy
-
-
-def _provision_projection(target: TargetConfig) -> DevProvisionSummary:
-    provision = target.provision
-    if isinstance(provision, ExecProvision):
-        return ExecProvisionSummary(mode=provision.mode)
-    return ManualProvisionSummary()
-
-
-def _dev_continuation(
-    target: TargetConfig, observed: ProbeObservation
-) -> Literal["blocked-unhealthy-responder", "manual-action-required", "ensure"] | None:
-    if observed.healthy:
-        return None
-    if observed.responded:
-        return "blocked-unhealthy-responder"
-    if isinstance(target.provision, ManualProvision):
-        return "manual-action-required"
-    return "ensure"
-
-
-def _result_base(
-    target: TargetConfig,
-    target_digest: str,
-    workspace: WorkspaceIdentity,
-    identity: CapabilityIdentity,
-    observed: ProbeObservation,
-) -> DevEnsureContext:
-    resolved_probe = resolve_probe(target, workspace, target_name=identity.target)
-    return DevEnsureContext(
-        target=identity.target,
-        ready=observed.healthy,
-        effective_target_digest=target_digest,
+def catalog(
+    repo: Path,
+    key: str | None = None,
+    *,
+    observe: bool = False,
+    observation: str | None = None,
+    store: ExecutionStore | None = None,
+) -> CatalogResult:
+    workspace, configs = declarations(repo)
+    if key is not None and key not in configs:
+        raise SvcError("resource-not-declared", "资源未声明。", {"resource": key})
+    if observation and not key:
+        raise SvcError("observation-resource-required", "按需观察必须选择一个资源。")
+    store = store or ExecutionStore()
+    views: list[ResourceView] = []
+    for name, config in configs.items():
+        if key is not None and name != key:
+            continue
+        resource = resolve_entry(workspace, name, config)
+        view = resource.view()
+        if observation and observation not in config.observations:
+            raise SvcError("observation-not-declared", "观察项未声明。")
+        facets = (
+            observe_resource(resource, [observation] if observation else None)
+            if observe
+            else ()
+        )
+        execution = None
+        failure = resource.error
+        if resource.coordination:
+            try:
+                execution = records.inspect(
+                    store, resource.coordination.coordination_id
+                )
+            except SvcError as error:
+                failure = error.snapshot()
+        views.append(
+            view.model_copy(
+                update={
+                    "observations": facets,
+                    "execution": execution,
+                    "error": failure,
+                }
+            )
+        )
+    partial = any(
+        x.error
+        or (
+            x.execution is not None
+            and x.execution.phase == "owner-lost"
+            and not x.execution.acknowledged
+        )
+        or any(o.state == "unknown" or o.stale for o in x.observations)
+        for x in views
+    )
+    return CatalogResult(
         workspace=workspace,
-        capability=identity,
-        access=tuple(
-            interpolate_dev_value(value, workspace, target=identity.target)
-            for value in target.access
-        ),
-        provision=_provision_projection(target),
-        probe=observed,
-        probe_argv=resolved_probe.argv,
+        resources=tuple(views),
+        status="not-configured" if not views else "partial" if partial else "ok",
     )
 
 
-def _effective_target_digest(target: TargetConfig) -> str:
-    return _json_digest(target.model_dump(mode="json", exclude_none=True))
-
-
-def _ensure_intent_digest(target: TargetConfig, identity: CapabilityIdentity) -> str:
-    value = target.model_dump(mode="json", exclude={"stop"}, exclude_none=True)
-    return _json_digest(
-        {"operation": "ensure", "endpoint_id": identity.endpoint_id, "target": value}
-    )
-
-
-def _stop_intent_digest(target: TargetConfig, identity: CapabilityIdentity) -> str:
-    return _json_digest(
+def receipt(
+    resource: Resource, action: str, status: str, message: str, **fields: object
+) -> ActionReceipt:
+    return ActionReceipt.model_validate(
         {
-            "operation": "stop",
-            "endpoint_id": identity.endpoint_id,
-            "probe": target.probe.model_dump(mode="json", exclude_none=True),
-            "stop": (
-                target.stop.model_dump(mode="json", exclude_none=True)
-                if target.stop is not None
-                else None
-            ),
+            "resource": resource.key,
+            "entry_id": resource.entry_id,
+            "action": action,
+            "declaration_digest": resource.digest,
+            "coordination": resource.coordination,
+            "status": status,
+            "message": message,
+            **fields,
         }
     )
 
 
-def _dev_environment(
-    declared: dict[str, str], workspace: WorkspaceIdentity, target_name: str
-) -> dict[str, str]:
-    environment = os.environ.copy()
-    environment.update(
+def intent(resource: Resource, action: str) -> str:
+    return declaration_digest_value(
         {
-            "SVC_DEV_INSTANCE": workspace.instance,
-            "SVC_DEV_WORKTREE_ID": workspace.worktree_id,
-            "SVC_DEV_TARGET": target_name,
+            "entry": resource.entry_id,
+            "action": action,
+            "declaration": resource.digest,
+            "execution": resource.actions[action].digest,
         }
     )
-    environment.update(
-        {
-            key: interpolate_dev_value(value, workspace, target=target_name)
-            for key, value in declared.items()
-        }
-    )
-    return environment
 
 
-def _json_digest(value: object) -> str:
-    encoded = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _same_dev_intent(
-    record: ExecutionRecord,
-    operation: str,
-    target_name: str,
-    intent_digest: str,
-) -> bool:
+def unchanged(resource: Resource) -> bool:
+    current = resolve_resource(resource.workspace.root, resource.key)
     return (
-        record.domain == "dev"
-        and record.operation == operation
-        and record.subject == target_name
-        and record.intent_digest == intent_digest
+        current.digest == resource.digest
+        and current.coordination == resource.coordination
     )
 
 
-def _notify_dev_selected(
+def act(
+    repo: Path,
+    key: str,
+    action_key: str,
+    *,
+    expected_digest: str | None = None,
+    store: ExecutionStore | None = None,
+) -> ActionReceipt:
+    store = store or ExecutionStore()
+    selected = resolve_resource(repo, key)
+    if expected_digest is not None and selected.digest != expected_digest:
+        return receipt(
+            selected, action_key, "stale", "声明已变化，请刷新后重新选择动作。"
+        )
+    if selected.coordination is None:
+        return receipt(
+            selected,
+            action_key,
+            "failed",
+            "无法解析共享控制边界。",
+            error=selected.error,
+        )
+    action = selected.config.actions.get(action_key)
+    if action is None:
+        return receipt(selected, action_key, "absent", "资源未声明该动作。")
+    if isinstance(action, ManualAction):
+        return receipt(
+            selected, action_key, "manual", "需要人工操作。", steps=tuple(action.steps)
+        )
+    lock = store.coordination_lock("dev", selected.coordination.coordination_id)
+    with interruptions() as interrupted:
+        try:
+            lock.acquire(timeout=0)
+        except Timeout:
+            return join_or_busy(store, selected, action_key, action, interrupted)
+        try:
+            current = resolve_resource(repo, key)
+            if current.coordination != selected.coordination or (
+                expected_digest is not None and current.digest != expected_digest
+            ):
+                return receipt(
+                    current, action_key, "stale", "声明或控制边界已变化，请刷新。"
+                )
+            selected = current
+            assert selected.coordination is not None
+            action = selected.config.actions.get(action_key)
+            if not isinstance(action, ExecAction):
+                return receipt(
+                    selected, action_key, "stale", "动作声明已变化，请刷新。"
+                )
+            pair = records.current(
+                store, selected.coordination.coordination_id, abandoned=True
+            )
+            if pair and pair[1].phase == "owner-lost" and not pair[1].acknowledged:
+                return receipt(
+                    selected,
+                    action_key,
+                    "owner-lost",
+                    "前次执行结果未知；核对控制者后确认恢复。",
+                    execution=records.view(store, *pair),
+                )
+            if interrupted.number is not None:
+                return receipt(
+                    selected, action_key, "interrupted", "动作启动前已取消。"
+                )
+            if (
+                action.completion == "ready"
+                and selected.coordination.scope == "worktree"
+                and not any(
+                    selected.config.observations[name].purpose == "runtime-readiness"
+                    for name in action.conditions
+                )
+            ):
+                return receipt(
+                    selected,
+                    action_key,
+                    "failed",
+                    "工作树服务启动必须声明 runtime-readiness 实例观察。",
+                )
+            if action.convergent:
+                observations = observe_resource(selected, action.conditions)
+                if satisfied(observations):
+                    return receipt(
+                        selected,
+                        action_key,
+                        "reused",
+                        "声明的正向条件已满足。",
+                        observations=observations,
+                    )
+            return execute(store, selected, action_key, action, interrupted)
+        finally:
+            lock.release()
+
+
+def join_or_busy(
     store: ExecutionStore,
-    record: ExecutionRecord,
-    caller_role: str,
-    callback: DevSelectedCallback | None,
-) -> None:
-    if callback is not None:
-        callback(record, caller_role, str(store.log_path(record, "merged")))
+    selected: Resource,
+    key: str,
+    action: ExecAction,
+    interrupted: InterruptRequest,
+) -> ActionReceipt:
+    assert selected.coordination is not None
+    pair = records.current(store, selected.coordination.coordination_id)
+    if not pair or not action.convergent:
+        return receipt(
+            selected,
+            key,
+            "busy",
+            "同一资源已有控制操作；本次没有排队。",
+            execution=records.view(store, *pair) if pair else None,
+        )
+    execution, record = pair
+    if (
+        record.phase != "pending"
+        or record.entry_id != selected.entry_id
+        or record.action != key
+        or record.intent_digest != intent(selected, key)
+        or record.declaration_digest != selected.digest
+    ):
+        return receipt(
+            selected,
+            key,
+            "busy",
+            "在途操作不属于同一入口、动作和声明。",
+            execution=records.view(store, *pair),
+        )
+    while True:
+        if interrupted.number is not None:
+            return receipt(
+                selected,
+                key,
+                "interrupted",
+                "已停止等待；未终止原动作。",
+                execution=records.view(store, execution, record),
+            )
+        if not unchanged(selected):
+            return receipt(selected, key, "stale", "等待期间声明已变化，请刷新。")
+        execution = store.read(execution.execution_id)
+        record = records.read(store, execution)
+        if record.phase == "settled":
+            assert record.receipt is not None
+            return record.receipt.model_copy(update={"joined": True})
+        if record.phase == "owner-lost":
+            return receipt(
+                selected,
+                key,
+                "owner-lost",
+                "原动作失去执行者，结果未知。",
+                execution=records.view(store, execution, record),
+            )
+        lock = store.coordination_lock("dev", execution.coordination_key)
+        try:
+            lock.acquire(timeout=0)
+        except Timeout:
+            time.sleep(0.05)
+        else:
+            try:
+                records.current(store, execution.coordination_key, abandoned=True)
+            finally:
+                lock.release()
 
 
-def _remaining(deadline: float) -> float:
-    return max(0.0, deadline - time.monotonic())
+def execute(
+    store: ExecutionStore,
+    resource: Resource,
+    key: str,
+    action: ExecAction,
+    interrupted: InterruptRequest,
+) -> ActionReceipt:
+    assert resource.coordination is not None
+    resolved = resource.actions[key]
+    published = store.publish(
+        domain="dev",
+        operation="act",
+        subject=resource.key,
+        workspace_instance=resource.workspace.instance,
+        intent_digest=intent(resource, key),
+        coordination_key=resource.coordination.coordination_id,
+        argv=resolved.argv,
+        cwd=resolved.cwd,
+        capture="merged",
+    )
+    meta = records.DevRecord(
+        execution_id=published.record.execution_id,
+        coordination_id=resource.coordination.coordination_id,
+        entry_id=resource.entry_id,
+        action=key,
+        declaration_digest=resource.digest,
+        intent_digest=published.record.intent_digest,
+    )
+    owned: OwnedExecution | None = None
+    final: ExecutionRecord | None
+    try:
+        records.write(store, meta)
+        store.write_coordination("dev", meta.coordination_id, meta.execution_id)
+        if interrupted.number is not None:
+            final = settle_unstarted_interruption(
+                store, published.record, interrupted.number
+            )
+            result = receipt(resource, key, "interrupted", "动作启动前已取消。")
+            return settle(store, meta, final, result, interrupted)
+        environment = dict(resolved.env)
+        result_path = store.execution_dir(meta.execution_id) / "dev-result.json"
+        if action.result == "operation-json":
+            environment["SVC_DEV_RESULT_FILE"] = str(result_path)
+        launched = start_isolated(
+            store,
+            published,
+            LaunchSpec(resolved.argv, resolved.cwd, environment),
+            wait_on_record_failure=action.interruption == "wait",
+        )
+        if isinstance(launched, ExecutionRecord):
+            return settle(
+                store,
+                meta,
+                launched,
+                receipt(resource, key, "failed", "无法启动动作。"),
+                interrupted,
+            )
+        owned = launched
+        started = time.monotonic()
+        ready_deadline = started + action.completion_timeout
+        observations: tuple[Observation, ...] = ()
+        while True:
+            if interrupted.number is not None and action.interruption == "terminate":
+                final = terminate_owned(
+                    store, owned, requested_signal=interrupted.number
+                )
+                return settle(
+                    store,
+                    meta,
+                    final,
+                    receipt(resource, key, "interrupted", "本次拥有的动作已终止。"),
+                    interrupted,
+                )
+            if (
+                action.timeout is not None
+                and time.monotonic() - started >= action.timeout
+            ):
+                final = terminate_owned(store, owned)
+                return settle(
+                    store,
+                    meta,
+                    final,
+                    receipt(resource, key, "interrupted", "动作达到声明的终止期限。"),
+                    interrupted,
+                )
+            requested = (
+                signal.Signals(interrupted.number).name if interrupted.number else None
+            )
+            if meta.requested_signal != requested:
+                meta = meta.model_copy(update={"requested_signal": requested})
+                records.write(store, meta)
+            final = wait_owned(store, owned, timeout=0.05)
+            if action.completion == "ready":
+                if final is not None:
+                    return settle(
+                        store,
+                        meta,
+                        final,
+                        receipt(resource, key, "failed", "进程在取得就绪证明前退出。"),
+                        interrupted,
+                    )
+                observations = observe_resource(resource, action.conditions)
+                runtime_facets = [
+                    resource.config.observations[name] for name in action.conditions
+                ]
+                provenance = resource.coordination.scope != "worktree" or any(
+                    x.purpose == "runtime-readiness" for x in runtime_facets
+                )
+                if satisfied(observations) and provenance:
+                    final = release_owned(store, owned)
+                    if final.state == "released":
+                        owned = (
+                            None  # Receipt storage cannot revoke released ownership.
+                        )
+                    if final.state != "released":
+                        return settle(
+                            store,
+                            meta,
+                            final,
+                            receipt(resource, key, "failed", "进程在释放前退出。"),
+                            interrupted,
+                        )
+                    return settle(
+                        store,
+                        meta,
+                        final,
+                        receipt(
+                            resource,
+                            key,
+                            "ready",
+                            "就绪条件已证实；进程已释放。",
+                            observations=observations,
+                        ),
+                        interrupted,
+                    )
+                if time.monotonic() >= ready_deadline:
+                    final = terminate_owned(store, owned)
+                    return settle(
+                        store,
+                        meta,
+                        final,
+                        receipt(
+                            resource,
+                            key,
+                            "condition-unmet",
+                            "未取得就绪与实例证明，本次启动已终止。",
+                            observations=observations,
+                        ),
+                        interrupted,
+                    )
+                time.sleep(action.poll_interval)
+                continue
+            if final is not None:
+                break
+        if final.state == "interrupted":
+            return settle(
+                store,
+                meta,
+                final,
+                receipt(resource, key, "interrupted", "控制者因信号退出。"),
+                interrupted,
+            )
+        if final.exit_code != 0:
+            return settle(
+                store,
+                meta,
+                final,
+                receipt(
+                    resource,
+                    key,
+                    "failed",
+                    f"控制者拒绝或执行失败（退出 {final.exit_code}）。",
+                ),
+                interrupted,
+            )
+        if action.completion == "submitted":
+            operation = None
+            if action.result == "operation-json":
+                try:
+                    submission = Submission.model_validate_json(
+                        records.read_regular(result_path, 65536)
+                    )
+                    if submission.operation.url:
+                        validate_access_url(submission.operation.url)
+                    operation = submission.operation
+                except (OSError, ValueError) as error:
+                    return settle(
+                        store,
+                        meta,
+                        final,
+                        receipt(
+                            resource,
+                            key,
+                            "failed",
+                            f"提交命令退出 0，但结果无效；请求可能已发生：{error}",
+                        ),
+                        interrupted,
+                    )
+            return settle(
+                store,
+                meta,
+                final,
+                receipt(
+                    resource,
+                    key,
+                    "accepted",
+                    "控制者已接受请求；资源操作尚未证实完成。",
+                    operation=operation,
+                ),
+                interrupted,
+            )
+        if action.conditions:
+            deadline = time.monotonic() + action.completion_timeout
+            while True:
+                observations = observe_resource(resource, action.conditions)
+                if satisfied(observations) or time.monotonic() >= deadline:
+                    break
+                time.sleep(action.poll_interval)
+            if not satisfied(observations):
+                return settle(
+                    store,
+                    meta,
+                    final,
+                    receipt(
+                        resource,
+                        key,
+                        "condition-unmet",
+                        "命令结束，但完成条件尚未证实。",
+                        observations=observations,
+                    ),
+                    interrupted,
+                )
+        return settle(
+            store,
+            meta,
+            final,
+            receipt(
+                resource,
+                key,
+                "completed",
+                "声明动作已完成。",
+                observations=observations,
+            ),
+            interrupted,
+        )
+    except BaseException:
+        # Keep wait ownership even if evidence storage fails after process creation.
+        if owned is not None and owned.process.poll() is None:
+            if action.interruption == "wait":
+                owned.process.wait()
+            else:
+                terminate_owned(store, owned)
+        raise
+    finally:
+        if published.merged_stream is not None:
+            published.merged_stream.close()
+
+
+def settle(
+    store: ExecutionStore,
+    meta: records.DevRecord,
+    final: ExecutionRecord,
+    result: ActionReceipt,
+    interrupted: InterruptRequest,
+) -> ActionReceipt:
+    settled = meta.model_copy(update={"phase": "settled"})
+    result = result.model_copy(
+        update={
+            "execution": records.view(store, final, settled),
+            "requested_signal": signal.Signals(interrupted.number).name
+            if interrupted.number
+            else None,
+        }
+    )
+    records.write(
+        store,
+        settled.model_copy(
+            update={"receipt": result, "requested_signal": result.requested_signal}
+        ),
+    )
+    return result
+
+
+def reconcile(
+    repo: Path,
+    key: str,
+    execution_id: str,
+    *,
+    acknowledge: bool = False,
+    store: ExecutionStore | None = None,
+) -> ActionReceipt:
+    store = store or ExecutionStore()
+    resource = resolve_resource(repo, key)
+    if resource.coordination is None:
+        return receipt(
+            resource, "reconcile", "failed", "无法解析控制边界。", error=resource.error
+        )
+    lock = store.coordination_lock("dev", resource.coordination.coordination_id)
+    try:
+        lock.acquire(timeout=0)
+    except Timeout:
+        return receipt(resource, "reconcile", "busy", "执行者仍持有资源控制锁。")
+    try:
+        current = resolve_resource(repo, key)
+        if (
+            current.digest != resource.digest
+            or current.coordination != resource.coordination
+        ):
+            return receipt(current, "reconcile", "stale", "声明已变化，请刷新。")
+        pair = records.current(
+            store, resource.coordination.coordination_id, abandoned=True
+        )
+        if not pair:
+            return receipt(
+                resource, "reconcile", "nothing-to-reconcile", "没有未决执行。"
+            )
+        execution, meta = pair
+        if execution.execution_id != execution_id:
+            return receipt(
+                resource,
+                "reconcile",
+                "stale",
+                "execution ID 不是当前边界的执行。",
+                execution=records.view(store, *pair),
+            )
+        if meta.phase != "owner-lost":
+            return receipt(
+                resource,
+                "reconcile",
+                "nothing-to-reconcile",
+                "当前执行无需恢复。",
+                execution=records.view(store, *pair),
+            )
+        if acknowledge and not meta.acknowledged:
+            meta = meta.model_copy(
+                update={"acknowledged": True, "acknowledged_at": utc_now()}
+            )
+            records.write(store, meta)
+        return receipt(
+            resource,
+            "reconcile",
+            "acknowledged" if meta.acknowledged else "owner-lost",
+            "已确认原结果未知；没有重试或终止旧进程。"
+            if meta.acknowledged
+            else "原结果未知，重新操作可能重复；需要明确确认。",
+            execution=records.view(store, execution, meta),
+        )
+    finally:
+        lock.release()

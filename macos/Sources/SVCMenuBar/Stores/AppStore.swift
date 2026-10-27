@@ -3,7 +3,7 @@ import Observation
 
 struct ProjectState: Identifiable {
     let path: String
-    var snapshot: DevStatus?
+    var snapshot: DevCatalog?
     var checkedAt: Date?
     var error: String?
     var id: String { path }
@@ -12,7 +12,7 @@ struct ProjectState: Identifiable {
 
 @MainActor @Observable
 final class AppStore {
-    typealias Request = @Sendable (CLIConfiguration, DevCommand, String, String?) async throws -> Data
+    typealias Request = @Sendable (CLIConfiguration, DevCommand, String, [String]) async throws -> Data
     private(set) var projects: [ProjectState]
     private(set) var configuration: CLIConfiguration
     private(set) var operations: [String: DevCommand] = [:]
@@ -25,8 +25,8 @@ final class AppStore {
     @ObservationIgnored private let request: Request
     @ObservationIgnored private var quitCompletion: ((Bool) -> Void)?
 
-    init(preferences: UserDefaults = .standard, request: @escaping Request = { config, command, repo, target in
-        try await CLIClient(configuration: config).request(command, repo: repo, target: target)
+    init(preferences: UserDefaults = .standard, request: @escaping Request = { config, command, repo, arguments in
+        try await CLIClient(configuration: config).request(command, repo: repo, arguments: arguments)
     }) {
         self.preferences = preferences
         self.request = request
@@ -40,10 +40,7 @@ final class AppStore {
         )
     }
 
-    var readyCount: Int {
-        projects.flatMap { $0.snapshot?.targets ?? [] }.filter { $0.health == .ready }.count
-    }
-    var targetCount: Int { projects.flatMap { $0.snapshot?.targets ?? [] }.count }
+    var resourceCount: Int { projects.flatMap { $0.snapshot?.resources ?? [] }.count }
 
     func addProject(_ url: URL) {
         guard !quitPending else { return }
@@ -84,17 +81,31 @@ final class AppStore {
         }
     }
 
-    func refresh(_ path: String) async {
+    func refresh(_ path: String, resource: String? = nil, observation: String? = nil) async {
         guard !quitPending, refreshes[path] == nil,
               projects.contains(where: { $0.path == path }) else { return }
         let generation = UUID()
         refreshes[path] = generation
         do {
-            let data = try await request(configuration, .status, path, nil)
-            let snapshot = try CLIResponse.decode(DevStatus.self, data: data, command: .status)
+            let arguments = (resource.map { [$0] } ?? []) + (observation.map { ["--observation", $0] } ?? [])
+            let data = try await request(configuration, .status, path, arguments)
+            let snapshot = try CLIResponse.decode(DevCatalog.self, data: data, command: .status)
             guard refreshes[path] == generation,
                   let index = projects.firstIndex(where: { $0.path == path }) else { return }
-            projects[index].snapshot = snapshot
+            let previous = projects[index].snapshot?.resources ?? []
+            let merged = snapshot.resources.map { incoming in
+                var entry = incoming
+                if let old = previous.first(where: { $0.entryId == incoming.entryId && $0.declarationDigest == incoming.declarationDigest }) {
+                    let refreshed = Set(incoming.observations.map(\.key))
+                    let retained = old.observations.filter { item in
+                        !refreshed.contains(item.key) && incoming.facets.contains { $0.key == item.key && (observation != nil || !$0.automatic) }
+                    }
+                    entry.observations += retained
+                }
+                return entry
+            }
+            projects[index].snapshot = DevCatalog(status: snapshot.status, resources:
+                resource == nil ? merged : previous.map { old in merged.first(where: { $0.entryId == old.entryId }) ?? old })
             projects[index].error = nil
             projects[index].checkedAt = Date()
         } catch {
@@ -107,29 +118,45 @@ final class AppStore {
         if refreshes[path] == generation { refreshes[path] = nil }
     }
 
-    func perform(_ command: DevCommand, target: DevTarget, project: String) {
-        guard !quitPending, let id = target.capability?.capabilityId, operations[id] == nil,
-              projects.contains(where: { $0.path == project }),
-              (command == .ensure && target.canStart) || (command == .stop && target.canStop) else { return }
+    func perform(_ action: ResourceAction, resource: DevResource, project: String) {
+        guard resource.actions.contains(where: { $0.key == action.key }),
+              !resource.needsReconciliation else { return }
+        execute(.act, resource: resource, project: project, action: action.key,
+                arguments: [resource.resource, action.key, "--expected-digest", resource.declarationDigest])
+    }
+
+    func reconcile(_ resource: DevResource, project: String) {
+        guard resource.needsReconciliation, let id = resource.execution?.executionId else { return }
+        execute(.reconcile, resource: resource, project: project, action: "确认未知结果",
+                arguments: [resource.resource, "--execution", id, "--acknowledge-unknown"])
+    }
+
+    private func execute(_ command: DevCommand, resource: DevResource, project: String,
+                         action: String, arguments: [String]) {
+        guard !quitPending, let id = resource.coordination?.coordinationId,
+              operations[id] == nil, projects.contains(where: { $0.path == project }) else { return }
         operations[id] = command
         invalidateRefreshes()
         let config = configuration
         Task {
             let receipt: OperationReceipt
             do {
-                let data = try await request(config, command, project, target.target)
+                let data = try await request(config, command, project, arguments)
                 let result = try CLIResponse.decode(DevResult.self, data: data, command: command)
-                receipt = OperationReceipt(
-                    projectPath: project, target: target.target, command: command,
-                    message: result.message(for: command) + (result.probeError.map { "\n\($0.message)" } ?? ""),
-                    date: Date(), logPath: result.attempt?.logs.merged.path
-                )
+                guard result.entryId == resource.entryId,
+                      result.resource == resource.resource,
+                      result.action == (command == .reconcile ? "reconcile" : action) else {
+                    throw CLIError(message: "CLI 返回了其他入口或动作的结果。")
+                }
+                receipt = OperationReceipt(projectPath: project, entryId: resource.entryId,
+                    resource: resource.resource, action: action, message: result.message,
+                    date: Date(), logPath: result.execution?.logPath, result: result)
             } catch {
-                receipt = OperationReceipt(projectPath: project, target: target.target,
-                                           command: command, message: error.localizedDescription,
-                                           date: Date(), logPath: nil)
+                receipt = OperationReceipt(projectPath: project, entryId: resource.entryId,
+                    resource: resource.resource, action: action, message: error.localizedDescription,
+                    date: Date(), logPath: nil, result: nil)
             }
-            receipts[id] = receipt
+            receipts[resource.entryId] = receipt
             operations[id] = nil
             invalidateRefreshes()
             if quitPending && operations.isEmpty {
@@ -142,7 +169,7 @@ final class AppStore {
     }
 
     func unavailableReceipts(for project: ProjectState) -> [OperationReceipt] {
-        let visible = Set((project.snapshot?.targets ?? []).compactMap { $0.capability?.capabilityId })
+        let visible = Set((project.snapshot?.resources ?? []).map { $0.entryId })
         return receipts.filter { $0.value.projectPath == project.path && !visible.contains($0.key) }
             .map(\.value).sorted { $0.date > $1.date }
     }

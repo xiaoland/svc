@@ -11,6 +11,9 @@ from pydantic import JsonValue, TypeAdapter
 
 from .cli_output.dev import (
     DevEnsureOutput,
+    DevListOutput,
+    DevActOutput,
+    DevReconcileOutput,
     DevIdentityOutput,
     DevStatusOutput,
     DevStopOutput,
@@ -80,6 +83,9 @@ RegisteredMachineOutput: TypeAlias = (
     | InitApplyOutput
     | RootStatusOutput
     | DevIdentityOutput
+    | DevListOutput
+    | DevActOutput
+    | DevReconcileOutput
     | DevStatusOutput
     | DevEnsureOutput
     | DevStopOutput
@@ -110,11 +116,20 @@ OUTPUT_SCHEMA_SPECS = {
         1, TypeAdapter(SkillsOutput | AdoptionOutput | MachineError | CliUsageOutput)
     ),
     "init": OutputSchemaSpec(4, TypeAdapter(InitMachineOutput)),
-    "status": OutputSchemaSpec(3, TypeAdapter(StatusMachineOutput)),
-    "dev-identity": OutputSchemaSpec(2, TypeAdapter(DevIdentityMachineOutput)),
-    "dev-status": OutputSchemaSpec(3, TypeAdapter(DevStatusMachineOutput)),
-    "dev-ensure": OutputSchemaSpec(2, TypeAdapter(DevEnsureMachineOutput)),
-    "dev-stop": OutputSchemaSpec(2, TypeAdapter(DevStopMachineOutput)),
+    "status": OutputSchemaSpec(4, TypeAdapter(StatusMachineOutput)),
+    "dev-identity": OutputSchemaSpec(3, TypeAdapter(DevIdentityMachineOutput)),
+    "dev-status": OutputSchemaSpec(4, TypeAdapter(DevStatusMachineOutput)),
+    "dev-ensure": OutputSchemaSpec(3, TypeAdapter(DevEnsureMachineOutput)),
+    "dev-stop": OutputSchemaSpec(3, TypeAdapter(DevStopMachineOutput)),
+    "dev-list": OutputSchemaSpec(
+        1, TypeAdapter(DevListOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-act": OutputSchemaSpec(
+        1, TypeAdapter(DevActOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-reconcile": OutputSchemaSpec(
+        1, TypeAdapter(DevReconcileOutput | MachineError | CliUsageOutput)
+    ),
     "run": OutputSchemaSpec(2, TypeAdapter(RunMachineOutput)),
     "double-validate": OutputSchemaSpec(1, TypeAdapter(DoubleValidateMachineOutput)),
     "double-start": OutputSchemaSpec(1, TypeAdapter(DoubleStartMachineOutput)),

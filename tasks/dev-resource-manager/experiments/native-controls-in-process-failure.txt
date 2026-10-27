@@ -1,0 +1,41 @@
+{
+  "accessibility_identifiers" : [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+  ],
+  "activation_events" : 0,
+  "active" : false,
+  "button_identifiers" : [
+    "",
+    "",
+    ""
+  ],
+  "button_titles" : [
+    "",
+    "",
+    ""
+  ],
+  "effects" : [
+
+  ],
+  "external_activation_events" : 0,
+  "key_window" : false,
+  "key_window_events" : 0,
+  "launcher_exit_code" : 0,
+  "limit" : "isolated three-button SwiftUI host, not the candidate resource panel",
+  "matching_controls" : 0,
+  "policy" : "accessory",
+  "pressed" : false
+}

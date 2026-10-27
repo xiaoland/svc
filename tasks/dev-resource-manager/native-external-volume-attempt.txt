@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/tasks/dev-resource-manager/scripts/observe_native.py", line 57, in <module>
+    result.check_returncode()
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/subprocess.py", line 502, in check_returncode
+    raise CalledProcessError(self.returncode, self.args, self.stdout,
+subprocess.CalledProcessError: Command '['/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-native-observe-qkw74d35/ResourceObservation.app/Contents/MacOS/ResourceObservation', '--monitor', '/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-native-observe-qkw74d35/ResourceObservation.app', '/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-native-observe-qkw74d35', '/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/dist/dev-resource-manager/cli-env/bin/svc']' died with <Signals.SIGTRAP: 5>.

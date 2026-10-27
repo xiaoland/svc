@@ -59,14 +59,14 @@ jobs:
           pdm run python -m tools.macos_app check --require-clean
       - name: Native tests without foreground activation
         run: |
-          SVC_TEST_CLI="$PWD/.venv/bin/svc" swift test --package-path macos
+          SVC_TEST_CLI="$PWD/.venv/bin/svc" SVC_TEST_PYTHON="$PWD/.venv/bin/python" SVC_RENDER_DIR="$RUNNER_TEMP/svc-render" XDG_RUNTIME_DIR="$RUNNER_TEMP/svc-native-runtime" swift test --package-path macos
       - name: Build source-bound preview assets
         run: pdm run python -m tools.macos_app archive --require-clean --output dist/macos-release
       - name: Accept the packaged CLI and native controls together
         run: |
           pdm run python -m venv "$RUNNER_TEMP/svc-release-cli"
           "$RUNNER_TEMP/svc-release-cli/bin/pip" install dist/macos-release/*.whl
-          SVC_TEST_CLI="$RUNNER_TEMP/svc-release-cli/bin/svc" swift test --package-path macos --filter 'realCLIService|nativeButtonsControlRealServer'
+          SVC_TEST_CLI="$RUNNER_TEMP/svc-release-cli/bin/svc" SVC_TEST_PYTHON="$PWD/.venv/bin/python" XDG_RUNTIME_DIR="$RUNNER_TEMP/svc-wheel-runtime" swift test --package-path macos --filter 'realCLIService|nativeButtonsControlRealServer'
       - id: release
         name: Detect an authorized prepared release on main
         env:

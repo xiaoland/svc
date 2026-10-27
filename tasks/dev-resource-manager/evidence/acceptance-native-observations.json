@@ -1,0 +1,206 @@
+{
+  "actions": [
+    {
+      "action": "destroy",
+      "button": "3ad6d271e49b3722936a577fd524e4452818e5de1d30e2f98c26a0126a8e4f24/destroy",
+      "key_window": false,
+      "message": "声明动作已完成。",
+      "resource": "shared",
+      "status": "completed"
+    },
+    {
+      "action": "manual",
+      "button": "fcc3b24bd4fe30d389f81e60ee78b4f53ebae72b23380d6fe729b4dc4d8bf2bb/manual",
+      "key_window": false,
+      "message": "需要人工操作。",
+      "resource": "reference",
+      "status": "manual"
+    },
+    {
+      "action": "disconnect",
+      "button": "14fe092b91a2be5556e398311ca70773ab929b3359a2b7d75c441f93297decd4/disconnect",
+      "key_window": false,
+      "message": "声明动作已完成。",
+      "resource": "connection",
+      "status": "completed"
+    },
+    {
+      "action": "update",
+      "button": "835785d01f00ecae9729ddac2731a2509fe3d896483628795dc660d8996571f5/update",
+      "key_window": false,
+      "message": "声明动作已完成。",
+      "resource": "install",
+      "status": "completed"
+    },
+    {
+      "action": "manual",
+      "button": "835785d01f00ecae9729ddac2731a2509fe3d896483628795dc660d8996571f5/manual",
+      "key_window": false,
+      "message": "需要人工操作。",
+      "resource": "install",
+      "status": "manual"
+    },
+    {
+      "action": "stop",
+      "button": "f1ad5c0edc5c6db701916c012789484c33d7442792cc68180bcd32ba927abf15/stop",
+      "key_window": false,
+      "message": "声明动作已完成。",
+      "resource": "wait",
+      "status": "completed"
+    },
+    {
+      "action": "reject",
+      "button": "f1ad5c0edc5c6db701916c012789484c33d7442792cc68180bcd32ba927abf15/reject",
+      "key_window": false,
+      "message": "控制者拒绝或执行失败（退出 7）。",
+      "resource": "wait",
+      "status": "failed"
+    }
+  ],
+  "activation_events": 0,
+  "active": false,
+  "detail_controls": [
+    {
+      "identifier": "",
+      "label": "",
+      "title": ""
+    },
+    {
+      "identifier": "835785d01f00ecae9729ddac2731a2509fe3d896483628795dc660d8996571f5/observe/permission",
+      "label": "检查设备授权",
+      "title": "检查设备授权"
+    },
+    {
+      "identifier": "835785d01f00ecae9729ddac2731a2509fe3d896483628795dc660d8996571f5/update",
+      "label": "更新组件",
+      "title": "更新组件"
+    },
+    {
+      "identifier": "835785d01f00ecae9729ddac2731a2509fe3d896483628795dc660d8996571f5/manual",
+      "label": "授权设备",
+      "title": "授权设备"
+    }
+  ],
+  "explicit_cli_preserved": true,
+  "external_activation_events": 0,
+  "initial_resources": [
+    "shared",
+    "connection",
+    "install",
+    "wait",
+    "reference"
+  ],
+  "invalid_configuration_snapshot_cleared": true,
+  "key_window_events": 0,
+  "launcher_exit": 0,
+  "manual_details_rendered": true,
+  "manual_facet_requested": true,
+  "manual_facet_retained": true,
+  "migration_message": "svc.json 使用旧配置 schema 4；当前 CLI 要求 schema 5。请先排空旧 CLI 的执行者和等待者，再将 dev.targets 迁移为 dev.resources，补充明确动作合同，并同步 svc.local.json。操作步骤见 USER_MANUAL.md 的“人工迁移 CLI 配置”。",
+  "observations": [
+    {
+      "resource": "shared",
+      "states": []
+    },
+    {
+      "resource": "connection",
+      "states": [
+        {
+          "key": "reachable",
+          "stale": "false",
+          "state": "unknown",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "resource": "install",
+      "states": [
+        {
+          "key": "version",
+          "stale": "false",
+          "state": "satisfied",
+          "value": "1.0"
+        },
+        {
+          "key": "running",
+          "stale": "false",
+          "state": "unsatisfied",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "resource": "wait",
+      "states": []
+    },
+    {
+      "resource": "reference",
+      "states": []
+    }
+  ],
+  "operation_survived_cancel_quit": true,
+  "policy": "accessory",
+  "quit_pending_after_cancel": false,
+  "quit_pending_before_cancel": true,
+  "rebound_effects": [
+    "first",
+    "second"
+  ],
+  "receipts_by_entry": [
+    {
+      "action": "disconnect",
+      "entry_id": "14fe092b91a2be5556e398311ca70773ab929b3359a2b7d75c441f93297decd4",
+      "resource": "connection",
+      "status": "completed"
+    },
+    {
+      "action": "manual",
+      "entry_id": "835785d01f00ecae9729ddac2731a2509fe3d896483628795dc660d8996571f5",
+      "resource": "install",
+      "status": "manual"
+    },
+    {
+      "action": "destroy",
+      "entry_id": "3ad6d271e49b3722936a577fd524e4452818e5de1d30e2f98c26a0126a8e4f24",
+      "resource": "shared",
+      "status": "completed"
+    },
+    {
+      "action": "manual",
+      "entry_id": "fcc3b24bd4fe30d389f81e60ee78b4f53ebae72b23380d6fe729b4dc4d8bf2bb",
+      "resource": "reference",
+      "status": "manual"
+    },
+    {
+      "action": "reject",
+      "entry_id": "f1ad5c0edc5c6db701916c012789484c33d7442792cc68180bcd32ba927abf15",
+      "resource": "wait",
+      "status": "failed"
+    }
+  ],
+  "reopened_has_old_snapshot": false,
+  "reopened_preferences": [
+    "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-native-observe-0do1lm80/开发资源与很长名称的隔离项目"
+  ],
+  "reopened_resources": 5,
+  "effects": {
+    "data_deleted": true,
+    "connection_removed": true,
+    "installed_version": "2.0",
+    "wait_finished": true
+  },
+  "cli_path": "/private/tmp/svc-resource-manager-cli-20261027/bin/svc",
+  "source_hashes": {
+    "macos/Sources/SVCMenuBar/Models/DevModels.swift": "7d59da63ffc14d3feb662b30a29dae4f3653f77ffce5b626fe1025a5416767a8",
+    "macos/Sources/SVCMenuBar/Services/CLIClient.swift": "a7603d3c309853c6e3ca88a451cf31c2dbd130a0c08ba461d4eaa8fbd262b1d1",
+    "macos/Sources/SVCMenuBar/Stores/AppStore.swift": "ade179b8963949e547c72e5fa17cf83d5ba189d229769b4f6af9b7bb826bb1a6",
+    "macos/Sources/SVCMenuBar/Views/MenuPanel.swift": "0e451708db90f7bf58eac5fd2319b612a8d57903b153c1d911957e4214a50c44",
+    "macos/Sources/SVCMenuBar/Views/ReceiptView.swift": "5f35862371188084a548d6a046d6c2b79ab2986db572059110d45115f1a6118e",
+    "macos/Sources/SVCMenuBar/Views/ResourceActionButton.swift": "bdc2915de4f52da2f7ae9648337b422ad4219e913c834e7cd6763bb0a6011991",
+    "macos/Sources/SVCMenuBar/Views/ResourceRow.swift": "c7d65af5a1888d418e49dd81b8dab08d6d8b5e03df4b9fcfd9f637f0722c687e",
+    "macos/Sources/SVCMenuBar/Views/SettingsView.swift": "a072d0a3a7a4c7b579bb37d3d44c8b898de5e401413087d2f5ce11a59e6eea75",
+    "macos/Sources/SVCMenuBar/App/SVCMenuBarApp.swift": "fd6e3019d385aa105ebc6032b304118cdf6d268d047dfd4f7079856b54b413f6"
+  },
+  "limit": "Actual product views/store/client in isolated accessory host; no installed-app menu interaction."
+}

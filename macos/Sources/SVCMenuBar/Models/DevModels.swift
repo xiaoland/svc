@@ -6,9 +6,16 @@ struct CLIConfiguration: Equatable, Sendable {
 }
 
 enum DevCommand: String, Sendable {
-    case status, ensure, stop
-    var title: String { self == .ensure ? "启动" : self == .stop ? "停止" : "刷新" }
-    var schemaVersion: Int { self == .status ? 3 : 2 }
+    case list, status, act, reconcile
+    var schemaVersion: Int { self == .status ? 4 : 1 }
+    var title: String {
+        switch self {
+        case .list: "资源"
+        case .status: "刷新"
+        case .act: "操作"
+        case .reconcile: "确认未知结果"
+        }
+    }
 }
 
 struct CLIError: LocalizedError, Sendable {
@@ -28,128 +35,182 @@ enum CLIResponse {
         guard let header = try? decoder.decode(CLIHeader.self, from: data) else {
             throw CLIError(message: "CLI 未返回有效的 SVC 结果。请检查设置中的 CLI 路径。")
         }
-        guard header.schemaVersion == command.schemaVersion else {
-            throw CLIError(message: "CLI 结果版本不兼容（\(header.schemaVersion)）。请更新或重新选择 CLI。")
-        }
-        guard header.command == "dev \(command.rawValue)" else {
-            throw CLIError(message: "CLI 返回了其他命令的结果：\(header.command)。")
+        guard header.schemaVersion == command.schemaVersion, header.command == "dev \(command.rawValue)" else {
+            throw CLIError(message: "CLI 协议不兼容。请使用配套 CLI，或在设置中更新所选路径。")
         }
         do { return try decoder.decode(type, from: data) }
-        catch { throw CLIError(message: "CLI 结果不完整。请更新 CLI。\n\(error.localizedDescription)") }
+        catch { throw CLIError(message: "CLI 结果不完整：\(error.localizedDescription)") }
     }
 }
 
-struct DevStatus: Decodable, Sendable {
+struct DevCatalog: Decodable, Sendable {
     let status: String
-    let reason: String?
-    let targets: [DevTarget]?
+    let resources: [DevResource]
 }
 
-struct DevTarget: Decodable, Identifiable, Sendable {
-    let target: String
-    let capability: Capability?
-    let probe: Probe?
-    let access: [String]?
-    let provision: Declaration?
-    let stop: Declaration?
+struct DevResource: Decodable, Identifiable, Sendable {
+    let resource: String
+    let label: String
+    let entryId: String
+    let source: String
+    let declarationDigest: String
+    let coordination: Coordination?
+    let controller: String?
+    let access: [String]
+    let relations: [String]
+    let actions: [ResourceAction]
+    var observations: [ResourceObservation]
+    let facets: [ObservationDescription]
+    let execution: ResourceExecution?
     let error: Failure?
-    var id: String { target }
-
-    // Error targets have no observation; a successful observation must include stop authority.
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        target = try values.decode(String.self, forKey: .target)
-        error = try values.decodeIfPresent(Failure.self, forKey: .error)
-        if error != nil {
-            capability = nil; probe = nil; access = nil; provision = nil; stop = nil
-        } else {
-            capability = try values.decode(Capability.self, forKey: .capability)
-            probe = try values.decode(Probe.self, forKey: .probe)
-            access = try values.decode([String].self, forKey: .access)
-            provision = try values.decode(Declaration.self, forKey: .provision)
-            stop = try values.decode(Declaration.self, forKey: .stop)
-        }
-    }
-    private enum CodingKeys: String, CodingKey {
-        case target, capability, probe, access, provision, stop, error
-    }
-    var health: TargetHealth {
-        guard error == nil, let probe else { return .unknown }
-        if probe.healthy { return .ready }
-        return probe.responded ? .unhealthy : .notReady
-    }
-    var canStart: Bool {
-        error == nil && provision?.kind == "exec" && health == .notReady
-    }
-    var canStop: Bool { error == nil && stop?.kind == "exec" }
+    var id: String { entryId }
+    var needsReconciliation: Bool { execution?.phase == "owner-lost" && execution?.acknowledged == false }
     var scopeLabel: String {
-        switch capability?.scope {
+        switch coordination?.scope {
         case "repository": "仓库共享"
         case "host": "主机共享"
-        default: "当前工作树"
+        case "worktree": "工作树"
+        default: "协调范围未知"
         }
     }
 }
 
-struct Capability: Decodable, Sendable {
-    let capabilityId: String
+struct Coordination: Decodable, Sendable {
+    let coordinationId: String
     let scope: String
-}
-struct Declaration: Decodable, Sendable { let kind: String }
-struct Failure: Decodable, Sendable { let message: String }
-struct Probe: Decodable, Sendable {
-    let healthy: Bool
-    let responded: Bool
-    let reason: String
-    let endpointIdentity: String
+    let scopeId: String
+    let ownerRepo: String
+    let ownerResource: String
 }
 
-enum TargetHealth: String, Sendable {
-    case ready = "就绪", notReady = "未就绪", unhealthy = "响应异常", unknown = "状态未知"
+struct ResourceAction: Decodable, Identifiable, Sendable {
+    let key: String
+    let kind: String
+    let intent: String
+    let traits: [String]
+    let effectScope: String
+    let dataEffect: String
+    let completion: String?
+    let interruption: String?
+    let convergent: Bool
+    let steps: [String]
+    var id: String { key }
+    var traitLabels: String {
+        traits.map { ["observe": "观察访问", "runtime": "运行", "provision": "供应销毁", "connection": "连接", "installation": "安装更新"][$0] ?? $0 }.joined(separator: " · ")
+    }
+    var effectLabel: String {
+        switch dataEffect {
+        case "unchanged": "保留持久数据"
+        case "modify": "可能修改数据"
+        case "delete": "可能删除数据"
+        default: "数据影响未知"
+        }
+    }
+}
+
+struct ObservationDescription: Decodable, Identifiable, Sendable {
+    let key: String
+    let label: String
+    let automatic: Bool
+    let purpose: String
+    let provider: String
+    var id: String { key }
+}
+
+struct ResourceObservation: Decodable, Identifiable, Sendable {
+    let key: String
+    let label: String
+    let state: String
+    let source: String
+    let checkedAt: String
+    let dataAt: String?
+    let expiresAt: String?
+    let stale: Bool
+    let value: JSONValue?
+    let message: String?
+    let instance: String?
+    let error: Failure?
+    var id: String { key }
+    var isStale: Bool {
+        if stale { return true }
+        guard let expiresAt else { return false }
+        let format = ISO8601DateFormatter()
+        format.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return format.date(from: expiresAt).map { $0 < Date() } ?? true
+    }
+    var stateLabel: String {
+        if isStale { return "已过期" }
+        switch state {
+        case "satisfied": return "满足"
+        case "unsatisfied": return "未满足"
+        default: return "未知"
+        }
+    }
     var symbol: String {
+        if isStale { return "clock.badge.exclamationmark" }
+        switch state {
+        case "satisfied": return "checkmark.circle"
+        case "unsatisfied": return "circle"
+        default: return "questionmark.circle"
+        }
+    }
+}
+
+indirect enum JSONValue: Decodable, Sendable {
+    case string(String), number(Double), bool(Bool), array([JSONValue]), object([String: JSONValue]), null
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer()
+        if value.decodeNil() { self = .null }
+        else if let text = try? value.decode(String.self) { self = .string(text) }
+        else if let flag = try? value.decode(Bool.self) { self = .bool(flag) }
+        else if let number = try? value.decode(Double.self) { self = .number(number) }
+        else if let array = try? value.decode([JSONValue].self) { self = .array(array) }
+        else { self = .object(try value.decode([String: JSONValue].self)) }
+    }
+    var text: String {
         switch self {
-        case .ready: "checkmark.circle.fill"
-        case .notReady: "circle"
-        case .unhealthy: "exclamationmark.circle.fill"
-        case .unknown: "questionmark.circle"
+        case .string(let value): value
+        case .number(let value): value.formatted()
+        case .bool(let value): value ? "true" : "false"
+        case .null: ""
+        case .array(let values): values.map(\.text).joined(separator: ", ")
+        case .object(let values): values.keys.sorted().map { "\($0): \(values[$0]!.text)" }.joined(separator: ", ")
         }
     }
 }
 
-struct DevResult: Decodable, Sendable {
-    let status: String
-    let ready: Bool?
-    let attempt: Attempt?
-    let probeError: Failure?
-
-    func message(for command: DevCommand) -> String {
-        switch status {
-        case "reused", "started", "joined": return ready == true ? "服务已就绪" : "服务尚未就绪"
-        case "stopped": return "停止成功"
-        case "manual-action-required": return "需要按项目配置手动操作"
-        case "conflict": return "端点被占用或有其他操作进行中"
-        case "still-ready": return "停止命令结束，但服务仍然就绪"
-        case "stop-unverified": return "无法确认停止结果"
-        case "stop-failed": return "停止失败"
-        case "readiness-timeout", "activation-timeout": return "等待服务就绪超时"
-        case "child-exit": return "启动进程提前退出"
-        case "interrupted": return "操作已中断"
-        default: return ready == true ? "服务已就绪" : "\(command.title)结果：\(status)"
-        }
-    }
-}
-struct Attempt: Decodable, Sendable {
+struct Failure: Decodable, Sendable { let message: String }
+struct CLIFailureResult: Decodable { let schemaVersion: Int; let error: Failure }
+struct ResourceExecution: Decodable, Sendable {
     let executionId: String
-    let logs: AttemptLogs
+    let state: String
+    let phase: String
+    let acknowledged: Bool
+    let action: String?
+    let entryId: String?
+    let exitCode: Int?
+    let logPath: String
 }
-struct AttemptLogs: Decodable, Sendable { let merged: LogReference }
-struct LogReference: Decodable, Sendable { let path: String }
-
+struct OperationReference: Decodable, Sendable { let id: String; let url: String? }
+struct DevResult: Decodable, Sendable {
+    let resource: String
+    let entryId: String
+    let action: String
+    let status: String
+    let message: String
+    let execution: ResourceExecution?
+    let observations: [ResourceObservation]
+    let operation: OperationReference?
+    let steps: [String]
+    let requestedSignal: String?
+}
 struct OperationReceipt: Sendable {
     let projectPath: String
-    let target: String
-    let command: DevCommand
+    let entryId: String
+    let resource: String
+    let action: String
     let message: String
     let date: Date
     let logPath: String?
+    let result: DevResult?
 }

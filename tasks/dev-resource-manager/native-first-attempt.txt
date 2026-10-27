@@ -1,0 +1,22 @@
+/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/tasks/dev-resource-manager/scripts/observe_native.swift:99:198: warning: left side of nil coalescing operator '??' has non-optional type 'String', so the right side is never used
+ 97 |             try await until { store.operations.isEmpty && store.refreshes.isEmpty }
+ 98 |             let receipt = store.receipts[resource.entryId]
+ 99 |             effects.append(["resource": name, "action": action, "status": receipt?.result?.status ?? "error", "message": receipt?.message ?? "missing", "button": found[0].accessibilityIdentifier() ?? "", "key_window": window.isKeyWindow])
+    |                                                                                                                                                                                                      `- warning: left side of nil coalescing operator '??' has non-optional type 'String', so the right side is never used
+100 |         }
+101 |         report["actions"] = effects
+Traceback (most recent call last):
+  File "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/tasks/dev-resource-manager/scripts/observe_native.py", line 55, in <module>
+    result=subprocess.run([str(executable),'--monitor',str(bundle),str(root),str(cli)],env=env,text=True,capture_output=True,timeout=110)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/subprocess.py", line 2116, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/subprocess.py", line 1253, in _check_timeout
+    raise TimeoutExpired(
+subprocess.TimeoutExpired: Command '['/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-native-observe-5cytq399/ResourceObservation.app/Contents/MacOS/ResourceObservation', '--monitor', '/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-native-observe-5cytq399/ResourceObservation.app', '/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-native-observe-5cytq399', '/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/dist/dev-resource-manager/cli-env/bin/svc']' timed out after 110 seconds

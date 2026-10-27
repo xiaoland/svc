@@ -1,0 +1,43 @@
+{
+  "wait-timeout": {
+    "accepted": false,
+    "message": "svc.json does not match schema v5: 1 validation error for ProjectConfig\ndev.resources.r.actions.go.exec\n  Value error, wait actions cannot have a terminating timeout [type=value_error, input_value={'kind': 'exec', 'intent'... ['true'], 'timeout': 1}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "ready-without-proof": {
+    "accepted": false,
+    "message": "svc.json does not match schema v5: 1 validation error for ProjectConfig\ndev.resources.r.actions.go.exec\n  Value error, ready actions require conditions and terminate interruption [type=value_error, input_value={'kind': 'exec', 'intent'..., 'completion': 'ready'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "submission-conditions": {
+    "accepted": false,
+    "message": "svc.json does not match schema v5: 1 validation error for ProjectConfig\ndev.resources.r.actions.go.exec\n  Value error, submitted reports acceptance, not completed resource conditions [type=value_error, input_value={'kind': 'exec', 'intent'...onditions': ['missing']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "convergence-delete": {
+    "accepted": false,
+    "message": "svc.json does not match schema v5: 1 validation error for ProjectConfig\ndev.resources.r.actions.go.exec\n  Value error, convergence requires positive conditions and cannot represent deletion or submission [type=value_error, input_value={'kind': 'exec', 'intent'...te', 'convergent': True}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "result-mode": {
+    "accepted": false,
+    "message": "svc.json does not match schema v5: 1 validation error for ProjectConfig\ndev.resources.r.actions.go.exec\n  Value error, operation-json is only valid for submitted actions [type=value_error, input_value={'kind': 'exec', 'intent'...sult': 'operation-json'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "nul-argv": {
+    "accepted": false,
+    "message": "svc.json does not match schema v5: 1 validation error for ProjectConfig\ndev.resources.r.actions.go.exec\n  Value error, action argv must have an executable and contain no NUL [type=value_error, input_value={'kind': 'exec', 'intent'... 'argv': ['bad\\x00arg']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "host-without-key": {
+    "accepted": false,
+    "message": "svc.json does not match schema v5: 1 validation error for ProjectConfig\ndev.resources.r\n  Value error, host scope requires host_key [type=value_error, input_value={'scope': 'host', 'access': ['http://localhost']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "owner-plus-scope": {
+    "accepted": false,
+    "message": "svc.json does not match schema v5: 1 validation error for ProjectConfig\ndev.resources.r\n  Value error, owner references cannot declare their own scope or host_key [type=value_error, input_value={'scope': 'repository', '...': ['http://localhost']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "no-capability": {
+    "accepted": false,
+    "message": "svc.json does not match schema v5: 1 validation error for ProjectConfig\ndev.resources.r\n  Value error, resource must offer observation, access, or an action [type=value_error, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "overlay": {
+    "env": {
+      "LOCAL": "yes"
+    }
+  }
+}

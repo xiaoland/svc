@@ -1,0 +1,388 @@
+{
+  "list": {
+    "exit": 0,
+    "stdout": {
+      "command": "dev list",
+      "resources": [
+        {
+          "access": [],
+          "actions": [],
+          "coordination": {
+            "coordination_id": "d01b93bb36ef5ceaec5fa6cfdf4cf7f81ebe7eec0f4430e0",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6",
+            "owner_resource": "component",
+            "scope": "host",
+            "scope_id": "6045c1a839acbe5380b2",
+            "workspace_instance": "d45e42bc43639280"
+          },
+          "declaration_digest": "d5383c2f234cda227761e3089326b90b77f0be62218b722883e4955786f86f69",
+          "entry_id": "a20a743aa35f0c09227ece8b594f5b8ab69f4afd420b0b82f32aeba4c3f43a58",
+          "facets": [
+            {
+              "automatic": true,
+              "key": "fresh",
+              "label": "fresh",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "stale",
+              "label": "stale",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "unknown",
+              "label": "unknown",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "duplicate",
+              "label": "duplicate",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "overflow",
+              "label": "overflow",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": false,
+              "key": "manual",
+              "label": "manual",
+              "provider": "exec",
+              "purpose": "state"
+            }
+          ],
+          "label": "component",
+          "observations": [],
+          "relations": [],
+          "resource": "component",
+          "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6"
+        },
+        {
+          "access": [],
+          "actions": [
+            {
+              "completion": "ready",
+              "convergent": true,
+              "data_effect": "unknown",
+              "effect_scope": "隔离实例",
+              "intent": "就绪",
+              "interruption": "terminate",
+              "key": "ensure",
+              "kind": "exec",
+              "steps": [],
+              "traits": []
+            }
+          ],
+          "coordination": {
+            "coordination_id": "616045860a8ebeec21ccaa0d93648decab081cd7c1d20be6",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6",
+            "owner_resource": "service",
+            "scope": "worktree",
+            "scope_id": "1fde5d407bfd609f910f",
+            "workspace_instance": "d45e42bc43639280"
+          },
+          "declaration_digest": "38da97b1d59c48fdec2a4f4413b6d31e42a1e4d6ceab6bf8076c005fd296a843",
+          "entry_id": "96bc339b180eb1f1140870c618ad7381193f2ba3ea4c37fd7a44494ed89a64aa",
+          "facets": [
+            {
+              "automatic": true,
+              "key": "wrong-purpose",
+              "label": "wrong-purpose",
+              "provider": "exec",
+              "purpose": "state"
+            }
+          ],
+          "label": "service",
+          "observations": [],
+          "relations": [],
+          "resource": "service",
+          "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6"
+        }
+      ],
+      "schema_version": 1,
+      "status": "ok",
+      "workspace": {
+        "instance": "d45e42bc43639280",
+        "namespace_id": "13ee6bfda907db280cc4",
+        "repository_id": "1fde5d407bfd609f910f",
+        "repository_kind": "non-git",
+        "root": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6",
+        "worktree_id": "1fde5d407bfd609f910f"
+      }
+    },
+    "stderr": ""
+  },
+  "probe_called_by_list": false,
+  "automatic": {
+    "exit": 3,
+    "stdout": {
+      "command": "dev status",
+      "resources": [
+        {
+          "access": [],
+          "actions": [],
+          "coordination": {
+            "coordination_id": "d01b93bb36ef5ceaec5fa6cfdf4cf7f81ebe7eec0f4430e0",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6",
+            "owner_resource": "component",
+            "scope": "host",
+            "scope_id": "6045c1a839acbe5380b2",
+            "workspace_instance": "d45e42bc43639280"
+          },
+          "declaration_digest": "d5383c2f234cda227761e3089326b90b77f0be62218b722883e4955786f86f69",
+          "entry_id": "a20a743aa35f0c09227ece8b594f5b8ab69f4afd420b0b82f32aeba4c3f43a58",
+          "facets": [
+            {
+              "automatic": true,
+              "key": "fresh",
+              "label": "fresh",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "stale",
+              "label": "stale",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "unknown",
+              "label": "unknown",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "duplicate",
+              "label": "duplicate",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "overflow",
+              "label": "overflow",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": false,
+              "key": "manual",
+              "label": "manual",
+              "provider": "exec",
+              "purpose": "state"
+            }
+          ],
+          "label": "component",
+          "observations": [
+            {
+              "checked_at": "2026-10-27T13:13:33.658904+00:00",
+              "data_at": "2026-10-27T13:13:33.658904+00:00",
+              "expires_at": "2026-10-27T13:14:33.658904+00:00",
+              "key": "fresh",
+              "label": "fresh",
+              "source": "exec:/private/tmp/svc-resource-manager-cli-20261027/bin/python\u0000-c\u0000from pathlib import Path; Path('/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6/events').open(\"a\").write(\"observed\\n\"); print('{\"schema_version\":1,\"state\":\"satisfied\",\"value\":\"installed\"}')",
+              "stale": false,
+              "state": "satisfied",
+              "value": "installed"
+            },
+            {
+              "checked_at": "2026-10-27T13:13:33.682378+00:00",
+              "data_at": "2000-01-01T00:00:00+00:00",
+              "expires_at": "2000-01-01T00:00:01+00:00",
+              "key": "stale",
+              "label": "stale",
+              "source": "exec:/private/tmp/svc-resource-manager-cli-20261027/bin/python\u0000-c\u0000from pathlib import Path; Path('/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6/events').open(\"a\").write(\"observed\\n\"); print('{\"schema_version\":1,\"state\":\"satisfied\",\"data_at\":\"2000-01-01T00:00:00+00:00\",\"value\":\"old\"}')",
+              "stale": true,
+              "state": "satisfied",
+              "value": "old"
+            },
+            {
+              "checked_at": "2026-10-27T13:13:33.706425+00:00",
+              "data_at": "2026-10-27T13:13:33.706425+00:00",
+              "expires_at": "2026-10-27T13:14:33.706425+00:00",
+              "key": "unknown",
+              "label": "unknown",
+              "source": "exec:/private/tmp/svc-resource-manager-cli-20261027/bin/python\u0000-c\u0000from pathlib import Path; Path('/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6/events').open(\"a\").write(\"observed\\n\"); print('{\"schema_version\":1,\"state\":\"unknown\"}')",
+              "stale": false,
+              "state": "unknown"
+            },
+            {
+              "checked_at": "2026-10-27T13:13:33.730481+00:00",
+              "error": {
+                "code": "observation-failed",
+                "details": {},
+                "message": "duplicate JSON field"
+              },
+              "key": "duplicate",
+              "label": "duplicate",
+              "message": "duplicate JSON field",
+              "source": "exec:/private/tmp/svc-resource-manager-cli-20261027/bin/python\u0000-c\u0000from pathlib import Path; Path('/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6/events').open(\"a\").write(\"observed\\n\"); print('{\"schema_version\":1,\"state\":\"satisfied\",\"state\":\"unknown\"}')",
+              "stale": false,
+              "state": "unknown"
+            },
+            {
+              "checked_at": "2026-10-27T13:13:33.754516+00:00",
+              "error": {
+                "code": "observation-failed",
+                "details": {},
+                "message": "non-finite JSON value: 1e999"
+              },
+              "key": "overflow",
+              "label": "overflow",
+              "message": "non-finite JSON value: 1e999",
+              "source": "exec:/private/tmp/svc-resource-manager-cli-20261027/bin/python\u0000-c\u0000from pathlib import Path; Path('/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6/events').open(\"a\").write(\"observed\\n\"); print('{\"schema_version\":1,\"state\":\"satisfied\",\"value\":1e999}')",
+              "stale": false,
+              "state": "unknown"
+            }
+          ],
+          "relations": [],
+          "resource": "component",
+          "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6"
+        }
+      ],
+      "schema_version": 4,
+      "status": "partial",
+      "workspace": {
+        "instance": "d45e42bc43639280",
+        "namespace_id": "13ee6bfda907db280cc4",
+        "repository_id": "1fde5d407bfd609f910f",
+        "repository_kind": "non-git",
+        "root": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6",
+        "worktree_id": "1fde5d407bfd609f910f"
+      }
+    },
+    "stderr": ""
+  },
+  "explicit": {
+    "exit": 0,
+    "stdout": {
+      "command": "dev status",
+      "resources": [
+        {
+          "access": [],
+          "actions": [],
+          "coordination": {
+            "coordination_id": "d01b93bb36ef5ceaec5fa6cfdf4cf7f81ebe7eec0f4430e0",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6",
+            "owner_resource": "component",
+            "scope": "host",
+            "scope_id": "6045c1a839acbe5380b2",
+            "workspace_instance": "d45e42bc43639280"
+          },
+          "declaration_digest": "d5383c2f234cda227761e3089326b90b77f0be62218b722883e4955786f86f69",
+          "entry_id": "a20a743aa35f0c09227ece8b594f5b8ab69f4afd420b0b82f32aeba4c3f43a58",
+          "facets": [
+            {
+              "automatic": true,
+              "key": "fresh",
+              "label": "fresh",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "stale",
+              "label": "stale",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "unknown",
+              "label": "unknown",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "duplicate",
+              "label": "duplicate",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": true,
+              "key": "overflow",
+              "label": "overflow",
+              "provider": "exec",
+              "purpose": "state"
+            },
+            {
+              "automatic": false,
+              "key": "manual",
+              "label": "manual",
+              "provider": "exec",
+              "purpose": "state"
+            }
+          ],
+          "label": "component",
+          "observations": [
+            {
+              "checked_at": "2026-10-27T13:13:34.024380+00:00",
+              "data_at": "2026-10-27T13:13:34.024380+00:00",
+              "expires_at": "2026-10-27T13:14:34.024380+00:00",
+              "key": "manual",
+              "label": "manual",
+              "source": "exec:/private/tmp/svc-resource-manager-cli-20261027/bin/python\u0000-c\u0000from pathlib import Path; Path('/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6/events').open(\"a\").write(\"observed\\n\"); print('{\"schema_version\":1,\"state\":\"unsatisfied\"}')",
+              "stale": false,
+              "state": "unsatisfied"
+            }
+          ],
+          "relations": [],
+          "resource": "component",
+          "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6"
+        }
+      ],
+      "schema_version": 4,
+      "status": "ok",
+      "workspace": {
+        "instance": "d45e42bc43639280",
+        "namespace_id": "13ee6bfda907db280cc4",
+        "repository_id": "1fde5d407bfd609f910f",
+        "repository_kind": "non-git",
+        "root": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6",
+        "worktree_id": "1fde5d407bfd609f910f"
+      }
+    },
+    "stderr": ""
+  },
+  "invalid_ready_provenance": {
+    "exit": 4,
+    "stdout": {
+      "action": "ensure",
+      "command": "dev act",
+      "coordination": {
+        "coordination_id": "616045860a8ebeec21ccaa0d93648decab081cd7c1d20be6",
+        "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-facets-ih7bm0m6",
+        "owner_resource": "service",
+        "scope": "worktree",
+        "scope_id": "1fde5d407bfd609f910f",
+        "workspace_instance": "d45e42bc43639280"
+      },
+      "declaration_digest": "38da97b1d59c48fdec2a4f4413b6d31e42a1e4d6ceab6bf8076c005fd296a843",
+      "entry_id": "96bc339b180eb1f1140870c618ad7381193f2ba3ea4c37fd7a44494ed89a64aa",
+      "joined": false,
+      "message": "工作树服务启动必须声明 runtime-readiness 实例观察。",
+      "observations": [],
+      "resource": "service",
+      "schema_version": 1,
+      "status": "failed",
+      "steps": []
+    },
+    "stderr": ""
+  },
+  "service_started": false
+}

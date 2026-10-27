@@ -44,17 +44,17 @@ AGENTS.local.md            被忽略、归消费者所有的本地 Agent 指导
 docs/index.md              缺失时创建，带有界 CLI 工具导航块
 ```
 
-`svc.json` 是完整、提交到版本控制的项目配置。schema 4 可声明开发能力与有界运行，最小配置为：
+`svc.json` 是完整、提交到版本控制的项目配置。schema 5 可声明开发能力与有界运行，最小配置为：
 
 ```json
 {
-  "schema_version": 4
+  "schema_version": 5
 }
 ```
 
-可选的 `svc.local.json` 是被忽略的稀疏 overlay，也须声明 schema 4。它可覆盖 `dev` 和主配置已有的 `run`，不能创建本地专有 run 名称或形成无效的有效配置。`init` 只维护标记的忽略块，不写本地配置；缺失时创建 `AGENTS.local.md`，之后不重写它。
+可选的 `svc.local.json` 是被忽略的稀疏 overlay，也须声明 schema 5。它可覆盖 `dev` 和主配置已有的 `run`，不能创建本地专有 run 名称或形成无效的有效配置。`init` 只维护标记的忽略块，不写本地配置；缺失时创建 `AGENTS.local.md`，之后不重写它。
 
-在任何仓库先用 `svc status --json` 获取只读 preflight。它分别报告 CLI、配置、集成和 workspace 事实及一个主要延续动作，只汇总 dev target 和 run entry 名称而不执行它们；需要 runtime 观察时用 `svc dev status`。每个当前 `--json` 响应都是一个紧凑 JSON 值。
+在任何仓库先用 `svc status --json` 获取只读 preflight。它分别报告 CLI、配置、集成和 workspace 事实及一个主要延续动作，只汇总 dev resource 和 run entry 名称而不执行它们；需要 runtime 观察时用 `svc dev status`。每个当前 `--json` 响应都是一个紧凑 JSON 值。
 
 未标记内容、消费者框架指针和本地 Agent 指导归消费者所有。`init` 的受管导航只提供工具入口；框架采用使用独立的 `skills adopt` 标记块。只有可识别且未被修改的生成块可被精确计划维护；修改过的导航或忽略块停止修复。过期计划、并发修改检查与失败回滚保护仍然有效。
 
@@ -102,21 +102,60 @@ npx skills@1.7.0 add https://github.com/xiaoland/svc/releases/download/corpus-v1
 
 所有非平凡任务使用 Task Packet。先找到现有 Packet，不存在时建立足以表达目标、授权、当前状态与验证边界的最小入口，随后按任务压力增长。[Task Packet Skill](corpus/svc-task-packet/SKILL.md)拥有选择和维护规则，并提供 references/assets；Agent 使用已有文件工具完成操作，保护现有 Packet 和授权路径。模板存在不意味着必须创建所有文件，文件工具也不自动具备旧 CLI 创建命令的全部事务与路径保护。
 
-## 声明与确保开发能力
+## 管理开发资源
 
-可选的 `dev.targets` 直接声明命名能力。每个 target 有 scope（`worktree`、`repository` 或 `host`）、一个 readiness probe（`http`、`tcp` 或 `exec`）、可执行或手动 provisioner，以及可选的 target-local 可执行或手动 `stop` 动作。默认文本服务 Agent/Human，紧凑 JSON 服务脚本与 CI：
+`dev.resources` 声明资源的观察、访问与明确动作。资源至少提供其中一项，不要求采用 SVC Skills。下面的仓库共享资源由项目脚本控制，停止动作的声明仅承诺命令结束，不声称所有进程已退出：
+
+```json
+{
+  "schema_version": 5,
+  "dev": {
+    "resources": {
+      "frontend": {
+        "scope": "repository",
+        "observations": {
+          "ready": {"probe": {"kind": "http", "url": "http://127.0.0.1:3000/health"}}
+        },
+        "actions": {
+          "ensure": {
+            "kind": "exec", "intent": "启动前端", "traits": ["runtime"],
+            "effect_scope": "本仓库前端", "data_effect": "unchanged",
+            "argv": ["npm", "run", "dev"], "completion": "ready",
+            "interruption": "terminate", "conditions": ["ready"], "convergent": true
+          },
+          "stop": {
+            "kind": "exec", "intent": "停止前端", "traits": ["runtime"],
+            "effect_scope": "本仓库前端", "data_effect": "unchanged",
+            "argv": ["npm", "run", "dev:stop"], "completion": "exit", "interruption": "wait"
+          }
+        },
+        "access": ["http://127.0.0.1:3000/"]
+      }
+    }
+  }
+}
+```
 
 ```bash
-svc dev identity --repo /path/to/project --json
-svc dev status --repo /path/to/project --json
+svc dev list --repo /path/to/project --json
 svc dev status frontend --repo /path/to/project --json
-svc dev ensure frontend --repo /path/to/project --json
+svc dev act frontend ensure --repo /path/to/project --json
 svc dev stop frontend --repo /path/to/project --json
 ```
 
-根 `status` 只汇总声明；`dev status` 观察 target，不启动或接管进程。`ensure` 处理一个 target，复用健康 endpoint，拒绝被占用但不健康的 endpoint，不执行 `manual` provisioner。`stop` 只执行消费者声明的清理动作，不从记录的 PID 推断权限。可执行工作按声明的 scope 协调，readiness 成功后释放进程权限。默认 worktree scope 的 probe endpoint 必须证明解析出的实例；host scope 要求 `host_key`。
+list 不调用观察脚本；status 只检查声明的自动观察，非自动方面用 `status frontend --observation <key>` 显式检查。HTTP／TCP 不可达为未知，不证明停止。exec 退出码格式约定 0 满足、1 不满足、其它未知；`format: "json"` 需输出 `{"schema_version":1,"state":"satisfied","value":"可选显示值","data_at":"带时区时间","instance":"可选实例"}`，并以 0 退出。数据过期不能满足动作条件；默认 ttl 为 60 秒。
 
-Dev 值只支持 `${dev.instance}`、`${dev.worktree.id}` 和 `${dev.target}` 插值。命令是参数数组，配置的工作目录必须位于 workspace 内。
+动作的 `intent`、`effect_scope` 必须明确，`data_effect` 为 unchanged／modify／delete／unknown；缺省为 unknown。`traits` 可组合 observe／runtime／provision／connection／installation。人工动作用 `kind: "manual"` 和非空 `steps`，不会运行命令。ensure／stop 仅访问同名显式动作。App 与 CLI 按相同合同展示影响和结果，声明“保留”本身不是独立的数据完整性证明。
+
+`exit` 等实际退出并检查可选 conditions；`ready` 需 conditions 和 terminate 策略，就绪后释放本次进程；默认 worktree scope 还需 purpose 为 runtime-readiness 的实例证明。`submitted` 只报告接受，实际控制者负责后续冲突和生命周期；需要动态引用时用 `result: "operation-json"`，将 schema 1 的 `operation.id` 和可选 HTTP(S) url 写入 `SVC_DEV_RESULT_FILE`，不要打印到日志代替结果文件。
+
+默认 wait 动作开始后收到 SIGINT／SIGTERM 仍等待实际结束并持锁。可安全中断的动作才声明 terminate 和可选 timeout。竞争有限动作立即 busy；显式 convergent 的正向条件动作可复用状态或同入口同意图的在途执行，不能用于删除动作或 submitted。App 不提供虚假的强制取消成功。
+
+默认 scope 是 worktree，repository 为本仓库共享，host 需 host_key。共享引用用 `owner: {"repo":"另一项目路径","resource":"直接资源键"}`，只共享协调身份，不继承动作、不触发观察或依赖；引用不能再引用。owner 失效阻断控制，独立观察和访问仍可返回。
+
+Dev 插值限于 `${dev.instance}`、`${dev.worktree.id}`、`${dev.target}`，后者继续表示资源键；命令为 argv 数组，cwd 必须在工作区内。查看后控制可带 `--expected-digest`，绑定 list／status 的 declaration_digest；变更时刷新重选，SVC 不自动替换请求。摘要不冻结外部脚本字节。
+
+owner-lost 表示原操作结果未知，会持续阻断变更。先核对控制者和实际资源，再用 `dev reconcile <resource> --execution <id> --acknowledge-unknown` 明确接受重复操作风险。确认只解除阻断，不杀进程、不重试、不改写成功；其后若需要执行，另发明确动作。runtime 是可能被系统清理的本机证据，不是永久资源登记库。
 
 ## 运行共同声明的命令
 
@@ -124,7 +163,7 @@ Dev 值只支持 `${dev.instance}`、`${dev.worktree.id}` 和 `${dev.target}` �
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "run": {
     "check": {
       "argv": ["pdm", "run", "test"],
@@ -175,9 +214,15 @@ schema-v3 ZIP 的权威是 `manifest.json`、`native.bin` 和 `native-index.json
 
 ## 人工迁移 CLI 配置
 
-包管理器拥有 CLI 安装和更新。CLI 15 不提供 `lookup`、`upgrade` 或 `task init/grow`，不保留别名或转发。旧配置采用 hard-cutoff，失败时保持文件不变；`init` 不清空、重建或自动迁移旧配置。
+CLI 18 只接受配置 schema 5，不提供旧字段别名或自动迁移。先备份并审查 svc.json 和存在的 svc.local.json；init 不覆盖旧配置。
 
-先备份并审查项目配置，把 `svc.json` 与存在的 `svc.local.json` 的 `schema_version` 改为 `4`，从主配置删除 `corpus_version`，保留其余 dev/run 声明与 overlay 内容。之后用 `svc status --json` 检查，再审查新的 init 计划及其受管工具导航变化。未知字段和无效有效配置继续被拒绝。
+1. 停止发起旧 CLI 控制，等待所有旧 owner 和 follower 实际结束。不要强杀调用来假装排空；旧等待者可能继续旧快照，新版恢复规则不能约束它们。
+2. 首先保留资源键、scope、host_key，只把 targets 改为 resources。probe 放入具名 observations；provision 和 stop 转为显式 actions，逐项填写意图、影响范围、数据效果、完成及中断策略。manual 必须补充步骤，原 readiness_timeout 改为动作 completion_timeout。旧停止后的“不就绪”不自动迁移成正向停止证明。
+3. 同步修改本地 overlay 的路径，将两份配置版本改为 5；早期配置的 corpus_version 删除，run 内容保留。若采用默认 worktree 的 ready，声明 runtime-readiness 观察并提供正确实例证明。
+4. 用 `svc status --json`、`svc dev list --json` 检查解析，再按需执行 `dev status`。观察会运行项目代码；list 不运行探测。完成迁移和旧调用排空后才开放新版控制。
+5. 改名、改变 scope／host_key 或引入 owner 会改变协调身份，必须另行确认旧边界没有活跃或未解决执行后再做。保持原键只保证旧 owner 持锁时新请求不平行，不保证任意热改身份安全。
+
+App 0.2.0 使用配套 CLI 18.0.0；显式保存的旧 CLI 路径需在设置中修改。项目列表与 CLI 设置保留，旧观察不当作新会话状态。
 
 框架采用变化遵循[Corpus 版本迁移指导](corpus/migrations/index.md)，由 Agent/Human 更新消费者拥有的契约与引用；它不变换 CLI 配置，不自动迁移消费者语义；CLI 只记录自己安装文件的基线。
 

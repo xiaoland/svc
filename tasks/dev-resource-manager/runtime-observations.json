@@ -1,0 +1,994 @@
+{
+  "source": "working-tree CLI",
+  "scenarios": {
+    "read_only": {
+      "list": {
+        "exit_code": 0,
+        "result": {
+          "command": "dev list",
+          "resources": [
+            {
+              "access": [],
+              "actions": [
+                {
+                  "completion": "exit",
+                  "convergent": false,
+                  "data_effect": "modify",
+                  "effect_scope": "隔离临时文件",
+                  "intent": "wait",
+                  "interruption": "wait",
+                  "key": "go",
+                  "kind": "exec",
+                  "steps": [],
+                  "traits": []
+                }
+              ],
+              "coordination": {
+                "coordination_id": "51bdec9eb4756e679c6823c35895928c4e539868ada311ff",
+                "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+                "owner_resource": "wait",
+                "scope": "repository",
+                "scope_id": "2c669d6d9db0d2bc859e",
+                "workspace_instance": "d0995c6426bd6c1f"
+              },
+              "declaration_digest": "51d872e6c88f52093736d41c9f46dd4313382981551559eb405103b0362fcf3d",
+              "entry_id": "2ed55ec28be7ab532f80e96bcf44e819f0d6343f544b69b4575557abcf9ae560",
+              "label": "wait",
+              "observations": [],
+              "relations": [],
+              "resource": "wait",
+              "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project"
+            },
+            {
+              "access": [],
+              "actions": [
+                {
+                  "completion": "exit",
+                  "convergent": false,
+                  "data_effect": "modify",
+                  "effect_scope": "隔离临时文件",
+                  "intent": "lost",
+                  "interruption": "wait",
+                  "key": "go",
+                  "kind": "exec",
+                  "steps": [],
+                  "traits": []
+                }
+              ],
+              "coordination": {
+                "coordination_id": "3646bdc64f6d40bc01ab0b1bc0db5f209389d5f07561e003",
+                "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+                "owner_resource": "lost",
+                "scope": "repository",
+                "scope_id": "2c669d6d9db0d2bc859e",
+                "workspace_instance": "d0995c6426bd6c1f"
+              },
+              "declaration_digest": "7ddbef8644287ba088e02998e32be64308622ebe079d0b33e077addfed19a7ad",
+              "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+              "label": "lost",
+              "observations": [],
+              "relations": [],
+              "resource": "lost",
+              "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project"
+            },
+            {
+              "access": [],
+              "actions": [
+                {
+                  "completion": "exit",
+                  "convergent": false,
+                  "data_effect": "modify",
+                  "effect_scope": "隔离临时文件",
+                  "intent": "install",
+                  "interruption": "wait",
+                  "key": "go",
+                  "kind": "exec",
+                  "steps": [],
+                  "traits": []
+                }
+              ],
+              "coordination": {
+                "coordination_id": "69a5f66537ccf4308d73ad44f8ac3c9cfcf69d5f8c45aea4",
+                "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+                "owner_resource": "install",
+                "scope": "repository",
+                "scope_id": "2c669d6d9db0d2bc859e",
+                "workspace_instance": "d0995c6426bd6c1f"
+              },
+              "declaration_digest": "34d70bb82a862ac784626d5d09e37af0a75fdaff18ccafb78693e5ddfd6a8bf2",
+              "entry_id": "12bca3f46f4d28203a9e5bfbbf28034d17bb62f4854fea25142b5e51fceb9845",
+              "label": "install",
+              "observations": [],
+              "relations": [],
+              "resource": "install",
+              "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project"
+            },
+            {
+              "access": [],
+              "actions": [
+                {
+                  "completion": "submitted",
+                  "convergent": false,
+                  "data_effect": "modify",
+                  "effect_scope": "隔离临时文件",
+                  "intent": "submit",
+                  "interruption": "wait",
+                  "key": "go",
+                  "kind": "exec",
+                  "steps": [],
+                  "traits": []
+                }
+              ],
+              "coordination": {
+                "coordination_id": "cd8c957c5108439383807e14f53149ce2890a18579839772",
+                "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+                "owner_resource": "submit",
+                "scope": "repository",
+                "scope_id": "2c669d6d9db0d2bc859e",
+                "workspace_instance": "d0995c6426bd6c1f"
+              },
+              "declaration_digest": "80e0af718e700da570b221783019556c4afb0ed435dd36883acf4b0a7e1b8085",
+              "entry_id": "821ace30b2a491c57bad5719f702048eb1dd5fd804815e14baf35fd14db21b95",
+              "label": "submit",
+              "observations": [],
+              "relations": [],
+              "resource": "submit",
+              "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project"
+            },
+            {
+              "access": [],
+              "actions": [
+                {
+                  "completion": "exit",
+                  "convergent": true,
+                  "data_effect": "modify",
+                  "effect_scope": "隔离临时文件",
+                  "intent": "ensure",
+                  "interruption": "wait",
+                  "key": "ensure",
+                  "kind": "exec",
+                  "steps": [],
+                  "traits": []
+                }
+              ],
+              "coordination": {
+                "coordination_id": "05afac12ea484d755dac61ef010e72b341b3571245794462",
+                "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+                "owner_resource": "ensure",
+                "scope": "repository",
+                "scope_id": "2c669d6d9db0d2bc859e",
+                "workspace_instance": "d0995c6426bd6c1f"
+              },
+              "declaration_digest": "2fe6ea3be05d342da538ad571c950e4abdc64d49be5a877c95a0f78f27ed8b24",
+              "entry_id": "c02831d98aefe96504e5e6ba7ef4a3cd693f773fd2b582367a80e8ddf3b97661",
+              "label": "ensure",
+              "observations": [],
+              "relations": [],
+              "resource": "ensure",
+              "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project"
+            },
+            {
+              "access": [],
+              "actions": [
+                {
+                  "completion": "exit",
+                  "convergent": false,
+                  "data_effect": "modify",
+                  "effect_scope": "隔离临时文件",
+                  "intent": "post",
+                  "interruption": "wait",
+                  "key": "go",
+                  "kind": "exec",
+                  "steps": [],
+                  "traits": []
+                }
+              ],
+              "coordination": {
+                "coordination_id": "5e85df65b5f6e12823bfd820bf199e927a314de32d5a8dbe",
+                "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+                "owner_resource": "post",
+                "scope": "repository",
+                "scope_id": "2c669d6d9db0d2bc859e",
+                "workspace_instance": "d0995c6426bd6c1f"
+              },
+              "declaration_digest": "808f9863c489e64a5fe19e4fd72d889e03cc1f14e3c0605b350cbe0d44699b3d",
+              "entry_id": "144f6c16e63f5eff81deb49fc0626cef3f81d5efedb2997a72fefd77a4402596",
+              "label": "post",
+              "observations": [],
+              "relations": [],
+              "resource": "post",
+              "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project"
+            }
+          ],
+          "schema_version": 1,
+          "status": "ok",
+          "workspace": {
+            "instance": "d0995c6426bd6c1f",
+            "namespace_id": "13ee6bfda907db280cc4",
+            "repository_id": "2c669d6d9db0d2bc859e",
+            "repository_kind": "non-git",
+            "root": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "worktree_id": "2c669d6d9db0d2bc859e"
+          }
+        },
+        "stderr": ""
+      },
+      "provider_events_after_list": [],
+      "status": {
+        "exit_code": 0,
+        "result": {
+          "command": "dev status",
+          "resources": [
+            {
+              "access": [],
+              "actions": [
+                {
+                  "completion": "exit",
+                  "convergent": true,
+                  "data_effect": "modify",
+                  "effect_scope": "隔离临时文件",
+                  "intent": "ensure",
+                  "interruption": "wait",
+                  "key": "ensure",
+                  "kind": "exec",
+                  "steps": [],
+                  "traits": []
+                }
+              ],
+              "coordination": {
+                "coordination_id": "05afac12ea484d755dac61ef010e72b341b3571245794462",
+                "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+                "owner_resource": "ensure",
+                "scope": "repository",
+                "scope_id": "2c669d6d9db0d2bc859e",
+                "workspace_instance": "d0995c6426bd6c1f"
+              },
+              "declaration_digest": "2fe6ea3be05d342da538ad571c950e4abdc64d49be5a877c95a0f78f27ed8b24",
+              "entry_id": "c02831d98aefe96504e5e6ba7ef4a3cd693f773fd2b582367a80e8ddf3b97661",
+              "label": "ensure",
+              "observations": [
+                {
+                  "checked_at": "2026-10-27T12:40:34.851564+00:00",
+                  "data_at": "2026-10-27T12:40:34.851564+00:00",
+                  "expires_at": "2026-10-27T12:41:34.851564+00:00",
+                  "key": "done",
+                  "label": "done",
+                  "message": "nonzero-exit",
+                  "source": "exec:/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python\u0000/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/controller.py\u0000/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb\u0000observe\u0000ensure",
+                  "stale": false,
+                  "state": "unsatisfied"
+                }
+              ],
+              "relations": [],
+              "resource": "ensure",
+              "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project"
+            }
+          ],
+          "schema_version": 4,
+          "status": "ok",
+          "workspace": {
+            "instance": "d0995c6426bd6c1f",
+            "namespace_id": "13ee6bfda907db280cc4",
+            "repository_id": "2c669d6d9db0d2bc859e",
+            "repository_kind": "non-git",
+            "root": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "worktree_id": "2c669d6d9db0d2bc859e"
+          }
+        },
+        "stderr": ""
+      },
+      "provider_events_after_status": [
+        "observed"
+      ]
+    },
+    "stale": {
+      "response": {
+        "exit_code": 3,
+        "result": {
+          "action": "go",
+          "command": "dev act",
+          "coordination": {
+            "coordination_id": "69a5f66537ccf4308d73ad44f8ac3c9cfcf69d5f8c45aea4",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "install",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "633f4a657c3d5af30476187e83abc277588d4377e58be9ca189fc93d9c4d7cde",
+          "entry_id": "12bca3f46f4d28203a9e5bfbbf28034d17bb62f4854fea25142b5e51fceb9845",
+          "joined": false,
+          "message": "声明已变化，请刷新后重新选择动作。",
+          "observations": [],
+          "resource": "install",
+          "schema_version": 1,
+          "status": "stale",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "controller_events": []
+    },
+    "finite": {
+      "response": {
+        "exit_code": 0,
+        "result": {
+          "action": "go",
+          "command": "dev act",
+          "coordination": {
+            "coordination_id": "69a5f66537ccf4308d73ad44f8ac3c9cfcf69d5f8c45aea4",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "install",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "633f4a657c3d5af30476187e83abc277588d4377e58be9ca189fc93d9c4d7cde",
+          "entry_id": "12bca3f46f4d28203a9e5bfbbf28034d17bb62f4854fea25142b5e51fceb9845",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "12bca3f46f4d28203a9e5bfbbf28034d17bb62f4854fea25142b5e51fceb9845",
+            "execution_id": "5628d588-29ba-4962-a06e-239e6d0eabff",
+            "exit_code": 0,
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/5628d588-29ba-4962-a06e-239e6d0eabff/output.log",
+            "phase": "settled",
+            "state": "exited"
+          },
+          "joined": false,
+          "message": "声明动作已完成。",
+          "observations": [],
+          "resource": "install",
+          "schema_version": 1,
+          "status": "completed",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "controller_events": [
+        "started",
+        "finished"
+      ]
+    },
+    "wait": {
+      "busy": {
+        "exit_code": 3,
+        "result": {
+          "action": "go",
+          "command": "dev act",
+          "coordination": {
+            "coordination_id": "51bdec9eb4756e679c6823c35895928c4e539868ada311ff",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "wait",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "51d872e6c88f52093736d41c9f46dd4313382981551559eb405103b0362fcf3d",
+          "entry_id": "2ed55ec28be7ab532f80e96bcf44e819f0d6343f544b69b4575557abcf9ae560",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "2ed55ec28be7ab532f80e96bcf44e819f0d6343f544b69b4575557abcf9ae560",
+            "execution_id": "ce795e08-8fd9-4d9a-b8c0-9be8ed8551ea",
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/ce795e08-8fd9-4d9a-b8c0-9be8ed8551ea/output.log",
+            "phase": "pending",
+            "state": "running"
+          },
+          "joined": false,
+          "message": "同一资源已有控制操作；本次没有排队。",
+          "observations": [],
+          "resource": "wait",
+          "schema_version": 1,
+          "status": "busy",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "owner_alive_after_signals": true,
+      "controller_before_finish": [
+        "started"
+      ],
+      "completion": {
+        "exit_code": 0,
+        "result": {
+          "action": "go",
+          "command": "dev act",
+          "coordination": {
+            "coordination_id": "51bdec9eb4756e679c6823c35895928c4e539868ada311ff",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "wait",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "51d872e6c88f52093736d41c9f46dd4313382981551559eb405103b0362fcf3d",
+          "entry_id": "2ed55ec28be7ab532f80e96bcf44e819f0d6343f544b69b4575557abcf9ae560",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "2ed55ec28be7ab532f80e96bcf44e819f0d6343f544b69b4575557abcf9ae560",
+            "execution_id": "ce795e08-8fd9-4d9a-b8c0-9be8ed8551ea",
+            "exit_code": 0,
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/ce795e08-8fd9-4d9a-b8c0-9be8ed8551ea/output.log",
+            "phase": "settled",
+            "state": "exited"
+          },
+          "joined": false,
+          "message": "声明动作已完成。",
+          "observations": [],
+          "requested_signal": "SIGINT",
+          "resource": "wait",
+          "schema_version": 1,
+          "status": "completed",
+          "steps": []
+        },
+        "stderr": ""
+      }
+    },
+    "join": {
+      "owner": {
+        "exit_code": 0,
+        "result": {
+          "action": "ensure",
+          "command": "dev ensure",
+          "coordination": {
+            "coordination_id": "05afac12ea484d755dac61ef010e72b341b3571245794462",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "ensure",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "2fe6ea3be05d342da538ad571c950e4abdc64d49be5a877c95a0f78f27ed8b24",
+          "entry_id": "c02831d98aefe96504e5e6ba7ef4a3cd693f773fd2b582367a80e8ddf3b97661",
+          "execution": {
+            "acknowledged": false,
+            "action": "ensure",
+            "entry_id": "c02831d98aefe96504e5e6ba7ef4a3cd693f773fd2b582367a80e8ddf3b97661",
+            "execution_id": "fe2e65ec-be57-4bd1-a22c-43d94f3c99c6",
+            "exit_code": 0,
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/fe2e65ec-be57-4bd1-a22c-43d94f3c99c6/output.log",
+            "phase": "settled",
+            "state": "exited"
+          },
+          "joined": false,
+          "message": "声明动作已完成。",
+          "observations": [
+            {
+              "checked_at": "2026-10-27T12:40:40.680085+00:00",
+              "data_at": "2026-10-27T12:40:40.680085+00:00",
+              "expires_at": "2026-10-27T12:41:40.680085+00:00",
+              "key": "done",
+              "label": "done",
+              "message": "zero-exit",
+              "source": "exec:/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python\u0000/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/controller.py\u0000/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb\u0000observe\u0000ensure",
+              "stale": false,
+              "state": "satisfied"
+            }
+          ],
+          "resource": "ensure",
+          "schema_version": 3,
+          "status": "completed",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "follower": {
+        "exit_code": 0,
+        "result": {
+          "action": "ensure",
+          "command": "dev ensure",
+          "coordination": {
+            "coordination_id": "05afac12ea484d755dac61ef010e72b341b3571245794462",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "ensure",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "2fe6ea3be05d342da538ad571c950e4abdc64d49be5a877c95a0f78f27ed8b24",
+          "entry_id": "c02831d98aefe96504e5e6ba7ef4a3cd693f773fd2b582367a80e8ddf3b97661",
+          "execution": {
+            "acknowledged": false,
+            "action": "ensure",
+            "entry_id": "c02831d98aefe96504e5e6ba7ef4a3cd693f773fd2b582367a80e8ddf3b97661",
+            "execution_id": "fe2e65ec-be57-4bd1-a22c-43d94f3c99c6",
+            "exit_code": 0,
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/fe2e65ec-be57-4bd1-a22c-43d94f3c99c6/output.log",
+            "phase": "settled",
+            "state": "exited"
+          },
+          "joined": true,
+          "message": "声明动作已完成。",
+          "observations": [
+            {
+              "checked_at": "2026-10-27T12:40:40.680085+00:00",
+              "data_at": "2026-10-27T12:40:40.680085+00:00",
+              "expires_at": "2026-10-27T12:41:40.680085+00:00",
+              "key": "done",
+              "label": "done",
+              "message": "zero-exit",
+              "source": "exec:/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python\u0000/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/controller.py\u0000/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb\u0000observe\u0000ensure",
+              "stale": false,
+              "state": "satisfied"
+            }
+          ],
+          "resource": "ensure",
+          "schema_version": 3,
+          "status": "completed",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "events": [
+        "observed",
+        "observed",
+        "started",
+        "finished",
+        "observed"
+      ]
+    },
+    "owner_lost": {
+      "first": {
+        "exit_code": 3,
+        "result": {
+          "action": "go",
+          "command": "dev act",
+          "coordination": {
+            "coordination_id": "3646bdc64f6d40bc01ab0b1bc0db5f209389d5f07561e003",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "lost",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "7ddbef8644287ba088e02998e32be64308622ebe079d0b33e077addfed19a7ad",
+          "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+            "execution_id": "1b7f35b2-ab72-4ad7-afd7-81d6390c7a04",
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/1b7f35b2-ab72-4ad7-afd7-81d6390c7a04/output.log",
+            "phase": "owner-lost",
+            "state": "owner-lost"
+          },
+          "joined": false,
+          "message": "前次执行结果未知；核对控制者后确认恢复。",
+          "observations": [],
+          "resource": "lost",
+          "schema_version": 1,
+          "status": "owner-lost",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "second": {
+        "exit_code": 3,
+        "result": {
+          "action": "go",
+          "command": "dev act",
+          "coordination": {
+            "coordination_id": "3646bdc64f6d40bc01ab0b1bc0db5f209389d5f07561e003",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "lost",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "7ddbef8644287ba088e02998e32be64308622ebe079d0b33e077addfed19a7ad",
+          "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+            "execution_id": "1b7f35b2-ab72-4ad7-afd7-81d6390c7a04",
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/1b7f35b2-ab72-4ad7-afd7-81d6390c7a04/output.log",
+            "phase": "owner-lost",
+            "state": "owner-lost"
+          },
+          "joined": false,
+          "message": "前次执行结果未知；核对控制者后确认恢复。",
+          "observations": [],
+          "resource": "lost",
+          "schema_version": 1,
+          "status": "owner-lost",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "wrong_id": {
+        "exit_code": 3,
+        "result": {
+          "action": "reconcile",
+          "command": "dev reconcile",
+          "coordination": {
+            "coordination_id": "3646bdc64f6d40bc01ab0b1bc0db5f209389d5f07561e003",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "lost",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "7ddbef8644287ba088e02998e32be64308622ebe079d0b33e077addfed19a7ad",
+          "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+            "execution_id": "1b7f35b2-ab72-4ad7-afd7-81d6390c7a04",
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/1b7f35b2-ab72-4ad7-afd7-81d6390c7a04/output.log",
+            "phase": "owner-lost",
+            "state": "owner-lost"
+          },
+          "joined": false,
+          "message": "execution ID 不是当前边界的执行。",
+          "observations": [],
+          "resource": "lost",
+          "schema_version": 1,
+          "status": "stale",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "without_ack": {
+        "exit_code": 3,
+        "result": {
+          "action": "reconcile",
+          "command": "dev reconcile",
+          "coordination": {
+            "coordination_id": "3646bdc64f6d40bc01ab0b1bc0db5f209389d5f07561e003",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "lost",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "7ddbef8644287ba088e02998e32be64308622ebe079d0b33e077addfed19a7ad",
+          "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+            "execution_id": "1b7f35b2-ab72-4ad7-afd7-81d6390c7a04",
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/1b7f35b2-ab72-4ad7-afd7-81d6390c7a04/output.log",
+            "phase": "owner-lost",
+            "state": "owner-lost"
+          },
+          "joined": false,
+          "message": "原结果未知，重新操作可能重复；需要明确确认。",
+          "observations": [],
+          "resource": "lost",
+          "schema_version": 1,
+          "status": "owner-lost",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "acknowledged": {
+        "exit_code": 0,
+        "result": {
+          "action": "reconcile",
+          "command": "dev reconcile",
+          "coordination": {
+            "coordination_id": "3646bdc64f6d40bc01ab0b1bc0db5f209389d5f07561e003",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "lost",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "7ddbef8644287ba088e02998e32be64308622ebe079d0b33e077addfed19a7ad",
+          "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+          "execution": {
+            "acknowledged": true,
+            "action": "go",
+            "entry_id": "8d59ecf3d31fbdf197edaec5eac45ef58acf204ebb67f4993411c23322d402db",
+            "execution_id": "1b7f35b2-ab72-4ad7-afd7-81d6390c7a04",
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/1b7f35b2-ab72-4ad7-afd7-81d6390c7a04/output.log",
+            "phase": "owner-lost",
+            "state": "owner-lost"
+          },
+          "joined": false,
+          "message": "已确认原结果未知；没有重试或终止旧进程。",
+          "observations": [],
+          "resource": "lost",
+          "schema_version": 1,
+          "status": "acknowledged",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "controller_events": [
+        "started"
+      ]
+    },
+    "post_exit_loss": {
+      "first": {
+        "exit_code": 3,
+        "result": {
+          "action": "go",
+          "command": "dev act",
+          "coordination": {
+            "coordination_id": "5e85df65b5f6e12823bfd820bf199e927a314de32d5a8dbe",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "post",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "808f9863c489e64a5fe19e4fd72d889e03cc1f14e3c0605b350cbe0d44699b3d",
+          "entry_id": "144f6c16e63f5eff81deb49fc0626cef3f81d5efedb2997a72fefd77a4402596",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "144f6c16e63f5eff81deb49fc0626cef3f81d5efedb2997a72fefd77a4402596",
+            "execution_id": "0e5bc667-8e8d-4a16-b9c0-7b3890a3e5c4",
+            "exit_code": 0,
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/0e5bc667-8e8d-4a16-b9c0-7b3890a3e5c4/output.log",
+            "phase": "owner-lost",
+            "state": "exited"
+          },
+          "joined": false,
+          "message": "前次执行结果未知；核对控制者后确认恢复。",
+          "observations": [],
+          "resource": "post",
+          "schema_version": 1,
+          "status": "owner-lost",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "second": {
+        "exit_code": 3,
+        "result": {
+          "action": "go",
+          "command": "dev act",
+          "coordination": {
+            "coordination_id": "5e85df65b5f6e12823bfd820bf199e927a314de32d5a8dbe",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "post",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "808f9863c489e64a5fe19e4fd72d889e03cc1f14e3c0605b350cbe0d44699b3d",
+          "entry_id": "144f6c16e63f5eff81deb49fc0626cef3f81d5efedb2997a72fefd77a4402596",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "144f6c16e63f5eff81deb49fc0626cef3f81d5efedb2997a72fefd77a4402596",
+            "execution_id": "0e5bc667-8e8d-4a16-b9c0-7b3890a3e5c4",
+            "exit_code": 0,
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/0e5bc667-8e8d-4a16-b9c0-7b3890a3e5c4/output.log",
+            "phase": "owner-lost",
+            "state": "exited"
+          },
+          "joined": false,
+          "message": "前次执行结果未知；核对控制者后确认恢复。",
+          "observations": [],
+          "resource": "post",
+          "schema_version": 1,
+          "status": "owner-lost",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "controller_events": [
+        "started",
+        "finished"
+      ]
+    },
+    "submitted": {
+      "accepted": {
+        "exit_code": 0,
+        "result": {
+          "action": "go",
+          "command": "dev act",
+          "coordination": {
+            "coordination_id": "cd8c957c5108439383807e14f53149ce2890a18579839772",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "submit",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "80e0af718e700da570b221783019556c4afb0ed435dd36883acf4b0a7e1b8085",
+          "entry_id": "821ace30b2a491c57bad5719f702048eb1dd5fd804815e14baf35fd14db21b95",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "821ace30b2a491c57bad5719f702048eb1dd5fd804815e14baf35fd14db21b95",
+            "execution_id": "90798b73-42f5-4578-86c8-74ee4d2462b6",
+            "exit_code": 0,
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/90798b73-42f5-4578-86c8-74ee4d2462b6/output.log",
+            "phase": "settled",
+            "state": "exited"
+          },
+          "joined": false,
+          "message": "控制者已接受请求；资源操作尚未证实完成。",
+          "observations": [],
+          "operation": {
+            "id": "submit-op"
+          },
+          "resource": "submit",
+          "schema_version": 1,
+          "status": "accepted",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "conflict": {
+        "exit_code": 4,
+        "result": {
+          "action": "go",
+          "command": "dev act",
+          "coordination": {
+            "coordination_id": "cd8c957c5108439383807e14f53149ce2890a18579839772",
+            "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "owner_resource": "submit",
+            "scope": "repository",
+            "scope_id": "2c669d6d9db0d2bc859e",
+            "workspace_instance": "d0995c6426bd6c1f"
+          },
+          "declaration_digest": "80e0af718e700da570b221783019556c4afb0ed435dd36883acf4b0a7e1b8085",
+          "entry_id": "821ace30b2a491c57bad5719f702048eb1dd5fd804815e14baf35fd14db21b95",
+          "execution": {
+            "acknowledged": false,
+            "action": "go",
+            "entry_id": "821ace30b2a491c57bad5719f702048eb1dd5fd804815e14baf35fd14db21b95",
+            "execution_id": "ae939508-e7e9-44c2-a5ce-d80ce4174d6d",
+            "exit_code": 9,
+            "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/ae939508-e7e9-44c2-a5ce-d80ce4174d6d/output.log",
+            "phase": "settled",
+            "state": "exited"
+          },
+          "joined": false,
+          "message": "控制者拒绝或执行失败（退出 9）。",
+          "observations": [],
+          "resource": "submit",
+          "schema_version": 1,
+          "status": "failed",
+          "steps": []
+        },
+        "stderr": ""
+      },
+      "pending": true,
+      "events": [
+        "started"
+      ]
+    },
+    "owner_reference": {
+      "owner": {
+        "exit_code": 0,
+        "result": {
+          "command": "dev list",
+          "resources": [
+            {
+              "access": [],
+              "actions": [
+                {
+                  "completion": "exit",
+                  "convergent": false,
+                  "data_effect": "modify",
+                  "effect_scope": "隔离临时文件",
+                  "intent": "wait",
+                  "interruption": "wait",
+                  "key": "go",
+                  "kind": "exec",
+                  "steps": [],
+                  "traits": []
+                }
+              ],
+              "coordination": {
+                "coordination_id": "51bdec9eb4756e679c6823c35895928c4e539868ada311ff",
+                "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+                "owner_resource": "wait",
+                "scope": "repository",
+                "scope_id": "2c669d6d9db0d2bc859e",
+                "workspace_instance": "d0995c6426bd6c1f"
+              },
+              "declaration_digest": "51d872e6c88f52093736d41c9f46dd4313382981551559eb405103b0362fcf3d",
+              "entry_id": "2ed55ec28be7ab532f80e96bcf44e819f0d6343f544b69b4575557abcf9ae560",
+              "execution": {
+                "acknowledged": false,
+                "action": "go",
+                "entry_id": "2ed55ec28be7ab532f80e96bcf44e819f0d6343f544b69b4575557abcf9ae560",
+                "execution_id": "ce795e08-8fd9-4d9a-b8c0-9be8ed8551ea",
+                "exit_code": 0,
+                "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/ce795e08-8fd9-4d9a-b8c0-9be8ed8551ea/output.log",
+                "phase": "settled",
+                "state": "exited"
+              },
+              "label": "wait",
+              "observations": [],
+              "relations": [],
+              "resource": "wait",
+              "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project"
+            }
+          ],
+          "schema_version": 1,
+          "status": "ok",
+          "workspace": {
+            "instance": "d0995c6426bd6c1f",
+            "namespace_id": "13ee6bfda907db280cc4",
+            "repository_id": "2c669d6d9db0d2bc859e",
+            "repository_kind": "non-git",
+            "root": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+            "worktree_id": "2c669d6d9db0d2bc859e"
+          }
+        },
+        "stderr": ""
+      },
+      "reference": {
+        "exit_code": 0,
+        "result": {
+          "command": "dev list",
+          "resources": [
+            {
+              "access": [
+                "http://127.0.0.1:1"
+              ],
+              "actions": [
+                {
+                  "completion": "exit",
+                  "convergent": false,
+                  "data_effect": "modify",
+                  "effect_scope": "隔离临时文件",
+                  "intent": "alias",
+                  "interruption": "wait",
+                  "key": "alias",
+                  "kind": "exec",
+                  "steps": [],
+                  "traits": []
+                }
+              ],
+              "coordination": {
+                "coordination_id": "51bdec9eb4756e679c6823c35895928c4e539868ada311ff",
+                "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/project",
+                "owner_resource": "wait",
+                "scope": "repository",
+                "scope_id": "2c669d6d9db0d2bc859e",
+                "workspace_instance": "d0995c6426bd6c1f"
+              },
+              "declaration_digest": "04e3acf31a7ca9aad365e629d926d37ffb69a701c207e0550e2f5c3ba44e7a29",
+              "entry_id": "c8808ff6b1156bd578482aa50bff31890af1534f6059587658ba7a8f9db65249",
+              "execution": {
+                "acknowledged": false,
+                "action": "go",
+                "entry_id": "2ed55ec28be7ab532f80e96bcf44e819f0d6343f544b69b4575557abcf9ae560",
+                "execution_id": "ce795e08-8fd9-4d9a-b8c0-9be8ed8551ea",
+                "exit_code": 0,
+                "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/runtime/svc/execution/ce795e08-8fd9-4d9a-b8c0-9be8ed8551ea/output.log",
+                "phase": "settled",
+                "state": "exited"
+              },
+              "label": "shared",
+              "observations": [],
+              "relations": [],
+              "resource": "shared",
+              "source": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/alias"
+            }
+          ],
+          "schema_version": 1,
+          "status": "ok",
+          "workspace": {
+            "instance": "ea78c40ad6c8932a",
+            "namespace_id": "13ee6bfda907db280cc4",
+            "repository_id": "c021f2e879609b081e93",
+            "repository_kind": "non-git",
+            "root": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-resource-observe-8dk_7uhb/alias",
+            "worktree_id": "c021f2e879609b081e93"
+          }
+        },
+        "stderr": ""
+      }
+    },
+    "old_config": {
+      "exit_code": 3,
+      "result": "",
+      "stderr": "{\"error\":{\"code\":\"invalid-dev-configuration\",\"details\":{},\"message\":\"svc.json does not match schema v5: 1 validation error for ProjectConfig\\nschema_version\\n  Input should be 5 [type=literal_error, input_value=4, input_type=int]\\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\"},\"schema_version\":1}\n"
+    }
+  }
+}

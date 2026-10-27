@@ -1,3 +1,20 @@
+## [18.0.0] - 2026-10-27
+
+### Changed
+
+- 项目配置升级为 schema 5，以开发资源、具名观察和显式动作替换 targets；新增 list/act/reconcile，支持等待、异步提交与未知结果恢复。旧配置需人工迁移并排空旧客户端调用。 (#resource-manager)
+
+
+
+## [17.0.0] - 2026-10-26
+
+此版本随 macOS 0.1.0 预览附件公开，未单独发布到 PyPI。
+
+### Changed
+
+- `svc dev status --json` 的目标观察新增 `stop.kind`（`absent`、`manual` 或 `exec`），使图形客户端可以在执行之前展示停止能力。该查询不执行停止动作；dev-status 结果 schema 升为 3，其他 dev 命令保持原有 schema。严格依赖 schema 2 的消费者需要更新；依据当前 schema 版本政策，CLI package 升为 17.0.0；macOS 预览随附同一源码的 wheel，PyPI 发布仍由 CLI 独立发布流程负责。 (#20261026-dev-status-stop)
+
+
 ## [16.0.0] - 2026-10-06
 
 ### Changed

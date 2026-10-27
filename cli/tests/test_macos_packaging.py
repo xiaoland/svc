@@ -138,6 +138,8 @@ def assets(path: Path) -> Path:
         "signing": "ad-hoc",
         "notarized": False,
         "cli_wheel": "svc-17.0.0.whl",
+        "cli_version": "17.0.0",
+        "cli_result_schemas": app.CLI_RESULT_SCHEMAS,
     }
     (path / "release.json").write_text(json.dumps(manifest))
     for name in ["SVC-0.1.0-macos-arm64.zip", "svc-17.0.0.whl", "INSTALL.md"]:

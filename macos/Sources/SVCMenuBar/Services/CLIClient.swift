@@ -3,13 +3,13 @@ import Foundation
 struct CLIClient: Sendable {
     let configuration: CLIConfiguration
 
-    func request(_ command: DevCommand, repo: String, target: String? = nil) async throws -> Data {
+    func request(_ command: DevCommand, repo: String, arguments: [String] = []) async throws -> Data {
         try await Task.detached(priority: .utility) {
-            try run(command, repo: repo, target: target)
+            try run(command, repo: repo, arguments: arguments)
         }.value
     }
 
-    private func run(_ command: DevCommand, repo: String, target: String?) throws -> Data {
+    private func run(_ command: DevCommand, repo: String, arguments: [String]) throws -> Data {
         let files = FileManager.default
         guard configuration.executable.hasPrefix("/"),
               files.isExecutableFile(atPath: configuration.executable) else {
@@ -33,7 +33,7 @@ struct CLIClient: Sendable {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: configuration.executable)
-        process.arguments = ["dev", command.rawValue] + (target.map { [$0] } ?? []) + ["--repo", repo, "--json"]
+        process.arguments = ["dev", command.rawValue] + arguments + ["--repo", repo, "--json"]
         process.currentDirectoryURL = URL(fileURLWithPath: repo)
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = configuration.searchPath
@@ -49,7 +49,14 @@ struct CLIClient: Sendable {
         if [0, 3, 4, 130].contains(process.terminationStatus), !data.isEmpty {
             return data
         }
-        let diagnostic = String(decoding: try readBounded(stderr), as: UTF8.self)
+        let diagnosticData = try readBounded(stderr)
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        if let failure = try? decoder.decode(CLIFailureResult.self, from: diagnosticData),
+           failure.schemaVersion == 1 {
+            throw CLIError(message: failure.error.message)
+        }
+        let diagnostic = String(decoding: diagnosticData, as: UTF8.self)
         throw CLIError(message: diagnostic.isEmpty
                        ? "CLI 已退出（\(process.terminationStatus)），没有返回结果。"
                        : "CLI 错误（\(process.terminationStatus)）：\n\(diagnostic.prefix(4000))")

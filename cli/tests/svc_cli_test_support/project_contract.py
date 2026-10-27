@@ -10,12 +10,12 @@ from pathlib import Path
 def write_project_config(
     root: Path,
     *,
-    dev_targets: Mapping[str, object] | None = None,
+    dev_resources: Mapping[str, object] | None = None,
     run_entries: Mapping[str, object] | None = None,
 ) -> Path:
-    document: dict[str, object] = {"schema_version": 4}
-    if dev_targets is not None:
-        document["dev"] = {"targets": dict(dev_targets)}
+    document: dict[str, object] = {"schema_version": 5}
+    if dev_resources is not None:
+        document["dev"] = {"resources": dict(dev_resources)}
     if run_entries is not None:
         document["run"] = dict(run_entries)
     path = root / "svc.json"
@@ -26,7 +26,7 @@ def write_project_config(
 def write_local_run_overlay(root: Path, entries: Mapping[str, object]) -> Path:
     path = root / "svc.local.json"
     path.write_text(
-        json.dumps({"schema_version": 4, "run": dict(entries)}),
+        json.dumps({"schema_version": 5, "run": dict(entries)}),
         encoding="utf-8",
     )
     return path

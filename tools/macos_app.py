@@ -14,12 +14,14 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from pathlib import Path
 
 from tools.release_notes import release_section
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ID = "dev.svc.menubar"
+CLI_RESULT_SCHEMAS = {"list": 1, "status": 4, "act": 1, "reconcile": 1}
 DEFAULT_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 
@@ -236,11 +238,12 @@ def install_runtime(wheel: Path) -> Path:
             "--disable-pip-version-check",
             str(wheel),
         )
-        schema = json.loads(
-            run(str(executable), "dev", "status", "--json-schema", capture=True)
-        )
-        if schema.get("x-svc-result-schema-version") != 3:
-            raise ValueError("配套 CLI 的 dev-status schema 不是 3")
+        for command, version in CLI_RESULT_SCHEMAS.items():
+            schema = json.loads(
+                run(str(executable), "dev", command, "--json-schema", capture=True)
+            )
+            if schema.get("x-svc-result-schema-version") != version:
+                raise ValueError(f"配套 CLI 的 dev-{command} schema 不是 {version}")
         marker.write_text(digest + "\n")
         return executable
     except BaseException:
@@ -310,7 +313,10 @@ def archive(output: Path, require_clean: bool) -> None:
         "signing": "ad-hoc",
         "notarized": False,
         "cli_wheel": wheel.name,
-        "dev_status_schema": 3,
+        "cli_version": tomllib.loads((ROOT / "cli/pyproject.toml").read_text())[
+            "project"
+        ]["version"],
+        "cli_result_schemas": CLI_RESULT_SCHEMAS,
     }
     (output / "release.json").write_text(json.dumps(manifest, indent=2) + "\n")
     shutil.copy2(ROOT / "macos/INSTALL.md", output / "INSTALL.md")

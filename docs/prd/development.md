@@ -1,29 +1,65 @@
-# Declared Development Capabilities
+# SVC Dev：开发资源管理
 
-Use this [Product Truth](index.md) projection when a project declares a long-lived development capability. It owns what independent callers can observe and request; cross-domain execution mechanics and runtime persistence remain with Product TDD and Deployment.
+本文拥有 SVC Dev 的产品定位、资源语言与行为边界。产品边界与当前源码能力分别说明；App／CLI 的跨单元合同见 [macOS App 与 CLI](../product-tdd/macos-client.md)，执行协调见[共享执行合同](../product-tdd/execution.md)，运行存储见[本地执行运行时](../deployment/execution.md)。
 
-SVC lets independent Agent, Human, editor, and CI callers observe and express one named long-lived development capability without starting the same intent twice. Readiness, coordination scope, provisioning, access, and optional stop cleanup remain Consumer declarations integrated by SVC rather than reimplementations of HTTP servers, package managers, Compose, or project scripts. Once readiness is proved, the capability survives the starter CLI and native output remains available through a stable shared log.
+## 产品定位
 
-Ensure and stop serialize at the same capability boundary, while equivalent callers converge on the same observable execution. Stop runs only declared Consumer cleanup and verifies the final readiness state; a historical PID is never cleanup authority. This preserves Consumer ownership rules such as an attached client refusing to tear down another repository's runtime.
+SVC Dev 面向人和 Agent，帮助使用者识别开发资源、观察状态、访问入口，并通过已有控制者请求明确的资源操作。macOS App 提供面向人的图形入口，CLI 提供终端和程序化入口；两者服务同一个产品能力。CLI 的命令组织和 App 当前采用的调用方式不决定产品范围。
 
-## CLI Contract
+资源管理围绕资源本身及其明确关系展开。项目、工作树、主机、设备和运行位置可以提供归属、来源或访问关系；SVC Dev 不推断开发任务、工作目标，也不据此自动选择、启动或清理资源。引用某资源不等于正在使用它，未观察到使用也不等于可以销毁它。
 
-An optional `dev.targets` map declares named capabilities directly. Each target has a scope (`worktree`, `repository`, or `host`), one readiness probe (`http`, `tcp`, or `exec`), an executable or manual provisioner, and an optional target-local executable or manual `stop` action. Default text serves ordinary Agent/Human use; compact JSON is the deliberate scripts/CI projection:
+项目脚本、容器运行时、操作系统服务和外部服务继续拥有实际控制语义。SVC Dev 不重写它们的数据初始化、授权或清理规则，不接管资源内部的 Agent 会话、分类队列等业务。有限构建可以是资源安装的准备动作，但资源管理不因此成为通用作业管理器。
 
-```bash
-svc dev identity --repo /path/to/project --json
-svc dev status --repo /path/to/project --json
-svc dev status frontend --repo /path/to/project --json
-svc dev ensure frontend --repo /path/to/project --json
-svc dev stop frontend --repo /path/to/project --json
-```
+## 资源、入口与观察
 
-Root `status` summarizes declarations only; `svc dev status` observes declared targets without starting or taking over a process. `ensure` handles one declared target, reuses a healthy endpoint, refuses an occupied but unhealthy endpoint, and does not run a `manual` provisioner. `stop` runs only Consumer-declared cleanup and never infers authority from a recorded PID. Executable work is coordinated at the declared scope and releases process authority once readiness succeeds. Worktree scope is the default and its probe endpoint must prove the resolved instance; host scope requires a declared `host_key`.
+资源是使用者能够持续识别、观察或控制的开发设施，例如服务实例、数据库 runtime、连接通路或安装在指定位置的应用。同一资源可以通过多个项目入口被引用；一个入口也可能管理由多个组件组成的资源。组件是否单列，取决于其是否有需要独立管理的身份、状态或动作。
 
-Dev values may interpolate only `${dev.instance}`, `${dev.worktree.id}`, and `${dev.target}`. Commands are argument arrays, not shell snippets, and their configured working directories must remain inside the workspace.
+资源登记说明来源、访问方式和可请求的动作；运行观察说明某个时间实际检查到了什么。声明、构建产物、已安装版本和运行实例各有不同含义，不能互相作为成功证明。端口、显示名称或项目路径相同，也不足以证明是同一实例。
 
-## macOS 菜单栏客户端
+观察必须保留适用对象、来源与新鲜度。运行、连通、安装和授权状态可以独立变化；未知或过期不能转换成已停止、已就绪或可以清理。访问失败也不能单独证明远端资源已经关闭。
 
-原生 macOS App 为用户添加的本机项目和工作树提供统一入口，查看 `dev.targets` 的当前就绪状态，并逐项启动、停止和访问服务。它沿用上述 CLI 控制与共享规则，不独立解析配置或接管进程。CLI 公开返回停止能力，App 据此区分自动停止、手动操作和未声明停止；查询不执行停止动作。两者的职责、调用和版本兼容由 [App 与 CLI 合同](../product-tdd/macos-client.md) 拥有。
+## 按控制特性组织能力
 
-面板区分就绪、未就绪、有响应但不健康和状态未知。检查失败不能延续旧的就绪结论，未就绪也不能单独证明进程已停止。关闭面板、移除项目或退出 App 不停止已经就绪的服务。日志入口只展示实际操作回执可提供的日志，不承诺所有服务的历史或实时日志。构建、设置与本地验收入口见 [macOS App](../../macos/README.md)。
+控制特性可以组合，不是互斥的资源类型。资源种类用于帮助理解，实际动作由已接入的控制入口提供。
+
+| 控制特性 | 使用者可理解的动作 | 必须区分的结果 |
+| --- | --- | --- |
+| 观察与访问 | 检查状态、打开访问入口、查看诊断 | 配置存在、观察成功与资源可用 |
+| 运行控制 | 启动、停止、重启 | 请求已提交、正在等待、动作结束与最终状态 |
+| 供应与销毁 | 创建实例、初始化、销毁 | 停止运行与删除持久数据 |
+| 连接控制 | 建立、检查、断开通路 | 本地连接状态与远端资源状态 |
+| 安装与更新 | 安装、替换、验证版本 | 构建成功、安装成功与运行就绪 |
+
+每个动作还需要区分控制主体、当前入口可请求的范围和动作后果。同一资源的拥有方与引用方可能具备不同能力。能观察、能执行脚本或曾启动过资源，都不自动授予停止、重置或销毁权限。
+
+动作需要准确表达是否涉及持久数据、是否需要等待在途工作，以及是否影响连接、单个实例或主机组件。缺少这些事实时保留未知，不根据动作名称、进程名或命令片段推断为安全。声明的效果与执行后的证据也要分开；控制者声称保留数据，不等于 SVC 已独立验证数据完整性。
+
+自动执行、人工操作和未提供入口描述的是执行方式，不能代替上述控制特性与效果。人工操作仍可有明确的访问入口和后续检查，不必伪装成可自动执行的按钮。
+
+## 入口与接入边界
+
+App 与 CLI 应让使用者理解同一个操作的对象、范围、效果和结果。App 拥有呈现、导航及交互状态，不能通过界面快照增加控制权限；程序化入口也不能绕过共同的操作规则。实际请求时仍由控制层依据当前声明和资源状态决定是否执行。
+
+本轮演进以项目内的 `svc.json`／`svc.local.json` 为声明来源，复用项目已有的脚本、工具或人工入口，允许只有观察与访问的资源。资源可以运行在远端主机或设备上，声明的位置不限制资源的运行位置。项目不必采用 SVC Skills，但需要提供接入声明；没有接入声明的项目不自动纳管。项目外独立登记不属于当前范围，也不通过另建配置中心绕过不接受 SVC 接入的项目约束。
+
+五类控制特性都属于产品表达范围，具体动作取决于接入的控制者。支持安装或连接的表达，不等于承诺内建所有设备、驱动和运行时适配。人工操作或缺少动作入口是有效状态，不能伪装成可执行的通用启动／停止。
+
+只使用明确声明或可验证来源提供的资源关系。连接关系不自动成为启动依赖，可选资源不可用也不应被擅自升级为其他资源的启动阻断。移除登记、关闭面板或退出 App 本身都不是资源停止指令。
+
+## 使用过程
+
+使用者从已添加的项目来源中找到资源，识别它的来源、运行位置与明确关联，查看有来源和时间的状态，打开访问或诊断入口，选择实际可用的操作，并查看动作回执与后续观察。失败、未知、等待、需要人工操作和控制者拒绝都应有准确表达，不能把请求结束统一解释为资源已达到目标。
+
+App 保留菜单栏作为主要入口，提供资源列表与详情并管理项目来源；列表呈现相关状态与动作，详情承担来源、影响及诊断信息。CLI 为终端用户和 Agent 提供同样的对象、查询、动作和结果语义，独立于 App 运行。两者不必拥有相同交互形式，App 的项目列表也不成为 CLI 使用资源的前置条件。
+
+## 当前源码能力与发行边界
+
+CLI 18.0.0／App 0.2.0 以 `dev.resources` 表达具名观察、访问入口和具名动作。五类控制特性可组合；同一资源可同时有安装、连通和运行事实，不汇总成统一绿色就绪状态。动作在执行前表达影响范围与数据影响；人工步骤、忙碌、控制者拒绝、已接受、完成条件未满足和结果未知分别呈现。
+
+`dev list` 只解析声明与已有执行事实；`dev status` 执行默认自动观察或用户指定方面，不执行控制动作。exec 观察仍是受信任项目代码，不能保证任意脚本没有副作用。`dev act` 请求明确动作；ensure／stop 只是对应动作键的便捷入口，缺失时不猜测。有限命令、就绪释放与提交后由控制者接管的合同分别处理，不从不就绪推导停止或数据安全。
+
+共享引用显式采用另一项目直接声明的协调身份，不继承动作或触发依赖。竞争中的有限动作返回 busy；只有同入口、同动作、同意图的收敛请求可以共享在途执行。owner-lost 持续阻断变更，确认未知风险只解除阻断，不能证明原进程结束或自动重试。
+
+App 展示来源、资源、状态、动作及回执，通过公开 CLI 完成全部资源语义。默认 worktree 资源的运行就绪需要实例证明；host 资源需声明 host_key。插值仍限于 `${dev.instance}`、`${dev.worktree.id}`、`${dev.target}`，命令按 argv 执行且 cwd 限于工作区。
+
+旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同。源码版本不表示已安装或公开发布；迁移步骤见[用户手册](../../USER_MANUAL.md#人工迁移-cli-配置)，实际交付状态见版本记录与 GitHub Release。

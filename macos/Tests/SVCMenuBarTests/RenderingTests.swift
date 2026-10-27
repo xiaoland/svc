@@ -39,17 +39,18 @@ import Testing
 
 private func renderData() throws -> Data {
     var snapshot = try #require(JSONSerialization.jsonObject(with: statusData(healthy: true)) as? [String: Any])
-    let healthy = try #require((snapshot["targets"] as? [[String: Any]])?.first)
+    let healthy = try #require((snapshot["resources"] as? [[String: Any]])?.first)
     var offline = healthy
-    offline["target"] = "worker"
-    offline["capability"] = ["capability_id": "worker", "scope": "worktree"]
-    offline["probe"] = ["healthy": false, "responded": false, "reason": "unreachable", "endpoint_identity": "tcp://127.0.0.1:3001"]
+    offline["resource"] = "worker"
+    offline["label"] = "后台控制者"
+    offline["entry_id"] = "entry-worker"
+    offline["observations"] = [["key": "state", "label": "运行状态", "state": "unknown", "source": "tcp://127.0.0.1:3001", "checked_at": "2026-10-27T00:00:00.000Z", "stale": false]]
     var manual = offline
-    manual["target"] = "database"
-    manual["capability"] = ["capability_id": "database", "scope": "repository"]
-    manual["stop"] = ["kind": "absent"]
-    manual["provision"] = ["kind": "manual"]
-    snapshot["targets"] = [healthy, offline, manual]
+    manual["resource"] = "database"
+    manual["label"] = "开发数据库"
+    manual["entry_id"] = "entry-database"
+    manual["actions"] = [["key": "destroy", "kind": "manual", "intent": "销毁数据库", "traits": ["provision"], "effect_scope": "共享数据库", "data_effect": "delete", "convergent": false, "steps": ["在数据库控制台中确认删除"]]]
+    snapshot["resources"] = [healthy, offline, manual]
     return try JSONSerialization.data(withJSONObject: snapshot)
 }
 
@@ -59,10 +60,10 @@ private func renderData() throws -> Data {
     let defaults = preferences(["/tmp/native-control"])
     let store = AppStore(preferences: defaults) { _, command, _, _ in
         if command == .status { return statusData(healthy: true) }
-        return Data("{\"schema_version\":2,\"command\":\"dev ensure\",\"status\":\"started\",\"ready\":true}".utf8)
+        return actionData()
     }
-    let target = try #require(CLIResponse.decode(DevStatus.self, data: statusData(), command: .status).targets?.first)
-    let host = NSHostingView(rootView: TargetRow(target: target, project: "/tmp/native-control", store: store))
+    let target = try #require(CLIResponse.decode(DevCatalog.self, data: statusData(), command: .status).resources.first)
+    let host = NSHostingView(rootView: ResourceRow(resource: target, project: "/tmp/native-control", store: store))
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 150),
                           styleMask: [.borderless], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
@@ -75,11 +76,10 @@ private func renderData() throws -> Data {
     func subviews(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(subviews) }
     let buttons = subviews(host).compactMap { $0 as? NSButton }
 
-    // The first native action in the rendered offline row is Start; disclosure follows both actions.
-    let startButton = try #require(buttons.min { $0.frame.minX < $1.frame.minX })
+    let startButton = try #require(buttons.first { $0.accessibilityIdentifier() == "entry-web/ensure" })
     startButton.performClick(nil)
-    try await waitUntil { store.receipts["shared"] != nil }
-    #expect(store.receipts["shared"]?.message == "服务已就绪")
+    try await waitUntil { store.receipts["entry-web"] != nil }
+    #expect(store.receipts["entry-web"]?.message == "声明动作已完成。")
     #expect(!window.isKeyWindow && window.alphaValue == 0)
     #expect(NSWorkspace.shared.frontmostApplication?.processIdentifier == foreground)
     window.close()

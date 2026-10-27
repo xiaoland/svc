@@ -1,0 +1,55 @@
+{
+  "accessibility_identifiers" : [
+    "",
+    "",
+    "",
+    "",
+    "other\/install",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "entry-b\/install",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "entry-b\/destroy",
+    "",
+    "",
+    ""
+  ],
+  "activation_events" : 0,
+  "active" : false,
+  "button_identifiers" : [
+    "other\/install",
+    "entry-b\/install",
+    "entry-b\/destroy"
+  ],
+  "button_titles" : [
+    "另一个入口的安装",
+    "选定资源的安装",
+    "选定资源的销毁"
+  ],
+  "effects" : [
+    "entry-a\/install",
+    "entry-b\/install"
+  ],
+  "external_activation_events" : 0,
+  "external_ax_identifiers" : [
+
+  ],
+  "external_ax_matching_controls" : 0,
+  "external_ax_pressed" : false,
+  "external_ax_trusted" : true,
+  "key_window" : false,
+  "key_window_events" : 0,
+  "launcher_exit_code" : 0,
+  "limit" : "isolated NSButton bridge inside SwiftUI; rebinding tested, not the candidate resource panel",
+  "matching_controls" : 1,
+  "policy" : "accessory",
+  "pressed" : true,
+  "window_intersects_screen" : true
+}

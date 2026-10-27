@@ -10,15 +10,15 @@ struct MenuPanel: View {
             HStack(spacing: 10) {
                 Image(systemName: "server.rack").font(.title2).foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("开发服务器").font(.headline)
-                    Text("\(store.readyCount) / \(store.targetCount) 就绪")
+                    Text("开发资源").font(.headline)
+                    Text("\(store.resourceCount) 个资源")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button { Task { await store.refreshAll() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .help("刷新服务状态").accessibilityLabel("刷新服务状态")
+                .help("刷新资源状态").accessibilityLabel("刷新资源状态")
                 .keyboardShortcut("r").disabled(store.quitPending || !store.refreshes.isEmpty)
                 Button(action: addProject) { Image(systemName: "plus") }
                     .help("添加项目").accessibilityLabel("添加项目").keyboardShortcut("o")
@@ -122,14 +122,13 @@ private struct ProjectSection: View {
                 Label("状态未知", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
                 Text(error).font(.caption).textSelection(.enabled)
             } else if let snapshot = project.snapshot {
-                if let targets = snapshot.targets, !targets.isEmpty {
-                    ForEach(targets) { target in
-                        TargetRow(target: target, project: project.path, store: store)
+                if !snapshot.resources.isEmpty {
+                    ForEach(snapshot.resources) { resource in
+                        ResourceRow(resource: resource, project: project.path, store: store)
                     }
                 } else {
-                    Text(snapshot.status == "not-configured" ? "项目尚未声明开发服务" : "配置无效")
+                    Text(snapshot.status == "not-configured" ? "项目尚未声明开发资源" : "配置无效")
                         .foregroundStyle(.secondary)
-                    if let reason = snapshot.reason { Text(reason).font(.caption).textSelection(.enabled) }
                 }
             } else {
                 Text("正在检查…").foregroundStyle(.secondary)

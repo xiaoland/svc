@@ -1,0 +1,15 @@
+{
+  "probe": "existing-mechanics-wait-policy",
+  "owner_signals": [
+    2,
+    15,
+    2
+  ],
+  "child_signals": [],
+  "observed_wait_seconds": 3.631,
+  "lock_during_wait": "held",
+  "lock_after_exit": "free",
+  "final_state": "exited",
+  "exit_code": 0,
+  "limit": "isolated owner adapter, not the future dev CLI"
+}

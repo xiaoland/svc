@@ -16,8 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMenu()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "server.rack", accessibilityDescription: "SVC 开发服务器")
-        item.button?.toolTip = "SVC 开发服务器"
+        item.button?.image = NSImage(systemSymbolName: "server.rack", accessibilityDescription: "SVC 开发资源")
+        item.button?.toolTip = "SVC 开发资源"
         item.button?.target = self
         item.button?.action = #selector(togglePanel)
         statusItem = item

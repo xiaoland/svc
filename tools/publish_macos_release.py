@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.release_notes import release_section
+from tools.macos_app import CLI_RESULT_SCHEMAS
 
 
 def gh(*args: str) -> str:
@@ -36,6 +37,10 @@ def verified_assets(directory: Path, revision: str) -> dict[str, str]:
     if re.fullmatch(r"[a-f0-9]{40}", revision) is None:
         raise ValueError("发布 revision 必须是完整 commit SHA")
     manifest = json.loads((directory / "release.json").read_text())
+    if manifest.get("cli_result_schemas") != CLI_RESULT_SCHEMAS:
+        raise ValueError("配套 CLI schema 清单不匹配")
+    if re.fullmatch(r"\d+\.\d+\.\d+", manifest.get("cli_version", "")) is None:
+        raise ValueError("配套 CLI 版本无效")
     if manifest["revision"] != revision:
         raise ValueError("发布制品与目标 commit 不一致，或来自脏工作区")
     if manifest["signing"] != "ad-hoc" or manifest["notarized"] is not False:

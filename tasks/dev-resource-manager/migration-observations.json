@@ -1,0 +1,148 @@
+{
+  "old_cli": "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/dist/dev-resource-manager/old-cli-env/bin/svc",
+  "new_cli": "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/svc",
+  "during_old_owner": {
+    "exit": 3,
+    "stdout": {
+      "action": "go",
+      "command": "dev act",
+      "coordination": {
+        "coordination_id": "6ba6008c392a86fcffc71b75695150e3f26b77206d9eade8",
+        "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-migration-njkhk6op/project",
+        "owner_resource": "server",
+        "scope": "repository",
+        "scope_id": "a7257cbc75952796c3bb",
+        "workspace_instance": "501006dd6d86faf7"
+      },
+      "declaration_digest": "9ad63b2fca863b9930b67c8a2edd21b9c4e4dce5b81b6714c38c6dece6c8f367",
+      "entry_id": "494e42b83bc9a2eb6411cf691bc9adfbde71b14eb07b498feff221343650a7ec",
+      "execution": {
+        "acknowledged": false,
+        "action": "ensure",
+        "execution_id": "d04f87c3-8b33-4f08-91f8-e19b74840cf4",
+        "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-migration-njkhk6op/runtime/svc/execution/d04f87c3-8b33-4f08-91f8-e19b74840cf4/output.log",
+        "phase": "pending",
+        "state": "running"
+      },
+      "joined": false,
+      "message": "同一资源已有控制操作；本次没有排队。",
+      "observations": [],
+      "resource": "server",
+      "schema_version": 1,
+      "status": "busy",
+      "steps": []
+    },
+    "stderr": ""
+  },
+  "events_during_lock": [
+    "old started"
+  ],
+  "old_owner_still_running": true,
+  "old_settled": {
+    "exit": 3,
+    "stdout": {
+      "access": [],
+      "attempt": {
+        "argv": [
+          "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python",
+          "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-migration-njkhk6op/controller.py",
+          "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-migration-njkhk6op",
+          "old"
+        ],
+        "caller_role": "owner",
+        "cwd": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-migration-njkhk6op/project",
+        "duration_ms": 903,
+        "execution_id": "d04f87c3-8b33-4f08-91f8-e19b74840cf4",
+        "exit_code": 0,
+        "logs": {
+          "merged": {
+            "bytes": 0,
+            "path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-migration-njkhk6op/runtime/svc/execution/d04f87c3-8b33-4f08-91f8-e19b74840cf4/output.log"
+          }
+        },
+        "state": "exited"
+      },
+      "capability": {
+        "capability_id": "6ba6008c392a86fcffc71b75695150e3f26b77206d9eade8",
+        "endpoint_id": "7a6ae31245647982eb32",
+        "scope": "repository",
+        "scope_id": "a7257cbc75952796c3bb",
+        "target": "server"
+      },
+      "cleanup": "completed",
+      "command": "dev ensure",
+      "effective_target_digest": "9335389d809bae7345e886972c2cc761237b8a7d1e985deff2290b43c2cc0951",
+      "probe": {
+        "endpoint_identity": "exec:/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python\u0000-c\u0000raise SystemExit(1)",
+        "exit_code": 1,
+        "healthy": false,
+        "kind": "exec",
+        "output_bytes": 0,
+        "output_truncated": false,
+        "reason": "nonzero-exit",
+        "responded": false
+      },
+      "probe_argv": [
+        "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python",
+        "-c",
+        "raise SystemExit(1)"
+      ],
+      "provision": {
+        "kind": "exec",
+        "mode": "run"
+      },
+      "ready": false,
+      "schema_version": 2,
+      "status": "child-exit",
+      "target": "server",
+      "workspace": {
+        "instance": "501006dd6d86faf7",
+        "namespace_id": "13ee6bfda907db280cc4",
+        "repository_id": "a7257cbc75952796c3bb",
+        "repository_kind": "non-git",
+        "root": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-migration-njkhk6op/project",
+        "worktree_id": "a7257cbc75952796c3bb"
+      }
+    },
+    "stderr": ""
+  },
+  "after_drain": {
+    "exit": 0,
+    "stdout": {
+      "action": "go",
+      "command": "dev act",
+      "coordination": {
+        "coordination_id": "6ba6008c392a86fcffc71b75695150e3f26b77206d9eade8",
+        "owner_repo": "/private/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-migration-njkhk6op/project",
+        "owner_resource": "server",
+        "scope": "repository",
+        "scope_id": "a7257cbc75952796c3bb",
+        "workspace_instance": "501006dd6d86faf7"
+      },
+      "declaration_digest": "9ad63b2fca863b9930b67c8a2edd21b9c4e4dce5b81b6714c38c6dece6c8f367",
+      "entry_id": "494e42b83bc9a2eb6411cf691bc9adfbde71b14eb07b498feff221343650a7ec",
+      "execution": {
+        "acknowledged": false,
+        "action": "go",
+        "entry_id": "494e42b83bc9a2eb6411cf691bc9adfbde71b14eb07b498feff221343650a7ec",
+        "execution_id": "c07f7f06-7edd-48e7-98c6-6d9ef82b7519",
+        "exit_code": 0,
+        "log_path": "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-migration-njkhk6op/runtime/svc/execution/c07f7f06-7edd-48e7-98c6-6d9ef82b7519/output.log",
+        "phase": "settled",
+        "state": "exited"
+      },
+      "joined": false,
+      "message": "声明动作已完成。",
+      "observations": [],
+      "resource": "server",
+      "schema_version": 1,
+      "status": "completed",
+      "steps": []
+    },
+    "stderr": ""
+  },
+  "events_after_drain": [
+    "old started",
+    "new started"
+  ]
+}

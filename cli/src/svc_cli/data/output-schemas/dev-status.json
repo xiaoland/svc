@@ -1,42 +1,108 @@
 {
   "$defs": {
-    "CapabilityIdentity": {
+    "ActionDescription": {
       "additionalProperties": false,
       "properties": {
-        "capability_id": {
-          "title": "Capability Id",
-          "type": "string"
-        },
-        "endpoint_id": {
-          "title": "Endpoint Id",
-          "type": "string"
-        },
-        "scope": {
-          "enum": [
-            "worktree",
-            "repository",
-            "host"
+        "completion": {
+          "anyOf": [
+            {
+              "enum": [
+                "exit",
+                "ready",
+                "submitted"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Scope",
+          "default": null,
+          "title": "Completion"
+        },
+        "convergent": {
+          "default": false,
+          "title": "Convergent",
+          "type": "boolean"
+        },
+        "data_effect": {
+          "enum": [
+            "unchanged",
+            "modify",
+            "delete",
+            "unknown"
+          ],
+          "title": "Data Effect",
           "type": "string"
         },
-        "scope_id": {
-          "title": "Scope Id",
+        "effect_scope": {
+          "title": "Effect Scope",
           "type": "string"
         },
-        "target": {
-          "title": "Target",
+        "intent": {
+          "title": "Intent",
           "type": "string"
+        },
+        "interruption": {
+          "anyOf": [
+            {
+              "enum": [
+                "wait",
+                "terminate"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interruption"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "manual",
+            "exec"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "steps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "traits": {
+          "items": {
+            "enum": [
+              "observe",
+              "runtime",
+              "provision",
+              "connection",
+              "installation"
+            ],
+            "type": "string"
+          },
+          "title": "Traits",
+          "type": "array"
         }
       },
       "required": [
-        "scope",
-        "target",
-        "endpoint_id",
-        "scope_id",
-        "capability_id"
+        "key",
+        "kind",
+        "intent",
+        "traits",
+        "effect_scope",
+        "data_effect"
       ],
-      "title": "CapabilityIdentity",
+      "title": "ActionDescription",
       "type": "object"
     },
     "CliUsageOutput": {
@@ -59,6 +125,50 @@
       "title": "CliUsageOutput",
       "type": "object"
     },
+    "Coordination": {
+      "additionalProperties": false,
+      "properties": {
+        "coordination_id": {
+          "title": "Coordination Id",
+          "type": "string"
+        },
+        "owner_repo": {
+          "title": "Owner Repo",
+          "type": "string"
+        },
+        "owner_resource": {
+          "title": "Owner Resource",
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "worktree",
+            "repository",
+            "host"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "scope_id": {
+          "title": "Scope Id",
+          "type": "string"
+        },
+        "workspace_instance": {
+          "title": "Workspace Instance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "coordination_id",
+        "scope",
+        "scope_id",
+        "workspace_instance",
+        "owner_repo",
+        "owner_resource"
+      ],
+      "title": "Coordination",
+      "type": "object"
+    },
     "DevStatusOutput": {
       "additionalProperties": false,
       "properties": {
@@ -68,135 +178,51 @@
           "title": "Command",
           "type": "string"
         },
-        "healthy": {
-          "title": "Healthy",
-          "type": "boolean"
-        },
-        "reason": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Reason"
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/ResourceView"
+          },
+          "title": "Resources",
+          "type": "array"
         },
         "schema_version": {
-          "const": 3,
-          "default": 3,
+          "const": 4,
+          "default": 4,
           "title": "Schema Version",
           "type": "integer"
         },
         "status": {
           "enum": [
-            "healthy",
-            "action-required",
-            "invalid-configuration",
+            "ok",
+            "partial",
             "not-configured"
           ],
           "title": "Status",
           "type": "string"
-        },
-        "targets": {
-          "anyOf": [
-            {
-              "items": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/DevTargetObservation"
-                  },
-                  {
-                    "$ref": "#/$defs/DevTargetError"
-                  }
-                ]
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Targets"
         },
         "workspace": {
           "$ref": "#/$defs/WorkspaceIdentity"
         }
       },
       "required": [
-        "healthy",
+        "workspace",
         "status",
-        "workspace"
+        "resources"
       ],
       "title": "DevStatusOutput",
       "type": "object"
     },
-    "DevStopDeclaration": {
+    "ExecutionView": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "enum": [
-            "absent",
-            "manual",
-            "exec"
-          ],
-          "title": "Kind",
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind"
-      ],
-      "title": "DevStopDeclaration",
-      "type": "object"
-    },
-    "DevTargetError": {
-      "additionalProperties": false,
-      "properties": {
-        "effective_target_digest": {
-          "title": "Effective Target Digest",
-          "type": "string"
+        "acknowledged": {
+          "default": false,
+          "title": "Acknowledged",
+          "type": "boolean"
         },
-        "error": {
-          "$ref": "#/$defs/MachineErrorBody"
-        },
-        "target": {
-          "title": "Target",
-          "type": "string"
-        }
-      },
-      "required": [
-        "target",
-        "effective_target_digest",
-        "error"
-      ],
-      "title": "DevTargetError",
-      "type": "object"
-    },
-    "DevTargetObservation": {
-      "additionalProperties": false,
-      "properties": {
-        "access": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Access",
-          "type": "array"
-        },
-        "capability": {
-          "$ref": "#/$defs/CapabilityIdentity"
-        },
-        "continuation": {
+        "action": {
           "anyOf": [
             {
-              "enum": [
-                "blocked-unhealthy-responder",
-                "manual-action-required",
-                "ensure"
-              ],
               "type": "string"
             },
             {
@@ -204,83 +230,87 @@
             }
           ],
           "default": null,
-          "title": "Continuation"
+          "title": "Action"
         },
-        "effective_target_digest": {
-          "title": "Effective Target Digest",
-          "type": "string"
-        },
-        "probe": {
-          "$ref": "#/$defs/ProbeObservation"
-        },
-        "probe_argv": {
+        "entry_id": {
           "anyOf": [
             {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Probe Argv"
+          "title": "Entry Id"
         },
-        "provision": {
+        "execution_id": {
+          "title": "Execution Id",
+          "type": "string"
+        },
+        "exit_code": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ManualProvisionOutput"
+              "type": "integer"
             },
             {
-              "$ref": "#/$defs/ExecProvisionOutput"
+              "type": "null"
             }
           ],
-          "title": "Provision"
+          "default": null,
+          "title": "Exit Code"
         },
-        "stop": {
-          "$ref": "#/$defs/DevStopDeclaration"
+        "log_path": {
+          "title": "Log Path",
+          "type": "string"
         },
-        "target": {
-          "title": "Target",
+        "phase": {
+          "enum": [
+            "pending",
+            "settled",
+            "owner-lost"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
           "type": "string"
         }
       },
       "required": [
-        "target",
-        "effective_target_digest",
-        "capability",
-        "probe",
-        "access",
-        "provision",
-        "stop"
+        "execution_id",
+        "state",
+        "phase",
+        "log_path"
       ],
-      "title": "DevTargetObservation",
+      "title": "ExecutionView",
       "type": "object"
     },
-    "ExecProvisionOutput": {
+    "Failure": {
       "additionalProperties": false,
+      "description": "An immutable snapshot when a failure is part of a larger service result.",
       "properties": {
-        "kind": {
-          "const": "exec",
-          "default": "exec",
-          "title": "Kind",
+        "code": {
+          "title": "Code",
           "type": "string"
         },
-        "mode": {
-          "enum": [
-            "run",
-            "activate"
-          ],
-          "title": "Mode",
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
           "type": "string"
         }
       },
       "required": [
-        "mode"
+        "code",
+        "message",
+        "details"
       ],
-      "title": "ExecProvisionOutput",
+      "title": "Failure",
       "type": "object"
     },
     "JsonValue": {},
@@ -330,52 +360,14 @@
       "title": "MachineErrorBody",
       "type": "object"
     },
-    "ManualProvisionOutput": {
+    "Observation": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "const": "manual",
-          "default": "manual",
-          "title": "Kind",
-          "type": "string"
-        }
-      },
-      "title": "ManualProvisionOutput",
-      "type": "object"
-    },
-    "ProbeObservation": {
-      "additionalProperties": false,
-      "properties": {
-        "endpoint_identity": {
-          "title": "Endpoint Identity",
+        "checked_at": {
+          "title": "Checked At",
           "type": "string"
         },
-        "exit_code": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Exit Code"
-        },
-        "healthy": {
-          "title": "Healthy",
-          "type": "boolean"
-        },
-        "kind": {
-          "enum": [
-            "http",
-            "tcp",
-            "exec"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "output": {
+        "data_at": {
           "anyOf": [
             {
               "type": "string"
@@ -385,73 +377,247 @@
             }
           ],
           "default": null,
-          "title": "Output"
+          "title": "Data At"
         },
-        "output_bytes": {
+        "error": {
           "anyOf": [
             {
-              "type": "integer"
+              "$ref": "#/$defs/Failure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Output Bytes"
+          "title": "Expires At"
         },
-        "output_truncated": {
+        "instance": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Output Truncated"
+          "title": "Instance"
         },
-        "reason": {
-          "enum": [
-            "accepted-status",
-            "unexpected-status",
-            "connected",
-            "timeout",
-            "unreachable",
-            "deadline-exhausted",
-            "exec-start-failed",
-            "zero-exit",
-            "nonzero-exit",
-            "output-limit"
-          ],
-          "title": "Reason",
+        "key": {
+          "title": "Key",
           "type": "string"
         },
-        "responded": {
-          "default": false,
-          "title": "Responded",
-          "type": "boolean"
+        "label": {
+          "title": "Label",
+          "type": "string"
         },
-        "status_code": {
+        "message": {
           "anyOf": [
             {
-              "type": "integer"
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Status Code"
+          "title": "Message"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "stale": {
+          "default": false,
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "satisfied",
+            "unsatisfied",
+            "unknown"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
         }
       },
       "required": [
-        "kind",
-        "healthy",
-        "reason",
-        "endpoint_identity"
+        "key",
+        "label",
+        "state",
+        "source",
+        "checked_at"
       ],
-      "title": "ProbeObservation",
+      "title": "Observation",
+      "type": "object"
+    },
+    "ObservationDescription": {
+      "additionalProperties": false,
+      "properties": {
+        "automatic": {
+          "title": "Automatic",
+          "type": "boolean"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "purpose": {
+          "title": "Purpose",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "automatic",
+        "purpose",
+        "provider"
+      ],
+      "title": "ObservationDescription",
+      "type": "object"
+    },
+    "ResourceView": {
+      "additionalProperties": false,
+      "properties": {
+        "access": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Access",
+          "type": "array"
+        },
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ActionDescription"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "controller": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Controller"
+        },
+        "coordination": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Coordination"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "declaration_digest": {
+          "title": "Declaration Digest",
+          "type": "string"
+        },
+        "entry_id": {
+          "title": "Entry Id",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Failure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "execution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "facets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObservationDescription"
+          },
+          "title": "Facets",
+          "type": "array"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "observations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Observation"
+          },
+          "title": "Observations",
+          "type": "array"
+        },
+        "relations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Relations",
+          "type": "array"
+        },
+        "resource": {
+          "title": "Resource",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource",
+        "label",
+        "entry_id",
+        "source",
+        "declaration_digest",
+        "coordination"
+      ],
+      "title": "ResourceView",
       "type": "object"
     },
     "WorkspaceIdentity": {
@@ -500,7 +666,7 @@
       "type": "object"
     }
   },
-  "$id": "urn:svc:cli-output:dev-status:v3",
+  "$id": "urn:svc:cli-output:dev-status:v4",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "anyOf": [
     {
@@ -514,5 +680,5 @@
     }
   ],
   "title": "SVC dev-status machine output",
-  "x-svc-result-schema-version": 3
+  "x-svc-result-schema-version": 4
 }

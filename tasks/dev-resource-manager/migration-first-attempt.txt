@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/tasks/dev-resource-manager/scripts/observe_migration.py", line 30, in <module>
+    if time.monotonic()>end: raise TimeoutError('old owner did not start')
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TimeoutError: old owner did not start

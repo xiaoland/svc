@@ -1,0 +1,17 @@
+{
+  "cases": [
+    {
+      "case": "valid",
+      "exit_code": 0,
+      "merged_log_contains_both_streams": true,
+      "outcome": "reference-parsed"
+    },
+    {
+      "case": "invalid",
+      "exit_code": 0,
+      "merged_log_contains_both_streams": true,
+      "outcome": "invalid-result-despite-zero-exit"
+    }
+  ],
+  "limit": "transport feasibility only; no future CLI result validation implemented"
+}

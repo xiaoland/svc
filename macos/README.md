@@ -1,8 +1,10 @@
 # SVC 菜单栏 App
 
-这个原生 macOS App 管理用户添加的本机 SVC 项目与工作树。从 Finder 打开时展示面板；开发安装默认只在后台启动。面板显示服务就绪状态，提供逐项启动、停止、访问地址与操作日志入口。项目配置和服务器生命周期仍由 `svc` CLI 负责。跨单元职责与兼容规则见 [App 与 CLI 合同](../docs/product-tdd/macos-client.md)。
+这个原生 macOS App 是 [SVC Dev 开发资源管理](../docs/prd/development.md) 面向人的图形入口，当前通过公开 CLI 协议管理用户添加的本机项目与工作树中的声明资源。从 Finder 打开时展示面板；开发安装默认只在后台启动。面板分别显示具名观察状态，提供逐项控制、访问地址与操作日志入口。CLI 负责配置解释与执行协调，实际资源的初始化、停止和清理由项目声明的控制入口负责。跨单元职责与兼容规则见 [App 与 CLI 合同](../docs/product-tdd/macos-client.md)。
 
-需要 macOS 14+、Swift 6 工具链，以及支持 dev-status schema 3 和 dev-ensure／dev-stop schema 2 的 SVC CLI。从仓库根目录执行：
+候选 App 0.2.0 展示资源的多个观察、显式动作、数据影响和回执；项目声明采用 schema 5。共享 owner 只统一协调，不合并动作权限。没有全局登记库或任务语义推断。旧 App 0.1.0 的 targets 配置需要按[人工迁移步骤](../USER_MANUAL.md#人工迁移-cli-配置)更新。
+
+需要 macOS 14+、Swift 6 工具链，以及配套 CLI 18.0.0（dev status schema 4，dev list／act／reconcile schema 1）。从仓库根目录执行：
 
 ```sh
 pdm install
@@ -13,7 +15,7 @@ pdm install
 
 本机安装从钥匙串选择唯一的 Apple Development 身份；存在多个身份时，通过 `SVC_SIGNING_IDENTITY` 指定证书 SHA-1 或完整名称。证书私钥始终留在本机。签名使用固定 Bundle ID `dev.svc.menubar`，重装保留当前用户设置。
 
-首次使用时选择包含 `svc.json` 的项目目录。添加的目录会执行项目声明的 readiness probe（包括 exec probe），因此只添加自己信任的项目。添加项目不执行启动或停止动作。项目列表保存在当前用户的 `dev.svc.menubar` 偏好中；配置无效或路径失效时直接显示错误。
+首次使用时选择包含 `svc.json` 的项目目录。添加的目录会执行项目声明的 自动观察（包括 exec probe），因此只添加自己信任的项目。添加项目不执行控制动作。项目列表保存在当前用户的 `dev.svc.menubar` 偏好中；配置无效或路径失效时直接显示错误。
 
 安装脚本同时构建配套 CLI wheel，并安装到 `~/Library/Application Support/SVC/runtimes/<wheel 摘要>/` 下的独立 Python 环境。同一个 wheel 复用已有环境；CLI 源码变化产生新环境，旧环境保留以便现有设置继续使用。App 默认引用本次配套环境，不再依赖工作树的 `.venv`。需要本机 Python 3.11+、PDM 和可用的依赖下载源；App 不捆绑 Python。
 

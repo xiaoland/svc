@@ -4,12 +4,12 @@
 
 Sustainable Vibe Coding（**SVC**）面向与 Coding Agent 共同开发软件的人。它关注代码生成之后依然重要的事情：**任务能否继续、项目事实是否清楚、设计选择有没有依据，以及怎样判断工作真正完成。**
 
-SVC 由两个可以独立使用的部分组成：
+SVC 把工作指导与软件工具分开提供，可以按需要独立采用：
 
 - **Agent Skills**：为任务推进、人机协作、验证、知识维护和设计取舍提供按需加载的工作指导。
-- **开发协作 CLI**：提供 Skills 安装与采用、开发环境管理、项目命令执行和 Agent 执行证据分析等确定性工具。
+- **软件工具**：CLI 提供 Skills 安装与采用、开发资源管理、项目命令执行和 Agent 执行证据分析；原生 macOS App 提供开发资源的图形入口。
 
-[macOS 菜单栏 App](macos/README.md) 是 CLI 开发服务器能力的可选图形客户端，需要兼容的 CLI 安装；App 与 CLI 各自维护版本，通过公开 JSON 协议协作。职责与兼容规则见 [App 与 CLI 合同](docs/product-tdd/macos-client.md)。
+[SVC Dev](docs/prd/development.md) 是面向人和 Agent 的开发资源管理能力，围绕资源状态、访问和明确的控制动作展开，不推断开发任务。[macOS 菜单栏 App](macos/README.md) 与 `svc dev` 分别提供图形和程序化入口。当前 App 需要兼容的 CLI 安装，两者各自维护版本，通过公开 JSON 协议协作；职责与兼容规则见 [App 与 CLI 合同](docs/product-tdd/macos-client.md)。当前交付仍以项目声明的长驻开发能力为主。
 
 它不规定所有项目必须遵守同一套开发流水线，也不接管项目自己的代码、文档和决策权限。
 
@@ -26,7 +26,7 @@ SVC 尝试把这些负担放回合适的位置：
 - **验证**围绕具体目标与证据，而非仅凭“测试通过”；
 - **重复的机械工作**交给 CLI，语义判断仍由 Agent 与使用者完成。
 
-![SVC 的两个组成部分与项目事实的关系](docs/assets/svc-overview.svg)
+![Skills、CLI 与项目事实的关系](docs/assets/svc-overview.svg)
 
 ## 六个 Skills
 
@@ -50,7 +50,7 @@ CLI 负责可确定的工程操作与观察，不代替 Agent 作产品或技术
 | 命令 | 能力 |
 | --- | --- |
 | `svc init` / `svc status` / `svc skills` | 检查项目集成状态，按计划初始化，并安装、检查与采用 Skills |
-| `svc dev` | 观察、确保或停止项目声明的本地开发能力 |
+| `svc dev` | 观察、确保或停止本机项目声明的开发能力，由项目控制入口决定实际运行位置 |
 | `svc run` | 运行项目声明的命名命令，并读取执行记录 |
 | `svc telemetry` / `svc analysis` | 从本地 Coding Agent 记录中提取执行证据，并进行结构查询和原始证据回读 |
 | `svc double` | 在显式配置的边界场景中运行可复现的外部系统替身（可选功能） |

@@ -365,6 +365,8 @@ def start_isolated(
     store: ExecutionStore,
     published: PublishedExecution,
     spec: LaunchSpec,
+    *,
+    wait_on_record_failure: bool = False,
 ) -> OwnedExecution | ExecutionRecord:
     """Start an isolated/null-stdin process using a pre-opened merged log."""
 
@@ -399,6 +401,9 @@ def start_isolated(
     try:
         store.write(record)
     except BaseException:
+        if wait_on_record_failure:
+            process.wait()
+            raise
         owned = OwnedExecution(record, process, True)
         _signal_owned_group(owned, signal.SIGTERM)
         try:
