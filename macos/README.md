@@ -2,7 +2,9 @@
 
 这个原生 macOS App 是 [SVC Dev 开发资源管理](../docs/prd/development.md) 面向人的图形入口，当前通过公开 CLI 协议管理用户添加的本机项目与工作树中的声明资源。从 Finder 打开时展示面板；开发安装默认只在后台启动。面板分别显示具名观察状态，提供逐项控制、访问地址与操作日志入口。CLI 负责配置解释与执行协调，实际资源的初始化、停止和清理由项目声明的控制入口负责。跨单元职责与兼容规则见 [App 与 CLI 合同](../docs/product-tdd/macos-client.md)。
 
-候选 App 0.2.0 展示资源的多个观察、显式动作、数据影响和回执；项目声明采用 schema 5。共享 owner 只统一协调，不合并动作权限。没有全局登记库或任务语义推断。旧 App 0.1.0 的 targets 配置需要按[人工迁移步骤](../USER_MANUAL.md#人工迁移-cli-配置)更新。
+App 0.3.0 展示资源的多个观察、显式动作、数据影响和回执；项目声明采用 schema 5。共享 owner 只统一协调，不合并动作权限。没有全局登记库或任务语义推断。旧 App 0.1.0 的 targets 配置需要按[人工迁移步骤](../USER_MANUAL.md#人工迁移-cli-配置)更新。
+
+顶部“＋”提供添加项目与新建 Section。Section 菜单可重命名、上下移动、添加项目或删除；项目菜单中的“移到 Section”可调整归属。点击分组标题折叠或展开，重启后保留分组与折叠状态。删除 Section 只把项目放回未分组，不停止资源。已有项目升级后保持原顺序与 CLI 设置。
 
 需要 macOS 14+、Swift 6 工具链，以及配套 CLI 18.0.0（dev status schema 4，dev list／act／reconcile schema 1）。从仓库根目录执行：
 
@@ -23,7 +25,7 @@ pdm install
 
 App 的唯一版本源是 `VERSION`，构建号来自当前 Git 的主线提交计数，包内记录完整源码 revision；未提交构建标记为 `-dirty`。设置窗口显示版本与构建号。发布流程和版本准备见根目录 `CONTRIBUTING.md`，公开预览安装条件见 `INSTALL.md`。GitHub 附件是 arm64 的 ad-hoc 签名预览，未公证，与本机开发签名安装分开构建；公开包不带本机 CLI 路径、PATH 或调试源码路径。
 
-服务状态表示探测到的可用性，未就绪不等于进程不存在。启动会复用已健康的服务；停止只执行项目声明的 cleanup。手动停止或未声明停止的目标没有自动停止按钮。仓库或主机共享的服务明确显示范围，并在本 App 内按 capability_id 互斥控制；跨进程协调继续由 CLI 负责。
+资源状态按具名观察分别呈现，未满足不等于进程不存在。所有控制只执行项目显式声明的动作，人工动作显示步骤。仓库或主机共享资源明确显示作用范围，App 按 coordination ID 互斥控制，跨进程协调由 CLI 负责。
 
 关闭面板或退出 App 不停止已经就绪的服务。正常退出时若启动／停止尚在进行，App 会等待结果，并允许取消退出。最近的操作回执仅保留在当前会话；日志入口仅代表对应操作的已有文件，不保证服务全生命周期的输出，也不扫描私有 runtime 存储。
 
@@ -35,6 +37,6 @@ SVC_RENDER_DIR="$PWD/dist/ui-evidence" swift test --package-path macos --filter 
 pdm run check
 ```
 
-`SVC_TEST_CLI` 指向本次待验证 CLI。生命周期测试使用临时目录和临时 loopback HTTP 服务，通过声明的停止请求清理。未设置该变量时只执行不依赖真实 CLI 的测试。原生按钮验收在透明、不接收鼠标的测试窗口内调用实际 NSButton，测试程序禁止激活，并断言前台应用未改变。离屏渲染不创建可见窗口，输出浅色／深色 PNG；它是渲染证据，不代表系统菜单栏锚定或人工体验。原生代码与测试位于 `Sources/SVCMenuBar`、`Tests/SVCMenuBarTests`；Python 测试仍由仓库 `cli/tests` 管理。
+`SVC_TEST_CLI` 指向本次待验证 CLI。生命周期测试使用临时目录和临时 loopback HTTP 服务，通过声明的停止请求清理。未设置该变量时只执行不依赖真实 CLI 的测试。原生按钮验收在透明、不接收鼠标的测试窗口内调用实际 NSButton，测试程序禁止激活，并检查被测进程未激活。离屏渲染不创建可见窗口，输出浅色／深色 PNG；它是渲染证据，不代表系统菜单栏锚定或人工体验。原生代码与测试位于 `Sources/SVCMenuBar`、`Tests/SVCMenuBarTests`；Python 测试仍由仓库 `cli/tests` 管理。
 
 Swift 的 `CLIClient` 只通过 argv 调用公开命令，不经 shell，不解析 `svc.json` 或私有运行时记录。`AppStore` 持有项目、操作和请求代次；修改配置、控制操作与项目移除会使旧刷新失效。界面只呈现这些状态。AppDelegate 独占 NSStatusItem、NSPopover 和设置窗口；菜单栏宿主采用 AppKit，以公开 API 控制首次展示、Finder reopen 和显隐轮询，内容使用 SwiftUI。标准编辑菜单为设置输入框提供复制、粘贴与全选快捷键。子进程 stdout／stderr 使用临时文件，避免大量输出或已释放服务器继承描述符导致的管道等待。控制操作使用 CLI 自身的超时，不被 App 的短超时打断。

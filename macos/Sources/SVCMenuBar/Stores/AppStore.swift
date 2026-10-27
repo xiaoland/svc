@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+struct ActiveOperation {
+    let command: DevCommand
+    let projectPath: String
+}
+
 struct ProjectState: Identifiable {
     let path: String
     var snapshot: DevCatalog?
@@ -14,8 +19,11 @@ struct ProjectState: Identifiable {
 final class AppStore {
     typealias Request = @Sendable (CLIConfiguration, DevCommand, String, [String]) async throws -> Data
     private(set) var projects: [ProjectState]
+    private(set) var organization = ProjectOrganization()
+    private(set) var sectionStorageError: String?
+    private(set) var projectReveal: ProjectReveal?
     private(set) var configuration: CLIConfiguration
-    private(set) var operations: [String: DevCommand] = [:]
+    private(set) var operations: [String: ActiveOperation] = [:]
     private(set) var receipts: [String: OperationReceipt] = [:]
     private(set) var refreshes: [String: UUID] = [:]
     private(set) var quitPending = false
@@ -38,16 +46,34 @@ final class AppStore {
             executable: preferences.string(forKey: "cliPath") ?? defaultCLI,
             searchPath: preferences.string(forKey: "searchPath") ?? defaultPath
         )
+        if let stored = preferences.object(forKey: "projectSections") {
+            do {
+                guard let data = stored as? Data else { throw CocoaError(.coderReadCorrupt) }
+                let decoded = try JSONDecoder().decode(ProjectOrganization.self, from: data)
+                guard decoded.isValid else { throw CocoaError(.coderReadCorrupt) }
+                organization = decoded
+                let known = Set(projects.map(\.path))
+                organization.assignments = organization.assignments.filter { known.contains($0.key) }
+            } catch {
+                sectionStorageError = "无法读取 Section 设置，原设置已保留；项目暂按未分组显示。"
+            }
+        }
     }
 
     var resourceCount: Int { projects.flatMap { $0.snapshot?.resources ?? [] }.count }
 
-    func addProject(_ url: URL) {
+    func addProject(_ url: URL, sectionID: UUID? = nil) {
         guard !quitPending else { return }
         let path = url.resolvingSymlinksInPath().standardizedFileURL.path
-        guard !projects.contains(where: { $0.path == path }) else { return }
+        guard !projects.contains(where: { $0.path == path }) else {
+            revealProject(path)
+            notice = "项目已存在：\(path)"
+            return
+        }
+        if let sectionID, !organization.sections.contains(where: { $0.id == sectionID }) { return }
         projects.append(ProjectState(path: path))
         persistProjects()
+        if let sectionID { moveProject(path, to: sectionID) }
         Task { await refresh(path) }
     }
 
@@ -56,6 +82,98 @@ final class AppStore {
         refreshes[path] = nil
         projects.removeAll { $0.path == path }
         persistProjects()
+        if sectionStorageError == nil, organization.assignments.removeValue(forKey: path) != nil { persistOrganization() }
+    }
+
+    var canEditSections: Bool { !quitPending && sectionStorageError == nil }
+
+    func projects(in sectionID: UUID?) -> [ProjectState] {
+        projects.filter { organization.assignments[$0.path] == sectionID }
+    }
+
+    @discardableResult func createSection(_ name: String) -> UUID? {
+        guard canEditSections, let name = sectionName(name, excluding: nil) else { return nil }
+        let section = ProjectSection(id: UUID(), name: name)
+        organization.sections.append(section)
+        persistOrganization()
+        return section.id
+    }
+
+    @discardableResult func renameSection(_ id: UUID, to name: String) -> Bool {
+        guard canEditSections, let index = organization.sections.firstIndex(where: { $0.id == id }),
+              let name = sectionName(name, excluding: id) else { return false }
+        organization.sections[index].name = name
+        persistOrganization()
+        return true
+    }
+
+    func moveSection(_ id: UUID, offset: Int) {
+        guard canEditSections, offset == -1 || offset == 1,
+              let index = organization.sections.firstIndex(where: { $0.id == id }),
+              organization.sections.indices.contains(index + offset) else { return }
+        organization.sections.swapAt(index, index + offset)
+        persistOrganization()
+    }
+
+    func deleteSection(_ id: UUID) {
+        guard canEditSections else { return }
+        organization.sections.removeAll { $0.id == id }
+        organization.assignments = organization.assignments.filter { $0.value != id }
+        persistOrganization()
+    }
+
+    func moveProject(_ path: String, to sectionID: UUID?) {
+        guard canEditSections, projects.contains(where: { $0.path == path }),
+              sectionID == nil || organization.sections.contains(where: { $0.id == sectionID }) else { return }
+        organization.assignments[path] = sectionID
+        persistOrganization()
+    }
+
+    func toggleSection(_ id: UUID) {
+        guard canEditSections, let index = organization.sections.firstIndex(where: { $0.id == id }) else { return }
+        organization.sections[index].collapsed.toggle()
+        persistOrganization()
+    }
+
+    func revealProject(_ path: String) {
+        if let id = organization.assignments[path],
+           let index = organization.sections.firstIndex(where: { $0.id == id }),
+           organization.sections[index].collapsed, canEditSections {
+            organization.sections[index].collapsed = false
+            persistOrganization()
+        }
+        projectReveal = ProjectReveal(path: path)
+    }
+
+    func sectionActivity(_ id: UUID) -> (running: Bool, attention: Bool) {
+        let members = projects(in: id)
+        let paths = Set(members.map(\.path))
+        let resources = members.flatMap { $0.snapshot?.resources ?? [] }
+        let running = operations.values.contains { paths.contains($0.projectPath) } || resources.contains { resource in
+            resource.coordination.map { operations[$0.coordinationId] != nil } ?? false
+        }
+        let attention = members.contains { $0.error != nil }
+            || resources.contains { $0.needsReconciliation || $0.error != nil }
+            || receipts.values.contains { receipt in
+                paths.contains(receipt.projectPath)
+                    && (receipt.result.map { ["failed", "condition-unmet", "owner-lost", "stale", "interrupted", "absent"].contains($0.status) } ?? true)
+            }
+        return (running, attention)
+    }
+
+    private func sectionName(_ value: String, excluding id: UUID?) -> String? {
+        let name = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { notice = "请输入 Section 名称。"; return nil }
+        guard !organization.sections.contains(where: { $0.id != id && $0.name.lowercased() == name.lowercased() }) else {
+            notice = "已有同名 Section。"
+            return nil
+        }
+        return name
+    }
+
+    private func persistOrganization() {
+        do { preferences.set(try JSONEncoder().encode(organization), forKey: "projectSections") }
+        catch { sectionStorageError = "无法保存 Section 设置：\(error.localizedDescription)" }
     }
 
     func setConfiguration(_ value: CLIConfiguration) {
@@ -135,7 +253,7 @@ final class AppStore {
                          action: String, arguments: [String]) {
         guard !quitPending, let id = resource.coordination?.coordinationId,
               operations[id] == nil, projects.contains(where: { $0.path == project }) else { return }
-        operations[id] = command
+        operations[id] = ActiveOperation(command: command, projectPath: project)
         invalidateRefreshes()
         let config = configuration
         Task {

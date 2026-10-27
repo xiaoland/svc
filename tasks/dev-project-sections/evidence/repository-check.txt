@@ -1,0 +1,88 @@
+142 files already formatted
+All checks passed!
+Success: no issues found in 57 source files
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 122 files, 621 dependencies.
+-------------------------------------
+
+Analysis core remains provider UI and network neutral KEPT
+Shared workspace identity remains public-domain neutral KEPT
+Shared execution mechanics remain public-domain neutral KEPT
+Shared file transactions remain controller neutral KEPT
+Release authority remains project-domain neutral KEPT
+Application services remain CLI interface neutral KEPT
+Command domains do not depend on the output schema registry KEPT
+
+Contracts: 7 kept, 0 broken.
+============================= test session starts ==============================
+platform darwin -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc
+configfile: pyproject.toml
+testpaths: cli/tests
+plugins: asyncio-1.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 260 items
+
+cli/tests/double/interface/test_cli.py .....                             [  1%]
+cli/tests/double/interface/test_output_models.py ....                    [  3%]
+cli/tests/double/interface/test_output_schemas.py ....                   [  5%]
+cli/tests/double/language/test_assets_and_materializers.py .......       [  7%]
+cli/tests/double/language/test_cel.py ..........                         [ 11%]
+cli/tests/double/language/test_compilation.py ..                         [ 12%]
+cli/tests/double/language/test_model.py .                                [ 12%]
+cli/tests/double/language/test_openapi.py ........                       [ 15%]
+cli/tests/double/language/test_values.py ............                    [ 20%]
+cli/tests/double/language/test_yaml_surface.py ...........               [ 24%]
+cli/tests/double/runtime/test_carrier.py ......                          [ 26%]
+cli/tests/double/runtime/test_consumer.py .                              [ 27%]
+cli/tests/double/runtime/test_contract_validation.py .                   [ 27%]
+cli/tests/double/runtime/test_matching.py ....                           [ 29%]
+cli/tests/double/runtime/test_materialization.py ....                    [ 30%]
+cli/tests/test_analysis_cli_v3.py .                                      [ 31%]
+cli/tests/test_analysis_fixture_corpus.py .                              [ 31%]
+cli/tests/test_analysis_models_v3.py ...                                 [ 32%]
+cli/tests/test_analysis_query_v3.py .......                              [ 35%]
+cli/tests/test_analysis_read_v3.py ..                                    [ 36%]
+cli/tests/test_cli.py ..........                                         [ 40%]
+cli/tests/test_cli_output_schema_release.py ....                         [ 41%]
+cli/tests/test_config.py ........                                        [ 44%]
+cli/tests/test_dev_identity.py ...                                       [ 45%]
+cli/tests/test_dev_runtime.py ......                                     [ 48%]
+cli/tests/test_execution.py .........                                    [ 51%]
+cli/tests/test_macos_packaging.py ..............                         [ 56%]
+cli/tests/test_plans.py ........                                         [ 60%]
+cli/tests/test_project.py ...............                                [ 65%]
+cli/tests/test_run_process.py ...                                        [ 66%]
+cli/tests/test_run_runtime.py .........                                  [ 70%]
+cli/tests/test_skill_adoption.py ......                                  [ 72%]
+cli/tests/test_skill_artifacts.py ..........                             [ 76%]
+cli/tests/test_skills.py ....................                            [ 84%]
+cli/tests/test_skills_cli.py ......                                      [ 86%]
+cli/tests/test_telemetry_archive.py .                                    [ 86%]
+cli/tests/test_telemetry_cli.py ...                                      [ 88%]
+cli/tests/test_telemetry_codex_inventory.py ...                          [ 89%]
+cli/tests/test_telemetry_codex_rollout.py ...                            [ 90%]
+cli/tests/test_telemetry_codex_trajectory.py ....                        [ 91%]
+cli/tests/test_telemetry_codex_v4.py .....                               [ 93%]
+cli/tests/test_telemetry_evidence.py ....                                [ 95%]
+cli/tests/test_telemetry_evidence_v4.py ...                              [ 96%]
+cli/tests/test_telemetry_pi_v4.py ..                                     [ 97%]
+cli/tests/test_telemetry_trajectory.py ....                              [ 98%]
+cli/tests/test_telemetry_trajectory_v2.py ..                             [ 99%]
+cli/tests/test_workspace.py .                                            [100%]
+
+============================= 260 passed in 50.66s =============================

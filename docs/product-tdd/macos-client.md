@@ -1,8 +1,16 @@
 # macOS App 与 CLI 合同
 
-本文拥有 SVC Dev 图形入口与程序化入口之间的职责、公开协议和生命周期合同。产品定位见 [开发资源管理](../prd/development.md)，使用与迁移见[用户手册](../../USER_MANUAL.md)，发行流程见[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)。本文描述 CLI 18.0.0／App 0.2.0 的源码合同；旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同，不能混用。安装和公开发布是独立的交付步骤，不能由源码版本推断。
+本文拥有 SVC Dev 图形入口与程序化入口之间的职责、公开协议和生命周期合同。产品定位见 [开发资源管理](../prd/development.md)，使用与迁移见[用户手册](../../USER_MANUAL.md)，发行流程见[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)。本文描述 CLI 18.0.0／App 0.3.0 的源码合同；旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同，不能混用。安装和公开发布是独立的交付步骤，不能由源码版本推断。
 
 App 与 CLI 是同一产品能力的两个入口。App 拥有项目来源偏好、呈现、刷新调度、当前会话回执及 CLI 路径和 PATH；CLI 拥有配置解释、资源身份、观察、声明动作执行和跨进程协调。项目脚本或实际控制者拥有资源内部的初始化、数据清理、权限和异步操作生命周期。App 不直接读取配置和私有 runtime，也不根据端口或历史 PID 推导权限。
+
+## 本机项目分组
+
+App 0.3.0 增加单层 Section，属于 App 的来源组织能力，CLI package 仍为 18.0.0。原 `projects` 路径数组继续拥有项目来源与项目顺序；UserDefaults 的 `projectSections` Data 保存 JSON schema 1，包含有序的 `sections`（id、name、collapsed）及 `assignments`（项目路径到 Section UUID）。一个项目只保存一个归属，组内沿用项目顺序，不生成资源副本。
+
+缺少该偏好时按全部未分组读取，保留原配置。读取时验证版本、名称、唯一 Section ID 和归属目标；不在现有项目列表中的路径归属会被剔除。无法解码或合同无效时保留原始值、显示错误并禁用分组编辑，项目仍可从原来源使用，不能用空分组覆盖损坏数据。写分组由 AppStore 统一负责，不保存观察快照或执行状态。
+
+Section 的创建、重命名、排序、移动和折叠不使项目请求代次失效。删除 Section 只解除归属，控制仍按协调 ID 互斥，回执仍按 entry ID 保存并绑定项目路径。运行提示根据在途操作的项目路径和资源协调 ID 派生，项目暂时无法刷新时也不丢失在途提示。重新添加已有项目会展开并定位原入口，不重复添加或自动改组。
 
 ## 公开调用与兼容性
 
@@ -19,7 +27,7 @@ App 通过绝对路径启动独立 CLI，以 argv 传入项目目录，不经过
 
 以上调用都支持 `--repo`、`--json` 和 `--json-schema`。根 status 结果 schema 为 4，init 结果仍为 4；配置 schema 5 与这些结果版本相互独立。App 校验 command、schema 和必要字段，拒绝不兼容或损坏结果，不能造出成功或未就绪。非零 CLI 退出也可能携带有效回执。
 
-App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.2.0 配套 CLI 18.0.0；此次 CLI major 对应配置、公开结果和控制行为的不兼容变化。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
+App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.3.0 沿用 0.2.0 的 CLI 18.0.0 合同；18.0.0 的 CLI major 对应配置、公开结果和控制行为的不兼容变化。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
 
 ## 进程与安装关系
 
