@@ -1,0 +1,17 @@
+{
+  "launch_services": "/Applications/SVC.app",
+  "running": [
+    {
+      "active": false,
+      "path": "/Applications/SVC.app",
+      "pid": 52070
+    }
+  ],
+  "app_version": "0.3.0",
+  "source_revision": "bbb7886542749735f672d5586cbdce146e23540b",
+  "all_preferences_preserved": true,
+  "legacy_path_is_finder_alias": true,
+  "legacy_archive_sha256": "e155812b2c82e0f7f452674107afc5470bb6e73cef977380f479351bccfaedba",
+  "protected_access_reprompt_verified": false,
+  "verification_limit": "两次后台启动不访问真实项目，不能证明首次访问受保护磁盘后的授权连续性；没有清空或修改 TCC。"
+}

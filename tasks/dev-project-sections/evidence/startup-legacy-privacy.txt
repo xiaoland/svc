@@ -1,0 +1,2 @@
+Timestamp               Ty Process[PID:TID]
+2026-10-28 10:33:51.316 Df tccd[48425:4fc1ce0] [com.apple.TCC:access] AUTHREQ_PROMPTING: msgID=33245.18, service=kTCCServiceSystemPolicyRemovableVolumes, subject=Sub:{dev.svc.menubar}Resp:{TCCDProcess: identifier=dev.svc.menubar, pid=47475, auid=501, euid=501, responsible_path=/Volumes/WorkSSD/Development/svc/dist/SVC.app/Contents/MacOS/SVCMenuBar, binary_path=/Volumes/WorkSSD/Development/svc/dist/SVC.app/Contents/MacOS/SVCMenuBar},

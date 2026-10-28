@@ -76,3 +76,15 @@ MenuPanel 顶部添加菜单提供“添加项目”和“新建 Section”；Se
 安装后的 CLI 与最终源码再次完成 [Section 原生观察](evidence/observations.json)，源文件摘要逐项相同；原生 13 项再次全部通过，见 [安装后日志](evidence/installed-native-check.txt)。S1–S5 在已说明的原生宿主、Store 命令与标准菜单连接范围内支持交付。没有新增或修改任何自动化测试用例，新增材料均为独立观察脚本。菜单栏锚定、文件选择器和用户主动打开路径未改，沿用既有系统入口证据。
 
 本次已授权工作完成，产品和使用说明已更新，未推送、打 tag 或发布 GitHub Release。真实项目保持未分组；使用入口是面板顶部“＋ → 新建 Section”，再从项目菜单选择“移到 Section”。已有项目的 schema 4 配置仍需按此前迁移说明处理，分组本身不依赖资源配置迁移。
+
+## 用户反馈后的安装入口修复（2026-10-28）
+
+用户发现点击加号直接选择目录，并在每次启动时收到磁盘授权请求。恢复第 6 阶段验收：原交付确实安装了正确的正式包，但没有消除旧启动入口，因此“用户实际使用已交付版本”的结论不成立。既有安装与修复授权覆盖这次纠正；不新增测试或改动产品二进制。
+
+实际运行 PID 47475 来自 `/Volumes/WorkSSD/Development/svc/dist/SVC.app`，版本为 0.1.0，Signature=adhoc、无 TeamIdentifier，designated requirement 仅绑定 cdhash。10:33:51 的 TCC 日志明确将 RemovableVolumes 授权提示归因于这个旧 App；这支持本次提示来源判断，但不足以证明历次启动提示的全部原因。另一方面，`/Applications/SVC.app` 仍是源码 `bbb7886` 的 0.3.0，Apple Development Authority 为用户现有证书，TeamIdentifier 为 7J9DJNJ782，严格签名校验通过。原生菜单实现含“添加项目…”和“新建 Section…”，此次反馈不构成该实现故障的证据。
+
+已正常退出旧进程，将旧包归档到原 dist 下的 `SVC-0.1.0-adhoc-retired-20261028.zip`，校验 ZIP 后移除可启动副本，并在旧 `dist/SVC.app` 路径创建指向 `/Applications/SVC.app` 的 Finder 替身。这里使用替身文件而非目录符号链接，避免旧构建脚本沿链接覆盖正式安装。主工作树有大量既有未提交源码，未替换或合并这些文件；后续开发仍使用本任务工作树的安装入口。
+
+从旧路径后台启动得到 PID 51824，再正常退出并从正式路径启动得到 PID 52070；两者都来自 `/Applications/SVC.app`。LaunchServices 按 Bundle ID 查找也返回正式路径。全部用户偏好保持相同，1634 次辅助采样和激活事件记录均未发现 SVC 激活；实际生命周期见 [记录](evidence/startup-repair-lifecycle.json)，安装／替身／偏好核对见 [结果](evidence/startup-repair.json)。旧包与正式包签名、原授权日志分别保存在同目录 startup 开头的文本文件中。
+
+这次补齐实际启动路径的核验，并已更新 macOS README 的交付判据。未主动打开真实面板或访问真实项目，因此不能宣称“磁盘访问不再重复请求”已验收；从 ad-hoc 切换到开发身份后，首次受保护资源访问可能仍需一次系统授权。没有清空 TCC、代替用户授权或扩大 App 权限。Section 菜单仍沿用此前已说明的源码与宿主证据，未将这次后台启动描述为菜单逐项点击验收。

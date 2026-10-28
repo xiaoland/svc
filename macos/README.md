@@ -17,6 +17,10 @@ pdm install
 
 本机安装从钥匙串选择唯一的 Apple Development 身份；存在多个身份时，通过 `SVC_SIGNING_IDENTITY` 指定证书 SHA-1 或完整名称。证书私钥始终留在本机。签名使用固定 Bundle ID `dev.svc.menubar`，重装保留当前用户设置。
 
+安装验收还须核对正在运行的进程来自 `/Applications/SVC.app`，不能只检查该路径的包或发现同名进程就认定交付完成。旧工作树中的 `dist/SVC.app` 可能仍是旧版 ad-hoc 包；从 Finder 或旧快捷方式启动它，会得到旧界面和另一种签名身份。发现这类副本时，先正常退出并归档旧包，再修正启动入口。`codesign -dvvv /Applications/SVC.app` 应显示 Apple Development Authority 和 TeamIdentifier；`codesign --verify --strict /Applications/SVC.app` 应通过。重新启动后，再检查进程的可执行路径与包内版本。
+
+macOS 依据签名的 designated requirement 跟踪应用身份；不同签名身份不自动共享隐私授权，详见 [Apple TN3127](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements)。从旧 ad-hoc 包切换到开发签名包后，首次访问受保护目录可能需要重新授权。固定开发身份与安装入口可以避免迭代时反复切换身份，但后台启动未访问项目，不能据此证明磁盘授权已经保留；还需区分首次授权与同一身份下的重复请求。
+
 首次使用时选择包含 `svc.json` 的项目目录。添加的目录会执行项目声明的 自动观察（包括 exec probe），因此只添加自己信任的项目。添加项目不执行控制动作。项目列表保存在当前用户的 `dev.svc.menubar` 偏好中；配置无效或路径失效时直接显示错误。
 
 安装脚本同时构建配套 CLI wheel，并安装到 `~/Library/Application Support/SVC/runtimes/<wheel 摘要>/` 下的独立 Python 环境。同一个 wheel 复用已有环境；CLI 源码变化产生新环境，旧环境保留以便现有设置继续使用。App 默认引用本次配套环境，不再依赖工作树的 `.venv`。需要本机 Python 3.11+、PDM 和可用的依赖下载源；App 不捆绑 Python。
