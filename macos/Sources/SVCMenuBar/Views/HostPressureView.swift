@@ -30,20 +30,16 @@ struct HostPressureView: View {
                         Text("CPU").foregroundStyle(.primary)
                         Text("\(pressure.cpuPercent, specifier: "%.0f")%").monospacedDigit().fontWeight(.medium)
                     }.help("整机 CPU 使用率；\(pressure.logicalCpus) 个逻辑核心，采样 \(pressure.sampleWindowMs) 毫秒")
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityAddTraits(.isStaticText)
-                        .accessibilityLabel("上次采样的整机 CPU")
-                        .accessibilityValue("\(pressure.cpuPercent.formatted(.number.precision(.fractionLength(0)))) 百分比")
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Text("内存").foregroundStyle(.primary)
                         Text(pressure.memoryLabel).fontWeight(.medium)
                         Text("可用 \(activityBytes(pressure.memoryAvailableBytes))").foregroundStyle(.primary)
                     }.help("系统内存压力与可用内存分别显示，不根据已用比例推断压力。")
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityAddTraits(.isStaticText)
-                        .accessibilityLabel("上次采样的内存")
-                        .accessibilityValue("压力\(pressure.memoryLabel)，可用 \(activityBytes(pressure.memoryAvailableBytes))")
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isStaticText)
+                .accessibilityLabel("上次采样的本机用量")
+                .accessibilityValue("整机 CPU \(pressure.cpuPercent.formatted(.number.precision(.fractionLength(0)))) 百分比；内存压力\(pressure.memoryLabel)，可用 \(activityBytes(pressure.memoryAvailableBytes))")
                 if expanded {
                     HStack {
                         Text("磁盘  读 \(rate(pressure.diskReadBytesPerSecond))  ·  写 \(rate(pressure.diskWriteBytesPerSecond))")
