@@ -22,5 +22,16 @@
     "contextual names and expanded state",
     "full host usage AX text"
   ],
-  "visual_scope": "Existing light/dark resource fixture; installed actual panel checked separately."
+  "visual_scope": "Existing light/dark resource fixture; installed actual panel checked separately.",
+  "installed_ax": {
+    "page_role": "native radio button",
+    "page_values": [
+      1,
+      0
+    ],
+    "native_group_containers": true,
+    "diagnostic_names_preserved": true,
+    "expanded_values_preserved": true,
+    "host_usage_text_complete": true
+  }
 }

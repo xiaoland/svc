@@ -92,4 +92,6 @@ App 面向人的压力概览、执行清单、详情与停止入口，CLI 提供
 
 本轮恢复原生分段 Picker、GroupBox、系统 caption／secondary 层级和按钮默认字形，删除 PanelCard、自绘勾选边框与焦点环；保留不透明的系统背景，避免叠加透明内容。已有具名控件、展开状态、完整指标文本与装饰图标隐藏继续保留，执行和资源语义不变。版本为 App 0.4.2，CLI 仍为 18.1.0。沿用本机签名安装与提交授权，不新增测试，不创建 GUI 观察宿主。
 
-验证只复用既有 13 项原生检查、浅深色渲染与实际 App AX／画面；检查后复用当前 runtime 打包安装。当前安装仍为 0.4.1，本轮调整尚未交付。
+验证复用既有 13 项原生检查、浅深色渲染与实际 App AX／画面。13 项成功，单任务低优先级构建 8.22 秒，检查 4.411 秒；[证据](evidence/native-ui/validation.json)保留实际范围，没有新增或修改测试。实际面板的页面重新表现为原生 radio button，资源／执行的值为 1／0；GroupBox 提供容器，诊断仍带项目名称和已折叠值，主机用量仍是完整 text。已核对真实两个项目的画面，没有自绘选择框、勾选、焦点环或纯白卡片。
+
+App 0.4.2 已使用同一开发证书安装至 `/Applications/SVC.app`，源提交 `41d8a83caf1ef9d2f1abdc937bd55130cbfa1d9a`，实际后台 PID 48831。打包复用通过检查的二进制，CLI runtime、全部偏好、Section 原字节与真实项目配置均未改变；[安装记录](evidence/native-ui/installation.json)与[签名](evidence/native-ui/installed-signature.txt)已保存。没有新 GUI 观察宿主或公开发布。本轮已按用户纠正的判据交付，不能把前一版自绘高对比样式作为后续默认设计方向。

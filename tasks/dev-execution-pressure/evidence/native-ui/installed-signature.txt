@@ -1,0 +1,21 @@
+Executable=/Applications/SVC.app/Contents/MacOS/SVCMenuBar
+Identifier=dev.svc.menubar
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20500 size=26203 flags=0x10000(runtime) hashes=812+3 location=embedded
+Hash type=sha256 size=32
+CandidateCDHash sha256=2ee36975585422b3bd0a259f7a7fecb1084a5aa5
+CandidateCDHashFull sha256=2ee36975585422b3bd0a259f7a7fecb1084a5aa506c0cf27ddd61269b48fa213
+Hash choices=sha256
+CMSDigest=2ee36975585422b3bd0a259f7a7fecb1084a5aa506c0cf27ddd61269b48fa213
+CMSDigestType=2
+CDHash=2ee36975585422b3bd0a259f7a7fecb1084a5aa5
+Signature size=4792
+Authority=Apple Development: lanzhijiang@foxmail.com (Z5PX453UV3)
+Authority=Apple Worldwide Developer Relations Certification Authority
+Authority=Apple Root CA
+Signed Time=Oct 28, 2026 at 16:11:54
+Info.plist entries=14
+TeamIdentifier=7J9DJNJ782
+Runtime Version=26.2.0
+Sealed Resources version=2 rules=13 files=1
+Internal requirements count=1 size=188
