@@ -1,0 +1,31 @@
+[
+  {
+    "applicationActive" : false,
+    "projects" : 2,
+    "toolbarLabels" : [
+      "Hide Sidebar",
+      "",
+      "刷新",
+      "设置"
+    ],
+    "width" : 1040,
+    "windowVisible" : false
+  },
+  {
+    "applicationActive" : false,
+    "projects" : 2,
+    "toolbarLabels" : [
+      "Hide Sidebar",
+      "",
+      "刷新",
+      "设置"
+    ],
+    "width" : 740,
+    "windowVisible" : false
+  },
+  {
+    "applicationActive" : false,
+    "projectExecutionHostHasWindow" : false,
+    "selectedProject" : "\/Volumes\/WorkSSD\/Development\/svc-dev-lab"
+  }
+]

@@ -1,0 +1,50 @@
+{
+  "monitorSchema": 2,
+  "ready": [
+    "ready",
+    "ready"
+  ],
+  "projects": [
+    {
+      "execution_count": 1,
+      "issues": [],
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "resource_count": 1,
+      "usage": {
+        "complete": true,
+        "cpu_percent": 0.1,
+        "disk_read_bytes_per_second": 0.0,
+        "disk_write_bytes_per_second": 254936.69,
+        "issues": [],
+        "memory_footprint_bytes": 47203216,
+        "pageins_per_second": 0.0,
+        "process_count": 2,
+        "rss_bytes": 49512448,
+        "scope": "verified-current-descendants"
+      }
+    },
+    {
+      "execution_count": 1,
+      "issues": [],
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "resource_count": 1,
+      "usage": {
+        "complete": true,
+        "cpu_percent": 0.0,
+        "disk_read_bytes_per_second": 0.0,
+        "disk_write_bytes_per_second": 255136.3,
+        "issues": [],
+        "memory_footprint_bytes": 47006584,
+        "pageins_per_second": 0.0,
+        "process_count": 2,
+        "rss_bytes": 35635200,
+        "scope": "verified-current-descendants"
+      }
+    }
+  ],
+  "resourceCount": 2,
+  "exitCodes": [
+    0,
+    0
+  ]
+}

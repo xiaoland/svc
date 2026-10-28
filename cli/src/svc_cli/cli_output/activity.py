@@ -23,6 +23,16 @@ class PressureOutput(MachineModel):
     level: str
     recommendation: str
     issues: tuple[str, ...]
+    swap_used_bytes: int | None = None
+    swap_total_bytes: int | None = None
+    compressed_bytes: int | None = None
+    page_size_bytes: int | None = None
+    pageins_per_second: float | None = None
+    pageouts_per_second: float | None = None
+    swapins_per_second: float | None = None
+    swapouts_per_second: float | None = None
+    compressions_per_second: float | None = None
+    decompressions_per_second: float | None = None
 
 
 class ProcessUsageOutput(MachineModel):
@@ -30,6 +40,12 @@ class ProcessUsageOutput(MachineModel):
     rss_bytes: int
     process_count: int
     scope: Literal["verified-current-descendants"]
+    memory_footprint_bytes: int | None = None
+    disk_read_bytes_per_second: float | None = None
+    disk_write_bytes_per_second: float | None = None
+    pageins_per_second: float | None = None
+    complete: bool = True
+    issues: tuple[str, ...] = ()
 
 
 class ExecutionActivityOutput(MachineModel):
@@ -50,14 +66,34 @@ class ExecutionActivityOutput(MachineModel):
     usage: ProcessUsageOutput | None
     logs: tuple[str, ...]
     issues: tuple[str, ...]
+    project_path: str | None = None
+    project_source: str = "unassigned"
+
+
+class ProjectActivityOutput(MachineModel):
+    project_path: str | None
+    execution_count: int
+    resource_count: int
+    usage: ProcessUsageOutput | None
+    issues: tuple[str, ...]
+
+
+class ResourceActivityOutput(MachineModel):
+    execution_id: str
+    project_path: str | None
+    entry_id: str
+    resource: str
+    usage: ProcessUsageOutput | None
 
 
 class MonitorOutput(MachineModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     command: Literal["dev monitor"] = "dev monitor"
     pressure: PressureOutput
     executions: tuple[ExecutionActivityOutput, ...]
     issues: tuple[str, ...]
+    projects: tuple[ProjectActivityOutput, ...] = ()
+    resources: tuple[ResourceActivityOutput, ...] = ()
 
 
 class ManagedOutput(MachineModel):
@@ -105,10 +141,18 @@ def project_monitor(snapshot: ActivitySnapshot) -> MonitorOutput:
                 usage=ProcessUsageOutput(**asdict(item.usage)) if item.usage else None,
                 logs=item.logs,
                 issues=item.issues,
+                project_path=item.project_path,
+                project_source=item.project_source,
             )
             for item in snapshot.executions
         ),
         issues=snapshot.issues,
+        projects=tuple(
+            ProjectActivityOutput(**asdict(item)) for item in snapshot.projects
+        ),
+        resources=tuple(
+            ResourceActivityOutput(**asdict(item)) for item in snapshot.resources
+        ),
     )
 
 

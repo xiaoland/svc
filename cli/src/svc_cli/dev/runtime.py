@@ -24,6 +24,7 @@ from .._execution import (
 )
 from ..config import ExecAction, ManualAction, declaration_digest_value
 from ..errors import SvcError
+from ..activity.provenance import register as register_observation
 from . import records
 from .models import ActionReceipt, CatalogResult, ResourceView, Submission, Observation
 from .resources import (
@@ -377,6 +378,14 @@ def execute(
                 interrupted,
             )
         owned = launched
+        register_observation(
+            store,
+            owned.record,
+            resource.workspace.root,
+            "declared",
+            resource_entry_id=resource.entry_id,
+            resource_key=resource.key,
+        )
         started = time.monotonic()
         ready_deadline = started + action.completion_timeout
         observations: tuple[Observation, ...] = ()

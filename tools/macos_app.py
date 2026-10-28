@@ -26,7 +26,7 @@ CLI_RESULT_SCHEMAS = {
     "status": 4,
     "act": 1,
     "reconcile": 1,
-    "monitor": 1,
+    "monitor": 2,
     "exec": 1,
     "terminate": 1,
 }

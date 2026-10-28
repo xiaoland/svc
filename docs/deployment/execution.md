@@ -19,3 +19,10 @@ dev 资源按 [App／CLI 合同](../product-tdd/macos-client.md#资源合同) �
 `dev exec` 在同一 execution 树中保存 run/managed 的 schema 2 记录、stdout.log、stderr.log，以及 activity 拥有的 management.json／termination.json schema 1。后者不复制机械状态；短的 termination.lock 只保护请求升级，生命周期仍由协调锁和前台 CLI 拥有。异常组观察另记 group-error.json，不能将其缺失或损坏解释为组已结束。所有文件仍属于同用户 runtime 信任边界，可能被系统清理；项目配置和持久资源目录不受影响。
 
 App 通过 CLI 使用相同平台 runtime，不扫描自己的另一份数据库。macOS 进程组查询与主进程回收规则见[主机与受管执行合同](../product-tdd/activity.md)。owner 被不可捕获地终止后可能留下孤儿，后续查询只记录 owner-lost，不重新获得控制权。命令自行离开 session／进程组或提交远端操作时，其后续工作不属于本次终止承诺。
+
+
+## 项目用量来源
+
+CLI 18.2.0 的 activity 在既有 execution 目录增加 observation.json schema 1，不修改机械 schema 2、协调指针或已有控制文件。它保存启动时确定的项目归属，以及非 managed 执行可观察的进程创建时间；managed 身份仍由 management.json 保存。该文件没有生命周期锁或终止权，monitor 不通过当前 PID 补建历史身份。可选观察发布失败只报告诊断，不改变已经开始的工作；必要机械记录和控制元数据仍遵守原来的失败规则。
+
+记录和该补充文件一起受本机 runtime 清理影响，不是永久的项目进程登记库。已释放服务只在原根仍可验证时观察；记录丢失后不保证继续归属，容器和远端工作也不自动接入。观察字段、预算和聚合规则由 [activity 合同](../product-tdd/activity.md#项目归属与用量观察)拥有。

@@ -117,7 +117,7 @@ class OutputSchemaSpec:
 
 OUTPUT_SCHEMA_SPECS = {
     "dev-monitor": OutputSchemaSpec(
-        1, TypeAdapter(MonitorOutput | MachineError | CliUsageOutput)
+        2, TypeAdapter(MonitorOutput | MachineError | CliUsageOutput)
     ),
     "dev-exec": OutputSchemaSpec(
         1, TypeAdapter(ManagedOutput | MachineError | CliUsageOutput)

@@ -1,0 +1,22 @@
+{
+  "project": "/Volumes/WorkSSD/Development/svc-dev-lab",
+  "projectSource": "declared",
+  "canTerminate": false,
+  "usage": {
+    "complete": true,
+    "cpu_percent": 0.0,
+    "disk_read_bytes_per_second": 0.0,
+    "disk_write_bytes_per_second": 252985.54,
+    "issues": [],
+    "memory_footprint_bytes": 22921600,
+    "pageins_per_second": 0.0,
+    "process_count": 1,
+    "rss_bytes": 21544960,
+    "scope": "verified-current-descendants"
+  },
+  "issues": [
+    "37f5c149-c158-4387-9b69-fa632825dd32: ('execution-state-invalid', 'Execution state must be a strict JSON object.', {'path': '/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/37f5c149-c158-4387-9b69-fa632825dd32/observation.json'})",
+    "38a59b6d-d8c7-4670-af7a-0dd9a3a7c05f: ('execution-state-invalid', 'Execution state must be a strict JSON object.', {'path': '/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/38a59b6d-d8c7-4670-af7a-0dd9a3a7c05f/observation.json'})"
+  ],
+  "exitCode": 0
+}

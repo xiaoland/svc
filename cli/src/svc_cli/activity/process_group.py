@@ -37,6 +37,15 @@ class ProcessGroup:
             )
         return list(buffer[:count])
 
+    def sample_members(self, leader: int, limit: int) -> tuple[list[int], bool]:
+        # Accounting may truncate; completion proof still requires members().
+        # Never expand a busy group into thousands of process objects here.
+        buffer = (ctypes.c_int * (limit + 1))()
+        count = self._list(leader, buffer, ctypes.sizeof(buffer))
+        if count <= 0:
+            raise SvcError("managed-group-unknown", "无法采样受管进程组的成员。")
+        return list(buffer[: min(count, limit)]), count > limit
+
     def complete(self, leader: int) -> bool:
         # Check the zombie first: a live leader could fork after an earlier
         # snapshot. Once zombie it cannot add new members to the group.

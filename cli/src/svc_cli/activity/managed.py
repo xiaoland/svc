@@ -30,6 +30,7 @@ from .._execution import (
 from ..errors import SvcError
 from .models import ManagedResult, TerminationResult
 from .process_group import ProcessGroup
+from .provenance import project_for, register as register_observation
 
 
 def read_management(
@@ -38,7 +39,7 @@ def read_management(
     if record.domain != "run" or record.operation != "managed":
         return None
     path = store.execution_dir(record.execution_id) / "management.json"
-    info = _read_json(path)
+    info = _read_json(path, allow_null=True)
     if (
         set(info)
         != {
@@ -146,6 +147,7 @@ def execute(
     *,
     label: str | None = None,
     source: str = "terminal",
+    project: Path | None = None,
     store: ExecutionStore | None = None,
     on_started: Callable[[ExecutionRecord], None] | None = None,
 ) -> ManagedResult:
@@ -154,6 +156,7 @@ def execute(
     directory = cwd.expanduser().resolve()
     if not directory.is_dir():
         raise SvcError("managed-cwd-not-directory", "执行目录不存在。")
+    project_root, project_source = project_for(directory, project)
     title = (label or Path(argv[0]).name).strip()
     if not title or len(title) > 200 or not source.strip() or len(source) > 200:
         raise SvcError("invalid-managed-label", "名称和来源必须为 1 到 200 个字符。")
@@ -183,6 +186,7 @@ def execute(
         }
         metadata_path = authority.execution_dir(record.execution_id) / "management.json"
         _atomic_json(metadata_path, metadata)
+        register_observation(authority, record, project_root, project_source)
         if on_started:
             on_started(record)
         with _signals() as signals:

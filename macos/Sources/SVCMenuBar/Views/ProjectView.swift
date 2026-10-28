@@ -36,6 +36,7 @@ struct ProjectView: View {
                 // Show the path to distinguish worktrees with identical directory names.
                 Text(project.path).font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle).help(project.path)
+                ProjectUsageView(project: project.path, activity: store.activity)
                 if let error = project.error {
                     DiagnosticView(title: "无法读取项目", message: error, semanticID: "project/\(project.path)/error", context: project.name)
                 } else if let snapshot = project.snapshot {

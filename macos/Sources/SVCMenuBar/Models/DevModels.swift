@@ -7,7 +7,7 @@ struct CLIConfiguration: Equatable, Sendable {
 
 enum DevCommand: String, Sendable {
     case list, status, act, reconcile, monitor, terminate
-    var schemaVersion: Int { self == .status ? 4 : 1 }
+    var schemaVersion: Int { self == .status ? 4 : (self == .monitor ? 2 : 1) }
     var title: String {
         switch self {
         case .list: "资源"

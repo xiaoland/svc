@@ -1,6 +1,6 @@
 # macOS App 与 CLI 合同
 
-本文拥有 SVC Dev 图形入口与程序化入口之间的职责、公开协议和生命周期合同。产品定位见 [开发资源管理](../prd/development.md)，使用与迁移见[用户手册](../../USER_MANUAL.md)，发行流程见[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)。本文描述 CLI 18.1.0／App 0.5.1 的源码合同；旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同，不能混用。安装和公开发布是独立的交付步骤，不能由源码版本推断。
+本文拥有 SVC Dev 图形入口与程序化入口之间的职责、公开协议和生命周期合同。产品定位见 [开发资源管理](../prd/development.md)，使用与迁移见[用户手册](../../USER_MANUAL.md)，发行流程见[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)。本文描述 CLI 18.2.0／App 0.6.0 的源码合同；旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同，不能混用。安装和公开发布是独立的交付步骤，不能由源码版本推断。
 
 App 与 CLI 是同一产品能力的两个入口。App 拥有项目来源偏好、呈现、刷新调度、当前会话回执及 CLI 路径和 PATH；CLI 拥有配置解释、资源身份、观察、声明动作执行和跨进程协调。项目脚本或实际控制者拥有资源内部的初始化、数据清理、权限和异步操作生命周期。App 不直接读取配置和私有 runtime，也不根据端口或历史 PID 推导权限。
 
@@ -27,7 +27,7 @@ App 通过绝对路径启动独立 CLI，以 argv 传入项目目录，不经过
 
 以上调用都支持 `--repo`、`--json` 和 `--json-schema`。根 status 结果 schema 为 4，init 结果仍为 4；配置 schema 5 与这些结果版本相互独立。App 校验 command、schema 和必要字段，拒绝不兼容或损坏结果，不能造出成功或未就绪。非零 CLI 退出也可能携带有效回执。
 
-App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.5.1 配套 CLI 18.1.0，沿用 0.4.0 新增的 dev-monitor／exec／terminate schema 1；原 list／status／act／reconcile 的结果版本不变。0.5.0 增加主窗口，0.5.1 统一原生导航与工具栏的管理；两版沿用系统文字层级和可访问语义；18.1.0 的 minor 表示新增独立能力，没有修改资源配置 schema 5 或既有 run 的公开合同。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
+App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.6.0 配套 CLI 18.2.0，将 dev-monitor 从 schema 1 推进到 2，exec／terminate 仍为 schema 1；原 list／status／act／reconcile 的结果版本不变。0.5.0 增加主窗口，0.5.1 统一原生导航与工具栏的管理；两版沿用系统文字层级和可访问语义；18.1.0 的 minor 表示新增独立能力，没有修改资源配置 schema 5 或既有 run 的公开合同。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
 
 机器与执行页使用 `dev monitor --json`，不附加项目目录，也不依赖项目能否解析；`dev terminate <execution-id> [--force] --by human --json` 只请求执行 owner 终止。App 不自己发送进程信号。主机采样、一次性执行及停止证明由[主机与受管执行合同](activity.md)拥有；执行页不会将旧资源动作的 wait、ready 释放或 submitted 改成可强杀。CLI 仍可独立于 App 使用；App 退出不终止前台 CLI 拥有的一次性执行。
 
@@ -43,7 +43,7 @@ AppStore 持有按 panel／mainWindow 区分的观察需求；窗口宿主负责
 
 一次请求对应一个 CLI 子进程。App 不额外给控制请求加短超时；退出等待在途操作，用户可取消退出，取消退出不取消动作。就绪释放后的服务不随 CLI 或 App 退出；移除来源和关闭面板也不是停止指令。观察和会话回执不作为下次启动的新鲜事实；运行证据由 CLI 保存，App 只使用公开回执中的日志路径。
 
-App 不捆绑 Python 或 CLI。源码安装构建同源 wheel，在用户 Library 下按 wheel 摘要建立隔离环境，将其路径设为默认值；显式保存的 CLI 路径优先，重装保留偏好。公开发布交付同 commit 的 App ZIP 和 CLI wheel，manifest 记录版本、来源和四个 App 调用协议。公开包不含构建机路径；安装者选用配套 wheel。配套发行不使 CLI 成为 App 私有接口，也不自动发布到 PyPI。安装和信任条件见 [macOS README](../../macos/README.md) 与 [INSTALL](../../macos/INSTALL.md)。
+App 不捆绑 Python 或 CLI。源码安装构建同源 wheel，在用户 Library 下按 wheel 摘要建立隔离环境，将其路径设为默认值；显式保存的 CLI 路径优先，重装保留偏好。公开发布交付同 commit 的 App ZIP 和 CLI wheel，manifest 记录版本、来源和各个 App 调用协议。公开包不含构建机路径；安装者选用配套 wheel。配套发行不使 CLI 成为 App 私有接口，也不自动发布到 PyPI。安装和信任条件见 [macOS README](../../macos/README.md) 与 [INSTALL](../../macos/INSTALL.md)。
 
 ## 资源合同
 
@@ -86,3 +86,10 @@ App 0.3.1 的面板以项目容器区分来源，资源在内部平铺。顶部�
 原生资源行与详情继续使用 SwiftUI，Store 保持唯一的界面状态所有者。资源动作按钮使用窄 NSViewRepresentable 承载 NSButton 的稳定入口／动作标识、名称、启用状态和回调；更新视图时同步标识与回调，不另建动作注册表。它允许隐藏宿主直接按语义触发同一个产品控件，菜单栏锚定和用户主动打开行为保持原结构。此实现选择只解决本机隐藏宿主未暴露 SwiftUI 动作标识的验收接缝，不表示整个界面改用 AppKit。
 
 配置遵循 current-only 人工迁移，不新增双读或旧字段别名；现有 `${dev.target}`／`SVC_DEV_TARGET` 脚本接口继续表示所选资源键。先保持资源键、scope 和 host_key 迁移声明形状；引入 owner、改名或改变 scope 属于协调身份变更，必须先完成旧边界的活跃或未解决执行。没有持久身份映射时，不承诺任意热改身份下的跨键互斥。旧客户端的 follower 可能取得锁后继续旧快照，因此停止发起旧控制并排空全部旧 owner／follower 后才开放新版控制。保持相同协调键只保证旧 owner 持锁时新请求不并行，不能把新版 owner-lost 规则强加给旧等待者；不能通过强杀旧调用伪造已排空。公开结果和 App 一起迁移，CLI、App 和结果 schema 仍分别管理版本，不兼容组合明确拒绝。
+
+
+## 项目范围与用量
+
+App 0.6.0 的主窗口在全部项目、Section 或项目范围内保留原生资源／执行切换；全局执行入口仍呈现未归属记录。执行列表使用“当前执行”和“最近记录”，避免将仍有可观测进程的 owner-lost 描述为已结束；它仍明确显示结果未知并禁用终止。项目筛选只使用 monitor 返回的 project_path 精确匹配 App 已规范化的来源路径，不在客户端根据 cwd 或命令内容重新归属。项目和执行展示来自同一 monitor 快照的用量；资源详情通过 entry_id／project_path 关联仍可观察的本地资源运行。App 不因观察到 released 进程而提供直接终止按钮，资源继续走声明动作。
+
+机器概览始终保留全机含义，磁盘读写、swap 已用量与真实换入／换出不会随所选项目变为该项目的值。项目用量明确标为“已观测”，不涵盖未接入的外部程序、容器或远端工作；不可用显示不可用而不是零。Swift 模型保留指标不可用时的空值表达，不伪造读数。本机及配套发行使用 18.2.0 的 monitor schema 2；旧 monitor schema 1 明确拒绝混用。exec／terminate schema 1 与资源配置 schema 5 不变。

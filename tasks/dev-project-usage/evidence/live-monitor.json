@@ -1,0 +1,610 @@
+{
+  "command": "dev monitor",
+  "executions": [
+    {
+      "argv": [
+        "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python",
+        "/Volumes/WorkSSD/Development/svc-dev-lab-peer/runner.py",
+        "work",
+        "--duration",
+        "8"
+      ],
+      "can_terminate": true,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "domain": "run",
+      "execution_id": "461e562b-61f9-4605-ad03-1a233aa3d726",
+      "exit_code": null,
+      "finished_at": null,
+      "group_state": "running",
+      "issues": [],
+      "label": "svc-dev-lab-peer bounded work",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/461e562b-61f9-4605-ad03-1a233aa3d726/stdout.log",
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/461e562b-61f9-4605-ad03-1a233aa3d726/stderr.log"
+      ],
+      "operation": "managed",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "project_source": "configuration-ancestor",
+      "source": "agent",
+      "started_at": "2026-10-28T11:32:05.270Z",
+      "state": "running",
+      "termination_requested": null,
+      "usage": {
+        "complete": true,
+        "cpu_percent": 0.1,
+        "disk_read_bytes_per_second": 0.0,
+        "disk_write_bytes_per_second": 254936.69,
+        "issues": [],
+        "memory_footprint_bytes": 23904760,
+        "pageins_per_second": 0.0,
+        "process_count": 1,
+        "rss_bytes": 31096832,
+        "scope": "verified-current-descendants"
+      }
+    },
+    {
+      "argv": [
+        "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python",
+        "/Volumes/WorkSSD/Development/svc-dev-lab/runner.py",
+        "work",
+        "--duration",
+        "8"
+      ],
+      "can_terminate": true,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "domain": "run",
+      "execution_id": "40fd85ef-f03a-4409-8d05-127b56a2b597",
+      "exit_code": null,
+      "finished_at": null,
+      "group_state": "running",
+      "issues": [],
+      "label": "svc-dev-lab bounded work",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/40fd85ef-f03a-4409-8d05-127b56a2b597/stdout.log",
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/40fd85ef-f03a-4409-8d05-127b56a2b597/stderr.log"
+      ],
+      "operation": "managed",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "project_source": "configuration-ancestor",
+      "source": "agent",
+      "started_at": "2026-10-28T11:32:04.722Z",
+      "state": "running",
+      "termination_requested": null,
+      "usage": {
+        "complete": true,
+        "cpu_percent": 0.0,
+        "disk_read_bytes_per_second": 0.0,
+        "disk_write_bytes_per_second": 255136.3,
+        "issues": [],
+        "memory_footprint_bytes": 23871944,
+        "pageins_per_second": 0.0,
+        "process_count": 1,
+        "rss_bytes": 18104320,
+        "scope": "verified-current-descendants"
+      }
+    },
+    {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "runner.py",
+        "serve",
+        "--port",
+        "60672",
+        "--duration",
+        "120"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "domain": "dev",
+      "execution_id": "988a4aa4-ebc5-4a47-9afa-50a57fc7c1a6",
+      "exit_code": null,
+      "finished_at": "2026-10-28T11:32:05.002Z",
+      "group_state": null,
+      "issues": [],
+      "label": "web",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/988a4aa4-ebc5-4a47-9afa-50a57fc7c1a6/output.log"
+      ],
+      "operation": "act",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "project_source": "declared",
+      "source": "dev",
+      "started_at": "2026-10-28T11:32:04.825Z",
+      "state": "released",
+      "termination_requested": null,
+      "usage": {
+        "complete": true,
+        "cpu_percent": 0.0,
+        "disk_read_bytes_per_second": 0.0,
+        "disk_write_bytes_per_second": 0.0,
+        "issues": [],
+        "memory_footprint_bytes": 23298456,
+        "pageins_per_second": 0.0,
+        "process_count": 1,
+        "rss_bytes": 18415616,
+        "scope": "verified-current-descendants"
+      }
+    },
+    {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "runner.py",
+        "serve",
+        "--port",
+        "60671",
+        "--duration",
+        "120"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "domain": "dev",
+      "execution_id": "def4c235-3a02-4832-9a16-8becebdc66a8",
+      "exit_code": null,
+      "finished_at": "2026-10-28T11:32:04.456Z",
+      "group_state": null,
+      "issues": [],
+      "label": "web",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/def4c235-3a02-4832-9a16-8becebdc66a8/output.log"
+      ],
+      "operation": "act",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "project_source": "declared",
+      "source": "dev",
+      "started_at": "2026-10-28T11:32:04.315Z",
+      "state": "released",
+      "termination_requested": null,
+      "usage": {
+        "complete": true,
+        "cpu_percent": 0.0,
+        "disk_read_bytes_per_second": 0.0,
+        "disk_write_bytes_per_second": 0.0,
+        "issues": [],
+        "memory_footprint_bytes": 23134640,
+        "pageins_per_second": 0.0,
+        "process_count": 1,
+        "rss_bytes": 17530880,
+        "scope": "verified-current-descendants"
+      }
+    },
+    {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "runner.py",
+        "work",
+        "--duration",
+        "4"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "domain": "run",
+      "execution_id": "e2c58b0f-7565-4ad1-87b2-cdfe9f7d028a",
+      "exit_code": 0,
+      "finished_at": "2026-10-28T11:22:55.872Z",
+      "group_state": null,
+      "issues": [],
+      "label": "short-work",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/e2c58b0f-7565-4ad1-87b2-cdfe9f7d028a/stdout.log",
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/e2c58b0f-7565-4ad1-87b2-cdfe9f7d028a/stderr.log"
+      ],
+      "operation": "execute",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "project_source": "declared",
+      "source": "run",
+      "started_at": "2026-10-28T11:22:51.756Z",
+      "state": "exited",
+      "termination_requested": null,
+      "usage": null
+    },
+    {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "runner.py",
+        "stop",
+        "--port",
+        "60672",
+        "--instance",
+        "4a16e7b061c5efae"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "domain": "dev",
+      "execution_id": "0d202b94-f90b-41c4-9ddf-b2e6d18de5d8",
+      "exit_code": 0,
+      "finished_at": "2026-10-28T11:11:08.272Z",
+      "group_state": null,
+      "issues": [],
+      "label": "web",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/0d202b94-f90b-41c4-9ddf-b2e6d18de5d8/output.log"
+      ],
+      "operation": "act",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "project_source": "declared",
+      "source": "dev",
+      "started_at": "2026-10-28T11:11:08.163Z",
+      "state": "exited",
+      "termination_requested": null,
+      "usage": null
+    },
+    {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "runner.py",
+        "stop",
+        "--port",
+        "60671",
+        "--instance",
+        "55dbd8f07c8fbb83"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "domain": "dev",
+      "execution_id": "0f5e6a68-a4ac-4a90-9c6a-1e22bef28db5",
+      "exit_code": 0,
+      "finished_at": "2026-10-28T11:11:07.749Z",
+      "group_state": null,
+      "issues": [],
+      "label": "web",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/0f5e6a68-a4ac-4a90-9c6a-1e22bef28db5/output.log"
+      ],
+      "operation": "act",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "project_source": "declared",
+      "source": "dev",
+      "started_at": "2026-10-28T11:11:07.658Z",
+      "state": "exited",
+      "termination_requested": null,
+      "usage": null
+    },
+    {
+      "argv": [
+        "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python",
+        "/Volumes/WorkSSD/Development/svc-dev-lab-peer/runner.py",
+        "work",
+        "--duration",
+        "8"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "domain": "run",
+      "execution_id": "62a4fd85-2bf3-4093-b3b4-a4243cfa0d5d",
+      "exit_code": 0,
+      "finished_at": "2026-10-28T11:11:07.177Z",
+      "group_state": "scope-complete",
+      "issues": [],
+      "label": "svc-dev-lab-peer bounded work",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/62a4fd85-2bf3-4093-b3b4-a4243cfa0d5d/stdout.log",
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/62a4fd85-2bf3-4093-b3b4-a4243cfa0d5d/stderr.log"
+      ],
+      "operation": "managed",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "project_source": "configuration-ancestor",
+      "source": "agent",
+      "started_at": "2026-10-28T11:10:58.154Z",
+      "state": "exited",
+      "termination_requested": null,
+      "usage": null
+    },
+    {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "runner.py",
+        "serve",
+        "--port",
+        "60672",
+        "--duration",
+        "120"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "domain": "dev",
+      "execution_id": "005af6c0-dab6-4a61-a378-05acb91dc443",
+      "exit_code": null,
+      "finished_at": "2026-10-28T11:10:57.884Z",
+      "group_state": null,
+      "issues": [],
+      "label": "web",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/005af6c0-dab6-4a61-a378-05acb91dc443/output.log"
+      ],
+      "operation": "act",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "project_source": "declared",
+      "source": "dev",
+      "started_at": "2026-10-28T11:10:57.751Z",
+      "state": "released",
+      "termination_requested": null,
+      "usage": null
+    },
+    {
+      "argv": [
+        "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python",
+        "/Volumes/WorkSSD/Development/svc-dev-lab/runner.py",
+        "work",
+        "--duration",
+        "8"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "domain": "run",
+      "execution_id": "0a59a0be-6d08-496a-8cd8-dd475f009b44",
+      "exit_code": 0,
+      "finished_at": "2026-10-28T11:11:06.697Z",
+      "group_state": "scope-complete",
+      "issues": [],
+      "label": "svc-dev-lab bounded work",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/0a59a0be-6d08-496a-8cd8-dd475f009b44/stdout.log",
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/0a59a0be-6d08-496a-8cd8-dd475f009b44/stderr.log"
+      ],
+      "operation": "managed",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "project_source": "configuration-ancestor",
+      "source": "agent",
+      "started_at": "2026-10-28T11:10:57.653Z",
+      "state": "exited",
+      "termination_requested": null,
+      "usage": null
+    },
+    {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "runner.py",
+        "serve",
+        "--port",
+        "60671",
+        "--duration",
+        "120"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "domain": "dev",
+      "execution_id": "2563dfc6-98ef-4d43-8b09-f78efe44e0b5",
+      "exit_code": null,
+      "finished_at": "2026-10-28T11:10:57.382Z",
+      "group_state": null,
+      "issues": [],
+      "label": "web",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/2563dfc6-98ef-4d43-8b09-f78efe44e0b5/output.log"
+      ],
+      "operation": "act",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "project_source": "declared",
+      "source": "dev",
+      "started_at": "2026-10-28T11:10:57.252Z",
+      "state": "released",
+      "termination_requested": null,
+      "usage": null
+    },
+    {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "runner.py",
+        "stop",
+        "--port",
+        "60672",
+        "--instance",
+        "4a16e7b061c5efae"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "domain": "dev",
+      "execution_id": "7d575592-e935-4e79-a48d-1ecc54430ae2",
+      "exit_code": 0,
+      "finished_at": "2026-10-28T11:06:55.468Z",
+      "group_state": null,
+      "issues": [],
+      "label": "web",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/7d575592-e935-4e79-a48d-1ecc54430ae2/output.log"
+      ],
+      "operation": "act",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "project_source": "declared",
+      "source": "dev",
+      "started_at": "2026-10-28T11:06:55.360Z",
+      "state": "exited",
+      "termination_requested": null,
+      "usage": null
+    },
+    {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "runner.py",
+        "stop",
+        "--port",
+        "60671",
+        "--instance",
+        "55dbd8f07c8fbb83"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "domain": "dev",
+      "execution_id": "1b9a519f-dc97-48a9-8b86-bd8383c4a6c8",
+      "exit_code": 0,
+      "finished_at": "2026-10-28T11:06:54.803Z",
+      "group_state": null,
+      "issues": [],
+      "label": "web",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/1b9a519f-dc97-48a9-8b86-bd8383c4a6c8/output.log"
+      ],
+      "operation": "act",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "project_source": "declared",
+      "source": "dev",
+      "started_at": "2026-10-28T11:06:54.727Z",
+      "state": "exited",
+      "termination_requested": null,
+      "usage": null
+    },
+    {
+      "argv": [
+        "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/.venv/bin/python",
+        "/Volumes/WorkSSD/Development/svc-dev-lab-peer/runner.py",
+        "work",
+        "--duration",
+        "8"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "domain": "run",
+      "execution_id": "ff9d2397-8b19-4c9b-82b9-40567e98d3d1",
+      "exit_code": 0,
+      "finished_at": "2026-10-28T11:06:48.528Z",
+      "group_state": "scope-complete",
+      "issues": [],
+      "label": "svc-dev-lab-peer bounded work",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/ff9d2397-8b19-4c9b-82b9-40567e98d3d1/stdout.log",
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/ff9d2397-8b19-4c9b-82b9-40567e98d3d1/stderr.log"
+      ],
+      "operation": "managed",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "project_source": "configuration-ancestor",
+      "source": "agent",
+      "started_at": "2026-10-28T11:06:40.417Z",
+      "state": "exited",
+      "termination_requested": null,
+      "usage": null
+    },
+    {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "runner.py",
+        "serve",
+        "--port",
+        "60672",
+        "--duration",
+        "120"
+      ],
+      "can_terminate": false,
+      "cwd": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "domain": "dev",
+      "execution_id": "4efc5b2a-5f5c-4813-b90e-bd4cbc1c7adb",
+      "exit_code": null,
+      "finished_at": "2026-10-28T11:06:40.105Z",
+      "group_state": null,
+      "issues": [],
+      "label": "web",
+      "logs": [
+        "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/4efc5b2a-5f5c-4813-b90e-bd4cbc1c7adb/output.log"
+      ],
+      "operation": "act",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "project_source": "declared",
+      "source": "dev",
+      "started_at": "2026-10-28T11:06:39.976Z",
+      "state": "released",
+      "termination_requested": null,
+      "usage": null
+    }
+  ],
+  "issues": [],
+  "pressure": {
+    "compressed_bytes": 7567458304,
+    "compressions_per_second": 0.0,
+    "cpu_percent": 0.0,
+    "decompressions_per_second": 0.0,
+    "disk_read_bytes_per_second": 291224929.1,
+    "disk_write_bytes_per_second": 327863218.0,
+    "issues": [],
+    "level": "elevated",
+    "logical_cpus": 10,
+    "memory_available_bytes": 2571583488,
+    "memory_pressure": "warning",
+    "memory_total_bytes": 17179869184,
+    "page_size_bytes": 16384,
+    "pageins_per_second": 0.0,
+    "pageouts_per_second": 0.0,
+    "recommendation": "将重任务串行执行，降低工具并发，并在启动下一项前重新采样。",
+    "sample_window_ms": 253,
+    "sampled_at": "2026-10-28T11:32:06.222772+00:00",
+    "swap_total_bytes": 21474836480,
+    "swap_used_bytes": 20495532032,
+    "swapins_per_second": 0.0,
+    "swapouts_per_second": 0.0
+  },
+  "projects": [
+    {
+      "execution_count": 1,
+      "issues": [],
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "resource_count": 1,
+      "usage": {
+        "complete": true,
+        "cpu_percent": 0.1,
+        "disk_read_bytes_per_second": 0.0,
+        "disk_write_bytes_per_second": 254936.69,
+        "issues": [],
+        "memory_footprint_bytes": 47203216,
+        "pageins_per_second": 0.0,
+        "process_count": 2,
+        "rss_bytes": 49512448,
+        "scope": "verified-current-descendants"
+      }
+    },
+    {
+      "execution_count": 1,
+      "issues": [],
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "resource_count": 1,
+      "usage": {
+        "complete": true,
+        "cpu_percent": 0.0,
+        "disk_read_bytes_per_second": 0.0,
+        "disk_write_bytes_per_second": 255136.3,
+        "issues": [],
+        "memory_footprint_bytes": 47006584,
+        "pageins_per_second": 0.0,
+        "process_count": 2,
+        "rss_bytes": 35635200,
+        "scope": "verified-current-descendants"
+      }
+    }
+  ],
+  "resources": [
+    {
+      "entry_id": "1c4f0f0bde0618c3063818b2948fde4f24023b87f82bb1ec7fc96d57d10f2c4a",
+      "execution_id": "988a4aa4-ebc5-4a47-9afa-50a57fc7c1a6",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "resource": "web",
+      "usage": {
+        "complete": true,
+        "cpu_percent": 0.0,
+        "disk_read_bytes_per_second": 0.0,
+        "disk_write_bytes_per_second": 0.0,
+        "issues": [],
+        "memory_footprint_bytes": 23298456,
+        "pageins_per_second": 0.0,
+        "process_count": 1,
+        "rss_bytes": 18415616,
+        "scope": "verified-current-descendants"
+      }
+    },
+    {
+      "entry_id": "bcb1a056ebdf50deafb3f8d7ca5154411eaa6517dfe806888b6bb561e316ccb7",
+      "execution_id": "def4c235-3a02-4832-9a16-8becebdc66a8",
+      "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "resource": "web",
+      "usage": {
+        "complete": true,
+        "cpu_percent": 0.0,
+        "disk_read_bytes_per_second": 0.0,
+        "disk_write_bytes_per_second": 0.0,
+        "issues": [],
+        "memory_footprint_bytes": 23134640,
+        "pageins_per_second": 0.0,
+        "process_count": 1,
+        "rss_bytes": 17530880,
+        "scope": "verified-current-descendants"
+      }
+    }
+  ],
+  "schema_version": 2
+}

@@ -1,0 +1,136 @@
+{
+  "isolated": {
+    "releasedBeyondHistory": {
+      "inRecentExecutions": false,
+      "resourceObserved": true,
+      "usage": [
+        {
+          "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+          "execution_count": 0,
+          "resource_count": 1,
+          "usage": {
+            "cpu_percent": 0.0,
+            "rss_bytes": 13811712,
+            "process_count": 1,
+            "scope": "verified-current-descendants",
+            "memory_footprint_bytes": 9470432,
+            "disk_read_bytes_per_second": 0.0,
+            "disk_write_bytes_per_second": 0.0,
+            "pageins_per_second": 0.0,
+            "complete": true,
+            "issues": []
+          },
+          "issues": []
+        }
+      ],
+      "termination": "execution-not-controllable"
+    },
+    "nestedProjects": {
+      "projects": [
+        {
+          "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+          "execution_count": 1,
+          "resource_count": 0,
+          "usage": {
+            "cpu_percent": 0.0,
+            "rss_bytes": 13271040,
+            "process_count": 1,
+            "scope": "verified-current-descendants",
+            "memory_footprint_bytes": 8896920,
+            "disk_read_bytes_per_second": 0.0,
+            "disk_write_bytes_per_second": 0.0,
+            "pageins_per_second": 0.0,
+            "complete": true,
+            "issues": []
+          },
+          "issues": []
+        },
+        {
+          "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+          "execution_count": 1,
+          "resource_count": 0,
+          "usage": {
+            "cpu_percent": 0.0,
+            "rss_bytes": 52101120,
+            "process_count": 2,
+            "scope": "verified-current-descendants",
+            "memory_footprint_bytes": 37585712,
+            "disk_read_bytes_per_second": 0.0,
+            "disk_write_bytes_per_second": 0.0,
+            "pageins_per_second": 0.0,
+            "complete": true,
+            "issues": []
+          },
+          "issues": []
+        }
+      ],
+      "executionProcessCounts": {
+        "inner-project": 1,
+        "outer-project": 2
+      },
+      "projectProcessTotal": 3,
+      "issues": []
+    },
+    "reparentedWorker": {
+      "groupState": "descendants-running",
+      "processCount": 1
+    },
+    "wrongIdentity": {
+      "usage": null,
+      "canTerminate": false,
+      "issues": [
+        "a7eb72f2-c61b-4542-8671-9e93ebe2281a: 进程身份已变化，未采样历史 PID。"
+      ]
+    }
+  },
+  "publicCLI": {
+    "monitorSchema": 2,
+    "ready": [
+      "ready",
+      "ready"
+    ],
+    "projects": [
+      {
+        "execution_count": 1,
+        "issues": [],
+        "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+        "resource_count": 1,
+        "usage": {
+          "complete": true,
+          "cpu_percent": 0.0,
+          "disk_read_bytes_per_second": 0.0,
+          "disk_write_bytes_per_second": 253857.13,
+          "issues": [],
+          "memory_footprint_bytes": 46433168,
+          "pageins_per_second": 0.0,
+          "process_count": 2,
+          "rss_bytes": 60964864,
+          "scope": "verified-current-descendants"
+        }
+      },
+      {
+        "execution_count": 1,
+        "issues": [],
+        "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+        "resource_count": 1,
+        "usage": {
+          "complete": true,
+          "cpu_percent": 0.0,
+          "disk_read_bytes_per_second": 0.0,
+          "disk_write_bytes_per_second": 254012.84,
+          "issues": [],
+          "memory_footprint_bytes": 47039376,
+          "pageins_per_second": 0.0,
+          "process_count": 2,
+          "rss_bytes": 44695552,
+          "scope": "verified-current-descendants"
+        }
+      }
+    ],
+    "resourceCount": 2,
+    "exitCodes": [
+      0,
+      0
+    ]
+  }
+}

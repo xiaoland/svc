@@ -1,0 +1,96 @@
+{
+  "command": "dev status",
+  "resources": [
+    {
+      "access": [
+        "http://127.0.0.1:60671"
+      ],
+      "actions": [
+        {
+          "completion": "ready",
+          "convergent": true,
+          "data_effect": "unchanged",
+          "effect_scope": "本验收项目的本地 Web 服务",
+          "intent": "启动验收服务",
+          "interruption": "terminate",
+          "key": "ensure",
+          "kind": "exec",
+          "steps": [],
+          "traits": [
+            "runtime"
+          ]
+        },
+        {
+          "completion": "exit",
+          "convergent": false,
+          "data_effect": "unchanged",
+          "effect_scope": "本验收项目的本地 Web 服务",
+          "intent": "停止验收服务",
+          "interruption": "wait",
+          "key": "stop",
+          "kind": "exec",
+          "steps": [],
+          "traits": [
+            "runtime"
+          ]
+        }
+      ],
+      "coordination": {
+        "coordination_id": "e4b156e017ea6b8a4a0613d9e5d5d896756ed7598783a760",
+        "owner_repo": "/Volumes/WorkSSD/Development/svc-dev-lab",
+        "owner_resource": "web",
+        "scope": "worktree",
+        "scope_id": "cb6139b09a0e6e147d19",
+        "workspace_instance": "55dbd8f07c8fbb83"
+      },
+      "declaration_digest": "15c45b7f52163b36d3caef947458dabbe430091b099fb6e1ae3dd2bc0f3d9463",
+      "entry_id": "bcb1a056ebdf50deafb3f8d7ca5154411eaa6517dfe806888b6bb561e316ccb7",
+      "execution": {
+        "acknowledged": false,
+        "action": "ensure",
+        "entry_id": "bcb1a056ebdf50deafb3f8d7ca5154411eaa6517dfe806888b6bb561e316ccb7",
+        "execution_id": "def4c235-3a02-4832-9a16-8becebdc66a8",
+        "log_path": "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/def4c235-3a02-4832-9a16-8becebdc66a8/output.log",
+        "phase": "settled",
+        "state": "released"
+      },
+      "facets": [
+        {
+          "automatic": true,
+          "key": "ready",
+          "label": "就绪状态",
+          "provider": "exec",
+          "purpose": "runtime-readiness"
+        }
+      ],
+      "label": "验收 Web 服务",
+      "observations": [
+        {
+          "checked_at": "2026-10-28T11:32:06.643489+00:00",
+          "data_at": "2026-10-28T11:32:06.643489+00:00",
+          "expires_at": "2026-10-28T11:33:06.643489+00:00",
+          "instance": "55dbd8f07c8fbb83",
+          "key": "ready",
+          "label": "就绪状态",
+          "message": "zero-exit",
+          "source": "exec:/Library/Frameworks/Python.framework/Versions/3.12/bin/python3\u0000runner.py\u0000probe\u0000--port\u000060671\u0000--instance\u000055dbd8f07c8fbb83",
+          "stale": false,
+          "state": "satisfied"
+        }
+      ],
+      "relations": [],
+      "resource": "web",
+      "source": "/Volumes/WorkSSD/Development/svc-dev-lab"
+    }
+  ],
+  "schema_version": 4,
+  "status": "ok",
+  "workspace": {
+    "instance": "55dbd8f07c8fbb83",
+    "namespace_id": "13ee6bfda907db280cc4",
+    "repository_id": "2d20a45d05f7f3bd10fa",
+    "repository_kind": "git",
+    "root": "/Volumes/WorkSSD/Development/svc-dev-lab",
+    "worktree_id": "cb6139b09a0e6e147d19"
+  }
+}

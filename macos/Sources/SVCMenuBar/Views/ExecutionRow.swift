@@ -11,7 +11,7 @@ struct ExecutionRow: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: execution.active ? "terminal" : "checkmark.circle")
+                    Image(systemName: execution.state == "owner-lost" ? "exclamationmark.triangle" : (execution.active ? "terminal" : "checkmark.circle"))
                         .foregroundStyle(execution.active ? Color.accentColor : .secondary)
                         .accessibilityHidden(true)
                     Text(execution.label).font(.system(size: 13, weight: .semibold))
@@ -26,12 +26,12 @@ struct ExecutionRow: View {
                     Spacer(minLength: 4)
                     Text(execution.source).foregroundStyle(.secondary).lineLimit(1)
                 }.font(.caption)
+                Text(execution.projectName).font(.caption).foregroundStyle(.secondary)
+                    .help(execution.projectPath ?? "启动时没有登记项目归属。")
                 Text(execution.cwd).font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle).help(execution.cwd)
                 if let usage = execution.usage {
-                    Text("CPU \(usage.cpuPercent, specifier: "%.0f")%  ·  RSS \(activityBytes(usage.rssBytes))  ·  \(usage.processCount) 个进程")
-                        .font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                        .help("主进程及当前可验证后代的观测值，可能遗漏已脱离的进程。CPU 100% 约为一个核心；RSS 求和可能重复计算共享内存。")
+                    ProcessUsageView(usage: usage)
                 }
                 if execution.canTerminate {
                     HStack(spacing: 8) {
@@ -48,7 +48,7 @@ struct ExecutionRow: View {
                                 confirmingForce = true
                             }
                     }
-                } else if execution.active {
+                } else if execution.currentlyObserved {
                     Text("当前执行未提供可验证的终止通道").font(.caption2).foregroundStyle(.secondary)
                 }
                 if confirmingForce {
@@ -68,6 +68,11 @@ struct ExecutionRow: View {
                 }
                 if expanded {
                     Divider()
+                    if let usage = execution.usage {
+                        Text("页面读入 \(activityPageRate(usage.pageinsPerSecond))")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .help("包含文件页读入，不能解释为此项目的 swap 换入。")
+                    }
                     Text(execution.argv.map(shellQuoted).joined(separator: " "))
                         .font(.caption.monospaced()).textSelection(.enabled)
                     Text("开始于 \(execution.startedAt)\nID \(execution.id)")

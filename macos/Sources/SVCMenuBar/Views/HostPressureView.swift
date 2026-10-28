@@ -40,12 +40,22 @@ struct HostPressureView: View {
                 .accessibilityAddTraits(.isStaticText)
                 .accessibilityLabel("上次采样的本机用量")
                 .accessibilityValue("整机 CPU \(pressure.cpuPercent.formatted(.number.precision(.fractionLength(0)))) 百分比；内存压力\(pressure.memoryLabel)，可用 \(activityBytes(pressure.memoryAvailableBytes))")
+                HStack(spacing: 18) {
+                    Text("磁盘读 \(activityRate(pressure.diskReadBytesPerSecond))")
+                    Text("写 \(activityRate(pressure.diskWriteBytesPerSecond))")
+                }.monospacedDigit()
+                    .help("整机磁盘活动；吞吐量不等于磁盘饱和度，也不能直接归因到某个项目。")
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 18) { swapUsage(pressure); swapActivity(pressure) }
+                    VStack(alignment: .leading, spacing: 5) { swapUsage(pressure); swapActivity(pressure) }
+                }.monospacedDigit()
                 if expanded {
-                    HStack {
-                        Text("磁盘  读 \(rate(pressure.diskReadBytesPerSecond))  ·  写 \(rate(pressure.diskWriteBytesPerSecond))")
-                        Spacer()
-                        Text("\(pressure.sampleWindowMs) ms")
-                    }.font(.caption2).foregroundStyle(.secondary)
+                    Text("压缩内存 \(pressure.compressedBytes.map(activityBytes) ?? "不可用")")
+                    Text("页面读入 \(activityPageRate(pressure.pageinsPerSecond)) · 写出 \(activityPageRate(pressure.pageoutsPerSecond))")
+                        .help("页面读入包含文件页，不能当作 swap 换入。")
+                    Text("压缩 \(activityPageRate(pressure.compressionsPerSecond)) · 解压 \(activityPageRate(pressure.decompressionsPerSecond))")
+                    Text("采样 \(pressure.sampleWindowMs) ms · 页面 \(pressure.pageSizeBytes.map { activityBytes(Int64($0)) } ?? "不可用")")
+                        .font(.caption2).foregroundStyle(.secondary)
                     Text(pressure.recommendation).font(.caption).textSelection(.enabled)
                     ForEach(pressure.issues, id: \.self) { Text($0).font(.caption).foregroundStyle(.orange) }
                 }
@@ -70,7 +80,13 @@ struct HostPressureView: View {
         }
     }
 
-    private func rate(_ value: Double?) -> String {
-        value.map { "\(activityBytes(Int64($0)))/s" } ?? "未知"
+    private func swapUsage(_ pressure: HostPressure) -> some View {
+        Text("Swap 已用 \(pressure.swapUsedBytes.map(activityBytes) ?? "不可用")")
+            .help("当前磁盘上的 swap 占用；不能单凭已用量判断当前是否发生换页或卡顿。")
+    }
+
+    private func swapActivity(_ pressure: HostPressure) -> some View {
+        Text("换入 \(activityPageRate(pressure.swapinsPerSecond)) · 换出 \(activityPageRate(pressure.swapoutsPerSecond))")
+            .help("真实系统 swap 页面计数的速率，不是页面读入／写出的别名，也不能分摊到某个项目。")
     }
 }

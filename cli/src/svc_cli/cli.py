@@ -258,6 +258,11 @@ def _parser() -> argparse.ArgumentParser:
         epilog="在 -- 后传 argv，不隐式使用 shell。独立进程组、无终端输入，日志写入执行目录。先 monitor，再按压力安排并发；人为终止后不要自动重试。",
     )
     execution.add_argument("--cwd", default=".")
+    execution.add_argument(
+        "--project",
+        type=Path,
+        help="明确归属的项目目录；默认在 cwd 的祖先中寻找最近的 svc.json",
+    )
     execution.add_argument("--label")
     execution.add_argument(
         "--source", default="terminal", help="调用来源，例如 agent；仅为调用方声明"
@@ -585,6 +590,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     Path(args.cwd),
                     label=args.label,
                     source=args.source,
+                    project=args.project,
                     on_started=lambda record: print(
                         f"svc execution: {record.execution_id}",
                         file=sys.stderr,

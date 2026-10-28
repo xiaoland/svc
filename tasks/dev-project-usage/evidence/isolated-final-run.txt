@@ -1,0 +1,84 @@
+{
+  "releasedBeyondHistory": {
+    "inRecentExecutions": false,
+    "resourceObserved": true,
+    "usage": [
+      {
+        "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+        "execution_count": 0,
+        "resource_count": 1,
+        "usage": {
+          "cpu_percent": 0.0,
+          "rss_bytes": 12435456,
+          "process_count": 1,
+          "scope": "verified-current-descendants",
+          "memory_footprint_bytes": 8028544,
+          "disk_read_bytes_per_second": 0.0,
+          "disk_write_bytes_per_second": 0.0,
+          "pageins_per_second": 0.0,
+          "complete": true,
+          "issues": []
+        },
+        "issues": []
+      }
+    ],
+    "termination": "execution-not-controllable"
+  },
+  "nestedProjects": {
+    "projects": [
+      {
+        "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+        "execution_count": 1,
+        "resource_count": 0,
+        "usage": {
+          "cpu_percent": 0.0,
+          "rss_bytes": 12992512,
+          "process_count": 1,
+          "scope": "verified-current-descendants",
+          "memory_footprint_bytes": 8601984,
+          "disk_read_bytes_per_second": 0.0,
+          "disk_write_bytes_per_second": 0.0,
+          "pageins_per_second": 0.0,
+          "complete": true,
+          "issues": []
+        },
+        "issues": []
+      },
+      {
+        "project_path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+        "execution_count": 1,
+        "resource_count": 0,
+        "usage": {
+          "cpu_percent": 0.0,
+          "rss_bytes": 52035584,
+          "process_count": 2,
+          "scope": "verified-current-descendants",
+          "memory_footprint_bytes": 37536584,
+          "disk_read_bytes_per_second": 0.0,
+          "disk_write_bytes_per_second": 0.0,
+          "pageins_per_second": 0.0,
+          "complete": true,
+          "issues": []
+        },
+        "issues": []
+      }
+    ],
+    "executionProcessCounts": {
+      "inner-project": 1,
+      "outer-project": 2
+    },
+    "projectProcessTotal": 3,
+    "issues": []
+  },
+  "reparentedWorker": {
+    "groupState": "descendants-running",
+    "processCount": 1
+  },
+  "wrongIdentity": {
+    "usage": null,
+    "canTerminate": false,
+    "issues": [
+      "7a81c4a4-fe9c-44bd-83b3-c5f9be5e9f55: 进程身份已变化，未采样历史 PID。"
+    ]
+  }
+}

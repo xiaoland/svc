@@ -81,6 +81,10 @@ struct ResourceRow: View {
                 ReceiptView(receipt: receipt, expanded: expanded, store: store)
             }
             if expanded {
+                if let runtime = store.activity.snapshot?.resources?.first(where: { $0.entryId == resource.entryId && $0.projectPath == project }),
+                   let usage = runtime.usage {
+                    ProcessUsageView(usage: usage)
+                }
                 if let controller = resource.controller { Text(controller).font(.caption).textSelection(.enabled) }
                 if let owner = resource.coordination, owner.ownerRepo != resource.source || owner.ownerResource != resource.resource {
                     Text("共享：\(owner.ownerRepo) · \(owner.ownerResource)").font(.caption).textSelection(.enabled)

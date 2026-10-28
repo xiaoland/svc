@@ -1,0 +1,50 @@
+[0/1] Planning build
+Building for debugging...
+[0/6] Write swift-version--FE76C4972A19952.txt
+[1/6] Write sources
+[3/7] Emitting module SVCMenuBar
+[4/8] Compiling SVCMenuBar DevModels.swift
+[4/9] Write Objects.LinkFileList
+[5/9] Linking SVCMenuBar
+[7/10] Emitting module SVCMenuBarTests
+[8/14] Compiling SVCMenuBarTests ContractTests.swift
+[9/14] Compiling SVCMenuBarTests LifecycleTests.swift
+[10/14] Compiling SVCMenuBarTests RenderingTests.swift
+[11/14] Compiling SVCMenuBarTests StoreTests.swift
+[11/14] Applying SVCMenuBar
+[12/14] Write Objects.LinkFileList
+[13/14] Linking SVCMenuBarPackageTests
+Build complete! (4.63s)
+Test Suite 'All tests' started at 2026-10-28 19:15:21.604.
+Test Suite 'All tests' passed at 2026-10-28 19:15:21.606.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.002) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test failedOperationReleasesQuitWait() started.
+􀟈  Test nativeButtonsControlRealServerWithoutForegroundChanges() started.
+􀟈  Test targetConfigurationErrorsDoNotBecomeHealthy() started.
+􀟈  Test sharedOperationsInvalidateOlderReadsAndQuitCanBeCancelled() started.
+􀟈  Test realCLIServiceSurvivesClientsAndStopsThroughDeclaredCleanup() started.
+􀟈  Test processClientHandlesSpacesNonzeroJSONAndLargeStderr() started.
+􀟈  Test missingCLIIsAnActionableError() started.
+􀟈  Test offscreenPanelRendersWithoutActivatingApplication() started.
+􀟈  Test hiddenNativeControlsInvokeActionsWithoutTakingFocus() started.
+􀟈  Test operationReceiptRemainsReachableAfterRefreshFails() started.
+􀟈  Test staleRefreshCannotReplaceNewConfigurationOrRemovedProject() started.
+􀟈  Test incompatibleOrIncompleteContractsFailClearly() started.
+􀟈  Test readinessIsNotProcessLivenessAndStopRequiresDeclaration() started.
+􁁛  Test targetConfigurationErrorsDoNotBecomeHealthy() passed after 0.003 seconds.
+􁁛  Test missingCLIIsAnActionableError() passed after 0.003 seconds.
+􁁛  Test readinessIsNotProcessLivenessAndStopRequiresDeclaration() passed after 0.003 seconds.
+􁁛  Test incompatibleOrIncompleteContractsFailClearly() passed after 0.012 seconds.
+􁁛  Test offscreenPanelRendersWithoutActivatingApplication() passed after 1.154 seconds.
+􁁛  Test hiddenNativeControlsInvokeActionsWithoutTakingFocus() passed after 1.312 seconds.
+􁁛  Test failedOperationReleasesQuitWait() passed after 1.314 seconds.
+􁁛  Test operationReceiptRemainsReachableAfterRefreshFails() passed after 1.325 seconds.
+􁁛  Test sharedOperationsInvalidateOlderReadsAndQuitCanBeCancelled() passed after 1.326 seconds.
+􁁛  Test staleRefreshCannotReplaceNewConfigurationOrRemovedProject() passed after 1.326 seconds.
+􁁛  Test realCLIServiceSurvivesClientsAndStopsThroughDeclaredCleanup() passed after 3.643 seconds.
+􁁛  Test nativeButtonsControlRealServerWithoutForegroundChanges() passed after 4.000 seconds.
+􁁛  Test processClientHandlesSpacesNonzeroJSONAndLargeStderr() passed after 30.703 seconds.
+􁁛  Test run with 13 tests in 0 suites passed after 30.704 seconds.

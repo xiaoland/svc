@@ -1,3 +1,10 @@
+## [18.2.0] - 2026-10-28
+
+### Added
+
+- dev exec 支持显式 --project，或在启动时按最近 svc.json 祖先记录项目归属。dev monitor 增加项目汇总、可验证的已释放资源运行、进程磁盘 I/O／内存 footprint 与系统 swap、压缩和换页指标；嵌套执行先去重再按项目统计，观察不会新增终止权限。monitor 结果升级为 schema 2，需使用配套 App；资源配置和既有执行／控制协议保持不变。 (#project-usage)
+
+
 ## [18.1.0] - 2026-10-28
 
 ### Added

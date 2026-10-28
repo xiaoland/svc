@@ -1,6 +1,6 @@
 [project]
 name = "sustainable-vibe-coding"
-version = "18.1.0"
+version = "18.2.0"
 description = "Local development-collaboration CLI."
 readme = "README.md"
 license = "MIT"

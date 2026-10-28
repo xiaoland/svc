@@ -18,8 +18,11 @@ from .._execution import (
     reconcile_owner_loss,
 )
 from ..errors import SvcError
-from .models import ActivitySnapshot, ExecutionActivity, HostPressure, ProcessUsage
+from .models import ActivitySnapshot, ExecutionActivity, HostPressure
 from .managed import read_management, read_termination
+from .darwin import DarwinMetrics, VMCounters
+from .provenance import ExecutionOrigin, read as read_origin
+from .usage import UsageSampler, projects
 
 
 def monitor(
@@ -38,37 +41,67 @@ def monitor(
         except SvcError as error:
             issues.append(f"{path.parent.name}: {error}")
     records.sort(key=lambda item: item.started_at, reverse=True)
-    active = [item for item in records if item.state in ACTIVE_STATES]
-    selected = (
-        active + [item for item in records if item.state not in ACTIVE_STATES][:limit]
-    )
-    processes: dict[str, list[object]] = {}
     metadata: dict[str, dict[str, object] | None] = {}
-    for record in selected:
+    origins: dict[str, ExecutionOrigin | None] = {}
+    controls: dict[str, bool] = {}
+    native = DarwinMetrics() if platform.system() == "Darwin" else None
+    sampler = UsageSampler(native)
+    # Historical display limits must not hide a still-running released server.
+    # Active roots get priority within the accounting budget.
+    for record in sorted(records, key=lambda item: item.state not in ACTIVE_STATES):
         try:
             info = read_management(authority, record)
             metadata[record.execution_id] = info
-            if info and record.state in ACTIVE_STATES and record.process_id:
-                process = psutil.Process(record.process_id)
-                if process.create_time() == info.get("process_created_at"):
-                    family = [process, *process.children(recursive=True)]
-                    if len(family) > 256:
-                        issues.append(
-                            f"{record.execution_id}: 用量采样限于前 256 个当前后代，统计不完整。"
-                        )
-                        family = family[:256]
-                    # CPU sampling is nonblocking; a single shared window follows.
-                    for member in family:
-                        member.cpu_percent(None)
-                    processes[record.execution_id] = family
-        except (SvcError, psutil.Error, OSError) as error:
+        except SvcError as error:
+            metadata[record.execution_id] = None
             issues.append(f"{record.execution_id}: {error}")
+        try:
+            origins[record.execution_id] = read_origin(authority, record)
+        except SvcError as error:
+            origins[record.execution_id] = None
+            issues.append(f"{record.execution_id}: {error}")
+        info = metadata[record.execution_id]
+        origin = origins[record.execution_id]
+        controls[record.execution_id] = bool(
+            info and record.state in ACTIVE_STATES and _owner_live(authority, record)
+        )
+        created = (
+            info.get("process_created_at")
+            if info is not None
+            else (origin.process_created_at if origin else None)
+        )
+        sampler.prepare(
+            record,
+            origin,
+            float(created) if isinstance(created, (int, float)) else None,
+            managed_owner_live=controls[record.execution_id],
+        )
 
     before_disk = _disk_counters()
+    before_vm = _vm_counters(native, issues)
     start = time.monotonic()
     cpu = psutil.cpu_percent(interval=0.25)
     elapsed = time.monotonic() - start
     after_disk = _disk_counters()
+    after_vm = _vm_counters(native, issues)
+    usages = sampler.finish()
+    current_ids = {
+        item.execution_id
+        for item in records
+        if item.state in ACTIVE_STATES
+        or (item.state == "owner-lost" and usages.get(item.execution_id) is not None)
+    }
+    selected = [item for item in records if item.execution_id in current_ids] + [
+        item for item in records if item.execution_id not in current_ids
+    ][:limit]
+    resources = sampler.resources(usages)
+    project_usages = projects(records, origins, resources, usages)
+    issues.extend(sampler.issues)
+    try:
+        swap = psutil.swap_memory()
+    except (OSError, psutil.Error) as error:
+        swap = None
+        issues.append(f"无法读取系统 swap 占用：{error}")
     memory = psutil.virtual_memory()
     memory_level, memory_issue = _memory_pressure()
     level = (
@@ -101,14 +134,22 @@ def monitor(
         level=level,
         recommendation=recommendation,
         issues=tuple([memory_issue] if memory_issue else []),
+        swap_used_bytes=swap.used if swap is not None else None,
+        swap_total_bytes=swap.total if swap is not None else None,
+        compressed_bytes=after_vm.compressed_bytes if after_vm else None,
+        page_size_bytes=after_vm.page_size if after_vm else None,
+        pageins_per_second=_rate(before_vm, after_vm, "pageins", elapsed),
+        pageouts_per_second=_rate(before_vm, after_vm, "pageouts", elapsed),
+        swapins_per_second=_rate(before_vm, after_vm, "swapins", elapsed),
+        swapouts_per_second=_rate(before_vm, after_vm, "swapouts", elapsed),
+        compressions_per_second=_rate(before_vm, after_vm, "compressions", elapsed),
+        decompressions_per_second=_rate(before_vm, after_vm, "decompressions", elapsed),
     )
     activities: list[ExecutionActivity] = []
     for record in selected:
         info = metadata.get(record.execution_id)
-        usage = _usage(processes.get(record.execution_id, []))
-        controls = bool(
-            info and record.state in ACTIVE_STATES and _owner_live(authority, record)
-        )
+        usage = usages.get(record.execution_id)
+        origin = origins.get(record.execution_id)
         try:
             request = read_termination(authority, record.execution_id) if info else None
             requested = str(request["mode"]) if request else None
@@ -123,14 +164,22 @@ def monitor(
                 record=record,
                 label=str(info["label"]) if info else record.subject,
                 source=str(info["source"]) if info else record.domain,
-                can_terminate=controls,
+                can_terminate=controls[record.execution_id],
                 termination_requested=requested,
                 group_state=str(info["group_state"]) if info else None,
                 usage=usage,
                 logs=tuple(str(authority.log_path(record, name)) for name in logs),
+                project_path=origin.project_path if origin else None,
+                project_source=origin.project_source if origin else "unassigned",
             )
         )
-    return ActivitySnapshot(pressure, tuple(activities), tuple(issues))
+    return ActivitySnapshot(
+        pressure,
+        tuple(activities),
+        tuple(dict.fromkeys(issues)),
+        project_usages,
+        resources,
+    )
 
 
 def _owner_live(store: ExecutionStore, record: ExecutionRecord) -> bool:
@@ -144,23 +193,14 @@ def _owner_live(store: ExecutionStore, record: ExecutionRecord) -> bool:
         return False
 
 
-def _usage(processes: list[object]) -> ProcessUsage | None:
-    if not processes:
+def _vm_counters(native: DarwinMetrics | None, issues: list[str]) -> VMCounters | None:
+    if native is None:
         return None
-    cpu = 0.0
-    rss = 0
-    count = 0
-    for process in processes:
-        try:
-            # psutil Process guards identity across these reads.
-            if not process.is_running():  # type: ignore[attr-defined]
-                continue
-            cpu += process.cpu_percent(None)  # type: ignore[attr-defined]
-            rss += process.memory_info().rss  # type: ignore[attr-defined]
-            count += 1
-        except psutil.Error:
-            continue
-    return ProcessUsage(round(cpu, 1), rss, count) if count else None
+    try:
+        return native.virtual_memory()
+    except OSError as error:
+        issues.append(f"无法读取内存换页与压缩：{error}")
+        return None
 
 
 def _memory_pressure() -> tuple[str, str | None]:

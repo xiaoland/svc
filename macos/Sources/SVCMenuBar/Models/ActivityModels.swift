@@ -4,6 +4,8 @@ struct ActivitySnapshot: Decodable, Sendable {
     let pressure: HostPressure
     let executions: [ExecutionActivity]
     let issues: [String]
+    let projects: [ProjectActivity]?
+    let resources: [ResourceActivity]?
 }
 
 struct HostPressure: Decodable, Sendable {
@@ -19,6 +21,16 @@ struct HostPressure: Decodable, Sendable {
     let level: String
     let recommendation: String
     let issues: [String]
+    let swapUsedBytes: Int64?
+    let swapTotalBytes: Int64?
+    let compressedBytes: Int64?
+    let pageSizeBytes: Int?
+    let pageinsPerSecond: Double?
+    let pageoutsPerSecond: Double?
+    let swapinsPerSecond: Double?
+    let swapoutsPerSecond: Double?
+    let compressionsPerSecond: Double?
+    let decompressionsPerSecond: Double?
 
     var levelLabel: String {
         switch level {
@@ -43,6 +55,28 @@ struct ExecutionUsage: Decodable, Sendable {
     let rssBytes: Int64
     let processCount: Int
     let scope: String
+    let memoryFootprintBytes: Int64?
+    let diskReadBytesPerSecond: Double?
+    let diskWriteBytesPerSecond: Double?
+    let pageinsPerSecond: Double?
+    let complete: Bool?
+    let issues: [String]?
+}
+
+struct ProjectActivity: Decodable, Sendable {
+    let projectPath: String?
+    let executionCount: Int
+    let resourceCount: Int
+    let usage: ExecutionUsage?
+    let issues: [String]
+}
+
+struct ResourceActivity: Decodable, Sendable {
+    let executionId: String
+    let projectPath: String?
+    let entryId: String
+    let resource: String
+    let usage: ExecutionUsage?
 }
 
 struct ExecutionActivity: Decodable, Identifiable, Sendable {
@@ -63,8 +97,12 @@ struct ExecutionActivity: Decodable, Identifiable, Sendable {
     let usage: ExecutionUsage?
     let logs: [String]
     let issues: [String]
+    let projectPath: String?
+    let projectSource: String?
     var id: String { executionId }
     var active: Bool { ["starting", "running"].contains(state) }
+    var currentlyObserved: Bool { active || (state == "owner-lost" && usage != nil) }
+    var projectName: String { projectPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "未归属项目" }
     var stateLabel: String {
         if state == "owner-lost" { return "执行者已丢失 · 结果未知" }
         if active {

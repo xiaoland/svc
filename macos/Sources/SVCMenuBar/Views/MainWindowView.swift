@@ -1,9 +1,7 @@
 import SwiftUI
 
 enum MainWindowSelection: Hashable {
-    case resources, section(UUID), project(String), executions
-
-    var showsResources: Bool { self != .executions }
+    case projects, section(UUID), project(String), executions
 }
 
 struct MainWindowView: View {
@@ -12,17 +10,18 @@ struct MainWindowView: View {
     let openSettings: () -> Void
     let addProject: (UUID?) -> Void
     let resourcePageChanged: (Bool) -> Void
-    @State private var selection: MainWindowSelection? = .resources
+    @State private var selection: MainWindowSelection? = .projects
     @State private var editingSection = false
     @State private var editingSectionID: UUID?
     @State private var sectionName = ""
+    @State private var showingExecutions = false
 
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
                 List(selection: $selection) {
-                    Label("全部资源", systemImage: "server.rack")
-                        .tag(MainWindowSelection.resources)
+                    Label("全部项目", systemImage: "server.rack")
+                        .tag(MainWindowSelection.projects)
                     Label("执行", systemImage: "terminal")
                         .tag(MainWindowSelection.executions)
                     ForEach(store.organization.sections) { section in
@@ -99,7 +98,8 @@ struct MainWindowView: View {
                 editingSection = false
             }.frame(width: 360)
         }
-        .onChange(of: selection) { _, value in resourcePageChanged(value?.showsResources ?? true) }
+        .onChange(of: selection) { _, _ in resourcePageChanged(needsResourceObservation) }
+        .onChange(of: showingExecutions) { _, _ in resourcePageChanged(needsResourceObservation) }
         .onChange(of: store.organization.sections.map(\.id)) { _, _ in validateSelection() }
         .onChange(of: store.projects.map(\.path)) { _, _ in validateSelection() }
     }
@@ -116,7 +116,17 @@ struct MainWindowView: View {
                 if let error = store.sectionStorageError {
                     DiagnosticView(title: "无法读取分组", message: error, semanticID: "main/sections/error")
                 }
-                if selectedProjects.isEmpty {
+                Picker("项目内容", selection: $showingExecutions) {
+                    Text("资源").tag(false)
+                    Text("执行").tag(true)
+                }.pickerStyle(.segmented).labelsHidden()
+                    .accessibilityIdentifier("main/project-pages")
+                if showingExecutions {
+                    ForEach(selectedProjects) { project in
+                        GroupBox(project.name) { ProjectUsageView(project: project.path, activity: store.activity).padding(4) }
+                    }
+                    ExecutionListView(store: store, projectPaths: Set(selectedProjects.map(\.path)))
+                } else if selectedProjects.isEmpty {
                     ContentUnavailableView {
                         Label("尚无项目", systemImage: "folder")
                     } actions: {
@@ -131,6 +141,10 @@ struct MainWindowView: View {
             }.padding(20).frame(maxWidth: 1000, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
         }.accessibilityIdentifier("main/resources")
+    }
+
+    private var needsResourceObservation: Bool {
+        selection != .executions && !showingExecutions
     }
 
     @ViewBuilder private var statusFooter: some View {
@@ -187,9 +201,9 @@ struct MainWindowView: View {
 
     private var selectionTitle: String {
         switch selection {
-        case .section(let id): store.organization.sections.first { $0.id == id }?.name ?? "全部资源"
+        case .section(let id): store.organization.sections.first { $0.id == id }?.name ?? "全部项目"
         case .project(let path): URL(fileURLWithPath: path).lastPathComponent
-        default: "全部资源"
+        default: "全部项目"
         }
     }
 
@@ -202,9 +216,9 @@ struct MainWindowView: View {
     private func validateSelection() {
         switch selection {
         case .section(let id) where !store.organization.sections.contains(where: { $0.id == id }):
-            selection = .resources
+            selection = .projects
         case .project(let path) where !store.projects.contains(where: { $0.path == path }):
-            selection = .resources
+            selection = .projects
         default: break
         }
     }

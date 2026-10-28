@@ -254,3 +254,18 @@ App 顶部“＋”可新建 Section，将多个项目放在同一分组。项�
 - **PATCH**：修正或澄清已有协议而不改变上述行为。
 
 Towncrier 分别记录 `.changes/cli/` 和 `.changes/corpus/`。CLI 发布通过 Trusted Publishing 发布已验证 wheel；Corpus 发布有独立 `corpus-v<version>` tag 与 GitHub Release。CLI wheel 不含框架内容，因此新 Corpus 不随 CLI 发布投递。框架版本权威是根 `pyproject.toml` 的 `[tool.svc.corpus].version`，六个 Skill 的 `metadata.version` 由发布准备命令同步；v16 起发布物提供六个独立 Skill ZIP、外部 `svc-skills-<version>.json` 清单与各自 SHA-256 校验文件，不再提供整体 Corpus ZIP。MIT 声明随每个独立 Skill 与 CLI 发行物携带，详见[贡献指南](CONTRIBUTING.md)。
+
+
+## 按项目查看执行与用量
+
+App 0.6.0／CLI 18.2.0 支持执行的项目归属。主窗口选择项目或 Section 后可切换资源／执行，查看已观测进程的 CPU、内存和磁盘读写；全局执行仍包含未归属记录。临时调用可显式指定项目：
+
+```sh
+svc dev exec --project /path/to/project --cwd /path/to/working-directory --source agent --label '构建' --json -- command arguments
+```
+
+省略 --project 时只在启动目录的祖先中寻找最近 svc.json；没有找到则不归属，不要求为临时命令建立配置。来源在启动时记录，不能自动给旧进程补出身份；请使用配套 CLI，App 的“复制 Agent 接入说明”提供实际绝对路径。
+
+项目用量涵盖通过 SVC 启动且身份仍可验证的本机进程，包含根仍存活的已释放资源；不自动包含容器内部、远端、外部启动或失去关联的后代。同一进程只计一次，共享服务归实际启动来源。无读数不等于零负载，终止能力也不会因能观察而增加。
+
+顶部 swap 已用量和换入／换出是全机数据。已用量不是当前换页速率，普通页面读入也不是 swap；详情另列压缩和解压活动。项目内存优先使用 macOS 的 footprint，不能将其简单理解为关闭项目后能释放的物理内存。磁盘读写速率只说明活动，没有承诺磁盘饱和检测或负载归因。
