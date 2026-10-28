@@ -59,3 +59,11 @@ Foundation 独立脚本 `ObserveRefresh.swift` 使用临时假 CLI 和两项注�
 `InspectWindowLayout.swift` 是一次性原生离屏脚本，构造真实 MainWindowController，禁止激活，不展示窗口，不进入 NSApplication.run，不发送 UI 输入、不运行项目观察。它在 1040 与 740 宽度下输出工具栏结构及完整窗口离屏图后结束。两次均获得系统 sidebar toggle、系统分隔项、刷新和设置四项，windowVisible 与 applicationActive 均为 false，unified／fullSizeContentView 均生效；[结构记录](evidence/window-layout.json)和两张布局图直接支持本次呈现修复。图中是空项目和未采样占位，不作为真实资源数据、系统激活／关闭旅程或完整可访问性验收。已有项目／Section／执行导航的先前观察及未受影响的 13 项检查继续有效。
 
 本机修正版使用 0.5.1 区分首轮被拒绝的 0.5.0；CLI 仍为 18.1.0。已补齐标准隐藏菜单，显式恢复窗口 frame 后再开启 autosave，避免将 hosting 的临时尺寸覆盖用户窗口偏好。后续安装复用单任务构建产物和同一开发签名，不再通过 computer use 重跑整条旅程。
+
+## 本机交付
+
+修正源提交为 `01ccde2397e27c5be6e4c56889f8371921c3379c`，最终单任务低优先级构建 4.91 秒。App 0.5.1 已安装到 `/Applications/SVC.app`，实际 PID 94153、可执行路径为该正式包，启动参数为 `--background`。安装使用 Apple Development 身份、Team 7J9DJNJ782，严格签名检查通过。[安装记录](evidence/installation.json)确认 CLI 仍为同一 18.1.0 runtime，全部偏好、Section 原字节和项目配置均未变化。去除签名后的产物摘要与原构建一致，产品源与 HEAD 一致；包的 dirty 标记来自旧任务材料和交付证据，不代表产品源未提交。
+
+主窗口功能和本轮明确指出的呈现缺陷修复已经交付。既有 13 项原生检查、Foundation 调度观察及两种宽度的原生离屏结构／画面证据分别支持对应范围；后两种脚本不建立可见界面或持续观察宿主。离屏图只显示空项目与采样占位；本轮修正后没有再用 computer use 复跑 Finder reopen、关闭、最小化及两个界面并开的系统交互，不能把上述证据描述为这些旅程的最终实测。也没有完整 VoiceOver 验收或用户体验认可。使用入口是 Finder 打开正式 SVC，或菜单栏面板的“打开主窗口”；体验反馈继续在本任务迭代。
+
+没有新增或修改自动化测试，没有改动 CLI、推送分支、创建 tag 或发布 GitHub Release。旧 `tasks/svc-macos-app/packet.md` 和另一个 InKCre 配置任务材料未纳入本任务提交。
