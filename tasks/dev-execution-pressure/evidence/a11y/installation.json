@@ -1,0 +1,18 @@
+{
+  "version": "0.4.1",
+  "revision": "ed954372b096c296cb07c9191451b4c6a4e04efa-dirty",
+  "previous_version": "0.4.0",
+  "cli_path": "/Users/lanzhijiang/Library/Application Support/SVC/runtimes/7056582203b85b4855d0/bin/svc",
+  "cli_runtime_unchanged": true,
+  "preferences_unchanged": true,
+  "sections_bytes_unchanged": true,
+  "project_configs_unchanged": true,
+  "running": [
+    {
+      "pid": 36815,
+      "command": "/Applications/SVC.app/Contents/MacOS/SVCMenuBar --background"
+    }
+  ],
+  "developer_signed": true,
+  "strict_signature": true
+}

@@ -1,0 +1,16 @@
+2026-10-28 15:54，CUA 只读获取正式安装 dev.svc.menubar 的 AX 状态。以下为相关原始字段节选；未执行 VoiceOver 全流程或物理键盘遍历。
+
+text 本机 压力偏高 15:54
+button Description: 展开机器详情, Value: 已折叠, ID: host/details
+text Description: 上次采样的本机用量, Value: 整机 CPU 45 百分比；内存压力偏高，可用 2.39 GB
+button (selected) Description: 资源页面, Value: 已选择, ID: panel/page/0
+button Description: 执行页面, Value: 未选择, ID: panel/page/1
+button InKCre, Description: 收起 InKCre Section, Value: 已展开, ID: section/F05B6866-696C-45D4-B9DA-42199A34CF3B/toggle
+heading Description: impl-ts, Help: /Volumes/WorkSSD/Development/InKCre/impl-ts
+button 详情, Description: 展开 impl-ts 的诊断, Value: 已折叠, ID: project//Volumes/WorkSSD/Development/InKCre/impl-ts/error/details
+text svc.json 使用旧配置 schema 4；当前 CLI 要求 schema 5
+heading Description: impl-py, Help: /Volumes/WorkSSD/Development/InKCre/impl-py
+button 详情, Description: 展开 impl-py 的诊断, Value: 已折叠, ID: project//Volumes/WorkSSD/Development/InKCre/impl-py/error/details
+text svc.json 使用旧配置 schema 4；当前 CLI 要求 schema 5
+
+装饰性的 server.rack／folder／诊断图标未进入最终 AX 树；Section 的需处理图标仍保留其状态语义。
