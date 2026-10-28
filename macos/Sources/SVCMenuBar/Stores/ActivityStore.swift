@@ -9,6 +9,7 @@ final class ActivityStore {
     private(set) var refreshing = false
     private(set) var pending: Set<String> = []
     private(set) var notice: String?
+    @ObservationIgnored var projectRoots: [String] = []
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var selectedConfiguration: CLIConfiguration?
 
@@ -26,7 +27,7 @@ final class ActivityStore {
         refreshing = true
         defer { if generation == requestGeneration { refreshing = false } }
         do {
-            let data = try await CLIClient(configuration: configuration).requestGlobal(.monitor)
+            let data = try await CLIClient(configuration: configuration).requestGlobal(.monitor, arguments: projectRoots.flatMap { ["--project-root", $0] })
             let incoming = try CLIResponse.decode(ActivitySnapshot.self, data: data, command: .monitor)
             guard generation == requestGeneration else { return }
             snapshot = incoming
@@ -57,6 +58,24 @@ final class ActivityStore {
             await refresh(configuration)
         }
     }
+
+    func terminateExternal(_ execution: HarnessExecution, configuration: CLIConfiguration) {
+        guard execution.canTerminate, !pending.contains(execution.id) else { return }
+        pending.insert(execution.id)
+        Task {
+            defer { pending.remove(execution.id) }
+            do {
+                let data = try await CLIClient(configuration: configuration).requestGlobal(.terminate,
+                    arguments: [execution.id, "--by", "human"])
+                let receipt = try CLIResponse.decode(TerminationReceipt.self, data: data, command: .terminate)
+                guard receipt.executionId == execution.id else { throw CLIError(message: "停止回执属于其他执行。") }
+                notice = receipt.message
+            } catch { notice = error.localizedDescription }
+            await refresh(configuration)
+        }
+    }
+
+    func report(_ message: String) { notice = message }
 
     func dismissNotice() { notice = nil }
 }

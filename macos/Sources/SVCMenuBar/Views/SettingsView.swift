@@ -35,6 +35,7 @@ struct SettingsView: View {
                 Text("项目命令使用此 PATH；需要的环境变量由项目配置声明。")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            IntegrationSettingsView(store: store)
             HStack {
                 if saved { Label("已保存", systemImage: "checkmark.circle").foregroundStyle(.green) }
                 Spacer()

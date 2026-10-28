@@ -33,7 +33,13 @@ from .cli_output.double import (
 from .cli_output.project import InitApplyOutput, InitPlanOutput, RootStatusOutput
 from .cli_output.model import CliUsageOutput, MachineError
 from .cli_output.run import RunReceipt
-from .cli_output.activity import MonitorOutput, ManagedOutput, TerminationOutput
+from .cli_output.activity import (
+    MonitorOutput,
+    ManagedOutput,
+    TerminationOutput,
+    ExecutionLogsOutput,
+    IntegrationSetupOutput,
+)
 from .cli_output.skills import SkillsOutput, AdoptionOutput
 
 
@@ -116,8 +122,14 @@ class OutputSchemaSpec:
 
 
 OUTPUT_SCHEMA_SPECS = {
+    "dev-logs": OutputSchemaSpec(
+        1, TypeAdapter(ExecutionLogsOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-integrate": OutputSchemaSpec(
+        1, TypeAdapter(IntegrationSetupOutput | MachineError | CliUsageOutput)
+    ),
     "dev-monitor": OutputSchemaSpec(
-        2, TypeAdapter(MonitorOutput | MachineError | CliUsageOutput)
+        3, TypeAdapter(MonitorOutput | MachineError | CliUsageOutput)
     ),
     "dev-exec": OutputSchemaSpec(
         1, TypeAdapter(ManagedOutput | MachineError | CliUsageOutput)

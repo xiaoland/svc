@@ -1,0 +1,11 @@
+{
+  "provider": "codex",
+  "separateNativeServer": true,
+  "realModelRequests": 0,
+  "localResponseRequests": 2,
+  "nativeList": true,
+  "nativeTerminateAcknowledged": true,
+  "terminalRemoved": true,
+  "originalConnectionObservedCommandCompletion": true,
+  "desktopAttached": false
+}

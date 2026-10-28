@@ -184,6 +184,152 @@
       "title": "ExecutionActivityOutput",
       "type": "object"
     },
+    "ExternalExecutionOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "can_read_logs": {
+          "title": "Can Read Logs",
+          "type": "boolean"
+        },
+        "can_terminate": {
+          "title": "Can Terminate",
+          "type": "boolean"
+        },
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "execution_id": {
+          "title": "Execution Id",
+          "type": "string"
+        },
+        "instance_id": {
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "native_id": {
+          "title": "Native Id",
+          "type": "string"
+        },
+        "process_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Process Id"
+        },
+        "project_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Path"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "scope": {
+          "title": "Scope",
+          "type": "string"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "stop_description": {
+          "title": "Stop Description",
+          "type": "string"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessUsageOutput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "execution_id",
+        "provider",
+        "native_id",
+        "instance_id",
+        "label",
+        "command",
+        "cwd",
+        "state",
+        "scope",
+        "started_at",
+        "can_terminate",
+        "can_read_logs",
+        "stop_description",
+        "process_id",
+        "usage",
+        "project_path",
+        "issues"
+      ],
+      "title": "ExternalExecutionOutput",
+      "type": "object"
+    },
+    "HarnessStatusOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "instances": {
+          "title": "Instances",
+          "type": "integer"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "state",
+        "message",
+        "instances"
+      ],
+      "title": "HarnessStatusOutput",
+      "type": "object"
+    },
     "JsonValue": {},
     "MachineError": {
       "additionalProperties": false,
@@ -247,6 +393,22 @@
           "title": "Executions",
           "type": "array"
         },
+        "external_executions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ExternalExecutionOutput"
+          },
+          "title": "External Executions",
+          "type": "array"
+        },
+        "integrations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HarnessStatusOutput"
+          },
+          "title": "Integrations",
+          "type": "array"
+        },
         "issues": {
           "items": {
             "type": "string"
@@ -274,8 +436,8 @@
           "type": "array"
         },
         "schema_version": {
-          "const": 2,
-          "default": 2,
+          "const": 3,
+          "default": 3,
           "title": "Schema Version",
           "type": "integer"
         }
@@ -683,7 +845,7 @@
       "type": "object"
     }
   },
-  "$id": "urn:svc:cli-output:dev-monitor:v2",
+  "$id": "urn:svc:cli-output:dev-monitor:v3",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "anyOf": [
     {
@@ -697,5 +859,5 @@
     }
   ],
   "title": "SVC dev-monitor machine output",
-  "x-svc-result-schema-version": 2
+  "x-svc-result-schema-version": 3
 }

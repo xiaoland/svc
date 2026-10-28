@@ -6,6 +6,8 @@ struct ActivitySnapshot: Decodable, Sendable {
     let issues: [String]
     let projects: [ProjectActivity]?
     let resources: [ResourceActivity]?
+    let externalExecutions: [HarnessExecution]?
+    let integrations: [HarnessIntegration]?
 }
 
 struct HostPressure: Decodable, Sendable {

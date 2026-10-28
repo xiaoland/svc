@@ -87,3 +87,6 @@ CLI 18.2.0／App 0.2.0 提供主窗口、菜单栏面板、机器概览与执行
 App 展示来源、资源、状态、动作及回执，通过公开 CLI 完成全部资源语义。默认 worktree 资源的运行就绪需要实例证明；host 资源需声明 host_key。插值仍限于 `${dev.instance}`、`${dev.worktree.id}`、`${dev.target}`，命令按 argv 执行且 cwd 限于工作区。
 
 旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同。源码版本不表示已安装或公开发布；迁移步骤见[用户手册](../../USER_MANUAL.md#人工迁移-cli-配置)，实际交付状态见版本记录与 GitHub Release。
+
+
+原生 Agent 管理器可以成为执行来源，Agent 无需为被观察而改用 SVC 的启动命令。当前接入 Pi 后台任务、Codex 共享 app-server 后台终端和 Claude Code 后台会话；各来源明确控制粒度、连接范围和指标缺失。SVC 不接管 Agent 的工作计划，也不把协作待办当运行任务。人按项目查看，停止仍交给原管理器；停止整个会话必须在执行前明确说明，不能伪装为仅停止其中一个命令。

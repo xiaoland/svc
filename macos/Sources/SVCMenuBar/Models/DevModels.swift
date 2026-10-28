@@ -27,8 +27,8 @@ struct CLIConfiguration: Equatable, Sendable {
 }
 
 enum DevCommand: String, Sendable {
-    case list, status, act, reconcile, monitor, terminate
-    var schemaVersion: Int { self == .status ? 4 : (self == .monitor ? 2 : 1) }
+    case list, status, act, reconcile, monitor, terminate, logs, integrate
+    var schemaVersion: Int { self == .status ? 4 : (self == .monitor ? 3 : 1) }
     var title: String {
         switch self {
         case .list: "资源"
@@ -37,6 +37,8 @@ enum DevCommand: String, Sendable {
         case .reconcile: "确认未知结果"
         case .monitor: "机器与执行"
         case .terminate: "终止执行"
+        case .logs: "执行日志"
+        case .integrate: "执行来源接入"
         }
     }
 }

@@ -1,0 +1,12 @@
+{
+  "applicationActive" : false,
+  "controlRequestsSent" : 0,
+  "logsActionAvailable" : true,
+  "project" : "\/Volumes\/WorkSSD\/Development\/svc-dev-lab",
+  "recordedNativeSnapshot" : true,
+  "rowHasWindow" : false,
+  "schema" : 3,
+  "stopLabel" : "停止 SVC Pi 验收",
+  "stopRequiresConfirmation" : true,
+  "usageAvailable" : true
+}

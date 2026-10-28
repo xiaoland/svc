@@ -6,6 +6,8 @@ import platform
 import subprocess
 import time
 from datetime import datetime, timezone
+from pathlib import Path
+from dataclasses import replace
 from typing import Literal
 
 import psutil  # type: ignore[import-untyped]
@@ -22,18 +24,33 @@ from .models import ActivitySnapshot, ExecutionActivity, HostPressure
 from .managed import read_management, read_termination
 from .darwin import DarwinMetrics, VMCounters
 from .provenance import ExecutionOrigin, read as read_origin
-from .usage import UsageSampler, projects
+from .usage import UsageSampler, projects, aggregate
+from .harness.service import collect
+from .models import ProjectActivity
 
 
 def monitor(
-    *, limit: int = 20, store: ExecutionStore | None = None
+    *,
+    limit: int = 20,
+    store: ExecutionStore | None = None,
+    project_roots: tuple[Path, ...] = (),
 ) -> ActivitySnapshot:
     if not 1 <= limit <= 100:
         raise SvcError("invalid-activity-limit", "执行历史条数必须在 1 到 100 之间。")
+    if len(project_roots) > 128:
+        raise SvcError(
+            "invalid-project-roots", "项目范围最多 128 个，且必须是现有目录。"
+        )
+    root_issues = [
+        f"项目目录暂不可达，未参与外部归属：{root}"
+        for root in project_roots
+        if not root.is_dir()
+    ]
+    project_roots = tuple(root.resolve() for root in project_roots if root.is_dir())
     authority = store or ExecutionStore()
     records: list[ExecutionRecord] = []
-    issues: list[str] = []
-    # Each directory is read once. No project probes or command execution occur here.
+    issues: list[str] = root_issues
+    # Each directory is read once. No project probes or project commands occur here.
     for path in authority.root.glob("*/execution.json"):
         try:
             record = authority.read(path.parent.name)
@@ -46,6 +63,8 @@ def monitor(
     controls: dict[str, bool] = {}
     native = DarwinMetrics() if platform.system() == "Darwin" else None
     sampler = UsageSampler(native)
+    # Native manager reads have their own deadline; finish them before CPU baselines.
+    harness = collect(project_roots)
     # Historical display limits must not hide a still-running released server.
     # Active roots get priority within the accounting budget.
     for record in sorted(records, key=lambda item: item.state not in ACTIVE_STATES):
@@ -77,6 +96,16 @@ def monitor(
             managed_owner_live=controls[record.execution_id],
         )
 
+    for external in harness.executions:
+        if (
+            external.state in ("running", "idle")
+            and external.process_id
+            and external.local_owner_pid
+        ):
+            sampler.prepare_external(
+                external.execution_id, external.process_id, external.local_owner_pid
+            )
+
     before_disk = _disk_counters()
     before_vm = _vm_counters(native, issues)
     start = time.monotonic()
@@ -96,6 +125,31 @@ def monitor(
     ][:limit]
     resources = sampler.resources(usages)
     project_usages = projects(records, origins, resources, usages)
+    external_executions = tuple(
+        replace(item, usage=usages.get(item.execution_id))
+        for item in harness.executions
+    )
+    by_project = {item.project_path: item for item in project_usages}
+    for external in external_executions:
+        if external.state not in ("running", "idle"):
+            continue
+        previous = by_project.get(external.project_path)
+        measured = [
+            value
+            for value in (previous.usage if previous else None, external.usage)
+            if value is not None
+        ]
+        notes = previous.issues if previous else ()
+        if external.usage is None:
+            notes += (f"{external.label}: 未取得可验证的本机用量。",)
+        by_project[external.project_path] = ProjectActivity(
+            external.project_path,
+            (previous.execution_count if previous else 0) + 1,
+            previous.resource_count if previous else 0,
+            aggregate(measured, notes),
+            notes,
+        )
+    project_usages = tuple(by_project.values())
     issues.extend(sampler.issues)
     try:
         swap = psutil.swap_memory()
@@ -179,6 +233,8 @@ def monitor(
         tuple(dict.fromkeys(issues)),
         project_usages,
         resources,
+        external_executions,
+        harness.integrations,
     )
 
 

@@ -16,4 +16,4 @@ App 使用用户安装的 SVC CLI，不内嵌 CLI，也不会自动安装 Python
 
 如果你在维护这份源码，可使用本机已有 Apple Development 身份执行 `./script/build_and_run.sh --install`。该路径只安装 App 并验证签名，CLI 由用户另行安装，适用于本机迭代；开发证书不会被导出或上传。
 
-App 0.2.0 配套 CLI 18.2.0，只接受项目配置 schema 5。已有 targets 配置需人工迁移并排空旧控制调用，步骤见[用户手册](https://github.com/xiaoland/svc/blob/main/USER_MANUAL.md#人工迁移-cli-配置)。用户自选 CLI 路径会保留，重装不会自动覆盖。
+App 0.2.0 配套 CLI 18.3.0，只接受项目配置 schema 5。已有 targets 配置需人工迁移并排空旧控制调用，步骤见[用户手册](https://github.com/xiaoland/svc/blob/main/USER_MANUAL.md#人工迁移-cli-配置)。用户自选 CLI 路径会保留，重装不会自动覆盖。

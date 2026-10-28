@@ -46,6 +46,12 @@ from .cli_output.project import (
 from .cli_output.run import project_run_receipt, run_exit_code
 from .cli_output.activity import project_monitor, project_managed, project_termination
 from .activity.monitor import monitor
+from .activity.harness.service import (
+    terminate as terminate_external,
+    logs as external_logs,
+)
+from .activity.harness.install import setup as setup_integration
+from .cli_output.activity import project_logs, project_integration
 from .activity.managed import execute as execute_managed, request_termination
 from .cli_delivery import deliver_error, deliver_result
 from .errors import SvcError
@@ -252,6 +258,13 @@ def _parser() -> argparse.ArgumentParser:
     _add_machine_output(
         monitoring, "dev-monitor", "输出带采样时间的机器结果", schema_first=True
     )
+    monitoring.add_argument(
+        "--project-root",
+        action="append",
+        type=Path,
+        default=[],
+        help="本次观察的已登记项目根，只影响外部执行归属",
+    )
     execution = dev_commands.add_parser(
         "exec",
         help="运行一次显式受管命令；人可从 App 终止，无需项目配置",
@@ -291,6 +304,18 @@ def _parser() -> argparse.ArgumentParser:
         "dev-terminate",
         "返回请求状态；不把请求等同于实际退出",
         schema_first=True,
+    )
+    logs = dev_commands.add_parser("logs", help="读取原生执行管理器提供的限量日志")
+    logs.add_argument("execution_id")
+    _add_machine_output(logs, "dev-logs", "读取外部执行日志", schema_first=True)
+    integration = dev_commands.add_parser(
+        "integrate", help="安装 Pi 接入或配置原生执行来源，不启动 Agent"
+    )
+    integration.add_argument("provider", choices=("pi", "codex", "claude"))
+    integration.add_argument("--cli", dest="native_cli")
+    integration.add_argument("--socket", dest="socket_path")
+    _add_machine_output(
+        integration, "dev-integrate", "返回接入配置结果", schema_first=True
     )
     for name in ("list", "status", "identity", "act", "ensure", "stop", "reconcile"):
         command = dev_commands.add_parser(name)
@@ -575,7 +600,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if args.command == "dev":
             if args.dev_command == "monitor":
-                snapshot = monitor(limit=args.limit)
+                snapshot = monitor(
+                    limit=args.limit, project_roots=tuple(args.project_root)
+                )
                 return deliver_result(
                     snapshot,
                     json_output=json_output,
@@ -612,8 +639,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ),
                     exit_code=int(result_code or 0),
                 )
+            if args.dev_command == "logs":
+                return deliver_result(
+                    external_logs(args.execution_id),
+                    json_output=json_output,
+                    project=project_logs,
+                    render=lambda result, stream: print(result.text, file=stream),
+                    exit_code=0,
+                )
+            if args.dev_command == "integrate":
+                return deliver_result(
+                    setup_integration(
+                        args.provider,
+                        executable=args.native_cli,
+                        socket_path=args.socket_path,
+                    ),
+                    json_output=json_output,
+                    project=project_integration,
+                    render=lambda result, stream: print(result.message, file=stream),
+                    exit_code=0,
+                )
             if args.dev_command == "terminate":
-                termination_result = request_termination(
+                terminate = (
+                    terminate_external
+                    if args.execution_id.startswith("harness:")
+                    else request_termination
+                )
+                termination_result = terminate(
                     args.execution_id, force=args.force, by=args.by
                 )
                 return deliver_result(
@@ -736,6 +788,16 @@ def _render_monitor(snapshot: Any, stream: TextIO) -> None:
         print(
             f"{item.record.execution_id}  {item.record.state}  {item.label}  {control}\n  {item.source} · {item.record.cwd}",
             file=stream,
+        )
+    for item in snapshot.external_executions:
+        control = "可原生停止" if item.can_terminate else "只读"
+        print(
+            f"{item.execution_id}  {item.state}  {item.label}  {control}\n  {item.provider} · {item.scope} · {item.cwd}",
+            file=stream,
+        )
+    for source in snapshot.integrations:
+        print(
+            f"来源：{source.provider} · {source.state} · {source.message}", file=stream
         )
     for issue in (*pressure.issues, *snapshot.issues):
         print(f"注意：{issue}", file=stream)

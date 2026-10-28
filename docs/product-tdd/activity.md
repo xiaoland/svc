@@ -25,7 +25,7 @@ activity 拥有 execution 目录内独立 observation.json schema 1，绑定 exe
 
 monitor 先从全部记录建立可验证的观察集合，再限制最近结束执行的展示条数。根仍存活且身份匹配的 released 服务不会因超过 20 条历史而丢失用量，作为 resources 返回，执行行仍保留 released 语义且不能终止。owner-lost 根若仍可观察，也不受历史条数限制；它计入当前观察来源，状态仍为结果未知，不能变为可终止或已成功结束。根结束后不从历史进程组接管脱离的后代。受管 owner 仍持锁、根身份仍有效时，可以从其保留的进程组观察已重新归属父进程的 worker；查询组成员不构成新控制权限。查询本身会经过操作系统进程列表，不宣称完全没有系统扫描。
 
-每个进程以 PID 和创建时间标识，采样前先建立唯一集合，再读取一次 CPU 基线与计数；重叠成员优先归最近的已登记执行根，不能同时计入外层项目和内层项目。无法消除的歧义明确报告并不重复计费。先按执行聚合，再按 project_path 聚合；共享服务归实际启动来源，不向所有引用项目复制用量。统计只覆盖可验证的本机进程，不包含容器内部、远端、绕过 SVC 启动的程序及已失去关联的后代。旧记录没有观察来源时保留未知，不根据进程名、端口或当前 cwd 补出历史归属。
+每个进程以 PID 和创建时间标识，采样前先建立唯一集合，再读取一次 CPU 基线与计数；重叠成员优先归最近的已登记执行根，不能同时计入外层项目和内层项目。无法消除的歧义明确报告并不重复计费。先按执行聚合，再按 project_path 聚合；共享服务归实际启动来源，不向所有引用项目复制用量。统计只覆盖可验证的本机进程，不包含容器内部、远端、尚未接入的外部程序及已失去关联的后代。旧记录没有观察来源时保留未知，不根据进程名、端口或当前 cwd 补出历史归属。
 
 进程内存优先采用 `proc_pid_rusage(RUSAGE_INFO_V2)` 的 phys_footprint，保留 RSS 原字段；footprint 包含系统计入的压缩内存，但进程之和不等于结束项目可释放的物理内存。进程磁盘读写及 pageins 由同一接口的累计量在相同进程身份下取差；采样失败或计数倒退返回 null，不能转成零。CPU 仍按单核 100% 表示。usage 的 complete／issues 说明本次选中集合是否完整读到，不承诺全项目或全部未来后代都已覆盖。
 
@@ -34,3 +34,28 @@ monitor 先从全部记录建立可验证的观察集合，再限制最近结束
 这些接口不需要 task port、地址空间遍历、root 或额外的隐私权限。实现依据为 [Apple rusage 接口](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/resource.h)、[VM 统计结构](https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/mach/vm_statistics.h)、[psutil 7.2.2 macOS 实现](https://github.com/giampaolo/psutil/blob/release-7.2.2/psutil/arch/osx/mem.c)及 [Apple 内存压力说明](https://support.apple.com/guide/activity-monitor/view-memory-usage-actmntr1004/mac)。
 
 公开 dev-monitor 结果升级为 schema 2，扩展 pressure、execution usage、project_path／project_source，并新增 projects 和 resources；dev-exec／terminate schema 1 不变。结果形状变化必须推进自己的版本，不能因为旧 Swift 解码器忽略额外字段就沿用严格旧 schema。App 与 CLI 使用同一项目用量模型，App 只决定显示范围，不另行扫描进程或汇总一份来源不明的全机用量。
+
+
+## 原生 Agent 执行来源
+
+CLI 18.3.0 的 dev-monitor schema 3 在原有机械 executions 之外返回 external_executions 和 integrations。原生执行保留 provider、实例、原生 ID、控制范围、动作能力及状态，不写入 ExecutionStore，也不假装由 SVC 启动。SVC 提供跨来源的项目归类与展示，生命周期、日志和停止仍由原管理器拥有。未连接、部分可用和已连接但清单为空分别表达；单一来源失败不阻止主机压力采样。原生来源读取合计限 3 秒，单个管理器通常最多 1.5 秒；达到预算的其余来源明确标为未知，不继续排队读取。
+
+| 来源 | 发现与控制入口 | 本版范围 |
+| --- | --- | --- |
+| Pi | pi-background-tasks Host EventBus API v1，同 activation 的桥接扩展 | 后台任务清单、最近日志、单项原生停止 |
+| Codex | 现有 app-server 的私有 Unix WebSocket；experimentalApi 的 loaded threads／backgroundTerminals | 后台终端清单和单项原生停止；该接口不提供日志 |
+| Claude Code | 原生 agents --json、logs ID、stop ID | 后台会话日志和整个会话停止；交互会话只读 |
+
+Pi 桥接随 CLI 分发，通过 dev integrate pi 安装到用户 Pi extensions/svc-dev.ts；Pi 必须重新加载扩展或开始下次会话。桥接只调用同进程已安装的 Host API，不建新 registry、模型工具或后台调度器。每次请求临时订阅后释放 lease，不在界面隐藏时持续采样。实例、随机密钥及 socket 描述保存在用户数据目录 SVC/harnesses；目录为 0700，文件与 socket 为 0600。仅开放 list、logs、stop，限制连接、队列、帧和日志大小；重载销毁旧 socket 和身份。
+
+Codex 必须连接拥有目标终端的同一个 app-server。默认查 CODEX_HOME/app-server-control/app-server-control.sock，可用 dev integrate codex --socket ABSOLUTE_PATH 配置已有入口；不会自动启动、恢复或重启服务器。公开 Unix transport 使用 WebSocket，官方 proxy 只转发字节，不能把换行 JSON 直接发给它。由 websockets 提供有帧上限和截止时间的连接；允许官方入口符号链接，但规范化后仍检查目标 socket 的用户与私有权限。socket 身份改变后旧执行 ID 失效。接口缺失或实验协议变化明确报不可用，不能退回扫描历史记录或直接给 PID 发信号。
+
+Claude Code 需要支持 agents --json 的原生 CLI，自动从 PATH 查找，也可用 dev integrate claude --cli ABSOLUTE_PATH 明确选择。本版验证版本为 2.1.292。会话身份包含原生 ID、session ID、启动时间、PID 和 CLI 路径，控制前重新列举并核对；交互会话即使有 PID 也不会提供停止。会话内 Bash 子任务没有独立接管能力，TaskList 等协作待办也不当作运行任务。
+
+external execution ID 是来源、实例和原生 ID 的不透明组合。dev logs ID schema 1 重新确认身份后读取有界日志；dev terminate ID --by human|terminal schema 1 重新确认能力后提交原生停止。外部执行不接受 force，也不把原生 Host 的 user stop 冒充为 Agent 操作。停止前 App 明示范围：Pi 可能按自身策略升级信号，Claude 会停止整个后台会话；原生回执不等于 SVC 的 scope-complete，也不会为外部来源伪造 stopped_by 或 retry_allowed。
+
+外部归属使用当前 cwd：优先匹配调用方通过重复 --project-root 指定的、包含 cwd 的最深项目根，再找最近的 svc.json 祖先；不执行项目探测，不推断任务目标，也不要求项目引入 SVC。该投影随当前原生快照变化，与 SVC 启动时写入的历史归属不同。不可达目录保留未归属及诊断，不影响机器采样。App 只提供已登记项目根并消费返回的 project_path，不自行再归类。
+
+外部用量只对新鲜原生清单声明且可关联本机宿主的 PID 采样，并在本轮固定创建时间；Pi 要求任务根与桥接宿主存在本机祖先关系，Claude 使用本机原生会话 PID。Codex 的 osPid 可能属于远端执行主机，因此本版不据此采集本机用量。所有已验证成员复用同一 64 根／256 进程采样集合，按 PID 和创建时间去重；嵌套来源归最近执行根，同一根优先已有 SVC 来源。缺少用量返回 null，项目汇总注明观察不完整，不补零；原管理器的 token/context telemetry 不算物理内存。
+
+协议依据为 [Pi Host API](https://github.com/ismailsaleekh/pi-background-tasks/blob/main/docs/api/eventbus-host-v1.md)、[Pi 扩展生命周期](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md)、[Codex app-server](https://developers.openai.com/codex/app-server/)与 [Unix transport 源码](https://github.com/openai/codex/blob/main/codex-rs/app-server-transport/src/transport/unix_socket.rs)。Claude 能力以当前原生 CLI 的 agents／logs／stop 帮助与独立有限运行核对；Agent SDK 的 stopTask 只属于持有 Query 的调用者，不据此承诺接管任意既有 Bash。

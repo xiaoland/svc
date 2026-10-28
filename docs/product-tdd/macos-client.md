@@ -1,6 +1,6 @@
 # macOS App 与 CLI 合同
 
-本文拥有 SVC Dev 图形入口与程序化入口之间的职责、公开协议和生命周期合同。产品定位见 [开发资源管理](../prd/development.md)，使用与迁移见[用户手册](../../USER_MANUAL.md)，发行流程见[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)。本文描述 CLI 18.2.0／App 0.2.0 的源码合同；旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同，不能混用。安装和公开发布是独立的交付步骤，不能由源码版本推断。
+本文拥有 SVC Dev 图形入口与程序化入口之间的职责、公开协议和生命周期合同。产品定位见 [开发资源管理](../prd/development.md)，使用与迁移见[用户手册](../../USER_MANUAL.md)，发行流程见[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)。本文描述 CLI 18.3.0／App 0.2.0 的源码合同；旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同，不能混用。安装和公开发布是独立的交付步骤，不能由源码版本推断。
 
 App 与 CLI 是同一产品能力的两个入口。App 拥有项目来源偏好、呈现、刷新调度、当前会话回执及 CLI 路径和 PATH；CLI 拥有配置解释、资源身份、观察、声明动作执行和跨进程协调。项目脚本或实际控制者拥有资源内部的初始化、数据清理、权限和异步操作生命周期。App 不直接读取配置和私有 runtime，也不根据端口或历史 PID 推导权限。
 
@@ -27,9 +27,9 @@ App 通过绝对路径启动独立 CLI，以 argv 传入项目目录，不经过
 
 以上调用都支持 `--repo`、`--json` 和 `--json-schema`。根 status 结果 schema 为 4，init 结果仍为 4；配置 schema 5 与这些结果版本相互独立。App 校验 command、schema 和必要字段，拒绝不兼容或损坏结果，不能造出成功或未就绪。非零 CLI 退出也可能携带有效回执。
 
-App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.2.0 配套 CLI 18.2.0，将 dev-monitor 从 schema 1 推进到 2，exec／terminate 仍为 schema 1；原 list／status／act／reconcile 的结果版本不变。本开发线包含主窗口、统一的原生导航与工具栏，并沿用系统文字层级和可访问语义；CLI package 的 minor 表示新增独立能力，不由本地 App 迭代次数决定。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
+App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.2.0 配套 CLI 18.3.0，将 dev-monitor 推进到 schema 3，exec／terminate 仍为 schema 1；原 list／status／act／reconcile 的结果版本不变。本开发线包含主窗口、统一的原生导航与工具栏，并沿用系统文字层级和可访问语义；CLI package 的 minor 表示新增独立能力，不由本地 App 迭代次数决定。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
 
-机器与执行页使用 `dev monitor --json`，不附加项目目录，也不依赖项目能否解析；`dev terminate <execution-id> [--force] --by human --json` 只请求执行 owner 终止。App 不自己发送进程信号。主机采样、一次性执行及停止证明由[主机与受管执行合同](activity.md)拥有；执行页不会将旧资源动作的 wait、ready 释放或 submitted 改成可强杀。CLI 仍可独立于 App 使用；App 退出不终止前台 CLI 拥有的一次性执行。
+机器与执行页使用 `dev monitor --json`，通过重复 --project-root 提供 App 已登记目录，但不依赖项目配置能否解析；`dev terminate <execution-id> [--force] --by human --json` 只请求执行 owner 终止。App 不自己发送进程信号。主机采样、一次性执行及停止证明由[主机与受管执行合同](activity.md)拥有；执行页不会将旧资源动作的 wait、ready 释放或 submitted 改成可强杀。CLI 仍可独立于 App 使用；App 退出不终止前台 CLI 拥有的一次性执行。
 
 ## 主窗口与菜单栏面板
 
@@ -92,7 +92,7 @@ App 按来源展示资源及具名状态，详情承载实例依据、关系、�
 
 App 0.2.0 的主窗口在全部项目、Section 或项目范围内保留原生资源／执行切换；全局执行入口仍呈现未归属记录。执行列表使用“当前执行”和“最近记录”，避免将仍有可观测进程的 owner-lost 描述为已结束；它仍明确显示结果未知并禁用终止。项目筛选只使用 monitor 返回的 project_path 精确匹配 App 已规范化的来源路径，不在客户端根据 cwd 或命令内容重新归属。项目和执行展示来自同一 monitor 快照的用量；资源详情通过 entry_id／project_path 关联仍可观察的本地资源运行。App 不因观察到 released 进程而提供直接终止按钮，资源继续走声明动作。
 
-机器概览始终保留全机含义，磁盘读写、swap 已用量与真实换入／换出不会随所选项目变为该项目的值。项目用量明确标为“已观测”，不涵盖未接入的外部程序、容器或远端工作；不可用显示不可用而不是零。Swift 模型保留指标不可用时的空值表达，不伪造读数。本机及配套发行使用 18.2.0 的 monitor schema 2；旧 monitor schema 1 明确拒绝混用。exec／terminate schema 1 与资源配置 schema 5 不变。
+机器概览始终保留全机含义，磁盘读写、swap 已用量与真实换入／换出不会随所选项目变为该项目的值。项目用量明确标为“已观测”，不涵盖未接入的外部程序、容器或远端工作；不可用显示不可用而不是零。Swift 模型保留指标不可用时的空值表达，不伪造读数。本机及配套发行使用 18.3.0 的 monitor schema 3；旧 monitor schema 1／2 明确拒绝混用。exec／terminate schema 1 与资源配置 schema 5 不变。
 
 ## 默认信息与深入查看
 
@@ -109,3 +109,6 @@ App 0.2.0 的主窗口在全部项目、Section 或项目范围内保留原生�
 主机、项目用量、最近记录与侧栏 Section 的 DisclosureGroup 保留系统控件，但每处局部 transaction 同时设置 animation 为 nil、disablesAnimations 为 true，避免默认展开／收起过渡造成内容缩放、淡入或布局迟滞。该约束不施加到整个窗口，也不改变展开状态的所有者、Section 偏好或刷新调度。做法来自 nearby-audio 的修复提交 `027c894`，不复制其项目业务。
 
 当前 App 0.2.0 是未发布目标，后续本地迭代沿用该版本；区分安装用构建号和源码 revision。此前临时使用的 0.3.x 到 0.6.x 没有公开发布，不作为兼容性基线。正式版本与发布记录按[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)维护。
+
+
+原生执行与机械执行共享项目列表，但采用独立模型。HarnessExecution 保留来源、scope 和动作能力；HarnessExecutionRow 仅在来源允许时展示日志／停止，停止前显示原管理器的作用范围并确认，不提供外部 force。IntegrationSettingsView 消费同一 ActivityStore 的 integrations，在设置内安装 Pi 桥接或配置现有 Codex socket；Claude 从用户 PATH 自动发现。执行页的折叠来源状态区区分尚未接入与空清单，沿用原生 DisclosureGroup 的局部无动画处理。连接、身份失效、日志预算和用量限制由 [activity 原生来源合同](activity.md#原生-agent-执行来源)拥有。

@@ -58,6 +58,7 @@ final class AppStore {
             executable: legacyCLI ? "" : savedCLI,
             searchPath: searchPath
         )
+        activity.projectRoots = projects.map(\.path)
         if let stored = preferences.object(forKey: "projectSections") {
             do {
                 guard let data = stored as? Data else { throw CocoaError(.coderReadCorrupt) }
@@ -361,5 +362,8 @@ final class AppStore {
         refreshes.removeAll()
     }
 
-    private func persistProjects() { preferences.set(projects.map(\.path), forKey: "projects") }
+    private func persistProjects() {
+        activity.projectRoots = projects.map(\.path)
+        preferences.set(projects.map(\.path), forKey: "projects")
+    }
 }

@@ -1,3 +1,10 @@
+## [18.3.0] - 2026-10-28
+
+### Added
+
+- dev monitor schema 3 增加独立原生执行与来源连接状态，接入 Pi Host API 任务、Codex 现有共享 app-server 后台终端和 Claude Code 后台会话；提供 dev integrate、dev logs 和按原生身份停止。原管理器拥有生命周期，交互会话只读，缺失用量不补零，外部执行不提供 force 或进程组收敛保证。 (#harness-native)
+
+
 ## [18.2.0] - 2026-10-28
 
 ### Added

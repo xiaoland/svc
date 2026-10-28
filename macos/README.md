@@ -12,7 +12,7 @@ App 0.2.0 提供菜单栏快捷面板和独立主窗口。主窗口使用原生�
 
 面板按 Section、项目、资源区分层级。顶部显示项目数量，所有项目读取成功后才显示完整资源数量；部分读取成功时标明“已读取”，全部读取失败时不显示零资源。项目或资源诊断先呈现短原因，点击展开箭头查看、选择或复制完整原文。资源访问入口直接显示，动作旁保留影响对象与数据影响；展开资源详情后可查看观察来源、时间、实例依据及完整动作范围。刷新时间集中在页脚。
 
-需要 macOS 14+、Swift 6 工具链，以及配套 CLI 18.2.0（dev status schema 4、monitor schema 2，其余 App 调用的 list／act／reconcile／terminate 为 schema 1）。从仓库根目录执行：
+需要 macOS 14+、Swift 6 工具链，以及配套 CLI 18.3.0（dev status schema 4、monitor schema 3，其余 App 调用的 list／act／reconcile／terminate／logs／integrate 为 schema 1）。从仓库根目录执行：
 
 ```sh
 pdm install
@@ -67,3 +67,6 @@ Swift 的 `CLIClient` 只通过 argv 调用公开命令，不经 shell，不解�
 主机概览默认只显示压力状态，点击展开详细指标。项目用量默认保留 CPU／内存，点击可看磁盘和进程数；资源和执行的“详情”提供证据、日志与高级操作。普通终止及修改／删除数据的影响仍直接可见。
 
 下次公开发布前，App 本地迭代统一使用 0.2.0，构建号和源码 revision 区分每次安装。主机、项目用量、历史与侧栏分组的原生 DisclosureGroup 都在局部 transaction 中禁用展开／收起动画；不改用自绘折叠控件，也不关闭整个应用的动画。
+
+
+执行页也显示原生 Agent 管理器提供的任务。设置中的“执行来源”可安装 Pi 桥接并配置已有 Codex socket，Claude Code 从用户 PATH 发现；没有连接时明确展示状态。Pi 扩展需在 Pi 重新加载后生效；Codex 不自动启动新服务器。原生停止先确认具体范围，Claude 是整个后台会话，交互会话只读。详细能力与限制见[原生执行接入说明](../USER_MANUAL.md#接入-agent-原生执行)。

@@ -1,6 +1,10 @@
 """Observations shared by the Human and Agent activity entry points."""
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .harness.models import ExternalExecution, HarnessStatus
 
 from .._execution import ExecutionRecord
 
@@ -85,6 +89,8 @@ class ActivitySnapshot:
     issues: tuple[str, ...] = ()
     projects: tuple[ProjectActivity, ...] = ()
     resources: tuple[ResourceActivity, ...] = ()
+    external_executions: tuple["ExternalExecution", ...] = ()
+    integrations: tuple["HarnessStatus", ...] = ()
 
 
 @dataclass(frozen=True)

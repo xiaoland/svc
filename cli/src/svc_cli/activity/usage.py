@@ -34,7 +34,7 @@ def _counter_rate(
 
 @dataclass
 class Candidate:
-    record: ExecutionRecord
+    record: ExecutionRecord | None
     origin: ExecutionOrigin | None
     root: Any
     key: ProcessKey
@@ -96,24 +96,73 @@ class UsageSampler:
             return
         if record.state not in ACTIVE_STATES | {"released", "owner-lost"}:
             return
+        self._prepare(
+            record.execution_id,
+            record.process_id,
+            created_at,
+            origin,
+            record=record,
+            use_group=managed_owner_live or record.domain == "dev",
+            report_errors=record.state in ACTIVE_STATES,
+        )
+
+    def prepare_external(self, execution_id: str, pid: int, owner_pid: int) -> None:
+        """Sample only a fresh native-manager claim with a local owner link."""
+        try:
+            root = psutil.Process(pid)
+            linked = root.pid == owner_pid
+            ancestor = root
+            for _ in range(32):
+                if linked:
+                    break
+                ancestor = ancestor.parent()
+                if ancestor is None:
+                    break
+                linked = ancestor.pid == owner_pid
+            if not linked:
+                self.issues.append(
+                    f"{execution_id}: 本机宿主关联不可验证，未计入用量。"
+                )
+                return
+            self._prepare(
+                execution_id,
+                pid,
+                root.create_time(),
+                None,
+                record=None,
+                use_group=False,
+                report_errors=True,
+            )
+        except psutil.Error as error:
+            self.issues.append(f"{execution_id}: {error}")
+
+    def _prepare(
+        self,
+        execution_id: str,
+        pid: int,
+        created_at: float,
+        origin: ExecutionOrigin | None,
+        *,
+        record: ExecutionRecord | None,
+        use_group: bool,
+        report_errors: bool,
+    ) -> None:
         if len(self.candidates) >= MAX_ROOTS:
             self.issues.append("用量观察限于 64 个已验证执行根，其余未统计。")
             return
         try:
-            root = psutil.Process(record.process_id)
+            root = psutil.Process(pid)
             if root.create_time() != created_at:
-                if record.state in ACTIVE_STATES:
+                if report_errors:
                     self.issues.append(
-                        f"{record.execution_id}: 进程身份已变化，未采样历史 PID。"
+                        f"{execution_id}: 进程身份已变化，未采样历史 PID。"
                     )
                 return
             candidate = Candidate(record, origin, root, (root.pid, created_at))
-            self.candidates[record.execution_id] = candidate
+            self.candidates[execution_id] = candidate
             # An unreaped managed leader can be a zombie while its workers have
             # been reparented. Its reserved process group retains that relation.
-            if self.native is not None and (
-                managed_owner_live or record.domain == "dev"
-            ):
+            if self.native is not None and use_group:
                 pids, truncated = ProcessGroup().sample_members(root.pid, MAX_PROCESSES)
                 if truncated:
                     candidate.issues.append("当前进程组超过 256 项，统计不完整。")
@@ -142,7 +191,7 @@ class UsageSampler:
                         continue
                     key = (process.pid, process.create_time())
                     if key in self.pending:
-                        self.pending[key].owners.append(record.execution_id)
+                        self.pending[key].owners.append(execution_id)
                         continue
                     if len(self.pending) >= MAX_PROCESSES:
                         candidate.issues.append(
@@ -158,7 +207,7 @@ class UsageSampler:
                             candidate.issues.append(str(error))
                     self.pending[key] = PendingProcess(
                         process,
-                        [record.execution_id],
+                        [execution_id],
                         process.ppid(),
                         before,
                         time.monotonic(),
@@ -166,12 +215,15 @@ class UsageSampler:
                 except psutil.Error as error:
                     candidate.issues.append(str(error))
         except (psutil.Error, SvcError, OSError) as error:
-            if record.state in ACTIVE_STATES:
-                self.issues.append(f"{record.execution_id}: {error}")
+            if report_errors:
+                self.issues.append(f"{execution_id}: {error}")
 
     def finish(self) -> dict[str, ProcessUsage | None]:
         collected: dict[str, list[ProcessUsage]] = {key: [] for key in self.candidates}
-        roots = {item.key: key for key, item in self.candidates.items()}
+        roots: dict[ProcessKey, str] = {}
+        for execution_id, item in self.candidates.items():
+            # Native SVC roots are prepared first; the same identity is never counted twice.
+            roots.setdefault(item.key, execution_id)
         parents = {key[0]: item.parent for key, item in self.pending.items()}
         for key, pending in self.pending.items():
             owner = self._closest_owner(key, pending, roots, parents)
@@ -273,7 +325,8 @@ class UsageSampler:
                 usages[execution_id],
             )
             for execution_id, item in self.candidates.items()
-            if item.record.state == "released"
+            if item.record is not None
+            and item.record.state == "released"
             and item.origin is not None
             and item.origin.resource_entry_id is not None
             and item.origin.resource_key is not None

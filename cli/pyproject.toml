@@ -1,6 +1,6 @@
 [project]
 name = "sustainable-vibe-coding"
-version = "18.2.0"
+version = "18.3.0"
 description = "Local development-collaboration CLI."
 readme = "README.md"
 license = "MIT"
@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv<2,>=1.2",
     "urllib3<3,>=2.7",
     "psutil<8,>=7.2",
+    "websockets<17,>=16",
 ]
 
 [project.optional-dependencies]

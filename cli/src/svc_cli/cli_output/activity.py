@@ -6,6 +6,7 @@ from dataclasses import asdict
 from typing import Literal
 
 from .._execution import ExecutionState
+from ..activity.harness.models import ExternalExecution, ExecutionLogs, IntegrationSetup
 from ..activity.models import ActivitySnapshot, ManagedResult, TerminationResult
 from .model import MachineModel
 
@@ -86,14 +87,59 @@ class ResourceActivityOutput(MachineModel):
     usage: ProcessUsageOutput | None
 
 
+class ExternalExecutionOutput(MachineModel):
+    execution_id: str
+    provider: str
+    native_id: str
+    instance_id: str
+    label: str
+    command: str
+    cwd: str
+    state: str
+    scope: str
+    started_at: str
+    can_terminate: bool
+    can_read_logs: bool
+    stop_description: str
+    process_id: int | None
+    usage: ProcessUsageOutput | None
+    project_path: str | None
+    issues: tuple[str, ...]
+
+
+class HarnessStatusOutput(MachineModel):
+    provider: str
+    state: str
+    message: str
+    instances: int
+
+
+class ExecutionLogsOutput(MachineModel):
+    schema_version: Literal[1] = 1
+    command: Literal["dev logs"] = "dev logs"
+    execution_id: str
+    text: str
+    truncated: bool
+
+
+class IntegrationSetupOutput(MachineModel):
+    schema_version: Literal[1] = 1
+    command: Literal["dev integrate"] = "dev integrate"
+    provider: str
+    state: str
+    message: str
+
+
 class MonitorOutput(MachineModel):
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     command: Literal["dev monitor"] = "dev monitor"
     pressure: PressureOutput
     executions: tuple[ExecutionActivityOutput, ...]
     issues: tuple[str, ...]
     projects: tuple[ProjectActivityOutput, ...] = ()
     resources: tuple[ResourceActivityOutput, ...] = ()
+    external_executions: tuple[ExternalExecutionOutput, ...] = ()
+    integrations: tuple[HarnessStatusOutput, ...] = ()
 
 
 class ManagedOutput(MachineModel):
@@ -153,6 +199,12 @@ def project_monitor(snapshot: ActivitySnapshot) -> MonitorOutput:
         resources=tuple(
             ResourceActivityOutput(**asdict(item)) for item in snapshot.resources
         ),
+        external_executions=tuple(
+            project_external(item) for item in snapshot.external_executions
+        ),
+        integrations=tuple(
+            HarnessStatusOutput(**asdict(item)) for item in snapshot.integrations
+        ),
     )
 
 
@@ -172,3 +224,17 @@ def project_managed(result: ManagedResult) -> ManagedOutput:
 
 def project_termination(result: TerminationResult) -> TerminationOutput:
     return TerminationOutput(**asdict(result))
+
+
+def project_external(item: "ExternalExecution") -> ExternalExecutionOutput:
+    fields = asdict(item)
+    del fields["local_owner_pid"]
+    return ExternalExecutionOutput(**fields)
+
+
+def project_logs(item: "ExecutionLogs") -> ExecutionLogsOutput:
+    return ExecutionLogsOutput(**asdict(item))
+
+
+def project_integration(item: "IntegrationSetup") -> IntegrationSetupOutput:
+    return IntegrationSetupOutput(**asdict(item))

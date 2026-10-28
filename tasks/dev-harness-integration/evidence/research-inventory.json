@@ -1,0 +1,16 @@
+{
+  "piBackgroundTasks": {
+    "version": "2.6.10",
+    "repository": "git+https://github.com/ismailsaleekh/pi-background-tasks.git",
+    "hostAPI": "docs/api/eventbus-host-v1.md",
+    "transport": "in-process pi.events, not an external socket"
+  },
+  "codex": {
+    "version": "0.165.0-alpha.1.2",
+    "schemaGeneratedWithExperimental": true,
+    "liveServerConnected": false
+  },
+  "productSourceChanged": false,
+  "installedExtensionsChanged": false,
+  "phase": "调查时点快照；实现和安装结果另见本任务后续证据"
+}
