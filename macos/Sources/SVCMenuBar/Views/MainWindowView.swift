@@ -88,9 +88,11 @@ struct MainWindowView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: refresh) { Label("刷新", systemImage: "arrow.clockwise") }
+                    .labelStyle(.iconOnly)
                     .help("刷新机器与当前页面（⌘R）")
                     .disabled(store.quitPending || store.activity.refreshing || !store.refreshes.isEmpty)
                 Button(action: openSettings) { Label("设置", systemImage: "gearshape") }
+                    .labelStyle(.iconOnly)
                     .help("设置（⌘,）")
             }
         }
@@ -108,12 +110,14 @@ struct MainWindowView: View {
     private var resourceContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text(selectionTitle).font(.title2).fontWeight(.semibold)
-                        .accessibilityAddTraits(.isHeader)
-                    Spacer()
-                    if selectedProjects.count > 1 {
-                        Text("\(selectedProjects.count) 个项目").foregroundStyle(.secondary)
+                if !isSingleProject || showingExecutions {
+                    HStack {
+                        Text(selectionTitle).font(.title2).fontWeight(.semibold)
+                            .accessibilityAddTraits(.isHeader)
+                        Spacer()
+                        if selectedProjects.count > 1 {
+                            Text("\(selectedProjects.count) 个项目").foregroundStyle(.secondary)
+                        }
                     }
                 }
                 if let error = store.sectionStorageError {
@@ -126,7 +130,8 @@ struct MainWindowView: View {
                     .accessibilityIdentifier("main/project-pages")
                 if showingExecutions {
                     ForEach(selectedProjects) { project in
-                        GroupBox(project.name) { ProjectUsageView(project: project.path, activity: store.activity).padding(4) }
+                        ProjectUsageView(project: project.path, activity: store.activity,
+                                         title: isSingleProject ? nil : project.name)
                     }
                     ExecutionListView(store: store, projectPaths: Set(selectedProjects.map(\.path)))
                 } else if selectedProjects.isEmpty {
@@ -166,7 +171,7 @@ struct MainWindowView: View {
                 Text(notice).textSelection(.enabled)
                 Spacer()
                 Button { store.notice = nil } label: { Image(systemName: "xmark") }
-                    .buttonStyle(.borderless).accessibilityLabel("关闭提示")
+                    .buttonStyle(.borderless).help("关闭提示").accessibilityLabel("关闭提示")
             }.font(.caption).padding(12)
         }
     }
@@ -187,6 +192,11 @@ struct MainWindowView: View {
         Divider()
         Button("删除 Section", role: .destructive) { store.deleteSection(section.id) }
             .disabled(!store.canEditSections)
+    }
+
+    private var isSingleProject: Bool {
+        if case .project = selection { return true }
+        return false
     }
 
     private var selectedSectionID: UUID? {

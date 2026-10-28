@@ -37,7 +37,7 @@ struct ProjectSectionView: View {
                     Button("删除 Section", role: .destructive) { store.deleteSection(section.id) }
                 } label: { Image(systemName: "ellipsis").frame(width: 24, height: 24) }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                .disabled(!store.canEditSections).accessibilityLabel("\(section.name) Section 操作")
+                .disabled(!store.canEditSections).help("\(section.name) Section 操作").accessibilityLabel("\(section.name) Section 操作")
             }
             if !section.collapsed {
                 if members.isEmpty {

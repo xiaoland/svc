@@ -86,7 +86,7 @@ struct MenuPanel: View {
                     Text(notice).font(.caption).lineLimit(3).help(notice).textSelection(.enabled)
                     Spacer()
                     Button { store.notice = nil } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.borderless).accessibilityLabel("关闭提示")
+                        .buttonStyle(.borderless).help("关闭提示").accessibilityLabel("关闭提示")
                 }.padding(12)
             }
             Divider()
@@ -97,7 +97,8 @@ struct MenuPanel: View {
                 Button {
                     NSApp.activate(ignoringOtherApps: true)
                     openSettings()
-                } label: { Label("设置", systemImage: "gearshape") }
+                } label: { Image(systemName: "gearshape") }
+                .help("设置").accessibilityLabel("设置")
                 .keyboardShortcut(",")
                 Spacer()
                 if let time = selectedTab == 0 ? store.projects.compactMap(\.checkedAt).max() : store.activity.checkedAt {

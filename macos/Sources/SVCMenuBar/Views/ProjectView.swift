@@ -31,7 +31,7 @@ struct ProjectView: View {
                         Button("移除项目", role: .destructive) { store.removeProject(project.path) }
                             .disabled(!store.operations.isEmpty || store.quitPending)
                     } label: { Image(systemName: "ellipsis").frame(width: 24, height: 22) }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("\(project.name) 项目操作")
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("\(project.name) 项目操作").accessibilityLabel("\(project.name) 项目操作")
                 }
                 ProjectUsageView(project: project.path, activity: store.activity)
                 if let error = project.error {

@@ -18,11 +18,11 @@ struct ExecutionRow: View {
                         .lineLimit(1).truncationMode(.middle).help(execution.label)
                     Spacer(minLength: 4)
                     if execution.canTerminate {
-                        ResourceActionButton(title: "终止", semanticID: "execution/\(execution.id)/terminate",
+                        ResourceActionButton(title: "", semanticID: "execution/\(execution.id)/terminate",
                             enabled: !busy && execution.terminationRequested == nil, symbol: "stop.fill",
                             accessibilityName: "终止 \(execution.label)", accessibilityHelp: "请求结束本次受管进程组") {
                                 store.activity.terminate(execution, force: false, configuration: store.configuration)
-                            }.fixedSize()
+                            }.frame(width: 28, height: 24)
                     }
                     ResourceActionButton(title: "", semanticID: "execution/\(execution.id)/details", bordered: false,
                         symbol: expanded ? "chevron.up" : "chevron.down",

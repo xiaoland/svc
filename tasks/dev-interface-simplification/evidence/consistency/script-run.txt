@@ -1,0 +1,70 @@
+{
+  "applicationActive" : false,
+  "collapsedResourceButtons" : [
+    "bcb1a056ebdf50deafb3f8d7ca5154411eaa6517dfe806888b6bb561e316ccb7\/details",
+    "",
+    "",
+    "bcb1a056ebdf50deafb3f8d7ca5154411eaa6517dfe806888b6bb561e316ccb7\/ensure",
+    "bcb1a056ebdf50deafb3f8d7ca5154411eaa6517dfe806888b6bb561e316ccb7\/stop"
+  ],
+  "collapsedResourceHeight" : 133,
+  "darkPanelHeight" : 612,
+  "destructiveActionVisible" : true,
+  "diagnosticDisclosure" : [
+    {
+      "help" : "展开 资源需要处理 的诊断",
+      "label" : "展开 资源需要处理 的诊断",
+      "title" : ""
+    }
+  ],
+  "executionDisclosure" : [
+    {
+      "help" : "展开 svc-dev-lab bounded work 的执行详情",
+      "label" : "展开 svc-dev-lab bounded work 的执行详情",
+      "title" : ""
+    }
+  ],
+  "expandedResourceHeight" : 435,
+  "forceHiddenUntilDetails" : true,
+  "forceRequiresConfirmation" : true,
+  "offscreenHostsHaveWindows" : false,
+  "ordinaryStopControl" : [
+    {
+      "help" : "请求结束本次受管进程组",
+      "label" : "终止 svc-dev-lab bounded work",
+      "title" : ""
+    }
+  ],
+  "ordinaryStopVisible" : true,
+  "panelHeight" : 612,
+  "recordedCLIReplay" : true,
+  "resourceDisclosure" : [
+    {
+      "help" : "展开 验收 Web 服务 详情",
+      "label" : "展开 验收 Web 服务 详情",
+      "title" : ""
+    }
+  ],
+  "resourceExpanded" : "已展开",
+  "settingsAccessibilityEvidence" : "这里只记录 NSButton 子视图；SwiftUI 语义树名称以源中的 accessibilityLabel 为依据，未声称完成 VoiceOver 验收。",
+  "settingsNativeSubviewMetadata" : [
+    {
+      "help" : "",
+      "label" : "",
+      "title" : ""
+    },
+    {
+      "help" : "",
+      "label" : "",
+      "title" : ""
+    }
+  ],
+  "toolbar" : [
+    "Hide Sidebar",
+    "",
+    "刷新",
+    "设置"
+  ],
+  "unobservedProjectUsageHeight" : 0,
+  "windowVisible" : false
+}

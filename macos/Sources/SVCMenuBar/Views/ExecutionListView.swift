@@ -13,13 +13,13 @@ struct ExecutionListView: View {
             let recent = executions.filter { !$0.currentlyObserved }
             HStack {
                 Text("当前执行").font(.system(size: 12, weight: .semibold))
-                Text("\(active.count)").foregroundStyle(.secondary)
+                if !active.isEmpty { Text("\(active.count)").foregroundStyle(.secondary) }
                 Spacer()
                 Menu {
                     Button("复制 Agent 接入说明") { copyAgentInstructions() }
                 } label: { Image(systemName: "ellipsis") }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                    .accessibilityLabel("执行列表操作")
+                    .help("执行列表操作").accessibilityLabel("执行列表操作")
             }
             if active.isEmpty {
                 Text(store.activity.snapshot == nil ? "尚未取得执行清单" : "暂无运行中的受管执行")
@@ -49,7 +49,7 @@ struct ExecutionListView: View {
                     Text(notice).font(.caption).textSelection(.enabled)
                     Spacer()
                     Button { store.activity.dismissNotice() } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.borderless).accessibilityLabel("关闭执行提示")
+                        .buttonStyle(.borderless).help("关闭执行提示").accessibilityLabel("关闭执行提示")
                 }
             }
         }.padding(12)

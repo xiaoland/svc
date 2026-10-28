@@ -64,6 +64,7 @@ struct InspectInterface {
         try await capture(task, width: 420, output: output.appendingPathComponent("execution.png"))
         let prefix = "execution/\(execution.id)"
         report["executionDisclosure"] = buttons(task).filter { $0.accessibilityIdentifier() == prefix + "/details" }.map { ["title": $0.title, "label": $0.accessibilityLabel(), "help": $0.toolTip ?? ""] }
+        report["ordinaryStopControl"] = buttons(task).filter { $0.accessibilityIdentifier() == prefix + "/terminate" }.map { ["title": $0.title, "label": $0.accessibilityLabel(), "help": $0.toolTip ?? ""] }
         report["ordinaryStopVisible"] = buttons(task).contains { $0.accessibilityIdentifier() == prefix + "/terminate" && !$0.isHidden }
         report["forceHiddenUntilDetails"] = !buttons(task).contains { $0.accessibilityIdentifier() == prefix + "/force" }
         try press(prefix + "/details", in: task)
@@ -92,6 +93,16 @@ struct InspectInterface {
         report["diagnosticDisclosure"] = buttons(diagnostic).filter { $0.accessibilityIdentifier() == "icon-diagnostic/details" }.map { ["title": $0.title, "label": $0.accessibilityLabel(), "help": $0.toolTip ?? ""] }
         try press("icon-diagnostic/details", in: diagnostic)
         try await capture(diagnostic, width: 420, output: output.appendingPathComponent("diagnostic-details.png"))
+        let settings = NSHostingView(rootView: SettingsView(store: store))
+        try await capture(settings, width: 560, output: output.appendingPathComponent("settings.png"))
+        report["settingsNativeSubviewMetadata"] = buttons(settings).map { ["title": $0.title, "label": $0.accessibilityLabel(), "help": $0.toolTip ?? ""] }
+        report["settingsAccessibilityEvidence"] = "这里只记录 NSButton 子视图；SwiftUI 语义树名称以源中的 accessibilityLabel 为依据，未声称完成 VoiceOver 验收。"
+        let usage = NSHostingView(rootView: ProjectUsageView(project: roots[0], activity: store.activity, title: "验收项目").padding(12).background(Color(nsColor: .windowBackgroundColor)))
+        try await capture(usage, width: 420, output: output.appendingPathComponent("named-project-usage.png"))
+        let missing = NSHostingView(rootView: ProjectUsageView(project: "/unobserved-project", activity: store.activity, title: "无用量项目"))
+        missing.frame = NSRect(x: 0, y: 0, width: 420, height: 200)
+        missing.layoutSubtreeIfNeeded()
+        report["unobservedProjectUsageHeight"] = missing.fittingSize.height
         report["applicationActive"] = app.isActive
         report["offscreenHostsHaveWindows"] = [row, task, warning].contains { $0.window != nil }
         let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])

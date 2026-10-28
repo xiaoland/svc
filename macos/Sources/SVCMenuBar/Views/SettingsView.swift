@@ -14,7 +14,9 @@ struct SettingsView: View {
             Section("SVC CLI") {
                 HStack {
                     TextField("可执行文件", text: $cliPath).textFieldStyle(.roundedBorder)
-                    Button("选择…", action: chooseCLI)
+                    Button(action: chooseCLI) { Image(systemName: "folder").frame(width: 26, height: 26) }
+                        .buttonStyle(.borderless)
+                        .help("选择 svc 可执行文件").accessibilityLabel("选择 svc 可执行文件")
                 }
                 TextField("命令搜索路径 PATH", text: $searchPath, axis: .vertical).lineLimit(3...5)
                 Text("项目命令使用此 PATH；需要的环境变量由项目配置声明。")

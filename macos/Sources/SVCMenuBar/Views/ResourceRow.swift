@@ -41,22 +41,14 @@ struct ResourceRow: View {
                 DiagnosticView(title: "资源需要处理", message: error.message, semanticID: resource.entryId + "/error", context: resource.label)
             }
             if resource.needsReconciliation { recovery }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) { ForEach(resource.actions) { action in actionButton(action) } }
-                VStack(alignment: .leading, spacing: 8) { ForEach(resource.actions) { action in actionButton(action) } }
-            }
             if expanded {
-                ForEach(resource.actions) { action in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(action.intent).fontWeight(.medium)
-                        Text("\(action.effectScope) · \(action.effectLabel)").textSelection(.enabled)
-                        if !action.traits.isEmpty { Text(action.traitLabels).foregroundStyle(.secondary) }
-                        if action.kind == "manual" && store.receipts[resource.entryId]?.result?.action != action.key {
-                            ForEach(Array(action.steps.enumerated()), id: \.offset) { _, step in Text(step) }
-                        }
-                        if action.interruption == "wait" { Text("开始后等待实际结束").foregroundStyle(.secondary) }
-                        if action.completion == "submitted" { Text("提交后由控制者继续处理").foregroundStyle(.secondary) }
-                    }.font(.caption)
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(resource.actions) { action in actionButton(action) }
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { ForEach(resource.actions) { action in actionButton(action) } }
+                    VStack(alignment: .leading, spacing: 8) { ForEach(resource.actions) { action in actionButton(action) } }
                 }
             }
             if let receipt = store.receipts[resource.entryId] {
@@ -100,10 +92,18 @@ struct ResourceRow: View {
                     if action.kind == "manual" { expanded = true }
                     store.perform(action, resource: resource, project: project)
                 }.fixedSize()
-            if action.dataEffect != "unchanged" {
+            if expanded || action.dataEffect != "unchanged" {
                 Text("\(action.effectScope) · \(action.effectLabel)")
                     .font(.caption).foregroundStyle(action.dataEffect == "delete" ? .red : .secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            if expanded {
+                if !action.traits.isEmpty { Text(action.traitLabels).font(.caption).foregroundStyle(.secondary) }
+                if action.kind == "manual" && store.receipts[resource.entryId]?.result?.action != action.key {
+                    ForEach(Array(action.steps.enumerated()), id: \.offset) { _, step in Text(step).font(.caption) }
+                }
+                if action.interruption == "wait" { Text("开始后等待实际结束").font(.caption).foregroundStyle(.secondary) }
+                if action.completion == "submitted" { Text("提交后由控制者继续处理").font(.caption).foregroundStyle(.secondary) }
             }
         }
     }

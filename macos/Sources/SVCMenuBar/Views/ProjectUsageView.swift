@@ -3,6 +3,7 @@ import SwiftUI
 struct ProjectUsageView: View {
     let project: String
     let activity: ActivityStore
+    var title: String? = nil
     @State private var expanded = false
 
     var body: some View {
@@ -22,14 +23,21 @@ struct ProjectUsageView: View {
                 }.padding(.top, 6).frame(maxWidth: .infinity, alignment: .leading)
             } label: {
                 HStack {
-                    Text("用量").foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    if let usage = observed.usage { ProcessUsageSummary(usage: usage) }
+                    if let title {
+                        Text(title).lineLimit(1).help(project)
+                        Spacer(minLength: 8)
+                    }
+                    if let usage = observed.usage {
+                        ProcessUsageSummary(usage: usage)
+                    } else {
+                        Text("用量不可用").foregroundStyle(.secondary)
+                    }
                     if !observed.issues.isEmpty {
                         Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
                             .accessibilityLabel("部分项目用量不可用")
                     }
-                }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                    .help("已观测的项目用量，展开查看磁盘活动和进程详情")
             }.font(.caption).accessibilityIdentifier("usage/\(project)/details")
         }
     }
