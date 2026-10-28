@@ -1,0 +1,28 @@
+{
+  "applicationActive" : false,
+  "collapsedResourceButtons" : [
+    "bcb1a056ebdf50deafb3f8d7ca5154411eaa6517dfe806888b6bb561e316ccb7\/details",
+    "",
+    "",
+    "bcb1a056ebdf50deafb3f8d7ca5154411eaa6517dfe806888b6bb561e316ccb7\/ensure",
+    "bcb1a056ebdf50deafb3f8d7ca5154411eaa6517dfe806888b6bb561e316ccb7\/stop"
+  ],
+  "collapsedResourceHeight" : 131,
+  "darkPanelHeight" : 609,
+  "destructiveActionVisible" : true,
+  "expandedResourceHeight" : 443,
+  "forceHiddenUntilDetails" : true,
+  "forceRequiresConfirmation" : true,
+  "offscreenHostsHaveWindows" : false,
+  "ordinaryStopVisible" : true,
+  "panelHeight" : 609,
+  "recordedCLIReplay" : true,
+  "resourceExpanded" : "已展开",
+  "toolbar" : [
+    "Hide Sidebar",
+    "",
+    "刷新",
+    "设置"
+  ],
+  "windowVisible" : false
+}

@@ -33,9 +33,6 @@ struct ProjectView: View {
                     } label: { Image(systemName: "ellipsis").frame(width: 24, height: 22) }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("\(project.name) 项目操作")
                 }
-                // Show the path to distinguish worktrees with identical directory names.
-                Text(project.path).font(.caption).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle).help(project.path)
                 ProjectUsageView(project: project.path, activity: store.activity)
                 if let error = project.error {
                     DiagnosticView(title: "无法读取项目", message: error, semanticID: "project/\(project.path)/error", context: project.name)

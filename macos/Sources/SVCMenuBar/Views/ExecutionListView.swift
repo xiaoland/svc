@@ -15,8 +15,11 @@ struct ExecutionListView: View {
                 Text("当前执行").font(.system(size: 12, weight: .semibold))
                 Text("\(active.count)").foregroundStyle(.secondary)
                 Spacer()
-                Button("复制 Agent 接入说明") { copyAgentInstructions() }
-                    .buttonStyle(.borderless).font(.caption)
+                Menu {
+                    Button("复制 Agent 接入说明") { copyAgentInstructions() }
+                } label: { Image(systemName: "ellipsis") }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .accessibilityLabel("执行列表操作")
             }
             if active.isEmpty {
                 Text(store.activity.snapshot == nil ? "尚未取得执行清单" : "暂无运行中的受管执行")

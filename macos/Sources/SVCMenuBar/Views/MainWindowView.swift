@@ -111,7 +111,9 @@ struct MainWindowView: View {
                     Text(selectionTitle).font(.title2).fontWeight(.semibold)
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
-                    Text("\(selectedProjects.count) 个项目").foregroundStyle(.secondary)
+                    if selectedProjects.count > 1 {
+                        Text("\(selectedProjects.count) 个项目").foregroundStyle(.secondary)
+                    }
                 }
                 if let error = store.sectionStorageError {
                     DiagnosticView(title: "无法读取分组", message: error, semanticID: "main/sections/error")

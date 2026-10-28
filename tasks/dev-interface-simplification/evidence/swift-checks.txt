@@ -1,0 +1,51 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write swift-version--FE76C4972A19952.txt
+[1/5] Write sources
+[3/6] Emitting module SVCMenuBar
+[4/10] Compiling SVCMenuBar ExecutionRow.swift
+[5/10] Compiling SVCMenuBar ProcessUsageView.swift
+[6/10] Compiling SVCMenuBar ProjectUsageView.swift
+[7/10] Compiling SVCMenuBar ResourceRow.swift
+[8/11] Compiling SVCMenuBar HostPressureView.swift
+[8/13] Write Objects.LinkFileList
+[9/13] Linking SVCMenuBar
+[11/14] Emitting module SVCMenuBarTests
+[12/18] Compiling SVCMenuBarTests ContractTests.swift
+[13/18] Compiling SVCMenuBarTests LifecycleTests.swift
+[14/18] Compiling SVCMenuBarTests RenderingTests.swift
+[15/18] Compiling SVCMenuBarTests StoreTests.swift
+[15/18] Applying SVCMenuBar
+[16/18] Write Objects.LinkFileList
+[17/18] Linking SVCMenuBarPackageTests
+Build complete! (4.84s)
+Test Suite 'All tests' started at 2026-10-28 20:17:09.166.
+Test Suite 'All tests' passed at 2026-10-28 20:17:09.167.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test operationReceiptRemainsReachableAfterRefreshFails() started.
+􀟈  Test readinessIsNotProcessLivenessAndStopRequiresDeclaration() started.
+􀙟  Test nativeButtonsControlRealServerWithoutForegroundChanges() skipped: "设置 SVC_TEST_CLI 以验证原生按钮控制真实服务"
+􀟈  Test hiddenNativeControlsInvokeActionsWithoutTakingFocus() started.
+􀟈  Test missingCLIIsAnActionableError() started.
+􀙟  Test offscreenPanelRendersWithoutActivatingApplication() skipped: "设置 SVC_RENDER_DIR 生成离屏界面证据"
+􀟈  Test sharedOperationsInvalidateOlderReadsAndQuitCanBeCancelled() started.
+􀟈  Test targetConfigurationErrorsDoNotBecomeHealthy() started.
+􀙟  Test realCLIServiceSurvivesClientsAndStopsThroughDeclaredCleanup() skipped: "设置 SVC_TEST_CLI 以运行真实生命周期测试"
+􀟈  Test incompatibleOrIncompleteContractsFailClearly() started.
+􀟈  Test processClientHandlesSpacesNonzeroJSONAndLargeStderr() started.
+􀟈  Test failedOperationReleasesQuitWait() started.
+􀟈  Test staleRefreshCannotReplaceNewConfigurationOrRemovedProject() started.
+􁁛  Test missingCLIIsAnActionableError() passed after 0.001 seconds.
+􁁛  Test targetConfigurationErrorsDoNotBecomeHealthy() passed after 0.001 seconds.
+􁁛  Test readinessIsNotProcessLivenessAndStopRequiresDeclaration() passed after 0.001 seconds.
+􁁛  Test incompatibleOrIncompleteContractsFailClearly() passed after 0.003 seconds.
+􁁛  Test failedOperationReleasesQuitWait() passed after 0.273 seconds.
+􁁛  Test operationReceiptRemainsReachableAfterRefreshFails() passed after 0.273 seconds.
+􁁛  Test sharedOperationsInvalidateOlderReadsAndQuitCanBeCancelled() passed after 0.286 seconds.
+􁁛  Test staleRefreshCannotReplaceNewConfigurationOrRemovedProject() passed after 0.286 seconds.
+􁁛  Test hiddenNativeControlsInvokeActionsWithoutTakingFocus() passed after 0.413 seconds.
+􁁛  Test processClientHandlesSpacesNonzeroJSONAndLargeStderr() passed after 0.526 seconds.
+􁁛  Test run with 13 tests in 0 suites passed after 0.526 seconds.
