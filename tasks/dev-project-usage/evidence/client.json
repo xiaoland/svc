@@ -1,0 +1,23 @@
+{
+  "actualMonitorDecoded" : true,
+  "canTerminateAfterExit" : false,
+  "decodedExecutions" : 15,
+  "decodedProjects" : [
+    "\/Volumes\/WorkSSD\/Development\/svc-dev-lab-peer",
+    "\/Volumes\/WorkSSD\/Development\/svc-dev-lab"
+  ],
+  "decodedResources" : 2,
+  "footprints" : [
+    47203216,
+    47006584
+  ],
+  "foundationOnly" : true,
+  "groupState" : "scope-complete",
+  "projectAfterTermination" : "\/Volumes\/WorkSSD\/Development\/svc-dev-lab",
+  "swapUsed" : 20495532032,
+  "terminatedState" : "interrupted",
+  "writeRates" : [
+    254936.69,
+    255136.29999999999
+  ]
+}

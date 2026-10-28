@@ -1,0 +1,19 @@
+{
+  "processExitCode": 130,
+  "result": {
+    "command": "dev exec",
+    "execution_id": "3d5ae4eb-387e-40df-add4-5f9212af1f0c",
+    "exit_code": null,
+    "group_state": "scope-complete",
+    "label": "svc-dev-lab 客户端终止验收",
+    "logs": [
+      "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/3d5ae4eb-387e-40df-add4-5f9212af1f0c/stdout.log",
+      "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/3d5ae4eb-387e-40df-add4-5f9212af1f0c/stderr.log"
+    ],
+    "retry_allowed": false,
+    "schema_version": 1,
+    "source": "agent",
+    "state": "interrupted",
+    "stopped_by": "human"
+  }
+}

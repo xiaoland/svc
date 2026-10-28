@@ -1,0 +1,9 @@
+{
+  "wheel": "/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/dist/macos/project-usage/sustainable_vibe_coding-18.2.0-py3-none-any.whl",
+  "sha256": "c25ccbdb08478f55cb948a49ca4728c98198413edef4f8d242d0bba443032165",
+  "runtime": "/Users/lanzhijiang/Library/Application Support/SVC/runtimes/c25ccbdb08478f55cb94/bin/svc",
+  "version": "svc 18.2.0",
+  "monitorSchema": 2,
+  "sourceFilesMatched": 99,
+  "allSourceBytesMatched": true
+}

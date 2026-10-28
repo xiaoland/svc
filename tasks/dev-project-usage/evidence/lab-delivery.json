@@ -1,0 +1,21 @@
+{
+  "observableLabResources": [],
+  "observableLabExecutions": [],
+  "issues": [],
+  "repositories": [
+    {
+      "path": "/Volumes/WorkSSD/Development/svc-dev-lab",
+      "ordinaryGitDirectory": true,
+      "linkedWorktree": false,
+      "commit": "a7f47c1b0536cf2734eac0c0247bd624f1b14637",
+      "status": ""
+    },
+    {
+      "path": "/Volumes/WorkSSD/Development/svc-dev-lab-peer",
+      "ordinaryGitDirectory": true,
+      "linkedWorktree": false,
+      "commit": "8576c77970aa4e793a462f4fff0dd4b72712f9bf",
+      "status": ""
+    }
+  ]
+}

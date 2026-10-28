@@ -1,0 +1,28 @@
+{
+  "actualMonitorDecoded" : true,
+  "cliPreferencesPreserved" : true,
+  "decodedExecutions" : 15,
+  "decodedProjects" : [
+    "\/Volumes\/WorkSSD\/Development\/svc-dev-lab-peer",
+    "\/Volumes\/WorkSSD\/Development\/svc-dev-lab"
+  ],
+  "decodedResources" : 2,
+  "footprints" : [
+    47203216,
+    47006584
+  ],
+  "foundationOnly" : true,
+  "originalAssignmentsPreserved" : true,
+  "originalProjectsPreserved" : true,
+  "originalSectionsPreserved" : true,
+  "registeredProjects" : [
+    "\/Volumes\/WorkSSD\/Development\/svc-dev-lab",
+    "\/Volumes\/WorkSSD\/Development\/svc-dev-lab-peer"
+  ],
+  "section" : "1C648A02-1587-469B-B2BC-3DB2AD14828B",
+  "swapUsed" : 20495532032,
+  "writeRates" : [
+    254936.69,
+    255136.29999999999
+  ]
+}

@@ -6,7 +6,7 @@
 
 禁止新增自动化测试，允许脚本；允许按新合同迁移或删除既有用例。避免高负载、并行构建、常驻观察宿主与反复 computer use。使用既有原生窗口和工具栏，不重新引入已修复的双重窗口／工具栏管理。保留真实项目与用户偏好，验收数据放在独立项目。
 
-## 当前事实及待决问题
+## 实施起点
 
 App 0.5.1／CLI 18.1.0 已支持全局执行与主机压力。`dev exec` 记录 cwd、来源与标签，尚无明确项目身份；monitor 只对仍受管的根进程和当前后代取得 CPU／RSS，尚不提供项目汇总、进程 I/O、swap 或压缩指标。资源 ready 动作可能释放长驻进程，不能把已结束的准备动作当成长驻资源用量，也不能从历史 PID 获得控制权。
 
@@ -50,4 +50,20 @@ run 和 dev 保存已解析 workspace.root；dev exec 支持 --project，缺省�
 
 原生脚本使用实际 Swift 模型和控件重放真实 CLI 的脱敏项目快照，1040／740 两种宽度及单项目执行列表已检查。两种宽度都保留系统侧栏按钮、刷新和设置，窗口未显示，应用未激活；单项目列表只显示该项目的一项活跃执行。图中的数值是记录重放，不证明拍图时实际工作仍在运行，也不当作物理键盘或 VoiceOver 验收。没有使用 computer use 重跑点击旅程。
 
-下一步构建并核对同源 wheel／配套 runtime，完成 Foundation 客户端对实际 CLI 的解码与终止观察、登记两个验收项目，最后开发签名安装。源代码、文档和版本已收敛，交付前仍保留这些具体待办。
+上述待办已完成，安装和客户端证据见下节。
+
+## 本机交付
+
+产品源码及权威文档已提交为 `25e835f8e3f039482f2d30533269e22a76b139cd`。本轮交付 App 0.6.0／CLI 18.2.0；生成的 wheel 含 99 个 svc_cli 文件，逐字节匹配已提交源码。隔离 runtime 位于 `~/Library/Application Support/SVC/runtimes/c25ccbdb08478f55cb94/bin/svc`，实际版本与 monitor schema 2 均已核对。[Runtime 证据](evidence/runtime.json)记录 wheel 摘要和路径，没有覆盖登录 shell 的旧 CLI。
+
+最终 Swift 编译用单任务、低优先级完成，耗时 4.59 秒。应用已替换到 `/Applications/SVC.app`，采用 `Apple Development: lanzhijiang@foxmail.com (Z5PX453UV3)` 签名，Team ID 为 `7J9DJNJ782`，严格签名验证通过。用临时副本移除签名后比较，安装代码与预备包相同；实际运行进程来自该安装目录并带 --background。源码版本元数据为上述提交加 dirty，原因是构建时仍有本任务证据及其他任务的未提交材料；99 个 CLI 文件已单独校验，不能把此标记当作干净发布证据。未制作标签、推送或公开 Release。
+
+[Foundation 客户端观察](evidence/client.json)使用实际产品模型、ActivityStore 和新 runtime。它解码实际 monitor 数据，并通过产品终止路径结束本项目 30 秒上限的有限任务。结果为 interrupted／scope-complete，项目归属保留，canTerminate 变为 false；[owner 结果](evidence/client-owner.json)返回进程状态 130、stopped_by human、retry_allowed false。此观察无需 AppKit 窗口或前台输入，不能替代物理键盘、VoiceOver 或人类体验验收。
+
+两个项目已通过实际 AppStore 加入“验收” Section。原有 2 个项目、Section 的 UUID／名称／折叠状态、原项目分配以及 CLI 路径与搜索路径均保留；原项目 svc.json／svc.local.json 摘要未改变。[登记](evidence/registration.json)和[安装](evidence/installation.json)保存结果。当前实例 PID 为 57917，仅是交付时快照，不作后续控制依据。单次实际 monitor 墙钟 0.541 秒、子进程 CPU 0.249 秒，无诊断问题；它包含 Python 启动和共享采样窗口，不代表纯采样成本或全场景性能保证。
+
+验收项目各自为普通 Git 仓库，提交分别为 svc-dev-lab 的 `a7f47c1` 和 svc-dev-lab-peer 的 `8576c77`。README 给出从当前安装包读取配套 CLI 的命令，便于以后迭代直接复用。交付时两个仓库干净，验收任务和服务已结束；[项目交付观察](evidence/lab-delivery.json)记录普通 Git 目录、提交及剩余用量来源。用户可在 App 的项目页启动验收服务，或按 README 运行有限任务。
+
+本轮未新增或修改自动化测试，只使用脚本及既有检查。完整既有检查与原生检查的结果已保留；随后修复采用有关静态检查、既有 execution 检查及实际脚本复核，最终包再次编译。未制造内存／swap 压力，也未声称已覆盖外部程序、远端、容器内部、旧记录或无法证明身份的进程。产品文档已说明项目用量边界，以及页面读入、真实 swap 活动与系统压力的区别。
+
+实现、本机交付和约定脚本验收已完成；产品体验仍由用户判断。目前无须用户补充决策。任务材料保留为本轮交付证据，原有 svc-macos-app 与 InKCre 迁移任务材料不属于本轮提交。
