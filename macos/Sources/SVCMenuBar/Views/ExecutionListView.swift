@@ -12,14 +12,14 @@ struct ExecutionListView: View {
             let recent = executions.filter { !$0.active }
             HStack {
                 Text("运行中").font(.system(size: 12, weight: .semibold))
-                Text("\(active.count)").foregroundStyle(.secondary)
+                Text("\(active.count)").foregroundStyle(.primary)
                 Spacer()
                 Button("复制 Agent 接入说明") { copyAgentInstructions() }
-                    .buttonStyle(.borderless).font(.caption)
+                    .buttonStyle(.borderless).font(.system(size: 12))
             }
             if active.isEmpty {
                 Text(store.activity.snapshot == nil ? "尚未取得执行清单" : "暂无运行中的受管执行")
-                    .font(.caption).foregroundStyle(.secondary).padding(.vertical, 16)
+                    .font(.system(size: 12)).foregroundStyle(.primary).padding(.vertical, 16)
                     .frame(maxWidth: .infinity)
             }
             ForEach(active) { ExecutionRow(execution: $0, store: store) }
@@ -28,14 +28,14 @@ struct ExecutionListView: View {
                     VStack(spacing: 10) {
                         ForEach(recent) { ExecutionRow(execution: $0, store: store) }
                     }.padding(.top, 8)
-                }.font(.caption).foregroundStyle(.secondary)
+                }.font(.system(size: 12)).foregroundStyle(.primary)
             }
             if let issues = store.activity.snapshot?.issues, !issues.isEmpty {
                 DiagnosticView(title: "部分执行无法读取", message: issues.joined(separator: "\n"), semanticID: "activity/records")
             }
             if let notice = store.activity.notice {
                 HStack(alignment: .top) {
-                    Text(notice).font(.caption).textSelection(.enabled)
+                    Text(notice).font(.system(size: 12)).textSelection(.enabled)
                     Spacer()
                     Button { store.activity.dismissNotice() } label: { Image(systemName: "xmark") }
                         .buttonStyle(.borderless).accessibilityLabel("关闭执行提示")

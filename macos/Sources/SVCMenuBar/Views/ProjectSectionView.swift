@@ -13,15 +13,17 @@ struct ProjectSectionView: View {
             HStack(spacing: 8) {
                 ResourceActionButton(title: section.name, semanticID: "section/\(section.id)/toggle",
                                      enabled: store.canEditSections, bordered: false,
-                                     symbol: section.collapsed ? "chevron.right" : "chevron.down") {
+                                     symbol: section.collapsed ? "chevron.right" : "chevron.down",
+                                     accessibilityName: "\(section.collapsed ? "展开" : "收起") \(section.name) Section",
+                                     expanded: !section.collapsed) {
                     store.toggleSection(section.id)
                 }.frame(maxWidth: .infinity, alignment: .leading).help(section.name)
-                Text("\(members.count) 个项目").font(.caption2).foregroundStyle(.secondary).fixedSize()
+                Text("\(members.count) 个项目").font(.system(size: 12)).foregroundStyle(.primary).fixedSize()
                 if activity.running {
-                    Image(systemName: "hourglass").font(.caption).help("组内有操作正在执行").accessibilityLabel("执行中")
+                    Image(systemName: "hourglass").font(.system(size: 12)).help("组内有操作正在执行").accessibilityLabel("执行中")
                 }
                 if activity.attention {
-                    Image(systemName: "exclamationmark.circle.fill").font(.caption).foregroundStyle(.orange)
+                    Image(systemName: "exclamationmark.circle.fill").font(.system(size: 12)).foregroundStyle(.orange)
                         .help("组内有错误或待确认的操作").accessibilityLabel("需处理")
                 }
                 Menu {
@@ -40,7 +42,7 @@ struct ProjectSectionView: View {
             if !section.collapsed {
                 if members.isEmpty {
                     Button(action: addProject) { Label("添加项目", systemImage: "plus") }
-                        .buttonStyle(.borderless).font(.caption).padding(.leading, 20).padding(.vertical, 6)
+                        .buttonStyle(.borderless).font(.system(size: 12)).padding(.leading, 20).padding(.vertical, 6)
                 } else {
                     ForEach(members) { project in
                         ProjectView(project: project, store: store).id(project.path)

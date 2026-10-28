@@ -16,6 +16,7 @@ struct ResourceAccessView: View {
                               systemImage: "arrow.up.right")
                             .lineLimit(1).truncationMode(.middle)
                     }.buttonStyle(.link).help(address)
+                        .accessibilityLabel("打开访问地址").accessibilityValue(address)
                 } else {
                     Text(address).lineLimit(1).truncationMode(.middle).textSelection(.enabled).help(address)
                 }
@@ -24,9 +25,9 @@ struct ResourceAccessView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(address, forType: .string)
                 } label: { Image(systemName: "doc.on.doc").frame(width: 22, height: 22) }
-                    .buttonStyle(.borderless).foregroundStyle(.secondary).help("复制访问地址")
-                    .accessibilityLabel("复制访问地址")
-            }.font(.caption)
+                    .buttonStyle(.borderless).foregroundStyle(.primary).help("复制访问地址")
+                    .accessibilityLabel("复制访问地址").accessibilityValue(address)
+            }.font(.system(size: 12))
         }
     }
 }

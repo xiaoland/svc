@@ -1,0 +1,23 @@
+{
+  "version": "0.4.1",
+  "cli_version": "18.1.0",
+  "native_tests": 13,
+  "new_tests": 0,
+  "swift_binary_sha256": "395e63b701a3d7acacd255e133559a923cbeaab032838c77f547522d487bc635",
+  "single_job_low_priority": true,
+  "build_seconds": 22.51,
+  "native_test_seconds": 12.419,
+  "visual_scope": "Existing resource fixture in light and dark; user error screenshot is the baseline, not the same fixture. No full VoiceOver or keyboard navigation acceptance claimed.",
+  "observed_before_ax": {
+    "project_diagnostic_buttons": "Two generic 详情 names without expanded values",
+    "decorative_folder": "Announced as 移动",
+    "page_selector": "Native radio buttons with values 1/0; not an absent AX tree"
+  },
+  "source_changes": {
+    "panel_background": "opaque system window/control colors",
+    "minimum_text_size_points": 12,
+    "expanded_controls": "object name, AX value, expanded attribute, value-changed notification",
+    "page_selection": "checkmark, outline, selected value and trait, Command-1/Command-2",
+    "decorative_icons": "hidden from accessibility"
+  }
+}

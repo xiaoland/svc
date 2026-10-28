@@ -7,8 +7,9 @@ struct ProjectView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "folder").foregroundStyle(.secondary).font(.system(size: 13))
+                Image(systemName: "folder").font(.system(size: 13)).accessibilityHidden(true)
                 Text(project.name).font(.system(size: 13, weight: .semibold)).lineLimit(1).help(project.path)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 if project.checkedAt == nil && store.refreshes[project.path] != nil { ProgressView().controlSize(.mini) }
                 Menu {
@@ -32,10 +33,10 @@ struct ProjectView: View {
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("\(project.name) 项目操作")
             }
             // Show the path to distinguish worktrees with identical directory names.
-            Text(project.path).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(project.path).font(.system(size: 12)).foregroundStyle(.primary)
                 .lineLimit(1).truncationMode(.middle).help(project.path)
             if let error = project.error {
-                DiagnosticView(title: "无法读取项目", message: error, semanticID: "project/\(project.path)/error")
+                DiagnosticView(title: "无法读取项目", message: error, semanticID: "project/\(project.path)/error", context: project.name)
             } else if let snapshot = project.snapshot {
                 if !snapshot.resources.isEmpty {
                     ForEach(snapshot.resources) { resource in
@@ -44,17 +45,16 @@ struct ProjectView: View {
                     }
                 } else {
                     Text(snapshot.status == "not-configured" ? "项目尚未声明开发资源" : "配置无效")
-                        .font(.caption).foregroundStyle(.secondary).padding(.vertical, 6)
+                        .font(.system(size: 12)).foregroundStyle(.primary).padding(.vertical, 6)
                 }
             } else {
-                Text("正在读取资源…").font(.caption).foregroundStyle(.secondary).padding(.vertical, 6)
+                Text("正在读取资源…").font(.system(size: 12)).foregroundStyle(.primary).padding(.vertical, 6)
             }
             ForEach(Array(store.unavailableReceipts(for: project).enumerated()), id: \.offset) { _, receipt in
                 ReceiptView(receipt: receipt, expanded: true, store: store)
             }
         }
         .padding(12)
-        .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
-        .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(.primary.opacity(0.05), lineWidth: 1) }
+        .modifier(PanelCard())
     }
 }

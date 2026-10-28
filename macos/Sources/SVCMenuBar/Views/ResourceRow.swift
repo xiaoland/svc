@@ -14,26 +14,27 @@ struct ResourceRow: View {
             HStack(spacing: 6) {
                 if busy { ProgressView().controlSize(.mini) }
                 Text(resource.label).font(.system(size: 13, weight: .medium))
-                    .lineLimit(2).help(resource.label)
-                Text(resource.scopeLabel).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize()
+                    .lineLimit(2).help(resource.label).accessibilityAddTraits(.isHeader)
+                Text(resource.scopeLabel).font(.system(size: 12)).foregroundStyle(.primary).fixedSize()
                 Spacer(minLength: 4)
                 ResourceActionButton(title: "", semanticID: resource.entryId + "/details", bordered: false,
                                      symbol: expanded ? "chevron.up" : "chevron.down",
-                                     accessibilityName: "\(resource.label) 详情") { expanded.toggle() }
-                    .frame(width: 24, height: 24)
+                                     accessibilityName: "\(expanded ? "收起" : "展开") \(resource.label) 详情", expanded: expanded) { expanded.toggle() }
+                    .frame(width: 28, height: 28)
             }
             ForEach(resource.observations) { item in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: item.symbol)
                         .foregroundStyle(item.state == "satisfied" && !item.isStale ? .green : .secondary)
-                    Text(item.label).foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    Text(item.label).foregroundStyle(.primary)
                     Spacer(minLength: 6)
                     Text(item.stateLabel)
                     if let value = item.value, !value.text.isEmpty {
-                        Text(value.text).foregroundStyle(.secondary).lineLimit(expanded ? nil : 1)
+                        Text(value.text).foregroundStyle(.primary).lineLimit(expanded ? nil : 1)
                             .truncationMode(.middle).help(value.text)
                     }
-                }.font(.caption)
+                }.font(.system(size: 12))
                 if expanded { observationDetails(item) }
             }
             if !resource.access.isEmpty { ResourceAccessView(addresses: resource.access, store: store) }
@@ -44,14 +45,16 @@ struct ResourceRow: View {
                     }.fixedSize()
             }
             if let error = resource.error {
-                DiagnosticView(title: "资源需要处理", message: error.message, semanticID: resource.entryId + "/error")
+                DiagnosticView(title: "资源需要处理", message: error.message, semanticID: resource.entryId + "/error", context: resource.label)
             }
             if resource.needsReconciliation { recovery }
             ForEach(resource.actions) { action in
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 10) {
                         ResourceActionButton(title: action.intent, semanticID: resource.entryId + "/" + action.key,
-                            enabled: !busy && !store.quitPending && resource.coordination != nil && !resource.needsReconciliation) {
+                            enabled: !busy && !store.quitPending && resource.coordination != nil && !resource.needsReconciliation,
+                            accessibilityName: "\(resource.label)：\(action.intent)",
+                            accessibilityHelp: "\(action.effectScope)；\(action.effectLabel)") {
                                 if action.kind == "manual" { expanded = true }
                                 store.perform(action, resource: resource, project: project)
                             }.frame(maxWidth: 160, alignment: .leading)
@@ -59,18 +62,18 @@ struct ResourceRow: View {
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(action.effectScope).lineLimit(1).truncationMode(.middle)
                             Text(action.effectLabel)
-                                .foregroundStyle(action.dataEffect == "delete" ? .red : .secondary)
-                        }.font(.system(size: 10)).foregroundStyle(.secondary)
+                                .foregroundStyle(action.dataEffect == "delete" ? .red : .primary)
+                        }.font(.system(size: 12)).foregroundStyle(.primary)
                             .help("\(action.effectScope) · \(action.effectLabel)")
                     }
                     if expanded {
-                        Text(action.effectScope).font(.caption).textSelection(.enabled)
-                        if !action.traits.isEmpty { Text(action.traitLabels).font(.caption).foregroundStyle(.secondary) }
+                        Text(action.effectScope).font(.system(size: 12)).textSelection(.enabled)
+                        if !action.traits.isEmpty { Text(action.traitLabels).font(.system(size: 12)).foregroundStyle(.primary) }
                         if action.kind == "manual" && store.receipts[resource.entryId]?.result?.action != action.key {
-                            ForEach(Array(action.steps.enumerated()), id: \.offset) { _, step in Text(step).font(.caption) }
+                            ForEach(Array(action.steps.enumerated()), id: \.offset) { _, step in Text(step).font(.system(size: 12)) }
                         }
-                        if action.interruption == "wait" { Text("开始后等待实际结束").font(.caption).foregroundStyle(.secondary) }
-                        if action.completion == "submitted" { Text("提交后由控制者继续处理").font(.caption).foregroundStyle(.secondary) }
+                        if action.interruption == "wait" { Text("开始后等待实际结束").font(.system(size: 12)).foregroundStyle(.primary) }
+                        if action.completion == "submitted" { Text("提交后由控制者继续处理").font(.system(size: 12)).foregroundStyle(.primary) }
                     }
                 }
             }
@@ -78,11 +81,11 @@ struct ResourceRow: View {
                 ReceiptView(receipt: receipt, expanded: expanded, store: store)
             }
             if expanded {
-                if let controller = resource.controller { Text(controller).font(.caption).textSelection(.enabled) }
+                if let controller = resource.controller { Text(controller).font(.system(size: 12)).textSelection(.enabled) }
                 if let owner = resource.coordination, owner.ownerRepo != resource.source || owner.ownerResource != resource.resource {
-                    Text("共享：\(owner.ownerRepo) · \(owner.ownerResource)").font(.caption).textSelection(.enabled)
+                    Text("共享：\(owner.ownerRepo) · \(owner.ownerResource)").font(.system(size: 12)).textSelection(.enabled)
                 }
-                ForEach(resource.relations, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                ForEach(resource.relations, id: \.self) { Text($0).font(.system(size: 12)).foregroundStyle(.primary) }
             }
         }.padding(.vertical, 2)
     }
@@ -90,17 +93,17 @@ struct ResourceRow: View {
     private func observationDetails(_ item: ResourceObservation) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             if let message = item.error?.message ?? item.message { Text(message).textSelection(.enabled) }
-            Text(item.source.replacingOccurrences(of: "\0", with: " ")).font(.caption.monospaced()).textSelection(.enabled)
+            Text(item.source.replacingOccurrences(of: "\0", with: " ")).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
             Text("检查：\(item.checkedAt)")
             if let time = item.dataAt { Text("数据：\(time)") }
             if let instance = item.instance { Text("实例：\(instance)").textSelection(.enabled) }
-        }.font(.caption2).foregroundStyle(.secondary).padding(.leading, 18)
+        }.font(.system(size: 12)).foregroundStyle(.primary).padding(.leading, 18)
     }
 
     private var recovery: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label("前次操作结果未知", systemImage: "exclamationmark.circle.fill")
-                .font(.caption).foregroundStyle(.orange)
+                .font(.system(size: 12)).foregroundStyle(.orange)
             ResourceActionButton(title: "核对并恢复…", semanticID: resource.entryId + "/reconcile",
                 enabled: !busy && !store.quitPending) { confirmRecovery = true }
                 .fixedSize()

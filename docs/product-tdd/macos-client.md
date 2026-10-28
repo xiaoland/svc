@@ -27,7 +27,7 @@ App 通过绝对路径启动独立 CLI，以 argv 传入项目目录，不经过
 
 以上调用都支持 `--repo`、`--json` 和 `--json-schema`。根 status 结果 schema 为 4，init 结果仍为 4；配置 schema 5 与这些结果版本相互独立。App 校验 command、schema 和必要字段，拒绝不兼容或损坏结果，不能造出成功或未就绪。非零 CLI 退出也可能携带有效回执。
 
-App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.4.0 配套 CLI 18.1.0，在原资源合同之上新增 dev-monitor／exec／terminate schema 1；原 list／status／act／reconcile 的结果版本不变。18.1.0 的 minor 表示新增独立能力，没有修改资源配置 schema 5 或既有 run 的公开合同。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
+App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.4.1 配套 CLI 18.1.0，沿用 0.4.0 新增的 dev-monitor／exec／terminate schema 1；原 list／status／act／reconcile 的结果版本不变。0.4.1 只修复可读性与原生可访问性；18.1.0 的 minor 表示新增独立能力，没有修改资源配置 schema 5 或既有 run 的公开合同。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
 
 机器与执行页使用 `dev monitor --json`，不附加项目目录，也不依赖项目能否解析；`dev terminate <execution-id> [--force] --by human --json` 只请求执行 owner 终止。App 不自己发送进程信号。主机采样、一次性执行及停止证明由[主机与受管执行合同](activity.md)拥有；执行页不会将旧资源动作的 wait、ready 释放或 submitted 改成可强杀。CLI 仍可独立于 App 使用；App 退出不终止前台 CLI 拥有的一次性执行。
 
