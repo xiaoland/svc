@@ -1,0 +1,58 @@
+{
+  "scope": "Native DisclosureGroup driven through its binding; no native input event or production view",
+  "processExitCode": 0,
+  "cases": {
+    "positive": [
+      {
+        "expanded": true,
+        "uniquePositions": {
+          "above": 1,
+          "group": 23,
+          "below": 23,
+          "footer": 1
+        }
+      },
+      {
+        "expanded": false,
+        "uniquePositions": {
+          "above": 1,
+          "group": 23,
+          "below": 23,
+          "footer": 1
+        }
+      }
+    ],
+    "stateWrite": [
+      {
+        "expanded": true,
+        "uniquePositions": {
+          "above": 1,
+          "group": 2,
+          "below": 2,
+          "footer": 1
+        }
+      },
+      {
+        "expanded": false,
+        "uniquePositions": {
+          "above": 1,
+          "group": 2,
+          "below": 2,
+          "footer": 1
+        }
+      }
+    ],
+    "subtreeOnly": [
+      {
+        "expanded": true,
+        "uniquePositions": {
+          "above": 1,
+          "group": 24,
+          "below": 24,
+          "footer": 1
+        }
+      }
+    ]
+  },
+  "actualProductionClickVerified": false
+}

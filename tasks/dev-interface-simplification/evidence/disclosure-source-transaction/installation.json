@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "build": "86",
+  "sourceRevision": "ecb5a079f57f0c8859a2199c34d56ff527503b0e-dirty",
+  "pid": 39503,
+  "backgroundLaunch": true,
+  "strictPersonalSignatureValid": true,
+  "team": "7J9DJNJ782",
+  "preferencesPreserved": true,
+  "installedMatchesPrepared": true,
+  "cliUnchanged": "svc 18.3.0",
+  "productionClickVisualVerificationComplete": false
+}
