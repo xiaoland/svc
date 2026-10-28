@@ -1,0 +1,21 @@
+{
+  "app": "/Applications/SVC.app",
+  "version": "0.2.0",
+  "previousLocalVersion": "0.6.3",
+  "buildNumber": "81",
+  "sourceRevision": "f3abaf50674c128e4a1b05899d357aefc322f483-dirty",
+  "cliUnchanged": true,
+  "preferencesUnchanged": true,
+  "signature": [
+    "CDHash=1dd45e3becc5ca4902f7d4fcbdfe35466b99f7b8",
+    "Authority=Apple Development: lanzhijiang@foxmail.com (Z5PX453UV3)",
+    "Authority=Apple Worldwide Developer Relations Certification Authority",
+    "Authority=Apple Root CA",
+    "TeamIdentifier=7J9DJNJ782"
+  ],
+  "strictSignatureVerified": true,
+  "installedBinaryMatched": true,
+  "pid": 11825,
+  "command": "/Applications/SVC.app/Contents/MacOS/SVCMenuBar --background",
+  "dynamicVisualExperienceVerified": false
+}
