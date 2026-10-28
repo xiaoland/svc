@@ -1,0 +1,22 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--FE76C4972A19952.txt
+Build complete! (0.13s)
+/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/dist/macos/interface-consistency/.svc-build-7avf_egp/SVC.app: replacing existing signature
+{
+  "version": "0.6.3",
+  "sourceRevision": "b1fdd9700c7e7daf5305c82f61ae74831e3b1135-dirty",
+  "cliUnchanged": true,
+  "preferencesUnchanged": true,
+  "signature": [
+    "CDHash=1f827a3298d4fe81d25cf3158e24cd91690fc01a",
+    "Authority=Apple Development: lanzhijiang@foxmail.com (Z5PX453UV3)",
+    "Authority=Apple Worldwide Developer Relations Certification Authority",
+    "Authority=Apple Root CA",
+    "TeamIdentifier=7J9DJNJ782"
+  ],
+  "strictSignatureVerified": true,
+  "installedBinaryMatched": true,
+  "pid": 92748,
+  "command": "/Applications/SVC.app/Contents/MacOS/SVCMenuBar --background"
+}
