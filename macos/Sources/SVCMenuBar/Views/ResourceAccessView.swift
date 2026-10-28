@@ -25,9 +25,9 @@ struct ResourceAccessView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(address, forType: .string)
                 } label: { Image(systemName: "doc.on.doc").frame(width: 22, height: 22) }
-                    .buttonStyle(.borderless).foregroundStyle(.primary).help("复制访问地址")
+                    .buttonStyle(.borderless).foregroundStyle(.secondary).help("复制访问地址")
                     .accessibilityLabel("复制访问地址").accessibilityValue(address)
-            }.font(.system(size: 12))
+            }.font(.caption)
         }
     }
 }

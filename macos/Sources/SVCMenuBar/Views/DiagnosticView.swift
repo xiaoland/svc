@@ -19,23 +19,20 @@ struct DiagnosticView: View {
                                      accessibilityName: "\(expanded ? "收起" : "展开") \(context ?? title) 的诊断", expanded: expanded) {
                     expanded.toggle()
                 }.fixedSize()
-            }.font(.system(size: 12))
+            }.font(.caption)
             if expanded {
                 ScrollView {
-                    Text(message).font(.system(size: 12)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                    Text(message).font(.caption).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                 }.frame(maxHeight: 150)
                 Button("复制诊断") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(message, forType: .string)
-                }.buttonStyle(.borderless).font(.system(size: 12))
+                }.buttonStyle(.borderless).font(.caption)
             } else {
                 Text(message.split(whereSeparator: { $0 == "。" || $0 == "\n" }).first.map(String.init) ?? message)
-                    .font(.system(size: 13)).foregroundStyle(.primary).lineLimit(2).textSelection(.enabled)
+                    .font(.callout).foregroundStyle(.primary).lineLimit(2).textSelection(.enabled)
             }
         }
         .padding(10)
-        .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 2).fill(Color(nsColor: .separatorColor)).frame(width: 3)
-        }
     }
 }

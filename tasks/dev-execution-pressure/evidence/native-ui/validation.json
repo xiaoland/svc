@@ -1,0 +1,26 @@
+{
+  "version": "0.4.2",
+  "cli_version": "18.1.0",
+  "native_tests": 13,
+  "new_tests": 0,
+  "single_job_low_priority": true,
+  "swift_binary_sha256": "641b584679405489bfdd4f171769e218a1b8ad28f8fbb51035a76907f682d91b",
+  "native_controls": [
+    "segmented Picker",
+    "GroupBox",
+    "NSButton standard font and tint",
+    "system caption/secondary styles"
+  ],
+  "removed": [
+    "PanelCard",
+    "custom page checkmark and outline",
+    "custom focus ring",
+    "global minimum font size"
+  ],
+  "retained": [
+    "opaque system background",
+    "contextual names and expanded state",
+    "full host usage AX text"
+  ],
+  "visual_scope": "Existing light/dark resource fixture; installed actual panel checked separately."
+}

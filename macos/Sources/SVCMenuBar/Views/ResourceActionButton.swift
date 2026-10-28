@@ -23,7 +23,7 @@ struct ResourceActionButton: NSViewRepresentable {
         let button = NSButton(title: title, target: context.coordinator,
                               action: #selector(Coordinator.invokeAction(_:)))
         button.bezelStyle = .rounded
-        button.controlSize = .regular
+        button.controlSize = .small
         button.setContentHuggingPriority(.required, for: .horizontal)
         return button
     }
@@ -41,17 +41,16 @@ struct ResourceActionButton: NSViewRepresentable {
         }
         button.isEnabled = enabled
         button.isBordered = bordered
-        button.contentTintColor = destructive ? .systemRed : .labelColor
+        button.contentTintColor = destructive ? .systemRed : nil
         button.setContentCompressionResistancePriority(bordered ? .defaultHigh : .defaultLow, for: .horizontal)
         button.image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
         button.imagePosition = .imageLeading
-        button.font = bordered ? NSFont.systemFont(ofSize: 13) : NSFont.systemFont(ofSize: 13, weight: .semibold)
         button.toolTip = accessibilityHelp ?? accessibilityName ?? title
         button.lineBreakMode = .byTruncatingTail
         context.coordinator.action = action
     }
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSButton, context: Context) -> CGSize? {
         let natural = nsView.intrinsicContentSize
-        return CGSize(width: min(proposal.width ?? natural.width, natural.width), height: max(28, natural.height))
+        return CGSize(width: min(proposal.width ?? natural.width, natural.width), height: max(22, natural.height))
     }
 }

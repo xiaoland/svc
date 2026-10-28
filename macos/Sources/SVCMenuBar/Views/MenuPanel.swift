@@ -8,7 +8,6 @@ struct MenuPanel: View {
     @State private var sectionID: UUID?
     @State private var sectionName = ""
     @State private var selectedTab = 0
-    @FocusState private var focusedPage: Int?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,7 +16,7 @@ struct MenuPanel: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("SVC Dev").font(.headline)
                     Text(summary)
-                        .font(.system(size: 12)).foregroundStyle(.primary)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button { Task { await refreshPanel() } } label: {
@@ -36,10 +35,12 @@ struct MenuPanel: View {
             .buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 12)
             Divider()
             HostPressureView(activity: store.activity)
-            HStack(spacing: 6) {
-                pageButton("资源", tab: 0, shortcut: "1")
-                pageButton("执行", tab: 1, shortcut: "2")
-            }.padding(.horizontal, 12).padding(.bottom, 10)
+            Picker("页面", selection: $selectedTab) {
+                Text("资源").tag(0)
+                Text("执行").tag(1)
+            }.pickerStyle(.segmented).labelsHidden()
+                .accessibilityIdentifier("panel/pages")
+                .padding(.horizontal, 12).padding(.bottom, 10)
             Divider()
             if selectedTab == 1 {
                 ScrollView { ExecutionListView(store: store) }.frame(height: 340)
@@ -54,7 +55,7 @@ struct MenuPanel: View {
             }
             if store.projects.isEmpty && store.organization.sections.isEmpty {
                 VStack(spacing: 16) {
-                    Image(systemName: "folder.badge.plus").font(.system(size: 36)).foregroundStyle(.primary)
+                    Image(systemName: "folder.badge.plus").font(.system(size: 36)).foregroundStyle(.secondary)
                     Text("添加第一个项目").font(.headline)
                     Button("选择项目文件夹…") { addProject() }.buttonStyle(.borderedProminent)
                 }.frame(maxWidth: .infinity).padding(.vertical, 42)
@@ -73,14 +74,14 @@ struct MenuPanel: View {
             if store.quitPending {
                 HStack {
                     ProgressView().controlSize(.small)
-                    Text("操作结束后退出").font(.system(size: 12))
+                    Text("操作结束后退出").font(.caption)
                     Spacer()
                     Button("取消退出") { store.cancelQuit() }
                 }.padding(12)
             }
             if let notice = store.notice {
                 HStack(alignment: .top) {
-                    Text(notice).font(.system(size: 12)).lineLimit(3).help(notice).textSelection(.enabled)
+                    Text(notice).font(.caption).lineLimit(3).help(notice).textSelection(.enabled)
                     Spacer()
                     Button { store.notice = nil } label: { Image(systemName: "xmark") }
                         .buttonStyle(.borderless).accessibilityLabel("关闭提示")
@@ -96,12 +97,12 @@ struct MenuPanel: View {
                 Spacer()
                 if let time = selectedTab == 0 ? store.projects.compactMap(\.checkedAt).max() : store.activity.checkedAt {
                     Text("更新于 \(time.formatted(date: .omitted, time: .shortened))")
-                        .font(.system(size: 12)).foregroundStyle(.primary)
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("退出 SVC") { NSApp.terminate(nil) }
                     .keyboardShortcut("q").disabled(store.quitPending)
-            }.buttonStyle(.borderless).font(.system(size: 12)).padding(.horizontal, 16).padding(.vertical, 10)
+            }.buttonStyle(.borderless).font(.caption).padding(.horizontal, 16).padding(.vertical, 10)
         }
         .frame(width: 420)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -124,33 +125,6 @@ struct MenuPanel: View {
         }
     }
 
-    private func pageButton(_ title: String, tab: Int, shortcut: KeyEquivalent) -> some View {
-        let selected = selectedTab == tab
-        return Button { selectedTab = tab } label: {
-            HStack(spacing: 5) {
-                Text(title).font(.system(size: 13, weight: selected ? .semibold : .regular))
-                if selected { Image(systemName: "checkmark").accessibilityHidden(true) }
-            }.frame(maxWidth: .infinity, minHeight: 30)
-                .foregroundStyle(.primary)
-                .background(selected ? Color(nsColor: .controlBackgroundColor) : .clear, in: RoundedRectangle(cornerRadius: 6))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(selected ? Color.primary : Color(nsColor: .separatorColor), lineWidth: selected ? 1.5 : 1)
-                }
-        }.buttonStyle(.plain)
-            .focused($focusedPage, equals: tab)
-            .overlay {
-                if focusedPage == tab {
-                    RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3).padding(-3)
-                }
-            }
-            .accessibilityLabel("\(title)页面")
-            .accessibilityValue(selected ? "已选择" : "未选择")
-            .accessibilityAddTraits(selected ? [.isSelected] : [])
-            .accessibilityIdentifier("panel/page/\(tab)")
-            .keyboardShortcut(shortcut, modifiers: .command)
-    }
-
     private func refreshPanel() async {
         guard !store.quitPending else { return }
         await store.activity.refresh(store.configuration)
@@ -167,7 +141,7 @@ struct MenuPanel: View {
             let ungrouped = store.projects(in: nil)
             if !ungrouped.isEmpty {
                 if !store.organization.sections.isEmpty {
-                    Text("未分组").font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
+                    Text("未分组").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
                         .padding(.top, 4).padding(.leading, 4)
                 }
                 ForEach(ungrouped) { project in

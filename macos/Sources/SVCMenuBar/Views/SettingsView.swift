@@ -18,7 +18,7 @@ struct SettingsView: View {
                 }
                 TextField("命令搜索路径 PATH", text: $searchPath, axis: .vertical).lineLimit(3...5)
                 Text("项目命令使用此 PATH；需要的环境变量由项目配置声明。")
-                    .font(.system(size: 12)).foregroundStyle(.primary)
+                    .font(.caption).foregroundStyle(.secondary)
             }
             HStack {
                 if saved { Label("已保存", systemImage: "checkmark.circle").foregroundStyle(.green) }

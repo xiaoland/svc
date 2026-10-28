@@ -16,7 +16,7 @@ struct HostPressureView: View {
                         Text(stale ? "上次采样 · 已过期" : pressure.levelLabel).fontWeight(.medium)
                         Spacer()
                         if let time = activity.checkedAt {
-                            Text(time, style: .time).font(.system(size: 12)).foregroundStyle(.primary)
+                            Text(time, style: .time).font(.caption2).foregroundStyle(.secondary)
                         }
                         ResourceActionButton(title: "", semanticID: "host/details", bordered: false,
                             symbol: expanded ? "chevron.up" : "chevron.down",
@@ -27,13 +27,13 @@ struct HostPressureView: View {
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 18) {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text("CPU").foregroundStyle(.primary)
+                        Text("CPU").foregroundStyle(.secondary)
                         Text("\(pressure.cpuPercent, specifier: "%.0f")%").monospacedDigit().fontWeight(.medium)
                     }.help("整机 CPU 使用率；\(pressure.logicalCpus) 个逻辑核心，采样 \(pressure.sampleWindowMs) 毫秒")
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text("内存").foregroundStyle(.primary)
+                        Text("内存").foregroundStyle(.secondary)
                         Text(pressure.memoryLabel).fontWeight(.medium)
-                        Text("可用 \(activityBytes(pressure.memoryAvailableBytes))").foregroundStyle(.primary)
+                        Text("可用 \(activityBytes(pressure.memoryAvailableBytes))").foregroundStyle(.secondary)
                     }.help("系统内存压力与可用内存分别显示，不根据已用比例推断压力。")
                 }
                 .accessibilityElement(children: .ignore)
@@ -45,14 +45,14 @@ struct HostPressureView: View {
                         Text("磁盘  读 \(rate(pressure.diskReadBytesPerSecond))  ·  写 \(rate(pressure.diskWriteBytesPerSecond))")
                         Spacer()
                         Text("\(pressure.sampleWindowMs) ms")
-                    }.font(.system(size: 12)).foregroundStyle(.primary)
-                    Text(pressure.recommendation).font(.system(size: 12)).textSelection(.enabled)
-                    ForEach(pressure.issues, id: \.self) { Text($0).font(.system(size: 12)).foregroundStyle(.orange) }
+                    }.font(.caption2).foregroundStyle(.secondary)
+                    Text(pressure.recommendation).font(.caption).textSelection(.enabled)
+                    ForEach(pressure.issues, id: \.self) { Text($0).font(.caption).foregroundStyle(.orange) }
                 }
             } else if activity.error == nil {
                 HStack {
                     ProgressView().controlSize(.small)
-                    Text("正在读取本机压力…").foregroundStyle(.primary)
+                    Text("正在读取本机压力…").foregroundStyle(.secondary)
                 }
             }
             if let error = activity.error {
