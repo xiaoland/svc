@@ -1,0 +1,10 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write swift-version--FE76C4972A19952.txt
+[1/4] Write sources
+[3/5] Emitting module SVCMenuBar
+[4/6] Compiling SVCMenuBar MainWindowController.swift
+[4/7] Write Objects.LinkFileList
+[5/7] Linking SVCMenuBar
+[6/7] Applying SVCMenuBar
+Build complete! (4.91s)

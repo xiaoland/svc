@@ -8,6 +8,8 @@ enum MainWindowSelection: Hashable {
 
 struct MainWindowView: View {
     @Bindable var store: AppStore
+    let refresh: () -> Void
+    let openSettings: () -> Void
     let addProject: (UUID?) -> Void
     let resourcePageChanged: (Bool) -> Void
     @State private var selection: MainWindowSelection? = .resources
@@ -82,6 +84,15 @@ struct MainWindowView: View {
                 statusFooter
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: refresh) { Label("刷新", systemImage: "arrow.clockwise") }
+                    .help("刷新机器与当前页面（⌘R）")
+                    .disabled(store.quitPending || store.activity.refreshing || !store.refreshes.isEmpty)
+                Button(action: openSettings) { Label("设置", systemImage: "gearshape") }
+                    .help("设置（⌘,）")
+            }
         }
         .sheet(isPresented: $editingSection) {
             SectionNameEditor(sectionID: editingSectionID, name: sectionName, store: store) {

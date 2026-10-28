@@ -2,32 +2,32 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSToolbarItemValidation {
+final class MainWindowController: NSWindowController, NSWindowDelegate {
     private let store: AppStore
-    private let openSettings: () -> Void
     private let closed: () -> Void
     private var showsResources = true
     private var presented = false
-    private static let refreshID = NSToolbarItem.Identifier("svc.refresh")
-    private static let settingsID = NSToolbarItem.Identifier("svc.settings")
 
     init(store: AppStore, openSettings: @escaping () -> Void, closed: @escaping () -> Void) {
         self.store = store
-        self.openSettings = openSettings
         self.closed = closed
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 720),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
         window.title = "SVC Dev"
+        window.toolbarStyle = .unified
         window.identifier = NSUserInterfaceItemIdentifier("svc.main")
         window.isReleasedWhenClosed = false
         window.contentMinSize = NSSize(width: 740, height: 480)
         window.center()
-        window.setFrameAutosaveName("SVCMainWindow")
+        window.setFrameUsingName("SVCMainWindow")
+        let initialFrame = window.frame
         super.init(window: window)
         window.delegate = self
-        window.contentViewController = NSHostingController(rootView: MainWindowView(
+        let content = NSHostingController(rootView: MainWindowView(
             store: store,
+            refresh: { [weak self] in self?.refreshCurrentPage() },
+            openSettings: openSettings,
             addProject: { [weak window] sectionID in
                 ProjectPicker.present(store: store, sectionID: sectionID, parent: window)
             },
@@ -36,10 +36,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
                 self?.updateObservationDemand()
             }
         ))
-        let toolbar = NSToolbar(identifier: "SVCMainToolbar")
-        toolbar.delegate = self
-        toolbar.displayMode = .iconOnly
-        window.toolbar = toolbar
+        content.sizingOptions = [.minSize]
+        // SwiftUI owns every toolbar item, while AppKit retains the fixed title.
+        // Mixing a manual NSToolbar with this bridge causes it to be replaced.
+        content.sceneBridgingOptions = [.toolbars]
+        window.contentViewController = content
+        window.setFrame(initialFrame, display: false)
+        window.setFrameAutosaveName("SVCMainWindow")
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -66,31 +69,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
         closed()
     }
 
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, Self.refreshID, Self.settingsID]
-    }
-
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar)
-    }
-
-    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier,
-                 willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        guard id == Self.refreshID || id == Self.settingsID else { return nil }
-        let item = NSToolbarItem(itemIdentifier: id)
-        let refresh = id == Self.refreshID
-        item.label = refresh ? "刷新" : "设置"
-        item.toolTip = refresh ? "刷新机器与当前页面（⌘R）" : "设置（⌘,）"
-        item.image = NSImage(systemSymbolName: refresh ? "arrow.clockwise" : "gearshape", accessibilityDescription: item.label)
-        item.target = self
-        item.action = refresh ? #selector(refreshCurrentPage) : #selector(showSettings)
-        return item
-    }
-
-    func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
-        item.itemIdentifier != Self.refreshID || (!store.quitPending && !store.activity.refreshing && store.refreshes.isEmpty)
-    }
-
     @objc func refreshCurrentPage() {
         guard !store.quitPending else { return }
         Task {
@@ -98,6 +76,4 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
             if showsResources { await store.refreshAll() }
         }
     }
-
-    @objc private func showSettings() { openSettings() }
 }

@@ -1,0 +1,56 @@
+[
+  {
+    "applicationActive" : false,
+    "contentHeight" : 720,
+    "contentWidth" : 1040,
+    "fullSizeContentView" : true,
+    "hostType" : "NSHostingController<MainWindowView>",
+    "toolbarItems" : [
+      {
+        "identifier" : "com.apple.SwiftUI.navigationSplitView.toggleSidebar",
+        "label" : "Hide Sidebar"
+      },
+      {
+        "identifier" : "com.apple.SwiftUI.splitViewSeparator-0",
+        "label" : ""
+      },
+      {
+        "identifier" : "8F31A522-8269-4633-B40D-EFF1B2711B13",
+        "label" : "刷新"
+      },
+      {
+        "identifier" : "DF0404A6-EBDB-416D-9CF1-C4C9ABA6DD08",
+        "label" : "设置"
+      }
+    ],
+    "toolbarStyle" : 3,
+    "windowVisible" : false
+  },
+  {
+    "applicationActive" : false,
+    "contentHeight" : 720,
+    "contentWidth" : 740,
+    "fullSizeContentView" : true,
+    "hostType" : "NSHostingController<MainWindowView>",
+    "toolbarItems" : [
+      {
+        "identifier" : "com.apple.SwiftUI.navigationSplitView.toggleSidebar",
+        "label" : "Hide Sidebar"
+      },
+      {
+        "identifier" : "com.apple.SwiftUI.splitViewSeparator-0",
+        "label" : ""
+      },
+      {
+        "identifier" : "8F31A522-8269-4633-B40D-EFF1B2711B13",
+        "label" : "刷新"
+      },
+      {
+        "identifier" : "DF0404A6-EBDB-416D-9CF1-C4C9ABA6DD08",
+        "label" : "设置"
+      }
+    ],
+    "toolbarStyle" : 3,
+    "windowVisible" : false
+  }
+]
