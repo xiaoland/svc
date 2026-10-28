@@ -60,4 +60,12 @@ App 面向人的压力概览、执行清单、详情与停止入口，CLI 提供
 
 [App 客户端观察](evidence/app-client-observation.json)使用只含 Foundation 的小脚本编译实际 CLIClient／ActivityStore／模型：真实配套 CLI 成功解码，AppStore 发出的 human 终止请求最后得到 interrupted／scope-complete，结束后不可再终止；CLI 实际退出 130，retry_allowed=false。此脚本不含 AppKit、不创建窗口。[采样开销](evidence/monitor-cost.json)实测单次 monitor 约 0.729 秒墙钟、0.396 秒 CPU；它只在面板可见时约每 5 秒运行，不宣称零开销或严格实时。
 
-96 个 CLI 源／资源文件与已构建 wheel 逐字相同，Swift 二进制摘要与成功原生检查的产物已记录在 [validation](evidence/validation.json)。现有资源 fixture 的浅深色图已检查，包含新页面切换；其中机器概览仍为加载占位，不能用它声称执行页视觉验收已全覆盖。停止链路由上述实际 Store 和 CLI 的证据支持，最终整体体验留给用户安装试用。正式安装与最终交付尚未完成。
+96 个 CLI 源／资源文件与已构建 wheel 逐字相同，Swift 二进制摘要与成功原生检查的产物已记录在 [validation](evidence/validation.json)。现有资源 fixture 的浅深色图已检查，包含新页面切换；其中机器概览仍为加载占位，不能用它声称执行页视觉验收已全覆盖。停止链路由上述实际 Store 和 CLI 的证据支持，最终整体体验留给用户安装试用。
+
+## 本机交付结果
+
+实现提交为 `839191fb6a536a013f18ceb36069d228470fd9e1`，分支为 `feat/execution-pressure`。App 0.4.0 已安装至 `/Applications/SVC.app`，实际后台进程 PID 1509，只有一份 SVCMenuBar 在运行。配套 CLI 18.1.0 位于 Library 的 wheel 摘要 runtime；App 使用新的包内默认路径，没有改写 cliPath 偏好。[安装记录](evidence/installation.json)与[签名](evidence/installed-signature.txt)确认 Apple Development、TeamIdentifier 7J9DJNJ782 及严格校验成功。
+
+打包复用已通过原生检查的 Swift 可执行产物，其摘要前后相同；单任务增量检查 2.09 秒，没有重新编译产品源或链接二进制。全部偏好对象、Section 原始字节和真实项目配置摘要前后相同，两个项目保留，未迁移 schema 4 配置。包内 revision 的 dirty 标记来自未纳入本任务的旧 `tasks/svc-macos-app/packet.md` 改动；产品源码已提交且 wheel／二进制核对通过，这是本机迭代包，不作为公开发布制品。
+
+本次已完成授权的主动收敛、实现、脚本与既有检查、本机签名安装及可试用版本交付。没有新增或修改自动化测试，没有创建新的 GUI 检查宿主，没有发布 tag／GitHub Release。临时控制脚本和原生检查均已结束，不留演示任务在后台消耗资源。用户尚未反馈这版的整体体验，不能记录为人类验收通过。后续反馈在本 Packet 中继续，不重复建立另一套产品合同。
