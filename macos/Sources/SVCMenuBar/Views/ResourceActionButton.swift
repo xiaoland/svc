@@ -8,6 +8,7 @@ struct ResourceActionButton: NSViewRepresentable {
     var bordered = true
     var symbol: String? = nil
     var accessibilityName: String? = nil
+    var destructive = false
     let action: () -> Void
 
     final class Coordinator: NSObject {
@@ -30,7 +31,7 @@ struct ResourceActionButton: NSViewRepresentable {
         button.setAccessibilityIdentifier(semanticID)
         button.isEnabled = enabled
         button.isBordered = bordered
-        button.contentTintColor = .labelColor
+        button.contentTintColor = destructive ? .systemRed : .labelColor
         button.setContentCompressionResistancePriority(bordered ? .defaultHigh : .defaultLow, for: .horizontal)
         button.image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
         button.imagePosition = .imageLeading

@@ -54,6 +54,7 @@ files = [
     "cli/src/svc_cli/dev",
     "cli/src/svc_cli/double",
     "cli/src/svc_cli/run",
+    "cli/src/svc_cli/activity",
     "tools",
 ]
 follow_imports = "silent"

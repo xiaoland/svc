@@ -44,6 +44,9 @@ from .cli_output.project import (
     project_status,
 )
 from .cli_output.run import project_run_receipt, run_exit_code
+from .cli_output.activity import project_monitor, project_managed, project_termination
+from .activity.monitor import monitor
+from .activity.managed import execute as execute_managed, request_termination
 from .cli_delivery import deliver_error, deliver_result
 from .errors import SvcError
 from .dev.runtime import catalog, act, reconcile
@@ -238,8 +241,52 @@ def _parser() -> argparse.ArgumentParser:
         status, "status", "Emit the complete compact scripts/CI projection"
     )
 
-    dev = subparsers.add_parser("dev", help="查阅和控制项目声明的开发资源")
+    dev = subparsers.add_parser("dev", help="查阅机器压力，管理开发资源与执行")
     dev_commands = dev.add_subparsers(dest="dev_command", required=True)
+    monitoring = dev_commands.add_parser(
+        "monitor", help="采样本机压力并查看跨项目执行；不执行资源探测"
+    )
+    monitoring.add_argument(
+        "--limit", type=int, default=20, help="最近结束执行的条数；活跃执行始终返回"
+    )
+    _add_machine_output(
+        monitoring, "dev-monitor", "输出带采样时间的机器结果", schema_first=True
+    )
+    execution = dev_commands.add_parser(
+        "exec",
+        help="运行一次显式受管命令；人可从 App 终止，无需项目配置",
+        epilog="在 -- 后传 argv，不隐式使用 shell。独立进程组、无终端输入，日志写入执行目录。先 monitor，再按压力安排并发；人为终止后不要自动重试。",
+    )
+    execution.add_argument("--cwd", default=".")
+    execution.add_argument("--label")
+    execution.add_argument(
+        "--source", default="terminal", help="调用来源，例如 agent；仅为调用方声明"
+    )
+    _add_machine_output(
+        execution,
+        "dev-exec",
+        "结束后输出结果；执行 ID 始终先写入 stderr",
+        schema_first=True,
+    )
+    execution.add_argument("argv", nargs=argparse.REMAINDER)
+    termination = dev_commands.add_parser(
+        "terminate", help="请求实际 owner 结束受管执行；不按 PID 接管"
+    )
+    termination.add_argument("execution_id")
+    termination.add_argument(
+        "--force",
+        action="store_true",
+        help="对受管进程组请求 SIGKILL，可能遗留不完整产物",
+    )
+    termination.add_argument(
+        "--by", choices=("human", "agent", "terminal"), default="terminal"
+    )
+    _add_machine_output(
+        termination,
+        "dev-terminate",
+        "返回请求状态；不把请求等同于实际退出",
+        schema_first=True,
+    )
     for name in ("list", "status", "identity", "act", "ensure", "stop", "reconcile"):
         command = dev_commands.add_parser(name)
         if name in {"list", "status"}:
@@ -522,6 +569,54 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
         if args.command == "dev":
+            if args.dev_command == "monitor":
+                snapshot = monitor(limit=args.limit)
+                return deliver_result(
+                    snapshot,
+                    json_output=json_output,
+                    project=project_monitor,
+                    render=_render_monitor,
+                    exit_code=0,
+                )
+            if args.dev_command == "exec":
+                command_argv = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
+                managed = execute_managed(
+                    tuple(command_argv),
+                    Path(args.cwd),
+                    label=args.label,
+                    source=args.source,
+                    on_started=lambda record: print(
+                        f"svc execution: {record.execution_id}",
+                        file=sys.stderr,
+                        flush=True,
+                    ),
+                )
+                result_code = (
+                    managed.record.exit_code
+                    if managed.record.state == "exited"
+                    else (130 if managed.record.state == "interrupted" else 4)
+                )
+                return deliver_result(
+                    managed,
+                    json_output=json_output,
+                    project=project_managed,
+                    render=lambda result, stream: print(
+                        f"{result.record.execution_id} {result.record.state} · {result.group_state}",
+                        file=stream,
+                    ),
+                    exit_code=int(result_code or 0),
+                )
+            if args.dev_command == "terminate":
+                termination_result = request_termination(
+                    args.execution_id, force=args.force, by=args.by
+                )
+                return deliver_result(
+                    termination_result,
+                    json_output=json_output,
+                    project=project_termination,
+                    render=lambda result, stream: print(result.message, file=stream),
+                    exit_code=0 if termination_result.status == "requested" else 3,
+                )
             if args.dev_command == "identity":
                 identity = resolve_workspace_identity(Path(args.repo))
                 return deliver_result(
@@ -618,6 +713,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             render=_render_error,
             exit_code=EXIT_FAILURE,
         )
+
+
+def _render_monitor(snapshot: Any, stream: TextIO) -> None:
+    pressure = snapshot.pressure
+    print(
+        f"本机 · {pressure.level} · CPU {pressure.cpu_percent:.0f}% · 可用内存 {pressure.memory_available_bytes / 1024**3:.1f} GiB",
+        file=stream,
+    )
+    print(
+        f"{pressure.sampled_at} · {pressure.sample_window_ms} ms · {pressure.recommendation}",
+        file=stream,
+    )
+    for item in snapshot.executions:
+        control = "可终止" if item.can_terminate else "只读"
+        print(
+            f"{item.record.execution_id}  {item.record.state}  {item.label}  {control}\n  {item.source} · {item.record.cwd}",
+            file=stream,
+        )
+    for issue in (*pressure.issues, *snapshot.issues):
+        print(f"注意：{issue}", file=stream)
 
 
 def _run_double(args: argparse.Namespace, json_output: bool) -> int:

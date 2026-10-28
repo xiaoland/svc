@@ -1,0 +1,20 @@
+{
+  "wall_seconds": 0.729,
+  "cpu_seconds": 0.396,
+  "pressure": {
+    "cpu_percent": 60.5,
+    "disk_read_bytes_per_second": 143771588.2,
+    "disk_write_bytes_per_second": 754833.0,
+    "issues": [],
+    "level": "elevated",
+    "logical_cpus": 10,
+    "memory_available_bytes": 2915450880,
+    "memory_pressure": "warning",
+    "memory_total_bytes": 17179869184,
+    "recommendation": "将重任务串行执行，降低工具并发，并在启动下一项前重新采样。",
+    "sample_window_ms": 255,
+    "sampled_at": "2026-10-28T07:30:22.020544+00:00"
+  },
+  "max_child_rss_bytes": 52838400,
+  "rss_scope": "Maximum across child processes in the observation script, not an isolated monitor peak."
+}

@@ -1,0 +1,390 @@
+{
+  "$defs": {
+    "CliUsageOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "const": "invalid-cli-usage",
+          "default": "invalid-cli-usage",
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "CliUsageOutput",
+      "type": "object"
+    },
+    "ExecutionActivityOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Argv",
+          "type": "array"
+        },
+        "can_terminate": {
+          "title": "Can Terminate",
+          "type": "boolean"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "domain": {
+          "title": "Domain",
+          "type": "string"
+        },
+        "execution_id": {
+          "title": "Execution Id",
+          "type": "string"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Exit Code"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Finished At"
+        },
+        "group_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Group State"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "logs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Logs",
+          "type": "array"
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "starting",
+            "running",
+            "exited",
+            "interrupted",
+            "start-failed",
+            "capture-failed",
+            "owner-lost",
+            "released"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "termination_requested": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Termination Requested"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessUsageOutput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "execution_id",
+        "domain",
+        "operation",
+        "label",
+        "source",
+        "cwd",
+        "argv",
+        "state",
+        "started_at",
+        "finished_at",
+        "exit_code",
+        "can_terminate",
+        "termination_requested",
+        "group_state",
+        "usage",
+        "logs",
+        "issues"
+      ],
+      "title": "ExecutionActivityOutput",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "MachineError": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/MachineErrorBody"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "MachineError",
+      "type": "object"
+    },
+    "MachineErrorBody": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "details"
+      ],
+      "title": "MachineErrorBody",
+      "type": "object"
+    },
+    "MonitorOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "dev monitor",
+          "default": "dev monitor",
+          "title": "Command",
+          "type": "string"
+        },
+        "executions": {
+          "items": {
+            "$ref": "#/$defs/ExecutionActivityOutput"
+          },
+          "title": "Executions",
+          "type": "array"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "pressure": {
+          "$ref": "#/$defs/PressureOutput"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pressure",
+        "executions",
+        "issues"
+      ],
+      "title": "MonitorOutput",
+      "type": "object"
+    },
+    "PressureOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_percent": {
+          "title": "Cpu Percent",
+          "type": "number"
+        },
+        "disk_read_bytes_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Disk Read Bytes Per Second"
+        },
+        "disk_write_bytes_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Disk Write Bytes Per Second"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "level": {
+          "title": "Level",
+          "type": "string"
+        },
+        "logical_cpus": {
+          "title": "Logical Cpus",
+          "type": "integer"
+        },
+        "memory_available_bytes": {
+          "title": "Memory Available Bytes",
+          "type": "integer"
+        },
+        "memory_pressure": {
+          "title": "Memory Pressure",
+          "type": "string"
+        },
+        "memory_total_bytes": {
+          "title": "Memory Total Bytes",
+          "type": "integer"
+        },
+        "recommendation": {
+          "title": "Recommendation",
+          "type": "string"
+        },
+        "sample_window_ms": {
+          "title": "Sample Window Ms",
+          "type": "integer"
+        },
+        "sampled_at": {
+          "title": "Sampled At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sampled_at",
+        "sample_window_ms",
+        "cpu_percent",
+        "logical_cpus",
+        "memory_total_bytes",
+        "memory_available_bytes",
+        "memory_pressure",
+        "disk_read_bytes_per_second",
+        "disk_write_bytes_per_second",
+        "level",
+        "recommendation",
+        "issues"
+      ],
+      "title": "PressureOutput",
+      "type": "object"
+    },
+    "ProcessUsageOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_percent": {
+          "title": "Cpu Percent",
+          "type": "number"
+        },
+        "process_count": {
+          "title": "Process Count",
+          "type": "integer"
+        },
+        "rss_bytes": {
+          "title": "Rss Bytes",
+          "type": "integer"
+        },
+        "scope": {
+          "const": "verified-current-descendants",
+          "title": "Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cpu_percent",
+        "rss_bytes",
+        "process_count",
+        "scope"
+      ],
+      "title": "ProcessUsageOutput",
+      "type": "object"
+    }
+  },
+  "$id": "urn:svc:cli-output:dev-monitor:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/MonitorOutput"
+    },
+    {
+      "$ref": "#/$defs/MachineError"
+    },
+    {
+      "$ref": "#/$defs/CliUsageOutput"
+    }
+  ],
+  "title": "SVC dev-monitor machine output",
+  "x-svc-result-schema-version": 1
+}

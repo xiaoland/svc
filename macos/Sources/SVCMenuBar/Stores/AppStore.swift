@@ -17,6 +17,7 @@ struct ProjectState: Identifiable {
 
 @MainActor @Observable
 final class AppStore {
+    let activity = ActivityStore()
     typealias Request = @Sendable (CLIConfiguration, DevCommand, String, [String]) async throws -> Data
     private(set) var projects: [ProjectState]
     private(set) var organization = ProjectOrganization()
@@ -192,10 +193,9 @@ final class AppStore {
 
     func refreshAll() async {
         guard !quitPending else { return }
-        await withTaskGroup(of: Void.self) { group in
-            for path in projects.map(\.path) {
-                group.addTask { await self.refresh(path) }
-            }
+        for path in projects.map(\.path) {
+            guard !Task.isCancelled, !quitPending else { break }
+            await refresh(path)
         }
     }
 

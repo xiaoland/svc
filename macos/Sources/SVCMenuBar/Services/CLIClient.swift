@@ -5,19 +5,27 @@ struct CLIClient: Sendable {
 
     func request(_ command: DevCommand, repo: String, arguments: [String] = []) async throws -> Data {
         try await Task.detached(priority: .utility) {
-            try run(command, repo: repo, arguments: arguments)
+            try run(arguments: ["dev", command.rawValue] + arguments + ["--repo", repo, "--json"], repo: repo)
         }.value
     }
 
-    private func run(_ command: DevCommand, repo: String, arguments: [String]) throws -> Data {
+    func requestGlobal(_ command: DevCommand, arguments: [String] = []) async throws -> Data {
+        try await Task.detached(priority: .utility) {
+            try run(arguments: ["dev", command.rawValue] + arguments + ["--json"], repo: nil)
+        }.value
+    }
+
+    private func run(arguments: [String], repo: String?) throws -> Data {
         let files = FileManager.default
         guard configuration.executable.hasPrefix("/"),
               files.isExecutableFile(atPath: configuration.executable) else {
             throw CLIError(message: "找不到可执行的 svc。请在设置中选择 CLI。")
         }
-        var isDirectory: ObjCBool = false
-        guard files.fileExists(atPath: repo, isDirectory: &isDirectory), isDirectory.boolValue else {
-            throw CLIError(message: "项目目录不存在：\(repo)")
+        if let repo {
+            var isDirectory: ObjCBool = false
+            guard files.fileExists(atPath: repo, isDirectory: &isDirectory), isDirectory.boolValue else {
+                throw CLIError(message: "项目目录不存在：\(repo)")
+            }
         }
         let directory = files.temporaryDirectory.appendingPathComponent("svc-app-\(UUID().uuidString)")
         try files.createDirectory(at: directory, withIntermediateDirectories: true,
@@ -33,8 +41,8 @@ struct CLIClient: Sendable {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: configuration.executable)
-        process.arguments = ["dev", command.rawValue] + arguments + ["--repo", repo, "--json"]
-        process.currentDirectoryURL = URL(fileURLWithPath: repo)
+        process.arguments = arguments
+        process.currentDirectoryURL = URL(fileURLWithPath: repo ?? NSHomeDirectory())
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = configuration.searchPath
         process.environment = environment

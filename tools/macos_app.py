@@ -21,7 +21,15 @@ from tools.release_notes import release_section
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ID = "dev.svc.menubar"
-CLI_RESULT_SCHEMAS = {"list": 1, "status": 4, "act": 1, "reconcile": 1}
+CLI_RESULT_SCHEMAS = {
+    "list": 1,
+    "status": 4,
+    "act": 1,
+    "reconcile": 1,
+    "monitor": 1,
+    "exec": 1,
+    "terminate": 1,
+}
 DEFAULT_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 
@@ -83,7 +91,19 @@ def build(profile: str, output: Path, cli: str = "") -> Path:
     build_number = run(
         "git", "rev-list", "--first-parent", "--count", "HEAD", capture=True
     )
-    run("swift", "build", "--package-path", str(ROOT / "macos"), "-c", configuration)
+    jobs = os.environ.get("SVC_BUILD_JOBS", "2")
+    if not jobs.isdigit() or not 1 <= int(jobs) <= 8:
+        raise ValueError("SVC_BUILD_JOBS 必须在 1 到 8 之间；默认 2，避免占满本机")
+    run(
+        "swift",
+        "build",
+        "--jobs",
+        jobs,
+        "--package-path",
+        str(ROOT / "macos"),
+        "-c",
+        configuration,
+    )
     binary_dir = Path(
         run(
             "swift",

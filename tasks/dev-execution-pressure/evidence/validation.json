@@ -1,0 +1,12 @@
+{
+  "wheel": "sustainable_vibe_coding-18.1.0-py3-none-any.whl",
+  "wheel_sha256": "7056582203b85b4855d08edcf751f08ab0de2d49ad7c1178f892c8122e878041",
+  "cli_source_files_matched": 96,
+  "mismatches": [],
+  "native_tests": 13,
+  "repository_tests": 260,
+  "new_tests": 0,
+  "swift_binary_sha256": "54f2cf304d33277243ff96d7aac09669da4174fb98d2403939e6c3961706d7b0",
+  "gui_observation_host_created": false,
+  "native_render_scope": "Existing resources fixture and new page selector; pressure remains loading in this fixture. Not evidence of full execution-page visual acceptance."
+}

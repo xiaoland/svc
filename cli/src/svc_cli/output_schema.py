@@ -33,6 +33,7 @@ from .cli_output.double import (
 from .cli_output.project import InitApplyOutput, InitPlanOutput, RootStatusOutput
 from .cli_output.model import CliUsageOutput, MachineError
 from .cli_output.run import RunReceipt
+from .cli_output.activity import MonitorOutput, ManagedOutput, TerminationOutput
 from .cli_output.skills import SkillsOutput, AdoptionOutput
 
 
@@ -77,7 +78,10 @@ DoubleStopMachineOutput: TypeAlias = (
 )
 
 RegisteredMachineOutput: TypeAlias = (
-    SkillsOutput
+    MonitorOutput
+    | ManagedOutput
+    | TerminationOutput
+    | SkillsOutput
     | AdoptionOutput
     | InitPlanOutput
     | InitApplyOutput
@@ -112,6 +116,15 @@ class OutputSchemaSpec:
 
 
 OUTPUT_SCHEMA_SPECS = {
+    "dev-monitor": OutputSchemaSpec(
+        1, TypeAdapter(MonitorOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-exec": OutputSchemaSpec(
+        1, TypeAdapter(ManagedOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-terminate": OutputSchemaSpec(
+        1, TypeAdapter(TerminationOutput | MachineError | CliUsageOutput)
+    ),
     "skills": OutputSchemaSpec(
         1, TypeAdapter(SkillsOutput | AdoptionOutput | MachineError | CliUsageOutput)
     ),

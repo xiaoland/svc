@@ -7,6 +7,7 @@ struct MenuPanel: View {
     @State private var editingSection = false
     @State private var sectionID: UUID?
     @State private var sectionName = ""
+    @State private var selectedTab = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,11 +19,11 @@ struct MenuPanel: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button { Task { await store.refreshAll() } } label: {
+                Button { Task { await refreshPanel() } } label: {
                     Image(systemName: "arrow.clockwise").frame(width: 26, height: 26)
                 }
-                .help("刷新资源状态").accessibilityLabel("刷新资源状态")
-                .keyboardShortcut("r").disabled(store.quitPending || !store.refreshes.isEmpty)
+                .help("刷新机器与当前页面").accessibilityLabel("刷新机器与当前页面")
+                .keyboardShortcut("r").disabled(store.quitPending || store.activity.refreshing || !store.refreshes.isEmpty)
                 Menu {
                     Button("添加项目…") { addProject() }.keyboardShortcut("o")
                     Button("新建 Section…") { editSection(nil) }.disabled(!store.canEditSections)
@@ -33,6 +34,15 @@ struct MenuPanel: View {
             }
             .buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 12)
             Divider()
+            HostPressureView(activity: store.activity)
+            Picker("页面", selection: $selectedTab) {
+                Text("资源").tag(0)
+                Text("执行").tag(1)
+            }.pickerStyle(.segmented).labelsHidden().padding(.horizontal, 12).padding(.bottom, 10)
+            Divider()
+            if selectedTab == 1 {
+                ScrollView { ExecutionListView(store: store) }.frame(height: 340)
+            } else {
             if editingSection {
                 SectionNameEditor(sectionID: sectionID, name: sectionName, store: store) { editingSection = false }
                     .id(sectionID)
@@ -58,6 +68,7 @@ struct MenuPanel: View {
                         }
                 }
             }
+            }
             if store.quitPending {
                 HStack {
                     ProgressView().controlSize(.small)
@@ -82,8 +93,8 @@ struct MenuPanel: View {
                 } label: { Label("设置", systemImage: "gearshape") }
                 .keyboardShortcut(",")
                 Spacer()
-                if let time = store.projects.compactMap(\.checkedAt).max() {
-                    Text(store.refreshes.isEmpty ? "更新于 \(time.formatted(date: .omitted, time: .shortened))" : "正在刷新…")
+                if let time = selectedTab == 0 ? store.projects.compactMap(\.checkedAt).max() : store.activity.checkedAt {
+                    Text("更新于 \(time.formatted(date: .omitted, time: .shortened))")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -95,10 +106,26 @@ struct MenuPanel: View {
         .task(id: store.panelVisible) {
             guard store.panelVisible else { return }
             while !Task.isCancelled && store.panelVisible {
+                await store.activity.refresh(store.configuration)
+                do { try await Task.sleep(for: .seconds(5)) } catch { break }
+            }
+        }
+        .task(id: "\(store.panelVisible)-\(selectedTab)") {
+            guard store.panelVisible, selectedTab == 0 else { return }
+            while !Task.isCancelled && store.panelVisible && selectedTab == 0 {
                 await store.refreshAll()
                 do { try await Task.sleep(for: .seconds(5)) } catch { break }
             }
         }
+        .onChange(of: selectedTab) { _, _ in
+            Task { await store.activity.refresh(store.configuration) }
+        }
+    }
+
+    private func refreshPanel() async {
+        guard !store.quitPending else { return }
+        await store.activity.refresh(store.configuration)
+        if selectedTab == 0 && store.panelVisible { await store.refreshAll() }
     }
 
     private var projectList: some View {

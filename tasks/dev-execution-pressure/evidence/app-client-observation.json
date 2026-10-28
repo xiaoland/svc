@@ -1,0 +1,29 @@
+{
+  "canTerminateAfterExit": false,
+  "decoded": true,
+  "executionCount": 21,
+  "foundationOnly": true,
+  "groupState": "scope-complete",
+  "notice": "已请求实际执行者终止；请继续查询实际退出结果。",
+  "pressure": "elevated",
+  "sampleWindowMs": 253,
+  "terminatedState": "interrupted",
+  "cli_result": {
+    "command": "dev exec",
+    "execution_id": "9730f609-0530-4cd1-a412-ce68f7801097",
+    "exit_code": null,
+    "group_state": "scope-complete",
+    "label": "App 客户端低负载验收",
+    "logs": [
+      "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/9730f609-0530-4cd1-a412-ce68f7801097/stdout.log",
+      "/Users/lanzhijiang/Library/Caches/TemporaryItems/svc/execution/9730f609-0530-4cd1-a412-ce68f7801097/stderr.log"
+    ],
+    "retry_allowed": false,
+    "schema_version": 1,
+    "source": "agent",
+    "state": "interrupted",
+    "stopped_by": "human"
+  },
+  "cli_exit": 130,
+  "script_stderr": ""
+}

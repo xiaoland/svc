@@ -6,7 +6,7 @@ struct CLIConfiguration: Equatable, Sendable {
 }
 
 enum DevCommand: String, Sendable {
-    case list, status, act, reconcile
+    case list, status, act, reconcile, monitor, terminate
     var schemaVersion: Int { self == .status ? 4 : 1 }
     var title: String {
         switch self {
@@ -14,6 +14,8 @@ enum DevCommand: String, Sendable {
         case .status: "刷新"
         case .act: "操作"
         case .reconcile: "确认未知结果"
+        case .monitor: "机器与执行"
+        case .terminate: "终止执行"
         }
     }
 }

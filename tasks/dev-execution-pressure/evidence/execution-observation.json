@@ -1,0 +1,111 @@
+{
+  "natural": {
+    "owner_exit": 0,
+    "result": {
+      "schema_version": 1,
+      "command": "dev exec",
+      "execution_id": "a3487cf7-f0e4-4c00-bdec-a203a327c9fd",
+      "label": "正常结束",
+      "source": "acceptance-script",
+      "state": "exited",
+      "exit_code": 0,
+      "stopped_by": null,
+      "group_state": "scope-complete",
+      "logs": [
+        "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-activity-observation-hgxdp4_x/runtime/a3487cf7-f0e4-4c00-bdec-a203a327c9fd/stdout.log",
+        "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-activity-observation-hgxdp4_x/runtime/a3487cf7-f0e4-4c00-bdec-a203a327c9fd/stderr.log"
+      ],
+      "retry_allowed": null
+    },
+    "stderr": ""
+  },
+  "stdout": "stdout-observed\n",
+  "active_controllable": [
+    true
+  ],
+  "terminate_request": {
+    "execution_id": "d57f4d21-9b3e-4c35-ae8d-b2fa22c47572",
+    "status": "requested",
+    "mode": "terminate",
+    "message": "已请求实际执行者终止；请继续查询实际退出结果。"
+  },
+  "terminated": {
+    "owner_exit": 0,
+    "result": {
+      "schema_version": 1,
+      "command": "dev exec",
+      "execution_id": "d57f4d21-9b3e-4c35-ae8d-b2fa22c47572",
+      "label": "正常终止",
+      "source": "acceptance-script",
+      "state": "interrupted",
+      "exit_code": null,
+      "stopped_by": "human",
+      "group_state": "scope-complete",
+      "logs": [
+        "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-activity-observation-hgxdp4_x/runtime/d57f4d21-9b3e-4c35-ae8d-b2fa22c47572/stdout.log",
+        "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-activity-observation-hgxdp4_x/runtime/d57f4d21-9b3e-4c35-ae8d-b2fa22c47572/stderr.log"
+      ],
+      "retry_allowed": false
+    },
+    "stderr": ""
+  },
+  "unrelated_sleep_alive": true,
+  "leader_exit_group_state": [
+    "descendants-running"
+  ],
+  "term_ignoring_worker_still_owned": "running",
+  "force_request": {
+    "execution_id": "02ada1dd-bf75-4a33-9f3c-afacaf67ff2f",
+    "status": "requested",
+    "mode": "kill",
+    "message": "已请求实际执行者终止；请继续查询实际退出结果。"
+  },
+  "forced": {
+    "owner_exit": 0,
+    "result": {
+      "schema_version": 1,
+      "command": "dev exec",
+      "execution_id": "02ada1dd-bf75-4a33-9f3c-afacaf67ff2f",
+      "label": "主进程先退出",
+      "source": "acceptance-script",
+      "state": "interrupted",
+      "exit_code": null,
+      "stopped_by": "human",
+      "group_state": "scope-complete",
+      "logs": [
+        "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-activity-observation-hgxdp4_x/runtime/02ada1dd-bf75-4a33-9f3c-afacaf67ff2f/stdout.log",
+        "/var/folders/rk/8_krr0y14p9g5plk8n77lgyr0000gn/T/svc-activity-observation-hgxdp4_x/runtime/02ada1dd-bf75-4a33-9f3c-afacaf67ff2f/stderr.log"
+      ],
+      "retry_allowed": false
+    },
+    "stderr": ""
+  },
+  "worker_still_present_after_force": false,
+  "owner_lost": [
+    {
+      "state": "owner-lost",
+      "can_terminate": false
+    }
+  ],
+  "owner_lost_request": {
+    "execution_id": "d7b7e5ed-14ab-4c5e-b133-b06491cfb6a7",
+    "status": "not-running",
+    "mode": "kill",
+    "message": "执行已结束或失去执行者；没有发送信号。"
+  },
+  "pressure": {
+    "sampled_at": "2026-10-28T07:25:06.534916+00:00",
+    "sample_window_ms": 250,
+    "cpu_percent": 44.4,
+    "logical_cpus": 10,
+    "memory_total_bytes": 17179869184,
+    "memory_available_bytes": 2718859264,
+    "memory_pressure": "warning",
+    "disk_read_bytes_per_second": 153490018.0,
+    "disk_write_bytes_per_second": 33034468.2,
+    "level": "elevated",
+    "recommendation": "将重任务串行执行，降低工具并发，并在启动下一项前重新采样。",
+    "issues": []
+  },
+  "issues": []
+}

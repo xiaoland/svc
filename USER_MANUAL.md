@@ -102,6 +102,25 @@ npx skills@1.7.0 add https://github.com/xiaoland/svc/releases/download/corpus-v1
 
 所有非平凡任务使用 Task Packet。先找到现有 Packet，不存在时建立足以表达目标、授权、当前状态与验证边界的最小入口，随后按任务压力增长。[Task Packet Skill](corpus/svc-task-packet/SKILL.md)拥有选择和维护规则，并提供 references/assets；Agent 使用已有文件工具完成操作，保护现有 Packet 和授权路径。模板存在不意味着必须创建所有文件，文件工具也不自动具备旧 CLI 创建命令的全部事务与路径保护。
 
+## 观察机器与管理临时执行
+
+App 0.4.0／CLI 18.1.0 提供无需项目配置的机器与执行入口。菜单栏顶部展示 CPU、系统内存压力和可用内存，展开可查看磁盘活动、采样窗口与建议；“执行”页跨项目显示活跃执行和最近结果。面板关闭后停止轮询，过期快照不能代表当前压力。
+
+```bash
+svc dev monitor --json
+svc dev exec --source agent --label '构建 App' --cwd /path/to/project --json -- swift build --jobs 2
+svc dev terminate <execution-id> --by human --json
+svc dev terminate <execution-id> --force --by human --json
+```
+
+在高消耗工作之前及执行期间查询 monitor，据压力安排串行、降低工具并发或推迟下一项。App 的“复制 Agent 接入说明”会使用设置中的实际 CLI 路径。此接口需要 Agent 主动采用；绕过 SVC 启动的程序不会自动获得终止能力，也没有强制全机限额或自动杀进程。CPU／磁盘短窗口只说明采样期间的活动，不能证明谁导致了卡顿；可用内存与系统内存压力是不同指标。
+
+exec 目前支持 macOS，按 `--` 后的 argv 执行，不自动解释 shell，无终端输入。每次调用独立运行，不合并同名命令；启动后先在 stderr 给出 execution ID，结束后 stdout 返回一份 JSON，原生命令输出写入返回的 stdout／stderr 日志。没有项目配置也可使用，既有具名 `svc run` 的终端及跟随行为不变。
+
+人可从执行行请求终止；强制终止在行内确认后发送 KILL，可能遗留未完成的产物或写入。requested 只表示请求已登记，仍需查看实际状态；主进程退出而子进程未结束时继续显示运行。scope-complete 只证明本次受管进程组结束，不能证明离开该组的进程、远端工作或业务回滚。已应用的终止在结果中保留 stopped_by，retry_allowed=false；Agent 不得把人为终止当普通失败自动重试。null 也不授予自动重试权限。
+
+旧 run 与资源动作可能出现在清单中，但只有明确受管的 exec 提供这个终止通道；已就绪释放的服务仍通过其资源动作控制。执行者丢失后显示未知并禁用终止，不能按历史 PID 接管。记录与日志是可能被系统清理的本机运行证据，不是永久历史。标签、source 和终止来源来自调用方声明，不证明某个 Agent 会话身份。
+
 ## 管理开发资源
 
 `dev.resources` 声明资源的观察、访问与明确动作。资源至少提供其中一项，不要求采用 SVC Skills。下面的仓库共享资源由项目脚本控制，停止动作的声明仅承诺命令结束，不声称所有进程已退出：
@@ -222,7 +241,7 @@ CLI 18 只接受配置 schema 5，不提供旧字段别名或自动迁移。先�
 4. 用 `svc status --json`、`svc dev list --json` 检查解析，再按需执行 `dev status`。观察会运行项目代码；list 不运行探测。完成迁移和旧调用排空后才开放新版控制。
 5. 改名、改变 scope／host_key 或引入 owner 会改变协调身份，必须另行确认旧边界没有活跃或未解决执行后再做。保持原键只保证旧 owner 持锁时新请求不平行，不保证任意热改身份安全。
 
-App 0.3.1 沿用配套 CLI 18.0.0；显式保存的旧 CLI 路径需在设置中修改。项目列表与 CLI 设置保留，旧观察不当作新会话状态。
+App 0.4.0 配套 CLI 18.1.0；资源配置仍为 schema 5，主机与临时执行不要求配置。显式保存的自定义 CLI 路径需在设置中保持兼容版本。项目列表和分组保留，旧观察不当作新会话状态。
 
 App 顶部“＋”可新建 Section，将多个项目放在同一分组。项目菜单可移入或移出 Section，分组菜单可添加项目、重命名、上下移动和删除。名称不能为空或重名。分组支持折叠并在重启后保留；删除分组仅解除归属，项目回到未分组，资源操作继续执行。分组偏好保存在本机，不需要修改项目的 svc.json。
 
