@@ -23,7 +23,7 @@ struct ExecutionListView: View {
                     .help("执行列表操作").accessibilityLabel("执行列表操作")
             }
             if let sources = store.activity.snapshot?.integrations, !sources.isEmpty {
-                DisclosureGroup(isExpanded: $showSources) {
+                DisclosureGroup(isExpanded: $showSources.immediateDisclosure) {
                     ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack { Text(source.name); Spacer(); Text(source.stateLabel).foregroundStyle(.secondary) }
@@ -54,7 +54,7 @@ struct ExecutionListView: View {
                 ForEach(groups[project] ?? []) { executionRow($0) }
             }
             if !recent.isEmpty {
-                DisclosureGroup("最近记录 · \(recent.count)", isExpanded: $showHistory) {
+                DisclosureGroup("最近记录 · \(recent.count)", isExpanded: $showHistory.immediateDisclosure) {
                     VStack(spacing: 10) {
                         ForEach(recent) { executionRow($0) }
                     }.padding(.top, 8)

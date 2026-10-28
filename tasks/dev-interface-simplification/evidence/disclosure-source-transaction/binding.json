@@ -1,0 +1,18 @@
+{
+  "scope" : "Binding transaction forwarding, not rendered animation",
+  "valid" : true,
+  "writes" : [
+    {
+      "animationCleared" : true,
+      "animationsDisabled" : true,
+      "continuousPreserved" : true,
+      "expanded" : true
+    },
+    {
+      "animationCleared" : true,
+      "animationsDisabled" : true,
+      "continuousPreserved" : true,
+      "expanded" : false
+    }
+  ]
+}

@@ -8,7 +8,7 @@ struct HostPressureView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let snapshot = activity.snapshot {
                 let pressure = snapshot.pressure
-                DisclosureGroup(isExpanded: $expanded) {
+                DisclosureGroup(isExpanded: $expanded.immediateDisclosure) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("CPU \(pressure.cpuPercent, specifier: "%.0f")% · 内存压力\(pressure.memoryLabel)")
                         Text("可用内存 \(activityBytes(pressure.memoryAvailableBytes)) · 压缩 \(pressure.compressedBytes.map(activityBytes) ?? "不可用")")

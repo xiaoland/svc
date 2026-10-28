@@ -28,7 +28,7 @@ struct MainWindowView: View {
                         DisclosureGroup(isExpanded: Binding(
                             get: { !section.collapsed },
                             set: { if $0 == section.collapsed { store.toggleSection(section.id) } }
-                        )) {
+                        ).immediateDisclosure) {
                             ForEach(store.projects(in: section.id)) { project in
                                 projectLink(project)
                             }

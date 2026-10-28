@@ -9,7 +9,7 @@ struct ProjectUsageView: View {
     var body: some View {
         let observed = activity.snapshot?.projects?.first { $0.projectPath == project }
         if let observed, observed.usage != nil || !observed.issues.isEmpty {
-            DisclosureGroup(isExpanded: $expanded) {
+            DisclosureGroup(isExpanded: $expanded.immediateDisclosure) {
                 VStack(alignment: .leading, spacing: 8) {
                     if let usage = observed.usage { ProcessUsageDetails(usage: usage) }
                     Text("\(observed.executionCount) 次执行 · \(observed.resourceCount) 个资源运行")

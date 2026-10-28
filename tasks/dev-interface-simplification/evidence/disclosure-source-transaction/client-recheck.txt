@@ -1,0 +1,16 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write swift-version--FE76C4972A19952.txt
+Build complete! (0.12s)
+Test Suite 'Selected tests' started at 2026-10-28 22:28:47.702.
+Test Suite 'SVCMenuBarPackageTests.xctest' started at 2026-10-28 22:28:47.703.
+Test Suite 'SVCMenuBarPackageTests.xctest' passed at 2026-10-28 22:28:47.703.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-28 22:28:47.703.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test processClientHandlesSpacesNonzeroJSONAndLargeStderr() started.
+􁁛  Test processClientHandlesSpacesNonzeroJSONAndLargeStderr() passed after 0.546 seconds.
+􁁛  Test run with 1 test in 0 suites passed after 0.546 seconds.

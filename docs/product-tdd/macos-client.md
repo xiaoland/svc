@@ -112,3 +112,6 @@ App 0.2.0 的主窗口在全部项目、Section 或项目范围内保留原生�
 
 
 原生执行与机械执行共享项目列表，但采用独立模型。HarnessExecution 保留来源、scope 和动作能力；HarnessExecutionRow 仅在来源允许时展示日志／停止，停止前显示原管理器的作用范围并确认，不提供外部 force。IntegrationSettingsView 消费同一 ActivityStore 的 integrations，在设置内安装 Pi 桥接或配置现有 Codex socket；Claude 从用户 PATH 自动发现。执行页的折叠来源状态区区分尚未接入与空清单，沿用原生 DisclosureGroup 的局部无动画处理。连接、身份失效、日志预算和用量限制由 [activity 原生来源合同](activity.md#原生-agent-执行来源)拥有。
+
+
+DisclosureGroup 的展开绑定使用 immediateDisclosure，在写入展开状态的 transaction 中清空 animation 并设置 disablesAnimations，再以相同事务写回原绑定；保留组内已有的事务约束。只改组内收到的 transaction 不能约束父容器与相邻区域的布局更新，所以不能作为整次开合已禁动画的依据。压力、项目用量、执行来源、历史与侧栏 Section 采用同一入口；没有新的展开状态副本，不改变原生控件、键盘或可访问语义，也不全局关闭动画。
