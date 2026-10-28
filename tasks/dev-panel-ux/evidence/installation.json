@@ -1,0 +1,21 @@
+{
+  "app_version": "0.3.1",
+  "source_revision": "e244682a5f77680a7bd7854a5a39b0a3f21df516-dirty",
+  "verified_binary_reused": true,
+  "cli_source_file_count": 87,
+  "cli_source_mismatches": [],
+  "cli_runtime_reused": "/Users/lanzhijiang/Library/Application Support/SVC/runtimes/d7a3d52520769d9796b5/bin/svc",
+  "existing_unrelated_task_packet_change": true,
+  "installed_version": "0.3.1",
+  "all_preferences_preserved": true,
+  "project_count": 2,
+  "sections_preserved": true,
+  "project_configuration_unchanged": true,
+  "signature_valid": true,
+  "apple_development": true,
+  "team_id": "7J9DJNJ782",
+  "running_processes": [
+    "38733 /Applications/SVC.app/Contents/MacOS/SVCMenuBar --background"
+  ],
+  "only_canonical_app_running": true
+}
