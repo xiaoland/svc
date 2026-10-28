@@ -31,6 +31,7 @@ struct HostPressureView: View {
                         Text("\(pressure.cpuPercent, specifier: "%.0f")%").monospacedDigit().fontWeight(.medium)
                     }.help("整机 CPU 使用率；\(pressure.logicalCpus) 个逻辑核心，采样 \(pressure.sampleWindowMs) 毫秒")
                         .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isStaticText)
                         .accessibilityLabel("上次采样的整机 CPU")
                         .accessibilityValue("\(pressure.cpuPercent.formatted(.number.precision(.fractionLength(0)))) 百分比")
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
@@ -39,6 +40,7 @@ struct HostPressureView: View {
                         Text("可用 \(activityBytes(pressure.memoryAvailableBytes))").foregroundStyle(.primary)
                     }.help("系统内存压力与可用内存分别显示，不根据已用比例推断压力。")
                         .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isStaticText)
                         .accessibilityLabel("上次采样的内存")
                         .accessibilityValue("压力\(pressure.memoryLabel)，可用 \(activityBytes(pressure.memoryAvailableBytes))")
                 }
