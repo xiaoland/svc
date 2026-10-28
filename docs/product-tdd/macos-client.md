@@ -1,6 +1,6 @@
 # macOS App 与 CLI 合同
 
-本文拥有 SVC Dev 图形入口与程序化入口之间的职责、公开协议和生命周期合同。产品定位见 [开发资源管理](../prd/development.md)，使用与迁移见[用户手册](../../USER_MANUAL.md)，发行流程见[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)。本文描述 CLI 18.0.0／App 0.3.1 的源码合同；旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同，不能混用。安装和公开发布是独立的交付步骤，不能由源码版本推断。
+本文拥有 SVC Dev 图形入口与程序化入口之间的职责、公开协议和生命周期合同。产品定位见 [开发资源管理](../prd/development.md)，使用与迁移见[用户手册](../../USER_MANUAL.md)，发行流程见[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)。本文描述 CLI 18.1.0／App 0.5.0 的源码合同；旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同，不能混用。安装和公开发布是独立的交付步骤，不能由源码版本推断。
 
 App 与 CLI 是同一产品能力的两个入口。App 拥有项目来源偏好、呈现、刷新调度、当前会话回执及 CLI 路径和 PATH；CLI 拥有配置解释、资源身份、观察、声明动作执行和跨进程协调。项目脚本或实际控制者拥有资源内部的初始化、数据清理、权限和异步操作生命周期。App 不直接读取配置和私有 runtime，也不根据端口或历史 PID 推导权限。
 
@@ -27,9 +27,17 @@ App 通过绝对路径启动独立 CLI，以 argv 传入项目目录，不经过
 
 以上调用都支持 `--repo`、`--json` 和 `--json-schema`。根 status 结果 schema 为 4，init 结果仍为 4；配置 schema 5 与这些结果版本相互独立。App 校验 command、schema 和必要字段，拒绝不兼容或损坏结果，不能造出成功或未就绪。非零 CLI 退出也可能携带有效回执。
 
-App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.4.2 配套 CLI 18.1.0，沿用 0.4.0 新增的 dev-monitor／exec／terminate schema 1；原 list／status／act／reconcile 的结果版本不变。0.4.2 使用原生控件和系统文字层级，并保留背景与可访问语义修复；18.1.0 的 minor 表示新增独立能力，没有修改资源配置 schema 5 或既有 run 的公开合同。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
+App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.5.0 配套 CLI 18.1.0，沿用 0.4.0 新增的 dev-monitor／exec／terminate schema 1；原 list／status／act／reconcile 的结果版本不变。0.5.0 增加主窗口，并沿用原生控件、系统文字层级和可访问语义；18.1.0 的 minor 表示新增独立能力，没有修改资源配置 schema 5 或既有 run 的公开合同。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
 
 机器与执行页使用 `dev monitor --json`，不附加项目目录，也不依赖项目能否解析；`dev terminate <execution-id> [--force] --by human --json` 只请求执行 owner 终止。App 不自己发送进程信号。主机采样、一次性执行及停止证明由[主机与受管执行合同](activity.md)拥有；执行页不会将旧资源动作的 wait、ready 释放或 submitted 改成可强杀。CLI 仍可独立于 App 使用；App 退出不终止前台 CLI 拥有的一次性执行。
+
+## 主窗口与菜单栏面板
+
+App 0.5.0 在既有 AppKit 应用入口中增加唯一 MainWindowController，承载 SwiftUI NavigationSplitView 和原生 NSToolbar，不增加第二个 AppStore。侧栏选择全部资源、Section、项目或全局执行；项目内容复用 ProjectView、ResourceRow 及同一操作回执。Section 折叠沿用已有本机偏好，页面选择及详情展开分别由两个界面的视图持有。删除当前 Section 或移除当前项目后，主窗口回到全部资源，不保留失效选择。
+
+普通启动及 Finder reopen 唤起主窗口；`--background` 只影响启动时呈现，不激活前台。Popover 和应用菜单（Cmd-0）可打开已有主窗口，最小化时恢复该窗口。主窗口采用标准关闭、最小化、缩放和调整尺寸行为，`SVCMainWindow` frame autosave 保存位置与尺寸。主窗口或设置窗口打开期间为 regular 应用，可在 Dock／Cmd-Tab 中访问；两者都关闭后回到 accessory 菜单栏常驻。关闭最后一个窗口不退出应用，资源与一次性执行也不因此停止。设置仍为独立窗口，退出继续等待本 App 的在途控制操作。
+
+AppStore 持有按 panel／mainWindow 区分的观察需求；窗口宿主负责可见性，视图只通知资源页是否被选中。主窗口关闭、最小化、应用隐藏或完全遮挡不产生可见需求；Popover 按实际展示状态登记。主机与项目各有一个周期循环，间隔为上一轮完成后 5 秒。任何可见界面需要资源时才运行项目循环。移除需求会取消后续周期，但保留正在自然结束的循环占位，快速重新显示也不产生第二个循环。CLIClient 的在途调用不会因关闭窗口被强杀。单项用户刷新和操作后的刷新仍沿用已有去重及代次规则，不属于额外周期采样。
 
 ## 进程与安装关系
 

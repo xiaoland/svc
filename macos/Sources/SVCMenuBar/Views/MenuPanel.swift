@@ -4,6 +4,8 @@ import SwiftUI
 struct MenuPanel: View {
     @Bindable var store: AppStore
     let openSettings: () -> Void
+    var openMainWindow: () -> Void = {}
+    var resourcePageChanged: (Bool) -> Void = { _ in }
     @State private var editingSection = false
     @State private var sectionID: UUID?
     @State private var sectionName = ""
@@ -89,6 +91,9 @@ struct MenuPanel: View {
             }
             Divider()
             HStack {
+                Button(action: openMainWindow) {
+                    Image(systemName: "macwindow")
+                }.help("打开主窗口").accessibilityLabel("打开主窗口")
                 Button {
                     NSApp.activate(ignoringOtherApps: true)
                     openSettings()
@@ -106,29 +111,15 @@ struct MenuPanel: View {
         }
         .frame(width: 420)
         .background(Color(nsColor: .windowBackgroundColor))
-        .task(id: store.panelVisible) {
-            guard store.panelVisible else { return }
-            while !Task.isCancelled && store.panelVisible {
-                await store.activity.refresh(store.configuration)
-                do { try await Task.sleep(for: .seconds(5)) } catch { break }
-            }
-        }
-        .task(id: "\(store.panelVisible)-\(selectedTab)") {
-            guard store.panelVisible, selectedTab == 0 else { return }
-            while !Task.isCancelled && store.panelVisible && selectedTab == 0 {
-                await store.refreshAll()
-                do { try await Task.sleep(for: .seconds(5)) } catch { break }
-            }
-        }
         .onChange(of: selectedTab) { _, _ in
-            Task { await store.activity.refresh(store.configuration) }
+            resourcePageChanged(selectedTab == 0)
         }
     }
 
     private func refreshPanel() async {
         guard !store.quitPending else { return }
         await store.activity.refresh(store.configuration)
-        if selectedTab == 0 && store.panelVisible { await store.refreshAll() }
+        if selectedTab == 0 { await store.refreshAll() }
     }
 
     private var projectList: some View {
@@ -166,15 +157,6 @@ struct MenuPanel: View {
     }
 
     private func addProject(sectionID: UUID? = nil) {
-        let panel = NSOpenPanel()
-        panel.title = "添加 SVC 项目"
-        panel.prompt = "添加项目"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = true
-        NSApp.activate(ignoringOtherApps: true)
-        panel.begin { response in
-            if response == .OK { for url in panel.urls { store.addProject(url, sectionID: sectionID) } }
-        }
+        ProjectPicker.present(store: store, sectionID: sectionID)
     }
 }

@@ -6,6 +6,10 @@ struct ActiveOperation {
     let projectPath: String
 }
 
+enum ObservationSurface: Hashable {
+    case panel, mainWindow
+}
+
 struct ProjectState: Identifiable {
     let path: String
     var snapshot: DevCatalog?
@@ -28,8 +32,10 @@ final class AppStore {
     private(set) var receipts: [String: OperationReceipt] = [:]
     private(set) var refreshes: [String: UUID] = [:]
     private(set) var quitPending = false
-    var panelVisible = false
     var notice: String?
+    @ObservationIgnored private var observationDemands: [ObservationSurface: Bool] = [:]
+    @ObservationIgnored private var activityObservationTask: Task<Void, Never>?
+    @ObservationIgnored private var resourceObservationTask: Task<Void, Never>?
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let request: Request
     @ObservationIgnored private var quitCompletion: ((Bool) -> Void)?
@@ -62,6 +68,46 @@ final class AppStore {
     }
 
     var resourceCount: Int { projects.flatMap { $0.snapshot?.resources ?? [] }.count }
+
+    // One owner schedules both surfaces. A cancelled loop retains its slot until
+    // its current CLI request finishes, including rapid hide/show transitions.
+    func setObservationDemand(_ surface: ObservationSurface, resources: Bool?) {
+        observationDemands[surface] = resources
+        updateObservationTasks()
+    }
+
+    private func updateObservationTasks() {
+        if observationDemands.isEmpty {
+            activityObservationTask?.cancel()
+        } else if activityObservationTask == nil {
+            activityObservationTask = Task { [weak self] in
+                guard let self else { return }
+                defer {
+                    activityObservationTask = nil
+                    updateObservationTasks()
+                }
+                while !Task.isCancelled {
+                    await activity.refresh(configuration)
+                    do { try await Task.sleep(for: .seconds(5)) } catch { break }
+                }
+            }
+        }
+        if !observationDemands.values.contains(true) {
+            resourceObservationTask?.cancel()
+        } else if resourceObservationTask == nil {
+            resourceObservationTask = Task { [weak self] in
+                guard let self else { return }
+                defer {
+                    resourceObservationTask = nil
+                    updateObservationTasks()
+                }
+                while !Task.isCancelled {
+                    await refreshAll()
+                    do { try await Task.sleep(for: .seconds(5)) } catch { break }
+                }
+            }
+        }
+    }
 
     func addProject(_ url: URL, sectionID: UUID? = nil) {
         guard !quitPending else { return }

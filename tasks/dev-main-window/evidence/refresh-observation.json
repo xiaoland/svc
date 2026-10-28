@@ -1,0 +1,65 @@
+[
+  {
+    "inFlight" : 0,
+    "maximumInFlight" : 1,
+    "maximumMonitorInFlight" : 1,
+    "monitorDecoded" : true,
+    "monitorRequests" : 1,
+    "phase" : "both-visible-initial",
+    "requests" : 2
+  },
+  {
+    "inFlight" : 0,
+    "maximumInFlight" : 1,
+    "maximumMonitorInFlight" : 1,
+    "monitorDecoded" : true,
+    "monitorRequests" : 2,
+    "phase" : "both-visible-next-cycle",
+    "requests" : 4
+  },
+  {
+    "inFlight" : 0,
+    "maximumInFlight" : 1,
+    "maximumMonitorInFlight" : 1,
+    "monitorDecoded" : true,
+    "monitorRequests" : 3,
+    "phase" : "main-only-still-refreshes",
+    "requests" : 6
+  },
+  {
+    "inFlight" : 0,
+    "maximumInFlight" : 1,
+    "maximumMonitorInFlight" : 1,
+    "monitorDecoded" : true,
+    "monitorRequests" : 4,
+    "phase" : "execution-only-no-project-refresh",
+    "requests" : 6
+  },
+  {
+    "inFlight" : 0,
+    "maximumInFlight" : 1,
+    "maximumMonitorInFlight" : 1,
+    "monitorDecoded" : true,
+    "monitorRequests" : 4,
+    "phase" : "all-hidden-no-new-requests",
+    "requests" : 6
+  },
+  {
+    "inFlight" : 1,
+    "maximumInFlight" : 1,
+    "maximumMonitorInFlight" : 1,
+    "monitorDecoded" : true,
+    "monitorRequests" : 6,
+    "phase" : "rapid-hide-show-no-overlap",
+    "requests" : 9
+  },
+  {
+    "inFlight" : 0,
+    "maximumInFlight" : 1,
+    "maximumMonitorInFlight" : 1,
+    "monitorDecoded" : true,
+    "monitorRequests" : 6,
+    "phase" : "finished-no-in-flight-projects",
+    "requests" : 9
+  }
+]

@@ -1,0 +1,200 @@
+import SwiftUI
+
+enum MainWindowSelection: Hashable {
+    case resources, section(UUID), project(String), executions
+
+    var showsResources: Bool { self != .executions }
+}
+
+struct MainWindowView: View {
+    @Bindable var store: AppStore
+    let addProject: (UUID?) -> Void
+    let resourcePageChanged: (Bool) -> Void
+    @State private var selection: MainWindowSelection? = .resources
+    @State private var editingSection = false
+    @State private var editingSectionID: UUID?
+    @State private var sectionName = ""
+
+    var body: some View {
+        NavigationSplitView {
+            VStack(spacing: 0) {
+                List(selection: $selection) {
+                    Label("全部资源", systemImage: "server.rack")
+                        .tag(MainWindowSelection.resources)
+                    Label("执行", systemImage: "terminal")
+                        .tag(MainWindowSelection.executions)
+                    ForEach(store.organization.sections) { section in
+                        DisclosureGroup(isExpanded: Binding(
+                            get: { !section.collapsed },
+                            set: { if $0 == section.collapsed { store.toggleSection(section.id) } }
+                        )) {
+                            ForEach(store.projects(in: section.id)) { project in
+                                projectLink(project)
+                            }
+                        } label: {
+                            HStack {
+                                Label(section.name, systemImage: "folder")
+                                Spacer()
+                                let activity = store.sectionActivity(section.id)
+                                if activity.running {
+                                    Image(systemName: "hourglass").accessibilityLabel("执行中")
+                                } else if activity.attention {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                        .foregroundStyle(.orange).accessibilityLabel("需处理")
+                                }
+                            }
+                        }
+                        .tag(MainWindowSelection.section(section.id))
+                        .contextMenu { sectionMenu(section) }
+                    }
+                    let ungrouped = store.projects(in: nil)
+                    if !ungrouped.isEmpty {
+                        Section("未分组") {
+                            ForEach(ungrouped) { project in projectLink(project) }
+                        }
+                    }
+                }
+                .listStyle(.sidebar)
+                .accessibilityIdentifier("main/navigation")
+                Divider()
+                HStack {
+                    Menu {
+                        Button("添加项目…") { addProject(selectedSectionID) }
+                        Button("新建 Section…") { editSection(nil) }
+                            .disabled(!store.canEditSections)
+                    } label: { Label("添加", systemImage: "plus") }
+                        .menuStyle(.borderlessButton).fixedSize()
+                        .disabled(store.quitPending)
+                    Spacer()
+                }.padding(12)
+            }
+            .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 320)
+        } detail: {
+            VStack(spacing: 0) {
+                HostPressureView(activity: store.activity)
+                Divider()
+                if selection == .executions {
+                    ScrollView { ExecutionListView(store: store) }
+                        .accessibilityIdentifier("main/executions")
+                } else {
+                    resourceContent
+                }
+                statusFooter
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .sheet(isPresented: $editingSection) {
+            SectionNameEditor(sectionID: editingSectionID, name: sectionName, store: store) {
+                editingSection = false
+            }.frame(width: 360)
+        }
+        .onChange(of: selection) { _, value in resourcePageChanged(value?.showsResources ?? true) }
+        .onChange(of: store.organization.sections.map(\.id)) { _, _ in validateSelection() }
+        .onChange(of: store.projects.map(\.path)) { _, _ in validateSelection() }
+    }
+
+    private var resourceContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text(selectionTitle).font(.title2).fontWeight(.semibold)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    Text("\(selectedProjects.count) 个项目").foregroundStyle(.secondary)
+                }
+                if let error = store.sectionStorageError {
+                    DiagnosticView(title: "无法读取分组", message: error, semanticID: "main/sections/error")
+                }
+                if selectedProjects.isEmpty {
+                    ContentUnavailableView {
+                        Label("尚无项目", systemImage: "folder")
+                    } actions: {
+                        Button("添加项目…") { addProject(selectedSectionID) }
+                            .disabled(store.quitPending)
+                    }.frame(maxWidth: .infinity).padding(.vertical, 48)
+                } else {
+                    ForEach(selectedProjects) { project in
+                        ProjectView(project: project, store: store)
+                    }
+                }
+            }.padding(20).frame(maxWidth: 1000, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }.accessibilityIdentifier("main/resources")
+    }
+
+    @ViewBuilder private var statusFooter: some View {
+        if store.quitPending {
+            Divider()
+            HStack {
+                ProgressView().controlSize(.small)
+                Text("操作结束后退出")
+                Spacer()
+                Button("取消退出") { store.cancelQuit() }
+            }.padding(12)
+        }
+        if let notice = store.notice {
+            Divider()
+            HStack(alignment: .top) {
+                Text(notice).textSelection(.enabled)
+                Spacer()
+                Button { store.notice = nil } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.borderless).accessibilityLabel("关闭提示")
+            }.font(.caption).padding(12)
+        }
+    }
+
+    private func projectLink(_ project: ProjectState) -> some View {
+        Label(project.name, systemImage: "folder")
+            .tag(MainWindowSelection.project(project.path)).help(project.path)
+            .accessibilityLabel("\(project.name)，\(project.path)")
+    }
+
+    @ViewBuilder private func sectionMenu(_ section: ProjectSection) -> some View {
+        Button("添加项目…") { addProject(section.id) }.disabled(store.quitPending)
+        Button("重命名…") { editSection(section) }.disabled(!store.canEditSections)
+        Button("上移") { store.moveSection(section.id, offset: -1) }
+            .disabled(!store.canEditSections || store.organization.sections.first?.id == section.id)
+        Button("下移") { store.moveSection(section.id, offset: 1) }
+            .disabled(!store.canEditSections || store.organization.sections.last?.id == section.id)
+        Divider()
+        Button("删除 Section", role: .destructive) { store.deleteSection(section.id) }
+            .disabled(!store.canEditSections)
+    }
+
+    private var selectedSectionID: UUID? {
+        if case .section(let id) = selection { return id }
+        return nil
+    }
+
+    private var selectedProjects: [ProjectState] {
+        switch selection {
+        case .section(let id): store.projects(in: id)
+        case .project(let path): store.projects.filter { $0.path == path }
+        default: store.projects
+        }
+    }
+
+    private var selectionTitle: String {
+        switch selection {
+        case .section(let id): store.organization.sections.first { $0.id == id }?.name ?? "全部资源"
+        case .project(let path): URL(fileURLWithPath: path).lastPathComponent
+        default: "全部资源"
+        }
+    }
+
+    private func editSection(_ section: ProjectSection?) {
+        editingSectionID = section?.id
+        sectionName = section?.name ?? ""
+        editingSection = true
+    }
+
+    private func validateSelection() {
+        switch selection {
+        case .section(let id) where !store.organization.sections.contains(where: { $0.id == id }):
+            selection = .resources
+        case .project(let path) where !store.projects.contains(where: { $0.path == path }):
+            selection = .resources
+        default: break
+        }
+    }
+}
