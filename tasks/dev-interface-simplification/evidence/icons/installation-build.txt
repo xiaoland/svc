@@ -1,0 +1,28 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write swift-version--FE76C4972A19952.txt
+[1/4] Write sources
+[3/5] Emitting module SVCMenuBar
+[4/11] Compiling SVCMenuBar DiagnosticView.swift
+[5/11] Compiling SVCMenuBar ExecutionRow.swift
+[6/11] Compiling SVCMenuBar MainWindowView.swift
+[7/11] Compiling SVCMenuBar MenuPanel.swift
+[8/11] Compiling SVCMenuBar ProjectSectionView.swift
+[9/11] Compiling SVCMenuBar ResourceRow.swift
+[9/12] Write Objects.LinkFileList
+[10/12] Linking SVCMenuBar
+[11/12] Applying SVCMenuBar
+Build complete! (4.28s)
+/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/dist/macos/interface-icons/.svc-build-dh0_tyyk/SVC.app: replacing existing signature
+{
+  "version": "0.6.2",
+  "sourceRevision": "4e3f4547977ed2dccd6b23dc9264cca3bd39e111-dirty",
+  "cliUnchanged": true,
+  "preferencesUnchanged": true,
+  "signedWithPersonalDevelopmentCertificate": true,
+  "team": "7J9DJNJ782",
+  "strictSignatureVerified": true,
+  "installedBinaryMatched": true,
+  "pid": 83718,
+  "command": "/Applications/SVC.app/Contents/MacOS/SVCMenuBar --background"
+}

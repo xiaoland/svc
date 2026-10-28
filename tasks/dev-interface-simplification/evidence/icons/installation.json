@@ -1,0 +1,12 @@
+{
+  "version": "0.6.2",
+  "sourceRevision": "4e3f4547977ed2dccd6b23dc9264cca3bd39e111-dirty",
+  "cliUnchanged": true,
+  "preferencesUnchanged": true,
+  "signedWithPersonalDevelopmentCertificate": true,
+  "team": "7J9DJNJ782",
+  "strictSignatureVerified": true,
+  "installedBinaryMatched": true,
+  "pid": 83718,
+  "command": "/Applications/SVC.app/Contents/MacOS/SVCMenuBar --background"
+}
