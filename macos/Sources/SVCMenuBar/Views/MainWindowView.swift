@@ -45,6 +45,10 @@ struct MainWindowView: View {
                                 }
                             }
                         }
+                        .transaction { transaction in
+                            transaction.animation = nil
+                            transaction.disablesAnimations = true
+                        }
                         .tag(MainWindowSelection.section(section.id))
                         .contextMenu { sectionMenu(section) }
                     }

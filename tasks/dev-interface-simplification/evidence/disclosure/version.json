@@ -1,0 +1,10 @@
+{
+  "appVersion": "0.2.0",
+  "preparedVersionCheck": "0.2.0",
+  "changelogVersions": [
+    "0.2.0",
+    "0.1.0"
+  ],
+  "published010Unchanged": true,
+  "cliSourceUnchanged": true
+}

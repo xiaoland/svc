@@ -43,6 +43,7 @@
 - 实质修改 Corpus 前读取最近的 `corpus/AGENTS.md` 作者合同。
 - 只有改变涉及代码结构、边界、数据、权限、命名、抽象或复杂度时，才加载 `corpus/svc-taste/references/implementation.md`。
 - 最近的本地 `AGENTS.md` 是附加约束。
+- macOS 未发布迭代的版本约定由 `CONTRIBUTING.md` 的 macOS 版本与发布部分拥有；不按每次本机迭代递增 App 版本。
 - 先修改权威源；仅当消费者形状变化时更新模板。
 - Corpus 不放 Python runtime 或构建工具代码；CLI 源与静态资源位于 `cli/`，仓库工具位于 `tools/`。
 - 新增层、模板、工具或 Agent 入口必须有独立的所有者、触发条件、消费者和验证路径。

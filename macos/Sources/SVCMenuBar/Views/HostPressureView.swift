@@ -45,6 +45,10 @@ struct HostPressureView: View {
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }.accessibilityIdentifier("host/details")
+                .transaction { transaction in
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
             } else if activity.error == nil {
                 HStack {
                     ProgressView().controlSize(.small)

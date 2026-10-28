@@ -39,6 +39,10 @@ struct ProjectUsageView: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
                     .help("已观测的项目用量，展开查看磁盘活动和进程详情")
             }.font(.caption).accessibilityIdentifier("usage/\(project)/details")
+                .transaction { transaction in
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
         }
     }
 }

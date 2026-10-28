@@ -40,6 +40,10 @@ struct ExecutionListView: View {
                         ForEach(recent) { ExecutionRow(execution: $0, store: store) }
                     }.padding(.top, 8)
                 }.font(.caption).foregroundStyle(.secondary)
+                    .transaction { transaction in
+                        transaction.animation = nil
+                        transaction.disablesAnimations = true
+                    }
             }
             if let issues = store.activity.snapshot?.issues, !issues.isEmpty {
                 DiagnosticView(title: "部分观察不可用", message: issues.joined(separator: "\n"), semanticID: "activity/records")

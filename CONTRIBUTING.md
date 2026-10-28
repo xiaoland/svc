@@ -100,7 +100,9 @@ App 与 CLI 的职责、公开调用和运行时兼容性由 [跨单元合同](d
 
 macOS App 使用独立的 `macos/VERSION` 与 `macos-v<version>` tag。版本遵循 SemVer；首版 `0.1.0` 是 macOS 14+ Apple Silicon 开发预览。构建号由 Git 主线提交计数生成，包和 `release.json` 记录准确 commit；本地未提交源码标记为 `-dirty`，不能发布。
 
-功能变化向 `.changes/macos/` 添加中文 Towncrier 片段。准备发布时更新 `macos/VERSION`，在仓库根目录执行：
+当前尚未发布的 macOS 开发线统一使用 `0.2.0`。本机功能、界面和修复迭代都不递增这个版本，使用构建号和源码 revision 区分安装；CLI 继续按自己的兼容性规则管理版本。`MACOS_CHANGELOG.md` 中既有的 `0.2.0` 节保存本开发线的累计变化，后续直接更新同一节，正式发布时补齐发布日期，不生成重复版本标题。原先本地的 0.3.x 到 0.6.x 没有公开发布，已归并到该节；已发布的 0.1.0 记录保持原样。
+
+后续准备新的发布目标时，功能变化向 `.changes/macos/` 添加中文 Towncrier 片段，在准备发布时更新 `macos/VERSION`，并从仓库根目录生成新版本章节：
 
 ```console
 mkdir -p .changes/macos
@@ -113,7 +115,7 @@ SVC_TEST_CLI="$PWD/.venv/bin/svc" swift test --package-path macos
 
 macOS runner 使用 PDM 管理的独立 CPython 3.12.10，并在独立进程中验证 HTTPServer 能在 10 秒内构造完成。此选择处理 framework Python 在 macOS 15+ runner 上的 [loopback 反向解析延迟](https://github.com/actions/setup-python/issues/1223)；构建环境的修正不改变 CLI 的业务超时或跳过服务生命周期测试。更换解释器时，须同时保持最终 wheel 验收使用同一解释器来源。
 
-每次发布包含 App ZIP、同一 commit 的 CLI wheel、`INSTALL.md`、`release.json` 和 `SHA256SUMS`。macOS CD 不发布 PyPI；CLI schema 或 package 变化仍遵守 CLI 的版本规则。App 0.4.0 配套 CLI 18.1.0，保留 dev-status schema 4 和 dev-list／act／reconcile schema 1，新增 monitor／exec／terminate schema 1。18.1.0 是独立新增能力的 minor，不把 App 版本变化自动映射为 CLI major；预览安装时使用随附 wheel。
+每次发布包含 App ZIP、同一 commit 的 CLI wheel、`INSTALL.md`、`release.json` 和 `SHA256SUMS`。macOS CD 不发布 PyPI；CLI schema 或 package 变化仍遵守 CLI 的版本规则。当前未发布 App 0.2.0 配套 CLI 18.2.0，dev-status 为 schema 4，monitor 为 schema 2，list／act／reconcile／exec／terminate 为 schema 1。App 版本变化不自动映射为 CLI major；预览安装时使用随附 wheel。
 
 公开预览使用 ad-hoc 签名，不含本机路径或私钥，也未经公证，不能承诺通过其他机器的 Gatekeeper。Developer ID 分发与公证需要另行配置有效身份和凭据。当前工作流只需 GitHub 自带的短期 token；本机 Apple Development 私钥不上传到 CI。
 
