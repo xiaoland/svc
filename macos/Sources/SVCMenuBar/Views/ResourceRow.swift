@@ -16,10 +16,10 @@ struct ResourceRow: View {
                 Text(resource.label).font(.system(size: 13, weight: .medium))
                     .lineLimit(2).help(resource.label).accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
-                ResourceActionButton(title: "详情", semanticID: resource.entryId + "/details", bordered: false,
+                ResourceActionButton(title: "", semanticID: resource.entryId + "/details", bordered: false,
                                      symbol: expanded ? "chevron.up" : "chevron.down",
                                      accessibilityName: "\(expanded ? "收起" : "展开") \(resource.label) 详情", expanded: expanded) { expanded.toggle() }
-                    .fixedSize()
+                    .frame(width: 28, height: 24)
             }
             ForEach(visibleObservations) { item in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {

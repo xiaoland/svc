@@ -14,11 +14,11 @@ struct DiagnosticView: View {
                 Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange).accessibilityHidden(true)
                 Text(title).fontWeight(.medium)
                 Spacer(minLength: 4)
-                ResourceActionButton(title: expanded ? "收起" : "详情", semanticID: semanticID + "/details",
+                ResourceActionButton(title: "", semanticID: semanticID + "/details",
                                      bordered: false, symbol: expanded ? "chevron.up" : "chevron.down",
                                      accessibilityName: "\(expanded ? "收起" : "展开") \(context ?? title) 的诊断", expanded: expanded) {
                     expanded.toggle()
-                }.fixedSize()
+                }.frame(width: 28, height: 24)
             }.font(.caption)
             if expanded {
                 ScrollView {

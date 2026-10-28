@@ -63,8 +63,9 @@ struct MainWindowView: View {
                         Button("添加项目…") { addProject(selectedSectionID) }
                         Button("新建 Section…") { editSection(nil) }
                             .disabled(!store.canEditSections)
-                    } label: { Label("添加", systemImage: "plus") }
-                        .menuStyle(.borderlessButton).fixedSize()
+                    } label: { Image(systemName: "plus").frame(width: 26, height: 26) }
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                        .help("添加项目或 Section").accessibilityLabel("添加项目或 Section")
                         .disabled(store.quitPending)
                     Spacer()
                 }.padding(12)

@@ -54,6 +54,7 @@ struct InspectInterface {
         let row = NSHostingView(rootView: ResourceRow(resource: resource, project: roots[0], store: store).padding(12).background(Color(nsColor: .windowBackgroundColor)))
         try await capture(row, width: 420, output: output.appendingPathComponent("resource.png"))
         report["collapsedResourceHeight"] = row.bounds.height
+        report["resourceDisclosure"] = buttons(row).filter { $0.accessibilityIdentifier() == resource.entryId + "/details" }.map { ["title": $0.title, "label": $0.accessibilityLabel(), "help": $0.toolTip ?? ""] }
         report["collapsedResourceButtons"] = buttons(row).map { $0.accessibilityIdentifier() }
         try press(resource.entryId + "/details", in: row)
         try await capture(row, width: 420, output: output.appendingPathComponent("resource-details.png"))
@@ -62,6 +63,7 @@ struct InspectInterface {
         let task = NSHostingView(rootView: ExecutionRow(execution: execution, store: store).padding(12).background(Color(nsColor: .windowBackgroundColor)))
         try await capture(task, width: 420, output: output.appendingPathComponent("execution.png"))
         let prefix = "execution/\(execution.id)"
+        report["executionDisclosure"] = buttons(task).filter { $0.accessibilityIdentifier() == prefix + "/details" }.map { ["title": $0.title, "label": $0.accessibilityLabel(), "help": $0.toolTip ?? ""] }
         report["ordinaryStopVisible"] = buttons(task).contains { $0.accessibilityIdentifier() == prefix + "/terminate" && !$0.isHidden }
         report["forceHiddenUntilDetails"] = !buttons(task).contains { $0.accessibilityIdentifier() == prefix + "/force" }
         try press(prefix + "/details", in: task)
@@ -85,6 +87,11 @@ struct InspectInterface {
         let warning = NSHostingView(rootView: ResourceRow(resource: adverse, project: roots[0], store: store).padding(12).background(Color(nsColor: .windowBackgroundColor)))
         try await capture(warning, width: 420, output: output.appendingPathComponent("unknown-destructive.png"))
         report["destructiveActionVisible"] = buttons(warning).contains { $0.accessibilityIdentifier() == adverse.entryId + "/destroy" }
+        let diagnostic = NSHostingView(rootView: DiagnosticView(title: "资源需要处理", message: "用于核对展开入口的完整诊断。", semanticID: "icon-diagnostic").frame(width: 420).background(Color(nsColor: .windowBackgroundColor)))
+        try await capture(diagnostic, width: 420, output: output.appendingPathComponent("diagnostic.png"))
+        report["diagnosticDisclosure"] = buttons(diagnostic).filter { $0.accessibilityIdentifier() == "icon-diagnostic/details" }.map { ["title": $0.title, "label": $0.accessibilityLabel(), "help": $0.toolTip ?? ""] }
+        try press("icon-diagnostic/details", in: diagnostic)
+        try await capture(diagnostic, width: 420, output: output.appendingPathComponent("diagnostic-details.png"))
         report["applicationActive"] = app.isActive
         report["offscreenHostsHaveWindows"] = [row, task, warning].contains { $0.window != nil }
         let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])

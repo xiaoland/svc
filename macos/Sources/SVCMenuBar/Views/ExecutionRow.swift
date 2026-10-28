@@ -24,9 +24,9 @@ struct ExecutionRow: View {
                                 store.activity.terminate(execution, force: false, configuration: store.configuration)
                             }.fixedSize()
                     }
-                    ResourceActionButton(title: "详情", semanticID: "execution/\(execution.id)/details", bordered: false,
+                    ResourceActionButton(title: "", semanticID: "execution/\(execution.id)/details", bordered: false,
                         symbol: expanded ? "chevron.up" : "chevron.down",
-                        accessibilityName: "\(expanded ? "收起" : "展开") \(execution.label) 的执行详情", expanded: expanded) { expanded.toggle() }.fixedSize()
+                        accessibilityName: "\(expanded ? "收起" : "展开") \(execution.label) 的执行详情", expanded: expanded) { expanded.toggle() }.frame(width: 28, height: 24)
                 }
                 HStack {
                     Text(execution.stateLabel).foregroundStyle(execution.state == "owner-lost" ? .orange : Color.primary)

@@ -41,8 +41,9 @@ struct ProjectSectionView: View {
             }
             if !section.collapsed {
                 if members.isEmpty {
-                    Button(action: addProject) { Label("添加项目", systemImage: "plus") }
+                    Button(action: addProject) { Image(systemName: "plus").frame(width: 26, height: 26) }
                         .buttonStyle(.borderless).font(.caption).padding(.leading, 20).padding(.vertical, 6)
+                        .help("添加项目").accessibilityLabel("添加项目到 \(section.name)")
                 } else {
                     ForEach(members) { project in
                         ProjectView(project: project, store: store).id(project.path)
