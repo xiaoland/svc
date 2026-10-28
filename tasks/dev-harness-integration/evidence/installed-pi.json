@@ -1,0 +1,18 @@
+{
+  "provider": "pi",
+  "actualRegistryVersion": "2.6.10",
+  "nativeList": true,
+  "nativeLogs": true,
+  "projectAssigned": true,
+  "wrongTokenRejected": true,
+  "nativeStopState": "stopped",
+  "duplicatePhysicalRootsCounted": 1,
+  "reloadInvalidatedIdentity": true,
+  "receipt": "requested",
+  "appClient": {
+    "nativeClientMonitor": true,
+    "nativeClientLogs": true,
+    "nativeClientStop": true,
+    "applicationActive": false
+  }
+}

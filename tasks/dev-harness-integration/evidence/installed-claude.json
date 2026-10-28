@@ -1,0 +1,10 @@
+{
+  "provider": "claude",
+  "isolatedNativeState": true,
+  "inferenceRequests": 0,
+  "nativeList": true,
+  "nativeLogs": true,
+  "nativeStop": "requested",
+  "scope": "session",
+  "ownSessionStopped": true
+}

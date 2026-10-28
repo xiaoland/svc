@@ -1,0 +1,25 @@
+{
+  "app": {
+    "path": "/Applications/SVC.app",
+    "version": "0.2.0",
+    "build": "84",
+    "sourceRevision": "f37fc2cf10fbd03ed6e0991a14e7ddd864db1d8e-dirty",
+    "pid": 99153,
+    "backgroundLaunch": true,
+    "team": "7J9DJNJ782",
+    "strictSignatureValid": true
+  },
+  "cli": {
+    "version": "svc 18.3.0",
+    "via": "/Users/lanzhijiang/.local/share/mise/shims/svc",
+    "runtime": "/Users/lanzhijiang/.local/share/svc/local-cli/18.3.0",
+    "wheelSHA256": "71dd7bffb548fd52866da94420f7ff7b7a75962b5338d958ec17d1e98a02cec7",
+    "wheelPath": "/Users/lanzhijiang/.local/share/svc/artifacts/18.3.0/sustainable_vibe_coding-18.3.0-py3-none-any.whl"
+  },
+  "preferencesPreserved": true,
+  "projectCount": 3,
+  "piExtensionInstalled": true,
+  "piReloadPending": true,
+  "published": false,
+  "sourceWorktreeNote": "构建时产品源码与 f37fc2c 相同；dirty 来自文档、任务材料和安装记录，不包含未提交产品源码。"
+}

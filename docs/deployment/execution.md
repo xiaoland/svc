@@ -26,3 +26,10 @@ App 通过 CLI 使用相同平台 runtime，不扫描自己的另一份数据库
 CLI 18.2.0 的 activity 在既有 execution 目录增加 observation.json schema 1，不修改机械 schema 2、协调指针或已有控制文件。它保存启动时确定的项目归属，以及非 managed 执行可观察的进程创建时间；managed 身份仍由 management.json 保存。该文件没有生命周期锁或终止权，monitor 不通过当前 PID 补建历史身份。可选观察发布失败只报告诊断，不改变已经开始的工作；必要机械记录和控制元数据仍遵守原来的失败规则。
 
 记录和该补充文件一起受本机 runtime 清理影响，不是永久的项目进程登记库。已释放服务只在原根仍可验证时观察；记录丢失后不保证继续归属，容器和远端工作也不自动接入。观察字段、预算和聚合规则由 [activity 合同](../product-tdd/activity.md#项目归属与用量观察)拥有。
+
+
+## 原生执行来源接入
+
+CLI 18.3.0 将原生任务保持在外部管理器，不为它们创建机械 execution 目录。接入配置和 Pi activation 描述位于平台用户数据目录的 SVC/harnesses，macOS 为 ~/Library/Application Support/SVC/harnesses；目录要求 0700，配置、描述与 socket 为 0600。Pi 桥接源码安装在 ~/.pi/agent/extensions/svc-dev.ts，正常会话关闭会删除本 activation 的描述与 socket；异常退出遗留项只会报告不可用，不按旧 PID 恢复控制。若需人工清理，只处理已确认原 Pi 实例关闭的描述与 socket，不删除仍在使用的接入目录。
+
+Codex 配置只指向已有原生 Unix 控制入口，Claude 配置只选择现有原生 CLI。SVC 不启动这些管理器，也不读取它们的私有认证文件、历史日志数据库或恢复会话来接管执行。App 仍只使用公开 CLI，不读取接入描述中的随机密钥。端点、实例失效、请求预算及原生停止范围由 [activity 合同](../product-tdd/activity.md#原生-agent-执行来源)拥有。
