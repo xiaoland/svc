@@ -113,7 +113,7 @@ SVC_TEST_CLI="$PWD/.venv/bin/svc" swift test --package-path macos
 
 macOS runner 使用 PDM 管理的独立 CPython 3.12.10，并在独立进程中验证 HTTPServer 能在 10 秒内构造完成。此选择处理 framework Python 在 macOS 15+ runner 上的 [loopback 反向解析延迟](https://github.com/actions/setup-python/issues/1223)；构建环境的修正不改变 CLI 的业务超时或跳过服务生命周期测试。更换解释器时，须同时保持最终 wheel 验收使用同一解释器来源。
 
-每次发布包含 App ZIP、同一 commit 的 CLI wheel、`INSTALL.md`、`release.json` 和 `SHA256SUMS`。macOS CD 不发布 PyPI；CLI schema 或 package 变化仍遵守 CLI 的版本规则。App 0.3.0 沿用 App 0.2.0 的 dev-status schema 4、dev-list／act／reconcile schema 1，配套 CLI 18.0.0，预览安装时必须使用随附 wheel，不能用旧版 PyPI CLI 替代。
+每次发布包含 App ZIP、同一 commit 的 CLI wheel、`INSTALL.md`、`release.json` 和 `SHA256SUMS`。macOS CD 不发布 PyPI；CLI schema 或 package 变化仍遵守 CLI 的版本规则。App 0.3.1 沿用 App 0.2.0 的 dev-status schema 4、dev-list／act／reconcile schema 1，配套 CLI 18.0.0，预览安装时必须使用随附 wheel，不能用旧版 PyPI CLI 替代。
 
 公开预览使用 ad-hoc 签名，不含本机路径或私钥，也未经公证，不能承诺通过其他机器的 Gatekeeper。Developer ID 分发与公证需要另行配置有效身份和凭据。当前工作流只需 GitHub 自带的短期 token；本机 Apple Development 私钥不上传到 CI。
 

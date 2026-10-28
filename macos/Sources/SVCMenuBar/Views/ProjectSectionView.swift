@@ -9,19 +9,20 @@ struct ProjectSectionView: View {
     var body: some View {
         let members = store.projects(in: section.id)
         let activity = store.sectionActivity(section.id)
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 ResourceActionButton(title: section.name, semanticID: "section/\(section.id)/toggle",
                                      enabled: store.canEditSections, bordered: false,
                                      symbol: section.collapsed ? "chevron.right" : "chevron.down") {
                     store.toggleSection(section.id)
                 }.frame(maxWidth: .infinity, alignment: .leading).help(section.name)
-                Text("\(members.count)").font(.caption).foregroundStyle(.secondary).fixedSize()
+                Text("\(members.count) 个项目").font(.caption2).foregroundStyle(.secondary).fixedSize()
                 if activity.running {
-                    Label("执行中", systemImage: "hourglass").font(.caption).fixedSize()
+                    Image(systemName: "hourglass").font(.caption).help("组内有操作正在执行").accessibilityLabel("执行中")
                 }
                 if activity.attention {
-                    Label("需处理", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange).fixedSize()
+                    Image(systemName: "exclamationmark.circle.fill").font(.caption).foregroundStyle(.orange)
+                        .help("组内有错误或待确认的操作").accessibilityLabel("需处理")
                 }
                 Menu {
                     Button("添加项目…", action: addProject)
@@ -32,13 +33,14 @@ struct ProjectSectionView: View {
                         .disabled(store.organization.sections.last?.id == section.id)
                     Divider()
                     Button("删除 Section", role: .destructive) { store.deleteSection(section.id) }
-                } label: { Image(systemName: "ellipsis") }
+                } label: { Image(systemName: "ellipsis").frame(width: 24, height: 24) }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 .disabled(!store.canEditSections).accessibilityLabel("\(section.name) Section 操作")
             }
             if !section.collapsed {
                 if members.isEmpty {
-                    Button("添加项目…", action: addProject).buttonStyle(.borderless)
+                    Button(action: addProject) { Label("添加项目", systemImage: "plus") }
+                        .buttonStyle(.borderless).font(.caption).padding(.leading, 20).padding(.vertical, 6)
                 } else {
                     ForEach(members) { project in
                         ProjectView(project: project, store: store).id(project.path)
@@ -46,7 +48,5 @@ struct ProjectSectionView: View {
                 }
             }
         }
-        .padding(.leading, 10)
-        .overlay(alignment: .leading) { Rectangle().fill(.quaternary).frame(width: 2) }
     }
 }

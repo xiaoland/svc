@@ -11,27 +11,27 @@ struct MenuPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "server.rack").font(.title2).foregroundStyle(.tint)
+                Image(systemName: "server.rack").font(.system(size: 19)).foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("开发资源").font(.headline)
-                    Text("\(store.resourceCount) 个资源")
+                    Text("SVC Dev").font(.headline)
+                    Text(summary)
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button { Task { await store.refreshAll() } } label: {
-                    Image(systemName: "arrow.clockwise")
+                    Image(systemName: "arrow.clockwise").frame(width: 26, height: 26)
                 }
                 .help("刷新资源状态").accessibilityLabel("刷新资源状态")
                 .keyboardShortcut("r").disabled(store.quitPending || !store.refreshes.isEmpty)
                 Menu {
                     Button("添加项目…") { addProject() }.keyboardShortcut("o")
                     Button("新建 Section…") { editSection(nil) }.disabled(!store.canEditSections)
-                } label: { Image(systemName: "plus") }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                } label: { Label("添加", systemImage: "plus").frame(height: 26) }
+                    .menuStyle(.borderlessButton).fixedSize()
                     .help("添加项目或 Section").accessibilityLabel("添加项目或 Section")
                     .disabled(store.quitPending)
             }
-            .buttonStyle(.borderless).padding(18)
+            .buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 12)
             Divider()
             if editingSection {
                 SectionNameEditor(sectionID: sectionID, name: sectionName, store: store) { editingSection = false }
@@ -39,12 +39,12 @@ struct MenuPanel: View {
                 Divider()
             }
             if let error = store.sectionStorageError {
-                Text(error).font(.caption).foregroundStyle(.orange).padding(12)
+                DiagnosticView(title: "无法读取分组", message: error, semanticID: "sections/error").padding(12)
             }
             if store.projects.isEmpty && store.organization.sections.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "folder.badge.plus").font(.system(size: 36)).foregroundStyle(.secondary)
-                    Text("添加开发项目").font(.headline)
+                    Text("添加第一个项目").font(.headline)
                     Button("选择项目文件夹…") { addProject() }.buttonStyle(.borderedProminent)
                 }.frame(maxWidth: .infinity).padding(.vertical, 42)
             } else {
@@ -68,7 +68,7 @@ struct MenuPanel: View {
             }
             if let notice = store.notice {
                 HStack(alignment: .top) {
-                    Text(notice).font(.caption).textSelection(.enabled)
+                    Text(notice).font(.caption).lineLimit(3).help(notice).textSelection(.enabled)
                     Spacer()
                     Button { store.notice = nil } label: { Image(systemName: "xmark") }
                         .buttonStyle(.borderless).accessibilityLabel("关闭提示")
@@ -82,9 +82,14 @@ struct MenuPanel: View {
                 } label: { Label("设置", systemImage: "gearshape") }
                 .keyboardShortcut(",")
                 Spacer()
+                if let time = store.projects.compactMap(\.checkedAt).max() {
+                    Text(store.refreshes.isEmpty ? "更新于 \(time.formatted(date: .omitted, time: .shortened))" : "正在刷新…")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer()
                 Button("退出 SVC") { NSApp.terminate(nil) }
                     .keyboardShortcut("q").disabled(store.quitPending)
-            }.buttonStyle(.borderless).font(.callout).padding(14)
+            }.buttonStyle(.borderless).font(.caption).padding(.horizontal, 16).padding(.vertical, 10)
         }
         .frame(width: 420)
         .task(id: store.panelVisible) {
@@ -97,7 +102,7 @@ struct MenuPanel: View {
     }
 
     private var projectList: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 12) {
             ForEach(store.organization.sections) { section in
                 ProjectSectionView(section: section, store: store,
                                    addProject: { addProject(sectionID: section.id) },
@@ -106,13 +111,22 @@ struct MenuPanel: View {
             let ungrouped = store.projects(in: nil)
             if !ungrouped.isEmpty {
                 if !store.organization.sections.isEmpty {
-                    Text("未分组").font(.headline).foregroundStyle(.secondary)
+                    Text("未分组").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                        .padding(.top, 4).padding(.leading, 4)
                 }
                 ForEach(ungrouped) { project in
                     ProjectView(project: project, store: store).id(project.path)
                 }
             }
-        }.padding(16)
+        }.padding(12)
+    }
+
+    private var summary: String {
+        let projects = "\(store.projects.count) 个项目"
+        let complete = store.projects.allSatisfy { $0.snapshot != nil && $0.error == nil }
+        if complete && !store.projects.isEmpty { return "\(projects) · \(store.resourceCount) 个资源" }
+        if store.resourceCount > 0 { return "\(projects) · 已读取 \(store.resourceCount) 个资源" }
+        return projects
     }
 
     private func editSection(_ section: ProjectSection?) {

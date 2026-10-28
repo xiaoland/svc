@@ -1,0 +1,33 @@
+{
+  "native_tests_passed": 13,
+  "native_test_log": "native-check.txt",
+  "source_hashes": {
+    "macos/Sources/SVCMenuBar/App/SVCMenuBarApp.swift": "fd6e3019d385aa105ebc6032b304118cdf6d268d047dfd4f7079856b54b413f6",
+    "macos/Sources/SVCMenuBar/Models/DevModels.swift": "7d59da63ffc14d3feb662b30a29dae4f3653f77ffce5b626fe1025a5416767a8",
+    "macos/Sources/SVCMenuBar/Models/ProjectOrganization.swift": "657aae84324a7f7172a35383c245a8ec6a078f1d02d668b1d721ffa9fe3d9799",
+    "macos/Sources/SVCMenuBar/Services/CLIClient.swift": "a7603d3c309853c6e3ca88a451cf31c2dbd130a0c08ba461d4eaa8fbd262b1d1",
+    "macos/Sources/SVCMenuBar/Stores/AppStore.swift": "653a08e11d2cf09d9205f6baf2e7a0319b4e2c04c883457049ba95cc932efecb",
+    "macos/Sources/SVCMenuBar/Views/DiagnosticView.swift": "4c9d7a7ae96b0f10b816e90cf1a815928025d918fe15bd5b309b1db38639570f",
+    "macos/Sources/SVCMenuBar/Views/MenuPanel.swift": "7160c8641abf00399c6f30a3d0f95e89cf134c0503e870a167ef492997299e29",
+    "macos/Sources/SVCMenuBar/Views/ProjectSectionView.swift": "d5973cbb3273aefca6a3777fb825e3f0ad33b8525bc85f2876d13bdc4d69504a",
+    "macos/Sources/SVCMenuBar/Views/ProjectView.swift": "4c920114e625eaf797fb3b885f6a54faae91e55306fd3981d01b8834cf3c5a74",
+    "macos/Sources/SVCMenuBar/Views/ReceiptView.swift": "de95769e3ab4987f213697adde99d9ccc5001d08076b058cf40a57291b78bab1",
+    "macos/Sources/SVCMenuBar/Views/ResourceAccessView.swift": "c1f37623c6180498564254cee6a622c075d48481b9b456a930618ea7c61209e1",
+    "macos/Sources/SVCMenuBar/Views/ResourceActionButton.swift": "7aa3d760443d7d6da0e6722f36039d5997dbf4d323bbc79501a2f182a6c6b535",
+    "macos/Sources/SVCMenuBar/Views/ResourceRow.swift": "40b88f39bcff5682edb51c29dc0b5161e2e20e5221ea2d463cbf8efa588a7904",
+    "macos/Sources/SVCMenuBar/Views/SectionNameEditor.swift": "0e08336321ee988fc4d0f03ea9e280fa273f37533839abfa9448e1b2b3bfd762",
+    "macos/Sources/SVCMenuBar/Views/SettingsView.swift": "a072d0a3a7a4c7b579bb37d3d44c8b898de5e401413087d2f5ce11a59e6eea75"
+  },
+  "screenshots_completed": [
+    "current-project-errors-light.png",
+    "current-project-errors-dark.png",
+    "diagnostic-expanded-light.png",
+    "resource-overview-light.png",
+    "resource-overview-dark.png"
+  ],
+  "scenario_kind": "基于实际迁移诊断和模拟资源结果渲染产品视图，未访问真实项目或执行控制动作",
+  "incomplete_observation": "首轮多窗口宿主没有最终报告，无法提供整轮完成或激活统计；后续纯离屏脚本编译超时，未启动。",
+  "verification_reused": "既有原生套件13项通过，包含实际资源操作、原生按钮和无窗口浅深色渲染；未新增或修改测试。",
+  "binary_sha256": "c219a5a2de21d79d1758a5a8629b109320e2d28934e972b6567eafbac6960fd8",
+  "source_newer_than_binary": []
+}

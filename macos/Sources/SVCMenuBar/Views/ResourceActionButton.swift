@@ -7,6 +7,7 @@ struct ResourceActionButton: NSViewRepresentable {
     var enabled = true
     var bordered = true
     var symbol: String? = nil
+    var accessibilityName: String? = nil
     let action: () -> Void
 
     final class Coordinator: NSObject {
@@ -25,20 +26,21 @@ struct ResourceActionButton: NSViewRepresentable {
     }
     func updateNSView(_ button: NSButton, context: Context) {
         button.title = title
-        button.setAccessibilityLabel(title)
+        button.setAccessibilityLabel(accessibilityName ?? title)
         button.setAccessibilityIdentifier(semanticID)
         button.isEnabled = enabled
         button.isBordered = bordered
+        button.contentTintColor = .labelColor
         button.setContentCompressionResistancePriority(bordered ? .defaultHigh : .defaultLow, for: .horizontal)
         button.image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
         button.imagePosition = .imageLeading
-        button.font = bordered ? NSFont.systemFont(ofSize: NSFont.smallSystemFontSize) : NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        button.font = bordered ? NSFont.systemFont(ofSize: 12) : NSFont.systemFont(ofSize: 12, weight: .semibold)
+        button.toolTip = accessibilityName ?? title
         button.lineBreakMode = .byTruncatingTail
         context.coordinator.action = action
     }
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSButton, context: Context) -> CGSize? {
-        guard !bordered else { return nil }
         let natural = nsView.intrinsicContentSize
-        return CGSize(width: min(proposal.width ?? natural.width, natural.width), height: natural.height)
+        return CGSize(width: min(proposal.width ?? natural.width, natural.width), height: max(22, natural.height))
     }
 }

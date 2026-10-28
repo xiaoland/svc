@@ -8,8 +8,10 @@ struct ReceiptView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(receipt.message).font(.caption).foregroundStyle(.secondary)
-                .lineLimit(expanded ? nil : 2).textSelection(.enabled)
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: symbol).foregroundStyle(needsAttention ? .orange : .secondary)
+                Text(receipt.message).lineLimit(expanded ? nil : 2).textSelection(.enabled)
+            }.font(.caption).foregroundStyle(needsAttention ? .primary : .secondary)
             if expanded {
                 if let result = receipt.result {
                     ForEach(Array(result.steps.enumerated()), id: \.offset) { _, step in Text(step).font(.caption).textSelection(.enabled) }
@@ -34,5 +36,15 @@ struct ReceiptView: View {
                 }
             }
         }
+    }
+
+    private var needsAttention: Bool {
+        guard let status = receipt.result?.status else { return true }
+        return ["failed", "condition-unmet", "owner-lost", "stale", "interrupted", "absent"].contains(status)
+    }
+
+    private var symbol: String {
+        if needsAttention { return "exclamationmark.circle.fill" }
+        return receipt.result?.status == "completed" ? "checkmark.circle" : "info.circle"
     }
 }
