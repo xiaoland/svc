@@ -46,12 +46,17 @@ final class AppStore {
         self.preferences = preferences
         self.request = request
         projects = (preferences.stringArray(forKey: "projects") ?? []).map { ProjectState(path: $0) }
-        let defaultCLI = Bundle.main.object(forInfoDictionaryKey: "SVCDefaultCLIPath") as? String ?? ""
-        let defaultPath = Bundle.main.object(forInfoDictionaryKey: "SVCDefaultSearchPath") as? String
-            ?? "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        let savedCLI = preferences.string(forKey: "cliPath") ?? ""
+        let legacyCLI = CLIConfiguration.isLegacyPrivateExecutable(savedCLI)
+        if legacyCLI { preferences.removeObject(forKey: "cliPath") }
+        let savedPath = preferences.string(forKey: "searchPath") ?? CLIConfiguration.defaultSearchPath
+        // Existing PATH preferences may predate mise discovery; explicit CLI choices still win.
+        let shimDirectory = "\(NSHomeDirectory())/.local/share/mise/shims"
+        let searchPath = savedPath.split(separator: ":").contains(Substring(shimDirectory))
+            ? savedPath : "\(shimDirectory):\(savedPath)"
         configuration = CLIConfiguration(
-            executable: preferences.string(forKey: "cliPath") ?? defaultCLI,
-            searchPath: preferences.string(forKey: "searchPath") ?? defaultPath
+            executable: legacyCLI ? "" : savedCLI,
+            searchPath: searchPath
         )
         if let stored = preferences.object(forKey: "projectSections") {
             do {

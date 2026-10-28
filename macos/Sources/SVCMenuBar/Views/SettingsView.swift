@@ -13,11 +13,24 @@ struct SettingsView: View {
             }
             Section("SVC CLI") {
                 HStack {
-                    TextField("可执行文件", text: $cliPath).textFieldStyle(.roundedBorder)
+                    TextField("自动查找 svc（也可填写绝对路径）", text: $cliPath).textFieldStyle(.roundedBorder)
                     Button(action: chooseCLI) { Image(systemName: "folder").frame(width: 26, height: 26) }
                         .buttonStyle(.borderless)
                         .help("选择 svc 可执行文件").accessibilityLabel("选择 svc 可执行文件")
                 }
+                if let executable = store.configuration.resolvedExecutable {
+                    Text(executable).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                } else {
+                    Label("未找到 SVC CLI", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                }
+                CLIInstallLinks()
+                Button("使用系统 CLI 并重新检测") {
+                    cliPath = ""
+                    store.setConfiguration(.init(executable: "", searchPath: searchPath))
+                    saved = true
+                }
+                .disabled(searchPath.isEmpty || !store.operations.isEmpty || store.quitPending)
                 TextField("命令搜索路径 PATH", text: $searchPath, axis: .vertical).lineLimit(3...5)
                 Text("项目命令使用此 PATH；需要的环境变量由项目配置声明。")
                     .font(.caption).foregroundStyle(.secondary)
@@ -33,7 +46,7 @@ struct SettingsView: View {
                     saved = true
                 }
                 .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-                .disabled(cliPath.isEmpty || searchPath.isEmpty || !store.operations.isEmpty || store.quitPending)
+                .disabled(searchPath.isEmpty || !store.operations.isEmpty || store.quitPending)
             }
         }
         .formStyle(.grouped).frame(width: 560)

@@ -9,7 +9,7 @@ SVC 把工作指导与软件工具分开提供，可以按需要独立采用：
 - **Agent Skills**：为任务推进、人机协作、验证、知识维护和设计取舍提供按需加载的工作指导。
 - **软件工具**：CLI 提供 Skills 安装与采用、开发资源管理、项目命令执行和 Agent 执行证据分析；原生 macOS App 提供开发资源的图形入口。
 
-[SVC Dev](docs/prd/development.md) 是面向人和 Agent 的开发资源管理能力，围绕资源状态、访问和明确的控制动作展开，不推断开发任务。[macOS 菜单栏 App](macos/README.md) 与 `svc dev` 分别提供图形和程序化入口。当前 App 需要兼容的 CLI 安装，两者各自维护版本，通过公开 JSON 协议协作；职责与兼容规则见 [App 与 CLI 合同](docs/product-tdd/macos-client.md)。当前交付仍以项目声明的长驻开发能力为主。
+[SVC Dev](docs/prd/development.md) 是面向人和 Agent 的开发资源管理能力，围绕资源状态、访问和明确的控制动作展开，不推断开发任务。[macOS 菜单栏 App](macos/README.md) 与 `svc dev` 分别提供图形和程序化入口。App 使用用户安装的兼容 CLI，不自动安装独立环境；找不到时提供 GitHub Releases 与 PyPI 安装入口。两者各自维护版本，通过公开 JSON 协议协作；职责与兼容规则见 [App 与 CLI 合同](docs/product-tdd/macos-client.md)。当前交付仍以项目声明的长驻开发能力为主。
 
 它不规定所有项目必须遵守同一套开发流水线，也不接管项目自己的代码、文档和决策权限。
 

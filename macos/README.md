@@ -31,9 +31,11 @@ macOS 依据签名的 designated requirement 跟踪应用身份；不同签名�
 
 首次使用时选择包含 `svc.json` 的项目目录。添加的目录会执行项目声明的 自动观察（包括 exec probe），因此只添加自己信任的项目。添加项目不执行控制动作。项目列表保存在当前用户的 `dev.svc.menubar` 偏好中；配置无效或路径失效时直接显示错误。
 
-安装脚本同时构建配套 CLI wheel，并安装到 `~/Library/Application Support/SVC/runtimes/<wheel 摘要>/` 下的独立 Python 环境。同一个 wheel 复用已有环境；CLI 源码变化产生新环境，旧环境保留以便现有设置继续使用。App 默认引用本次配套环境，不再依赖工作树的 `.venv`。需要本机 Python 3.11+、PDM 和可用的依赖下载源；App 不捆绑 Python。
+App 安装只构建、签名和替换应用，不安装 CLI，不创建 Python 环境。用户通过 mise、pipx、uv 或 pip 自行安装和升级 SVC CLI；App 与终端共用用户管理的安装。没有找到 CLI 时，主窗口、菜单栏面板和设置提供 [GitHub latest release](https://github.com/xiaoland/svc/releases/latest) 与 [PyPI](https://pypi.org/project/sustainable-vibe-coding/) 安装入口。
 
-设置中的 CLI 必须是可执行文件的绝对路径。显式保存的 CLI 路径优先于包内默认值，重装不会覆盖它；自定义 CLI 需要满足相同 schema 合同。命令搜索路径 PATH 默认来自本机构建环境，可在设置中调整。App 不读取登录 shell 配置，项目需要的环境变量由 SVC 配置声明。
+CLI 路径留空时，App 在设置中的 PATH 查找 svc，默认包含 mise shims、用户 .local/bin、Homebrew 和系统目录；mise 继续决定所用版本。显式填写可执行文件绝对路径时优先使用该路径。App 不读取登录 shell 配置，也不保存构建机 PATH。旧安装器设置的 Library/Application Support/SVC/runtimes 路径会恢复为自动查找，其余显式路径保留。旧私有环境不会自动删除，以免影响仍在运行的调用。项目需要的环境变量仍由 SVC 配置声明。
+
+CLI 必须满足 App 实际调用的公开结果 schema；已安装不等于协议兼容。公开发行物可以提供独立 wheel 供用户安装，但 App 不会安装或切换它。当前开发预览可能要求尚未进入 PyPI 的 CLI，不能用旧公开包伪装为兼容版本。
 
 App 的唯一版本源是 `VERSION`，构建号来自当前 Git 的主线提交计数，包内记录完整源码 revision；未提交构建标记为 `-dirty`。设置窗口显示版本与构建号。发布流程和版本准备见根目录 `CONTRIBUTING.md`，公开预览安装条件见 `INSTALL.md`。GitHub 附件是 arm64 的 ad-hoc 签名预览，未公证，与本机开发签名安装分开构建；公开包不带本机 CLI 路径、PATH 或调试源码路径。
 

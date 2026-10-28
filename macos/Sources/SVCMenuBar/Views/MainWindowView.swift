@@ -77,6 +77,10 @@ struct MainWindowView: View {
             .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 320)
         } detail: {
             VStack(spacing: 0) {
+                if store.configuration.resolvedExecutable == nil {
+                    CLISetupView(openSettings: openSettings)
+                    Divider()
+                }
                 HostPressureView(activity: store.activity)
                 Divider()
                 if selection == .executions {

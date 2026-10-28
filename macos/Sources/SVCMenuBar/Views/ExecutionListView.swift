@@ -68,7 +68,7 @@ struct ExecutionListView: View {
     }
 
     private func copyAgentInstructions() {
-        let cli = "'" + store.configuration.executable.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let cli = "'" + (store.configuration.resolvedExecutable ?? "svc").replacingOccurrences(of: "'", with: "'\\''") + "'"
         let text = """
         在启动重任务前，使用 \(cli) dev monitor --json 查询当前机器压力和执行。
         压力偏高时将重任务串行执行、降低工具并发；运行期间继续观察。

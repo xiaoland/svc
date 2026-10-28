@@ -111,24 +111,6 @@ def test_signing_requires_an_unambiguous_development_identity(
         app.signing_identity()
 
 
-def test_local_runtime_is_reused_only_for_matching_wheel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    wheel = tmp_path / "fixture.whl"
-    wheel.write_bytes(b"wheel")
-    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
-    runtime = tmp_path / "Library/Application Support/SVC/runtimes" / digest[:20]
-    (runtime / "bin").mkdir(parents=True)
-    (runtime / "bin/svc").write_text("fixture")
-    marker = runtime / ".svc-wheel-sha256"
-    marker.write_text(digest)
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    assert app.install_runtime(wheel) == runtime / "bin/svc"
-    marker.write_text("wrong")
-    with pytest.raises(ValueError, match="未完成"):
-        app.install_runtime(wheel)
-
-
 def assets(path: Path) -> Path:
     path.mkdir()
     manifest = {

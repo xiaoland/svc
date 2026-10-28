@@ -43,7 +43,7 @@ AppStore 持有按 panel／mainWindow 区分的观察需求；窗口宿主负责
 
 一次请求对应一个 CLI 子进程。App 不额外给控制请求加短超时；退出等待在途操作，用户可取消退出，取消退出不取消动作。就绪释放后的服务不随 CLI 或 App 退出；移除来源和关闭面板也不是停止指令。观察和会话回执不作为下次启动的新鲜事实；运行证据由 CLI 保存，App 只使用公开回执中的日志路径。
 
-App 不捆绑 Python 或 CLI。源码安装构建同源 wheel，在用户 Library 下按 wheel 摘要建立隔离环境，将其路径设为默认值；显式保存的 CLI 路径优先，重装保留偏好。公开发布交付同 commit 的 App ZIP 和 CLI wheel，manifest 记录版本、来源和各个 App 调用协议。公开包不含构建机路径；安装者选用配套 wheel。配套发行不使 CLI 成为 App 私有接口，也不自动发布到 PyPI。安装和信任条件见 [macOS README](../../macos/README.md) 与 [INSTALL](../../macos/INSTALL.md)。
+App 依赖用户安装的系统可用 CLI，不捆绑 Python 或 CLI，也不在 App 安装期间创建 Python 环境、安装 wheel 或改变用户的 CLI 版本。CLI 路径留空时，CLIConfiguration 按用户 PATH 查找 svc，默认包含 mise shims、用户 .local/bin、Homebrew 和系统目录；每次调用解析，保留 shim 路径以遵循用户的版本管理器。显式绝对路径优先，不存在时不偷偷换用另一版本。App 不执行登录 shell，也不把构建机 PATH 写入包。旧安装器留下的 SVC 私有 runtimes 路径恢复为自动查找，其余用户偏好保留。缺少 CLI 时，两个界面和设置提供 GitHub latest release 与 PyPI 安装入口；协议不兼容时明确要求升级或选择兼容版本，不自动安装。公开发布可以交付同 commit 的独立 CLI wheel，manifest 记录协议与版本，安装仍由用户完成；macOS CD 不自动发布 PyPI。安装和信任条件见 [macOS README](../../macos/README.md) 与 [INSTALL](../../macos/INSTALL.md)。
 
 ## 资源合同
 

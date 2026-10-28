@@ -30,7 +30,6 @@ CLI_RESULT_SCHEMAS = {
     "exec": 1,
     "terminate": 1,
 }
-DEFAULT_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 
 def run(*args: str, capture: bool = False) -> str:
@@ -82,7 +81,7 @@ def verify(path: Path) -> None:
     run("codesign", "--verify", "--strict", str(path))
 
 
-def build(profile: str, output: Path, cli: str = "") -> Path:
+def build(profile: str, output: Path) -> Path:
     release = profile == "release"
     identity = "-" if release else signing_identity()
     configuration = "release" if release else "debug"
@@ -141,10 +140,6 @@ def build(profile: str, output: Path, cli: str = "") -> Path:
             "LSUIElement": True,
             "SVCSourceRevision": revision + ("-dirty" if dirty else ""),
             "SVCBuildProfile": profile,
-            "SVCDefaultCLIPath": "" if release else cli,
-            "SVCDefaultSearchPath": DEFAULT_PATH
-            if release
-            else os.environ.get("PATH", DEFAULT_PATH),
         }
         with (prepared / "Contents/Info.plist").open("wb") as stream:
             plistlib.dump(info, stream)
@@ -234,51 +229,9 @@ def build_wheel(output: Path) -> Path:
     return wheels[0]
 
 
-def install_runtime(wheel: Path) -> Path:
-    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
-    root = Path.home() / "Library/Application Support/SVC/runtimes" / digest[:20]
-    executable = root / "bin/svc"
-    marker = root / ".svc-wheel-sha256"
-    if (
-        marker.is_file()
-        and marker.read_text().strip() == digest
-        and executable.is_file()
-    ):
-        return executable
-    if root.exists():
-        raise ValueError(f"发现未完成的 CLI 环境，请先检查：{root}")
-    root.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        run(sys.executable, "-m", "venv", str(root))
-        run(
-            str(root / "bin/python"),
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            str(wheel),
-        )
-        for command, version in CLI_RESULT_SCHEMAS.items():
-            schema = json.loads(
-                run(str(executable), "dev", command, "--json-schema", capture=True)
-            )
-            if schema.get("x-svc-result-schema-version") != version:
-                raise ValueError(f"配套 CLI 的 dev-{command} schema 不是 {version}")
-        marker.write_text(digest + "\n")
-        return executable
-    except BaseException:
-        shutil.rmtree(root)
-        raise
-
-
 def install(destination: Path, launch: bool) -> Path:
-    # A fixed source timestamp lets app-only iterations reuse the exact same CLI wheel/runtime.
-    os.environ.setdefault(
-        "SOURCE_DATE_EPOCH", run("git", "log", "-1", "--format=%ct", capture=True)
-    )
-    with tempfile.TemporaryDirectory(prefix="svc-cli-wheel-") as temporary:
-        cli = install_runtime(build_wheel(Path(temporary)))
-    bundle = build("local", ROOT / "dist/macos/local", str(cli))
+    # The user owns CLI installation and version selection independently of the App.
+    bundle = build("local", ROOT / "dist/macos/local")
     verify(bundle)
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists() or destination.is_symlink():
@@ -357,7 +310,6 @@ def main() -> int:
     build_command.add_argument(
         "--profile", choices=["local", "release"], default="local"
     )
-    build_command.add_argument("--cli", default="")
     build_command.add_argument("--output", type=Path, default=ROOT / "dist/SVC-build")
     install_command = commands.add_parser("install")
     install_command.add_argument(
@@ -376,7 +328,7 @@ def main() -> int:
         elif args.command == "check":
             print(check_release(args.require_clean))
         elif args.command == "build":
-            print(build(args.profile, args.output.resolve(), args.cli))
+            print(build(args.profile, args.output.resolve()))
         elif args.command == "install":
             print(install(args.destination.absolute(), args.launch))
         else:

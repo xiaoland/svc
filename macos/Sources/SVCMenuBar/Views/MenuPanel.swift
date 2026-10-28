@@ -36,6 +36,10 @@ struct MenuPanel: View {
             }
             .buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 12)
             Divider()
+            if store.configuration.resolvedExecutable == nil {
+                CLISetupView(openSettings: openSettings)
+                Divider()
+            }
             HostPressureView(activity: store.activity)
             Picker("页面", selection: $selectedTab) {
                 Text("资源").tag(0)

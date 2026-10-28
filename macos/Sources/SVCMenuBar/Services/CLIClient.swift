@@ -17,9 +17,8 @@ struct CLIClient: Sendable {
 
     private func run(arguments: [String], repo: String?) throws -> Data {
         let files = FileManager.default
-        guard configuration.executable.hasPrefix("/"),
-              files.isExecutableFile(atPath: configuration.executable) else {
-            throw CLIError(message: "找不到可执行的 svc。请在设置中选择 CLI。")
+        guard let executable = configuration.resolvedExecutable else {
+            throw CLIError(message: "找不到 SVC CLI。请通过 GitHub Releases 或 PyPI 安装，并在设置中重新检测或选择 svc。")
         }
         if let repo {
             var isDirectory: ObjCBool = false
@@ -40,7 +39,7 @@ struct CLIClient: Sendable {
         defer { try? output.close(); try? errors.close() }
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: configuration.executable)
+        process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         process.currentDirectoryURL = URL(fileURLWithPath: repo ?? NSHomeDirectory())
         var environment = ProcessInfo.processInfo.environment

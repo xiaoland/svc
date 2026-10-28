@@ -3,6 +3,27 @@ import Foundation
 struct CLIConfiguration: Equatable, Sendable {
     var executable: String
     var searchPath: String
+
+    static var defaultSearchPath: String {
+        let home = NSHomeDirectory()
+        return "\(home)/.local/share/mise/shims:\(home)/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    }
+
+    // Empty means automatic discovery. Keep the shim path so mise owns version selection.
+    var resolvedExecutable: String? {
+        let candidates = executable.isEmpty
+            ? searchPath.split(separator: ":").filter { $0.hasPrefix("/") }.map { "\($0)/svc" }
+            : [executable]
+        return candidates.first { path in
+            var directory: ObjCBool = false
+            return path.hasPrefix("/") && FileManager.default.fileExists(atPath: path, isDirectory: &directory)
+                && !directory.boolValue && FileManager.default.isExecutableFile(atPath: path)
+        }
+    }
+
+    static func isLegacyPrivateExecutable(_ path: String) -> Bool {
+        path.hasPrefix("\(NSHomeDirectory())/Library/Application Support/SVC/runtimes/")
+    }
 }
 
 enum DevCommand: String, Sendable {
@@ -38,7 +59,7 @@ enum CLIResponse {
             throw CLIError(message: "CLI 未返回有效的 SVC 结果。请检查设置中的 CLI 路径。")
         }
         guard header.schemaVersion == command.schemaVersion, header.command == "dev \(command.rawValue)" else {
-            throw CLIError(message: "CLI 协议不兼容。请使用配套 CLI，或在设置中更新所选路径。")
+            throw CLIError(message: "CLI 协议不兼容。请更新已安装的 SVC CLI，或在设置中选择兼容版本。")
         }
         do { return try decoder.decode(type, from: data) }
         catch { throw CLIError(message: "CLI 结果不完整：\(error.localizedDescription)") }
