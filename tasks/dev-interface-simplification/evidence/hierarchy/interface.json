@@ -1,0 +1,24 @@
+{
+  "actionsBeforeExpansion" : [
+    "启动验收服务",
+    "停止验收服务"
+  ],
+  "applicationActive" : false,
+  "collapsedResourceHeight" : 133,
+  "controlRequestsSent" : 0,
+  "darkPanelHeight" : 549,
+  "destructiveActionLabel" : "验收 Web 服务：删除验收数据",
+  "diagnosticsAfterClick" : "已展开",
+  "diagnosticsHeight" : 446,
+  "diagnosticsInitiallyCollapsed" : "已折叠",
+  "expandedResourceHeight" : 244,
+  "mainWindowVisible" : false,
+  "offscreenHostsHaveWindows" : false,
+  "panelHeight" : 549,
+  "pressureDetailsHeight" : 453,
+  "pressureSummaryHeight" : 33,
+  "recordedMonitorSchema" : 3,
+  "restoredExpandedResourceHeight" : 244,
+  "scope" : "Offscreen product view replay; no live popover anchoring, VoiceOver or human acceptance",
+  "stalePressureDetailsHeight" : 417
+}

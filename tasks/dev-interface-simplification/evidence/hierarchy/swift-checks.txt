@@ -1,0 +1,41 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write swift-version--FE76C4972A19952.txt
+[2/4] Emitting module SVCMenuBarTests
+[3/8] Compiling SVCMenuBarTests ContractTests.swift
+[4/8] Compiling SVCMenuBarTests LifecycleTests.swift
+[5/8] Compiling SVCMenuBarTests RenderingTests.swift
+[6/8] Compiling SVCMenuBarTests StoreTests.swift
+[6/8] Write Objects.LinkFileList
+[7/8] Linking SVCMenuBarPackageTests
+Build complete! (3.57s)
+Test Suite 'All tests' started at 2026-10-29 11:13:48.818.
+Test Suite 'All tests' passed at 2026-10-29 11:13:48.819.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀙟  Test offscreenPanelRendersWithoutActivatingApplication() skipped: "设置 SVC_RENDER_DIR 生成离屏界面证据"
+􀙟  Test nativeButtonsControlRealServerWithoutForegroundChanges() skipped: "设置 SVC_TEST_CLI 以验证原生按钮控制真实服务"
+􀟈  Test sharedOperationsInvalidateOlderReadsAndQuitCanBeCancelled() started.
+􀟈  Test incompatibleOrIncompleteContractsFailClearly() started.
+􀟈  Test failedOperationReleasesQuitWait() started.
+􀟈  Test hiddenNativeControlsInvokeActionsWithoutTakingFocus() started.
+􀟈  Test operationReceiptRemainsReachableAfterRefreshFails() started.
+􀙟  Test realCLIServiceSurvivesClientsAndStopsThroughDeclaredCleanup() skipped: "设置 SVC_TEST_CLI 以运行真实生命周期测试"
+􀟈  Test targetConfigurationErrorsDoNotBecomeHealthy() started.
+􀟈  Test staleRefreshCannotReplaceNewConfigurationOrRemovedProject() started.
+􀟈  Test processClientHandlesSpacesNonzeroJSONAndLargeStderr() started.
+􀟈  Test missingCLIIsAnActionableError() started.
+􀟈  Test readinessIsNotProcessLivenessAndStopRequiresDeclaration() started.
+􁁛  Test targetConfigurationErrorsDoNotBecomeHealthy() passed after 0.001 seconds.
+􁁛  Test missingCLIIsAnActionableError() passed after 0.001 seconds.
+􁁛  Test readinessIsNotProcessLivenessAndStopRequiresDeclaration() passed after 0.001 seconds.
+􁁛  Test incompatibleOrIncompleteContractsFailClearly() passed after 0.020 seconds.
+􁁛  Test failedOperationReleasesQuitWait() passed after 0.203 seconds.
+􁁛  Test operationReceiptRemainsReachableAfterRefreshFails() passed after 0.210 seconds.
+􁁛  Test sharedOperationsInvalidateOlderReadsAndQuitCanBeCancelled() passed after 0.217 seconds.
+􁁛  Test staleRefreshCannotReplaceNewConfigurationOrRemovedProject() passed after 0.217 seconds.
+􁁛  Test hiddenNativeControlsInvokeActionsWithoutTakingFocus() passed after 0.348 seconds.
+􁁛  Test processClientHandlesSpacesNonzeroJSONAndLargeStderr() passed after 0.490 seconds.
+􁁛  Test run with 13 tests in 0 suites passed after 0.490 seconds.

@@ -6,6 +6,7 @@ struct ResourceRow: View {
     let project: String
     let store: AppStore
     @State private var expanded = false
+    @State private var showingDiagnostics = false
     @State private var confirmRecovery = false
     private var busy: Bool { resource.coordination.map { store.operations[$0.coordinationId] != nil } ?? false }
 
@@ -29,33 +30,21 @@ struct ResourceRow: View {
                     Text(item.label).foregroundStyle(.secondary)
                     Spacer(minLength: 6)
                     Text(item.stateLabel)
-                    if expanded, let value = item.value, !value.text.isEmpty {
-                        Text(value.text).foregroundStyle(.secondary).lineLimit(nil)
-                            .truncationMode(.middle).help(value.text)
-                    }
                 }.font(.caption)
-                if expanded { observationDetails(item) }
             }
             if !resource.access.isEmpty { ResourceAccessView(addresses: expanded ? resource.access : Array(resource.access.prefix(1)), store: store) }
             if let error = resource.error {
                 DiagnosticView(title: "资源需要处理", message: error.message, semanticID: resource.entryId + "/error", context: resource.label)
             }
             if resource.needsReconciliation { recovery }
-            if expanded {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(resource.actions) { action in actionButton(action) }
-                }
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) { ForEach(resource.actions) { action in actionButton(action) } }
-                    VStack(alignment: .leading, spacing: 8) { ForEach(resource.actions) { action in actionButton(action) } }
-                }
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 8) { ForEach(resource.actions) { action in actionButton(action) } }
+                VStack(alignment: .leading, spacing: 8) { ForEach(resource.actions) { action in actionButton(action) } }
             }
             if let receipt = store.receipts[resource.entryId] {
                 ReceiptView(receipt: receipt, expanded: expanded, store: store)
             }
             if expanded {
-                Text(resource.scopeLabel).font(.caption).foregroundStyle(.secondary)
                 ForEach(resource.facets.filter { !$0.automatic }) { facet in
                     ResourceActionButton(title: "检查\(facet.label)", semanticID: resource.entryId + "/observe/" + facet.key,
                         enabled: !store.quitPending && store.refreshes[project] == nil) {
@@ -66,11 +55,29 @@ struct ResourceRow: View {
                    let usage = runtime.usage {
                     ProcessUsageView(usage: usage)
                 }
-                if let controller = resource.controller { Text(controller).font(.caption).textSelection(.enabled) }
-                if let owner = resource.coordination, owner.ownerRepo != resource.source || owner.ownerResource != resource.resource {
-                    Text("共享：\(owner.ownerRepo) · \(owner.ownerResource)").font(.caption).textSelection(.enabled)
+                ResourceActionButton(title: "诊断信息", semanticID: resource.entryId + "/diagnostics", bordered: false,
+                    symbol: showingDiagnostics ? "chevron.down" : "chevron.right",
+                    accessibilityName: "\(showingDiagnostics ? "收起" : "展开") \(resource.label) 诊断信息",
+                    expanded: showingDiagnostics) {
+                        $showingDiagnostics.immediateDisclosure.wrappedValue.toggle()
+                    }.font(.caption).fixedSize()
+                if showingDiagnostics {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(resource.observations) { item in observationDetails(item) }
+                        Text(resource.scopeLabel)
+                        if let controller = resource.controller { Text(controller).textSelection(.enabled) }
+                        if let owner = resource.coordination, owner.ownerRepo != resource.source || owner.ownerResource != resource.resource {
+                            Text("共享：\(owner.ownerRepo) · \(owner.ownerResource)").textSelection(.enabled)
+                        }
+                        ForEach(resource.relations, id: \.self) { Text($0) }
+                        ForEach(resource.actions) { action in
+                            if !action.traits.isEmpty {
+                                Text("\(action.intent) · \(action.traitLabels)")
+                            }
+                        }
+                    }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                ForEach(resource.relations, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
             }
         }.padding(.vertical, 2)
     }
@@ -98,7 +105,6 @@ struct ResourceRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if expanded {
-                if !action.traits.isEmpty { Text(action.traitLabels).font(.caption).foregroundStyle(.secondary) }
                 if action.kind == "manual" && store.receipts[resource.entryId]?.result?.action != action.key {
                     ForEach(Array(action.steps.enumerated()), id: \.offset) { _, step in Text(step).font(.caption) }
                 }
@@ -110,12 +116,14 @@ struct ResourceRow: View {
 
     private func observationDetails(_ item: ResourceObservation) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            Text("\(item.label) · \(item.stateLabel)").font(.caption.weight(.medium))
+            if let value = item.value, !value.text.isEmpty { Text(value.text).textSelection(.enabled) }
             if let message = item.error?.message ?? item.message { Text(message).textSelection(.enabled) }
             Text(item.source.replacingOccurrences(of: "\0", with: " ")).font(.caption.monospaced()).textSelection(.enabled)
             Text("检查：\(item.checkedAt)")
             if let time = item.dataAt { Text("数据：\(time)") }
             if let instance = item.instance { Text("实例：\(instance)").textSelection(.enabled) }
-        }.font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.leading, 18)
+        }.font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
     private var recovery: some View {
