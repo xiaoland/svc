@@ -1,0 +1,6 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--FE76C4972A19952.txt
+Build complete! (0.26s)
+/Volumes/WorkSSD/Development/.worktrees/svc-macos-release/svc/dist/macos/local/.svc-build-15840t6_/SVC.app: replacing existing signature
+/Applications/SVC.app

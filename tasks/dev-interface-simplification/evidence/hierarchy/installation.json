@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "build": "88",
+  "sourceRevision": "00e64288abba5b79229275b0c60e9b46f0f1adcb-dirty",
+  "strictSignatureValid": true,
+  "personalDevelopmentSignature": true,
+  "team": "7J9DJNJ782",
+  "preferencesPreserved": true,
+  "preferenceKeyCount": 6,
+  "installedMatchesPrepared": true,
+  "processes": [
+    {
+      "pid": 86267,
+      "executable": "/Applications/SVC.app/Contents/MacOS/SVCMenuBar",
+      "background": true
+    }
+  ],
+  "cli": "svc 18.3.0",
+  "observationHostsRemaining": [],
+  "scope": "Background installation and offscreen presentation; actual popover anchoring and human acceptance not asserted"
+}
