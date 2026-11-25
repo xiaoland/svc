@@ -1,7 +1,7 @@
 ---
 name: svc-taste
-description: "Use when choosing between design or implementation options affecting user experience, permissions, data ownership, state, boundaries, naming, dependencies, performance, or maintenance."
-metadata: {"version": "16.0.1"}
+description: "Judgment of design and implementation trade-offs by their consequences when Product or Technical facts do not decide the choice."
+metadata: {"version": "17.0.0"}
 ---
 
 # Taste and Design Judgment
@@ -25,7 +25,15 @@ Weigh intended consequences, causal reasons, costs, and counter-pressure. State 
 
 Product and UI choices may use rendered alternatives, interaction replay, references, and Human perception. Architecture choices may use authority, dependencies, lifecycle, propagation, migration, and failure scenarios. Implementation choices use code/data/API shape, naming, contracts, tests, observability, and future-change cost. Weigh short- and long-term stakeholder consequences; heuristics are not laws.
 
-Apply an aligned default directly. A reversible local departure with no material consequence may stay bounded. Present one decision-ready question when a departure changes product experience, explicit preference, authority, acceptance, or long-term cost. Human intent, preferences, permissions, material trade-offs, and acceptance retain their authority; factual and proposed-solution claims remain challengeable regardless of speaker. Continue safe investigation and independent authorized work while resolving consequential missing Human input.
+Price risk by expected value. For a protection, recovery path, compatibility layer, retry, check, or guarantee, estimate how often its trigger occurs, the loss when it occurs, and how much the project's stage and positioning weigh that loss; compare that product with the certain build, verification, learning, and maintenance cost. State the likelihood estimate: a failure you can construct is a possibility, not a frequency. Project stage sets the weight; unreleased work needs no compatibility layer, and reversible or demo-grade deployments warrant less caution than critical paths. Find the few decisions that carry most of the value. Where perfection is expensive, prefer best-effort behavior with a simple escape such as manual refresh or correction over a guarantee mechanism. The pressure runs both ways: make near-zero-downside improvements directly, and accept high cost when the return is high.
+
+Apply judgment within agreed goals and authority. Bring a recommendation to the Human when it depends on a missing Human preference or a material departure from accepted commitments. Resolve reversible local choices directly when they stay within those bounds; continue unaffected authorized work while a Human decision is pending.
+
+## Calibrate the Judgment
+
+Treat felt quality as a hypothesis, not a conclusion. When a design feels good or bad, explain which concrete decision causes the response before relying on it; an unexplained preference does not justify a choice. Study work widely recognized as excellent and analyze its specific decisions, since judgment calibrated on familiar examples inherits their limits. Strong work keeps purpose, architecture, design, and implementation simple together; when one layer is simple and another convoluted, find which decision broke the alignment. Seek critique on the reasons given, not only the outcome.
+
+Calibration also runs outward: check the result against the current catalogue of model default patterns — the arrangements models produce regardless of subject when no axis of the brief pins them down. A default reached on a free axis is evidence that no decision happened, not a defect; the response is to make the choice, not to ban the pattern, since each of these arrangements is legitimate for some brief. Run `scripts/check-default-patterns.sh <files>` on markup or styles before accepting a visible result; its findings are candidates for a decision, and a clean run says nothing about whether the design is good.
 
 ## Return a Usable Judgment
 
@@ -33,6 +41,6 @@ Return a recommendation with its reason, cost, and counter-pressure in enough de
 
 ## Authority and Task Continuity
 
-Before durable mutation, establish the authorized effect, owner, affected consumers, invariants, and proportionate verification. This Skill grants no write, delegation, external-effect, or acceptance authority. Keep durable project truth at its canonical owner, preferring executable sources for enforceable facts.
+Human goals, preferences, permissions, material trade-offs, and acceptance retain their authority; factual and proposed-solution claims remain open to evidence and reasoning. This Skill grants no write, delegation, external-effect, or acceptance authority. Keep durable project truth at its canonical owner, preferring executable sources for enforceable facts.
 
-For every non-trivial Task, recover its Packet or create the smallest `packet.md` at the project's authorized location. Preserve objective, authority and constraints, current facts, next action, and completion evidence. An invocation or Child Assignment creates no competing Task or Packet; return state changes to the Task owner. Other Skills are optional guidance, not prerequisites; discover them by name when needed, use qualified project mechanisms when absent, and report actual capability or authority gaps without relaxing obligations.
+Apply the judgment within the existing Task and return the recommendation, rationale, and unresolved matters to the Task owner. This Skill requires no separate Task or record. Other Skills are optional guidance; discover them when needed and report actual capability or authority gaps without relaxing obligations.

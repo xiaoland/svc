@@ -32,6 +32,8 @@ Keep only the state required to preserve the contract. Each extra state holder c
 
 Each abstraction, layer, state holder, protocol, switch, dependency, and indirection must earn its lifecycle cost through behavior, reliability, clarity, maintainability, performance, or evolvability. Compare the status quo and include migration, learning, verification, and forgone-option cost. Measure before optimizing and prefer simple algorithms and structures until a material bottleneck or correctness need appears.
 
+Trace every requirement and mechanism to a Human request or Product fact. Offer additions such as soft deletion, recovery chains, or upgrade paths as proposals for the owner to accept. Prefer platform-native capabilities and mature libraries; when a framework composition misbehaves, first check whether the simplest intended use of the framework solves it. Added validation is not maintainability: a maintainability change reduces what a future maintainer must know or change together.
+
 Use patterns when they clarify authority or stable variation, not because a pattern name is available. A local exception may be cheaper than a premature abstraction; repeated change scenarios may later justify the deeper boundary.
 
 ## Project the Design into Reality

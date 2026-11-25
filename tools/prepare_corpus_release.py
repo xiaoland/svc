@@ -1,4 +1,4 @@
-"""Synchronize the six Skill release metadata fields from pyproject.toml."""
+"""Synchronize the Skill release metadata fields from pyproject.toml."""
 
 from __future__ import annotations
 
