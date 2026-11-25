@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+from collections.abc import Callable
 
 import psutil  # type: ignore[import-untyped]
 
@@ -11,15 +12,18 @@ from ..errors import SvcError
 
 
 class ProcessGroup:
+    _list: Callable[[int, ctypes.Array[ctypes.c_int], int], int]
+
     def __init__(self) -> None:
         if sys.platform != "darwin":
             raise SvcError(
                 "managed-platform-unsupported", "受管临时执行目前支持 macOS。"
             )
         library = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
-        self._list = library.proc_listpgrppids
-        self._list.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
-        self._list.restype = ctypes.c_int
+        list_pids = library.proc_listpgrppids
+        list_pids.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
+        list_pids.restype = ctypes.c_int
+        self._list = list_pids
 
     def members(self, leader: int) -> list[int]:
         # libproc returns a PID count, not a byte count. Keep room for fork races.
