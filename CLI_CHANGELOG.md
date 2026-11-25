@@ -1,3 +1,16 @@
+## [18.3.0] - 2026-11-25
+
+### Added
+
+- `svc dev monitor`、`dev exec` 和 `dev terminate` 提供本机压力、按项目归属的执行用量和 macOS 受管临时命令。执行启动时记录项目归属。终止由实际执行者协调隔离进程组，主进程提前退出时继续观察该组；人为终止后不自动重试。无法验证的用量保持未知。 (#execution-and-usage)
+- `svc dev monitor` schema 3 显示 Pi 后台任务、同一 Codex app-server 拥有的后台终端及 Claude Code 后台会话的状态。`dev integrate` 配置接入，`dev logs` 和 `dev terminate` 仅在原管理器提供能力时使用。交互会话只读，外部终止由原管理器负责。 (#harness-native)
+- Skills 安装器支持带有 svc-writing 的 Corpus v17 七项发行清单，并继续支持历史 v15、v16 的六项发行物。在线安装和更新默认选择目标发布中的 Skills。 (#20261116-corpus-17-compatibility)
+
+### Changed
+
+- 项目配置升级为 schema 5，以开发资源、具名观察和显式动作替换 targets。`svc dev list` 列出声明，`dev act` 执行声明动作，`dev reconcile` 恢复结果未知的操作。随 macOS 0.1.0 附带的 CLI 17.0.0 使用 targets 和 dev-status schema 3，严格依赖旧输出的调用方需升级。已有 targets 配置须人工迁移，并在切换前排空旧客户端的控制调用。 (#resource-manager)
+
+
 ## [16.0.0] - 2026-10-06
 
 ### Changed

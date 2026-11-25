@@ -1,1 +1,0 @@
-项目配置升级为 schema 5，以开发资源、具名观察和显式动作替换 targets。`svc dev list` 列出声明，`dev act` 执行声明动作，`dev reconcile` 恢复结果未知的操作。随 macOS 0.1.0 附带的 CLI 17.0.0 使用 targets 和 dev-status schema 3，严格依赖旧输出的调用方需升级。已有 targets 配置须人工迁移，并在切换前排空旧客户端的控制调用。

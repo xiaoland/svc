@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -29,7 +29,7 @@ jobs:
       - run: pdm install --frozen-lockfile -d -G quality -G test -G double
       - name: Check repository contract
         env:
-          SVC_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+          SVC_BASE_REF: ${{ github.event.pull_request.base.sha || (github.event.created && github.sha) || github.event.before || github.sha }}
         run: pdm run check
       - run: pdm build -p cli
       - name: Accept the built wheel
