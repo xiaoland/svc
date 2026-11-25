@@ -10,9 +10,12 @@ struct CLIConfiguration: Equatable, Sendable {
     var environmentMode: ExecutionEnvironmentMode = .fixedPath
     var environmentRevision = 0
 
+    static var legacyDefaultSearchPath: String {
+        "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    }
+
     static var defaultSearchPath: String {
-        let home = NSHomeDirectory()
-        return "\(home)/.local/share/mise/shims:\(home)/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        "\(NSHomeDirectory())/.local/share/mise/shims:\(legacyDefaultSearchPath)"
     }
 
     // Empty means automatic discovery. Keep the shim path so mise owns version selection.
@@ -169,9 +172,9 @@ struct ResourceObservation: Decodable, Identifiable, Sendable {
     var isStale: Bool {
         if stale { return true }
         guard let expiresAt else { return false }
-        let format = ISO8601DateFormatter()
-        format.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return format.date(from: expiresAt).map { $0 < Date() } ?? true
+        let date = (try? Date(expiresAt, strategy: .iso8601))
+            ?? (try? Date(expiresAt, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)))
+        return date.map { $0 < Date() } ?? true
     }
     var stateLabel: String {
         if isStale { return "已过期" }

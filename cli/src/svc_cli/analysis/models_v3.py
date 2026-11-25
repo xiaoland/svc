@@ -42,7 +42,7 @@ HistoryScope: TypeAlias = Annotated[
 
 
 class OverviewRequestV3(AnalysisModel):
-    version: Literal[3]
+    version: Literal[3] = 3
     intent: Literal["overview"]
     cursor: str | None = Field(default=None, min_length=1, max_length=8192)
     max_items: int = Field(default=50, ge=1, le=100)
@@ -50,7 +50,7 @@ class OverviewRequestV3(AnalysisModel):
 
 
 class TraceRequestV3(AnalysisModel):
-    version: Literal[3]
+    version: Literal[3] = 3
     intent: Literal["trace"]
     execution: AnalysisRefV3 | None = None
     event: AnalysisRefV3 | None = None
@@ -94,7 +94,7 @@ class ProfileSelectV3(AnalysisModel):
 
 
 class ProfileRequestV3(AnalysisModel):
-    version: Literal[3]
+    version: Literal[3] = 3
     intent: Literal["profile"]
     select: ProfileSelectV3 = Field(default_factory=ProfileSelectV3)
     scope: HistoryScope = Field(
@@ -162,7 +162,7 @@ class MatchPredicatesV3(AnalysisModel):
 
 
 class MatchRequestV3(AnalysisModel):
-    version: Literal[3]
+    version: Literal[3] = 3
     intent: Literal["match"]
     predicates: MatchPredicatesV3 | None = None
     cursor: str | None = Field(default=None, min_length=1, max_length=8192)
@@ -184,7 +184,7 @@ QUERY_REQUEST_V3 = TypeAdapter(QueryRequestV3)
 
 
 class ExactReadRequestV3(AnalysisModel):
-    version: Literal[3]
+    version: Literal[3] = 3
     ref: AnalysisRefV3
     max_bytes: int = Field(default=65_536, ge=256, le=1_048_576)
 
@@ -196,7 +196,7 @@ class ExactReadRequestV3(AnalysisModel):
 
 
 class ForwardReadRequestV3(AnalysisModel):
-    version: Literal[3]
+    version: Literal[3] = 3
     start: AnalysisRefV3
     max_items: int = Field(default=20, ge=1, le=100)
     max_bytes: int = Field(default=65_536, ge=256, le=1_048_576)
@@ -209,7 +209,7 @@ class ForwardReadRequestV3(AnalysisModel):
 
 
 class ContinueReadRequestV3(AnalysisModel):
-    version: Literal[3]
+    version: Literal[3] = 3
     cursor: str = Field(min_length=1, max_length=8192)
     max_items: int = Field(default=20, ge=1, le=100)
     max_bytes: int = Field(default=65_536, ge=256, le=1_048_576)

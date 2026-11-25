@@ -14,7 +14,7 @@ struct CLISetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("请先安装 SVC CLI", systemImage: "terminal")
+            Label("未找到 SVC CLI", systemImage: "terminal")
                 .font(.headline)
             CLIInstallLinks()
             Button("选择 CLI 或重新检测…", action: openSettings)

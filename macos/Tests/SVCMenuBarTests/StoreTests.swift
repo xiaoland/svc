@@ -121,3 +121,45 @@ private final class TestPreferences: UserDefaults {
     #expect(receipt.message == "声明动作已完成。")
     #expect(receipt.logPath == "/tmp/output.log")
 }
+
+@Test @MainActor func terminationBlocksReconfigurationAndWaitsToQuit() async throws {
+    let requests = Requests()
+    let store = AppStore(preferences: preferences([])) { _, command, _, _ in
+        #expect(command == .terminate)
+        return try await requests.call(command)
+    }
+    let execution = HarnessExecution(executionId: "fixture", provider: "pi", nativeId: "local", instanceId: "test",
+                                    label: "验收任务", command: "true", cwd: "/tmp", state: "running",
+                                    scope: "task", startedAt: "", canTerminate: true, canReadLogs: false,
+                                    stopDescription: "", processId: nil, usage: nil, projectPath: nil, issues: [])
+    let original = store.configuration
+    store.terminate(.harness(execution))
+    store.terminate(.harness(execution))
+    store.setConfiguration(.init(executable: "/different", searchPath: "/bin"))
+    #expect(store.configuration == original)
+    var quitReply: Bool?
+    store.waitToQuit { quitReply = $0 }
+    try await waitUntil { await requests.count == 1 }
+    #expect(quitReply == nil)
+    await requests.failFirst()
+    try await waitUntil { quitReply == true }
+    #expect(store.operations.isEmpty)
+    #expect(store.activity.notice == "fixture failure")
+}
+
+@Test @MainActor func migratesOnlyTheImplicitLegacyDefaultPath() {
+    let prefs = preferences([])
+    prefs.set(CLIConfiguration.legacyDefaultSearchPath, forKey: "searchPath")
+    let migrated = AppStore(preferences: prefs).configuration
+    #expect(migrated.environmentMode == .projectShell)
+    #expect(migrated.searchPath == CLIConfiguration.defaultSearchPath)
+
+    prefs.set("fixedPath", forKey: "executionEnvironmentMode")
+    #expect(AppStore(preferences: prefs).configuration.searchPath == CLIConfiguration.legacyDefaultSearchPath)
+
+    prefs.removeObject(forKey: "executionEnvironmentMode")
+    prefs.set("/usr/bin:/bin", forKey: "searchPath")
+    let custom = AppStore(preferences: prefs).configuration
+    #expect(custom.environmentMode == .fixedPath)
+    #expect(custom.searchPath == "/usr/bin:/bin")
+}

@@ -5,6 +5,7 @@ import json
 import plistlib
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -285,3 +286,27 @@ def test_release_lookup_distinguishes_absence_from_access_failure(
     else:
         with pytest.raises(subprocess.CalledProcessError):
             release.find_release("owner/repo", "macos-v0.1.0")
+
+
+def test_unreleased_macos_notes_cannot_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        release, "validate_tag", lambda *_: pytest.fail("unexpected remote lookup")
+    )
+    directory = assets(tmp_path / "assets")
+    notes = tmp_path / "CHANGELOG.md"
+    notes.write_text("## [0.1.0] - 未发布\n")
+    with pytest.raises(ValueError, match="发布日期"):
+        release.publish("example/svc", directory, SHA, notes)
+
+
+def test_macos_date_probe_allows_development_without_a_release_section(tmp_path: Path):
+    notes = tmp_path / "MACOS_CHANGELOG.md"
+    notes.write_text("## [0.1.0] - 2026-10-26\n")
+    command = [sys.executable, "-m", "tools.release_notes", str(notes)]
+    assert subprocess.check_output([*command, "0.2.0", "--date-only"], text=True) == ""
+    assert (
+        subprocess.check_output([*command, "0.1.0", "--date-only"], text=True).strip()
+        == "2026-10-26"
+    )

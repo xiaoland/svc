@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.macos_app import CLI_RESULT_SCHEMAS
-from tools.release_notes import release_section
+from tools.release_notes import publication_date, release_section
 
 
 def gh(*args: str) -> str:
@@ -112,6 +112,8 @@ def publish(repo: str, directory: Path, revision: str, changelog: Path) -> None:
     version = manifest["version"]
     tag = f"macos-v{version}"
     notes = release_section(changelog.read_text(), version)
+    if publication_date(notes) is None:
+        raise ValueError("macOS 版本记录须先填写发布日期")
     validate_tag(repo, tag, revision)
     release = find_release(repo, tag)
     with tempfile.TemporaryDirectory(prefix="svc-release-") as temporary:

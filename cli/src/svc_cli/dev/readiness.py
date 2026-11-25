@@ -36,8 +36,6 @@ ProbeReason: TypeAlias = Literal[
     "connected",
     "timeout",
     "unreachable",
-    "deadline-exhausted",
-    "exec-start-failed",
     "zero-exit",
     "nonzero-exit",
     "output-limit",
@@ -55,14 +53,6 @@ class ProbeObservation(ValueModel):
     output: str | None = None
     output_bytes: int | None = None
     output_truncated: bool | None = None
-
-
-class ResolvedProbe(ValueModel):
-    kind: ProbeKind
-    endpoint_identity: str
-    url: str | None = None
-    host: str | None = None
-    argv: tuple[str, ...] | None = None
 
 
 def probe_http(
@@ -167,13 +157,12 @@ def probe_exec(
             shell=False,
             close_fds=True,
         )
-    except OSError:
-        return ProbeObservation(
-            kind="exec",
-            healthy=False,
-            reason="exec-start-failed",
-            endpoint_identity="exec:" + "\0".join(argv),
-        )
+    except OSError as error:
+        raise SvcError(
+            "exec-start-failed",
+            f"无法启动观察命令 {argv[0]}：{error.strerror}",
+            {"executable": argv[0], "cwd": str(cwd)},
+        ) from error
     assert process.stdout is not None
     output = process.stdout
 

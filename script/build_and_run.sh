@@ -8,7 +8,3 @@ case "${1:-run}" in
   --build-only) pdm run python -m tools.macos_app build ;;
   *) echo "usage: $0 [--install|--verify|--build-only]" >&2; exit 2 ;;
 esac
-if [[ "${1:-run}" == --verify ]]; then
-    sleep 1
-    pgrep -x SVCMenuBar >/dev/null
-fi

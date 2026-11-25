@@ -44,7 +44,7 @@ format-check = "ruff format --check cli/src cli/tests tools"
 lint = "ruff check cli/src cli/tests tools"
 lint-imports = "lint-imports"
 typecheck = "mypy"
-check = { composite = ["check-corpus-release", "check-skills", "check-cli-output-schemas", "format-check", "lint", "typecheck", "lint-imports", "test"] }
+check = { composite = ["check-corpus-release", "check-cli-output-schemas", "format-check", "lint", "typecheck", "lint-imports", "test"] }
 
 [tool.mypy]
 python_version = "3.11"

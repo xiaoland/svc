@@ -111,7 +111,7 @@ pdm run check
 SVC_TEST_CLI="$PWD/.venv/bin/svc" swift test --package-path macos
 ```
 
-版本须等于 `macos/VERSION`。将生成的 `MACOS_CHANGELOG.md` 与版本、实现一起通过 PR 合入 `main`；macOS workflow 先执行仓库检查、后台原生测试和配套 wheel 的真实服务验收，再发布 GitHub prerelease。普通功能合并只验证和归档，只有发布记录变更或在 `main` 手动运行 workflow 才发布。重试同一次失败运行可以继续已校验的草稿；不同 commit、同名不同内容或已发布但缺失附件均会被拒绝，不移动 tag，不覆盖附件。新的发布使用新版本。
+版本须等于 `macos/VERSION`。将生成的 `MACOS_CHANGELOG.md` 与版本、实现一起通过 PR 合入 `main`；macOS workflow 先执行仓库检查、后台原生测试和配套 wheel 的真实服务验收。当次版本只有变更片段，或版本章节标为“未发布”时，只验证并归档。为当前版本填入发布日期后，在 `main` 合入准备好的发布记录或手动运行 workflow，才会发布 GitHub prerelease。重试同一次失败运行可以继续已校验的草稿；不同 commit、同名不同内容或已发布但缺失附件均会被拒绝，不移动 tag，不覆盖附件。新的发布使用新版本。
 
 macOS runner 使用 PDM 管理的独立 CPython 3.12.10，并在独立进程中验证 HTTPServer 能在 10 秒内构造完成。此选择处理 framework Python 在 macOS 15+ runner 上的 [loopback 反向解析延迟](https://github.com/actions/setup-python/issues/1223)；构建环境的修正不改变 CLI 的业务超时或跳过服务生命周期测试。更换解释器时，须同时保持最终 wheel 验收使用同一解释器来源。
 

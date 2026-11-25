@@ -104,9 +104,11 @@ npx skills@1.7.0 add https://github.com/xiaoland/svc/releases/download/corpus-v1
 
 ## 观察机器与管理临时执行
 
-菜单栏 Popover 用于速览资源、压力与当前执行，并访问资源、执行声明动作或停止任务；项目和 Section 的添加、编辑、移动及移除统一在主窗口进行，执行历史与 Agent 接入说明也在主窗口查看。
+菜单栏面板显示资源、压力与当前执行，可访问资源、执行声明动作或停止任务。从面板左上角点应用标识或按 ⌘0 打开主窗口。历史记录与 Agent 接入说明可在主窗口的“执行”页查看。
 
-App 0.2.0／CLI 18.3.0 提供无需项目配置的机器与执行入口。菜单栏顶部展示本机压力状态，展开可查看 CPU、内存、磁盘、swap、采样信息与建议；“执行”页跨项目显示活跃执行和最近结果。App 还提供独立主窗口：从 Finder 打开 App，或点击面板左上角应用标识区（⌘0）。侧栏可按 Section／项目浏览资源，也可查看全局执行。关闭主窗口继续在菜单栏常驻，不停止执行。主窗口与面板共享观察；两处都不可见后停止周期轮询，过期快照不能代表当前压力。
+主窗口侧栏底部的“＋”可以添加项目或新建 Section。使用项目菜单调整归属，使用 Section 菜单重命名、排序或删除分组。删除分组后，项目回到未分组，资源继续运行。这些分组偏好只保存在本机。
+
+机器与执行观察无需项目配置。点击压力状态可查看 CPU、内存、磁盘和 swap 采样。关闭主窗口后 App 继续在菜单栏运行；两个界面都不可见时停止周期观察，过期读数只供回看。
 
 ```bash
 svc dev monitor --json
@@ -241,31 +243,18 @@ App 已登记项目中的外部执行按当前 cwd 归入最深项目根；其�
 
 ## 分析 Agent 任务证据
 
-Telemetry 获取一个显式选择的本地 provider 源，analysis 读取一个不可变证据 bundle。两者不上传数据、访问网络服务、调用模型或宣称审计完整性。调用 Agent 拥有语义解释和结论；SVC 拥有有界捕获、原生保真、快照身份和确定性结构导航。
+先用 `list` 找到要分析的会话，再用 `export` 读取选定来源。默认来源是 Codex，也可以用 `--provider pi` 选择标准 Pi 会话。输出须是已有目录中尚不存在的 ZIP 文件。
 
 ```bash
-svc telemetry agent-thread list [selection options] [--json]
-svc telemetry agent-thread export (--thread-id <id> | --source <path>) --output <absent.zip> [--json]
-
-svc analysis query --schema
-svc analysis query --input /path/to/evidence-v3.zip --request <file|->
-svc analysis read --schema
-svc analysis read --input /path/to/evidence-v3.zip --request <file|->
+svc telemetry agent-thread list --provider codex --json
+svc telemetry agent-thread export --provider codex --id <id> --output evidence.zip --json
+svc analysis --schema
+printf '%s\n' '{"version":3,"intent":"overview"}' | svc analysis query --input evidence.zip --request -
 ```
 
-`list` 提供有界 inventory，展示 provider 生命周期、识别结果和本地来源，不预测 export 时源是否仍可读。`export` 要求确切 thread ID 或源路径与不存在的目标，保持源只读，拒绝覆盖及源/目标别名。成功 export 是已验证 bundle；进程中断可能留下无效的部分目标，重试前须删除。caller 决定存储与访问权限；没有 `--include-sensitive` 确认、`--repo` 边界、TTY gate 或 private member-mode 承诺。
+导出生成 evidence v4。包内的 `manifest.json` 绑定必需的 `trajectory.jsonl` 和原始材料。Analysis v3 在本地校验并读取这个包；若只有 v1–v3 的旧证据包，需要从原始会话重新导出。原始材料可能含完整对话、命令和工具输出，导出者负责保管、保留和披露。
 
-schema-v3 ZIP 的权威是 `manifest.json`、`native.bin` 和 `native-index.jsonl`。Provider 原生字节保留源顺序；framing 只记录稳定 ID、连续字节范围、源坐标和 `complete|incomplete` 状态。一个 `evidence_id` 绑定原生与 framing 字节。可选 `trajectory.jsonl` 是可丢弃重建的派生结构缓存，其计数、能力和损失摘要也不是证据权威。schema-v1/v2 bundle 属于历史 cutoff，query/read 在有界识别后拒绝，须从 provider 本地源重新获取。
-
-这是同用户本地流程，不是安全沙箱；SVC 不防御 root、同账号恶意进程或对抗性路径替换。原生证据可包含所有选中内容，结构投影与省略不提供保密或脱敏。caller 拥有存储、访问、保留和披露决策。
-
-`query` 是封闭的 machine-first 协议，提供 `overview` 和确定性 `match`。它使用或重建结构缓存，返回证据身份、源/捕获事实、派生能力与损失、稳定 native/trajectory 引用、结构范围及有界匹配。匹配条件覆盖 record type、role、tool、relationship、native range 或 literal text；不支持任意字段选择、SQL/JSONPath、正则程序、join、grouping、scoring 或自然语言提示。
-
-`read` 按原生顺序向前读取，从开头或确切 native 引用开始，可包含有界前置 records，并以绑定请求 scope 的 cursor 延续。结果提供捕获的字节/值、确切 frame/fragment offsets、digest、来源与延续。cursor 是带类型请求 scope 的未签名本地状态，不是认证能力；frame/fragment digest 在读取时从原生字节计算。确切 UTF-8 fragment 可直接读为文本，任意字节以无损 base64 返回。Read 不过滤、重排、总结或静默标准化文本。
-
-响应区分 `complete`、`partial` 和 `unavailable`；分页不是证据损失。不完整的 acquisition frame 可读，但不能产生 projection record。缺失或无效缓存从原生证据重建；重建失败使结构 query 不可用，不阻止 native read。Query/read 是 JSON-first，`--schema` 拥有机器合同；任务分析方法和权限边界由 `svc analysis --help` 提供。
-
-旧 `telemetry agent-thread analyze` 与 Textual navigator 已移除；调用 Agent 通过显式 `query` 与原生 `read` 解释证据。
+从 `overview` 看执行关系、状态、用量和采集缺口。用 `trace` 查看相关消息及工具调用，用 `profile` 按执行、模型或工具汇总可用指标，用 `match` 定位符合条件的记录。需要查看精确内容时，将查询返回的 content、blob 或 native 引用交给 `read`。请求和分页字段见 `svc analysis --schema`。缺失会话和用量会反映在覆盖状态中，应结合任务目标判断结果。[证据格式与兼容性](docs/product-tdd/agent-analysis.md)
 
 ## 人工迁移 CLI 配置
 
