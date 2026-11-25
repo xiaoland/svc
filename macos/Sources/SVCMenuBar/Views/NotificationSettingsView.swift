@@ -55,13 +55,13 @@ struct NotificationSettingsView: View {
     }
 
     private func refresh() async {
-        settings = await NotificationPermission.read(from: .current())
+        settings = await UNUserNotificationCenter.current().svcPermission()
     }
 
     private func requestPermission() async {
         working = true
         defer { working = false }
-        do { _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) }
+        do { _ = try await UNUserNotificationCenter.current().svcRequestPermission() }
         catch { message = "无法请求通知授权：\(error.localizedDescription)" }
         await refresh()
     }
@@ -76,8 +76,7 @@ struct NotificationSettingsView: View {
         content.body = "指令返回后，会通过系统通知显示执行结果。"
         content.sound = .default
         do {
-            try await UNUserNotificationCenter.current().add(
-                UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+            try await UNUserNotificationCenter.current().svcPost(content)
             message = "已提交测试通知，请查看系统横幅或通知中心。"
         } catch { message = "无法发送测试通知：\(error.localizedDescription)" }
     }

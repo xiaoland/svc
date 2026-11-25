@@ -4,15 +4,37 @@ import UserNotifications
 struct NotificationPermission: Sendable {
     let authorizationStatus: UNAuthorizationStatus
     let displaysBanners: Bool
+}
 
-    @MainActor
-    static func read(from center: UNUserNotificationCenter) async -> Self {
+// Start SDK calls on the main actor and resume with value results.
+@MainActor
+extension UNUserNotificationCenter {
+    func svcPermission() async -> NotificationPermission {
         await withCheckedContinuation { continuation in
-            center.getNotificationSettings { @Sendable settings in
-                continuation.resume(returning: Self(
+            getNotificationSettings { @Sendable settings in
+                continuation.resume(returning: NotificationPermission(
                     authorizationStatus: settings.authorizationStatus,
                     displaysBanners: settings.alertSetting == .enabled && settings.alertStyle != .none
                 ))
+            }
+        }
+    }
+
+    func svcRequestPermission() async throws -> Bool {
+        try await withCheckedThrowingContinuation { continuation in
+            requestAuthorization(options: [.alert, .sound]) { @Sendable granted, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume(returning: granted) }
+            }
+        }
+    }
+
+    func svcPost(_ content: UNNotificationContent) async throws {
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            add(request) { @Sendable error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume() }
             }
         }
     }
@@ -34,7 +56,7 @@ final class CommandNotifications: NSObject, UNUserNotificationCenterDelegate {
 
     func deliver(_ receipt: OperationReceipt, resource: String, action: String) async {
         let content = Self.content(for: receipt, resource: resource, action: action)
-        let settings = await NotificationPermission.read(from: center)
+        let settings = await center.svcPermission()
         if settings.authorizationStatus == .notDetermined {
             // Permission may wait for the person; it must not keep the command busy.
             Task { await authorizeAndPost(content) }
@@ -46,7 +68,7 @@ final class CommandNotifications: NSObject, UNUserNotificationCenterDelegate {
     private func authorizeAndPost(_ content: UNNotificationContent) async {
         do {
             // Concurrent command results share the system's one permission decision.
-            let request = authorizationRequest ?? Task { try await center.requestAuthorization(options: [.alert, .sound]) }
+            let request = authorizationRequest ?? Task { try await center.svcRequestPermission() }
             authorizationRequest = request
             defer { authorizationRequest = nil }
             guard try await request.value else {
@@ -61,7 +83,7 @@ final class CommandNotifications: NSObject, UNUserNotificationCenterDelegate {
 
     private func post(_ content: UNNotificationContent) async {
         do {
-            try await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+            try await center.svcPost(content)
         } catch {
             reportError("无法发送执行结果通知：\(error.localizedDescription)")
         }
