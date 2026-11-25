@@ -3,7 +3,7 @@ import SwiftUI
 import UserNotifications
 
 struct NotificationSettingsView: View {
-    @State private var settings: UNNotificationSettings?
+    @State private var settings: NotificationPermission?
     @State private var working = false
     @State private var message: String?
 
@@ -47,7 +47,7 @@ struct NotificationSettingsView: View {
         case .notDetermined: return "尚未请求通知权限"
         case .denied: return "系统通知未开启"
         case .authorized:
-            return settings.alertSetting == .enabled && settings.alertStyle != .none
+            return settings.displaysBanners
                 ? "系统通知已允许" : "已允许通知，当前不显示横幅"
         case .provisional: return "已允许静默通知"
         default: return "无法确认通知权限"
@@ -55,7 +55,7 @@ struct NotificationSettingsView: View {
     }
 
     private func refresh() async {
-        settings = await UNUserNotificationCenter.current().notificationSettings()
+        settings = await NotificationPermission.read(from: .current())
     }
 
     private func requestPermission() async {

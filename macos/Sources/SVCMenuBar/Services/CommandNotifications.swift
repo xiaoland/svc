@@ -1,6 +1,23 @@
 import Foundation
 import UserNotifications
 
+struct NotificationPermission: Sendable {
+    let authorizationStatus: UNAuthorizationStatus
+    let displaysBanners: Bool
+
+    @MainActor
+    static func read(from center: UNUserNotificationCenter) async -> Self {
+        await withCheckedContinuation { continuation in
+            center.getNotificationSettings { @Sendable settings in
+                continuation.resume(returning: Self(
+                    authorizationStatus: settings.authorizationStatus,
+                    displaysBanners: settings.alertSetting == .enabled && settings.alertStyle != .none
+                ))
+            }
+        }
+    }
+}
+
 @MainActor
 final class CommandNotifications: NSObject, UNUserNotificationCenterDelegate {
     private let center = UNUserNotificationCenter.current()
@@ -17,7 +34,7 @@ final class CommandNotifications: NSObject, UNUserNotificationCenterDelegate {
 
     func deliver(_ receipt: OperationReceipt, resource: String, action: String) async {
         let content = Self.content(for: receipt, resource: resource, action: action)
-        let settings = await center.notificationSettings()
+        let settings = await NotificationPermission.read(from: center)
         if settings.authorizationStatus == .notDetermined {
             // Permission may wait for the person; it must not keep the command busy.
             Task { await authorizeAndPost(content) }
@@ -80,24 +97,20 @@ final class CommandNotifications: NSObject, UNUserNotificationCenterDelegate {
         return content
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
-        withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .list, .sound])
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .list, .sound]
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
-        withCompletionHandler completionHandler: @escaping @Sendable () -> Void) {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
+    ) async {
         guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
-              let path = response.notification.request.content.userInfo["projectPath"] as? String else {
-            completionHandler()
-            return
-        }
+              let path = response.notification.request.content.userInfo["projectPath"] as? String else { return }
         let content = response.notification.request.content
         let date = response.notification.date.formatted(date: .abbreviated, time: .shortened)
         let summary = "通知回执（\(date)）\n\(content.subtitle) · \(content.title)\n\(content.body)"
-        Task { @MainActor in
-            openResult(path, summary)
-            completionHandler()
-        }
+        await MainActor.run { openResult(path, summary) }
     }
 }
