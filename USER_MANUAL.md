@@ -44,17 +44,17 @@ AGENTS.local.md            被忽略、归消费者所有的本地 Agent 指导
 docs/index.md              缺失时创建，带有界 CLI 工具导航块
 ```
 
-`svc.json` 是完整、提交到版本控制的项目配置。schema 4 可声明开发能力与有界运行，最小配置为：
+`svc.json` 是完整、提交到版本控制的项目配置。schema 5 可声明开发能力与有界运行，最小配置为：
 
 ```json
 {
-  "schema_version": 4
+  "schema_version": 5
 }
 ```
 
-可选的 `svc.local.json` 是被忽略的稀疏 overlay，也须声明 schema 4。它可覆盖 `dev` 和主配置已有的 `run`，不能创建本地专有 run 名称或形成无效的有效配置。`init` 只维护标记的忽略块，不写本地配置；缺失时创建 `AGENTS.local.md`，之后不重写它。
+可选的 `svc.local.json` 是被忽略的稀疏 overlay，也须声明 schema 5。它可覆盖 `dev` 和主配置已有的 `run`，不能创建本地专有 run 名称或形成无效的有效配置。`init` 只维护标记的忽略块，不写本地配置；缺失时创建 `AGENTS.local.md`，之后不重写它。
 
-在任何仓库先用 `svc status --json` 获取只读 preflight。它分别报告 CLI、配置、集成和 workspace 事实及一个主要延续动作，只汇总 dev target 和 run entry 名称而不执行它们；需要 runtime 观察时用 `svc dev status`。每个当前 `--json` 响应都是一个紧凑 JSON 值。
+在任何仓库先用 `svc status --json` 获取只读 preflight。它分别报告 CLI、配置、集成和 workspace 事实及一个主要延续动作，只汇总 dev resource 和 run entry 名称而不执行它们；需要 runtime 观察时用 `svc dev status`。每个当前 `--json` 响应都是一个紧凑 JSON 值。
 
 未标记内容、消费者框架指针和本地 Agent 指导归消费者所有。`init` 的受管导航只提供工具入口；框架采用使用独立的 `skills adopt` 标记块。只有可识别且未被修改的生成块可被精确计划维护；修改过的导航或忽略块停止修复。过期计划、并发修改检查与失败回滚保护仍然有效。
 
@@ -102,21 +102,81 @@ npx skills@1.7.0 add https://github.com/xiaoland/svc/releases/download/corpus-v1
 
 所有非平凡任务使用 Task Packet。先找到现有 Packet，不存在时建立足以表达目标、授权、当前状态与验证边界的最小入口，随后按任务压力增长。[Task Packet Skill](corpus/svc-task-packet/SKILL.md)拥有选择和维护规则，并提供 references/assets；Agent 使用已有文件工具完成操作，保护现有 Packet 和授权路径。模板存在不意味着必须创建所有文件，文件工具也不自动具备旧 CLI 创建命令的全部事务与路径保护。
 
-## 声明与确保开发能力
+## 观察机器与管理临时执行
 
-可选的 `dev.targets` 直接声明命名能力。每个 target 有 scope（`worktree`、`repository` 或 `host`）、一个 readiness probe（`http`、`tcp` 或 `exec`）、可执行或手动 provisioner，以及可选的 target-local 可执行或手动 `stop` 动作。默认文本服务 Agent/Human，紧凑 JSON 服务脚本与 CI：
+菜单栏 Popover 用于速览资源、压力与当前执行，并访问资源、执行声明动作或停止任务；项目和 Section 的添加、编辑、移动及移除统一在主窗口进行，执行历史与 Agent 接入说明也在主窗口查看。
+
+App 0.2.0／CLI 18.3.0 提供无需项目配置的机器与执行入口。菜单栏顶部展示本机压力状态，展开可查看 CPU、内存、磁盘、swap、采样信息与建议；“执行”页跨项目显示活跃执行和最近结果。App 还提供独立主窗口：从 Finder 打开 App，或点击面板左上角应用标识区（⌘0）。侧栏可按 Section／项目浏览资源，也可查看全局执行。关闭主窗口继续在菜单栏常驻，不停止执行。主窗口与面板共享观察；两处都不可见后停止周期轮询，过期快照不能代表当前压力。
 
 ```bash
-svc dev identity --repo /path/to/project --json
-svc dev status --repo /path/to/project --json
+svc dev monitor --json
+svc dev exec --source agent --label '构建 App' --cwd /path/to/project --json -- swift build --jobs 2
+svc dev terminate <execution-id> --by human --json
+svc dev terminate <execution-id> --force --by human --json
+```
+
+在高消耗工作之前及执行期间查询 monitor，据压力安排串行、降低工具并发或推迟下一项。App 的“复制 Agent 接入说明”会使用设置中的实际 CLI 路径。此接口需要 Agent 主动采用；尚未接入的外部程序不会自动获得终止能力，也没有强制全机限额或自动杀进程。CPU／磁盘短窗口只说明采样期间的活动，不能证明谁导致了卡顿；可用内存与系统内存压力是不同指标。
+
+exec 目前支持 macOS，按 `--` 后的 argv 执行，不自动解释 shell，无终端输入。每次调用独立运行，不合并同名命令；启动后先在 stderr 给出 execution ID，结束后 stdout 返回一份 JSON，原生命令输出写入返回的 stdout／stderr 日志。没有项目配置也可使用，既有具名 `svc run` 的终端及跟随行为不变。
+
+人可从执行行请求终止；强制终止在行内确认后发送 KILL，可能遗留未完成的产物或写入。requested 只表示请求已登记，仍需查看实际状态；主进程退出而子进程未结束时继续显示运行。scope-complete 只证明本次受管进程组结束，不能证明离开该组的进程、远端工作或业务回滚。已应用的终止在结果中保留 stopped_by，retry_allowed=false；Agent 不得把人为终止当普通失败自动重试。null 也不授予自动重试权限。
+
+旧 run 与资源动作可能出现在清单中，但只有明确受管的 exec 提供这个终止通道；已就绪释放的服务仍通过其资源动作控制。执行者丢失后显示未知并禁用终止，不能按历史 PID 接管。记录与日志是可能被系统清理的本机运行证据，不是永久历史。标签、source 和终止来源来自调用方声明，不证明某个 Agent 会话身份。
+
+## 管理开发资源
+
+`dev.resources` 声明资源的观察、访问与明确动作。资源至少提供其中一项，不要求采用 SVC Skills。下面的仓库共享资源由项目脚本控制，停止动作的声明仅承诺命令结束，不声称所有进程已退出：
+
+```json
+{
+  "schema_version": 5,
+  "dev": {
+    "resources": {
+      "frontend": {
+        "scope": "repository",
+        "observations": {
+          "ready": {"probe": {"kind": "http", "url": "http://127.0.0.1:3000/health"}}
+        },
+        "actions": {
+          "ensure": {
+            "kind": "exec", "intent": "启动前端", "traits": ["runtime"],
+            "effect_scope": "本仓库前端", "data_effect": "unchanged",
+            "argv": ["npm", "run", "dev"], "completion": "ready",
+            "interruption": "terminate", "conditions": ["ready"], "convergent": true
+          },
+          "stop": {
+            "kind": "exec", "intent": "停止前端", "traits": ["runtime"],
+            "effect_scope": "本仓库前端", "data_effect": "unchanged",
+            "argv": ["npm", "run", "dev:stop"], "completion": "exit", "interruption": "wait"
+          }
+        },
+        "access": ["http://127.0.0.1:3000/"]
+      }
+    }
+  }
+}
+```
+
+```bash
+svc dev list --repo /path/to/project --json
 svc dev status frontend --repo /path/to/project --json
-svc dev ensure frontend --repo /path/to/project --json
+svc dev act frontend ensure --repo /path/to/project --json
 svc dev stop frontend --repo /path/to/project --json
 ```
 
-根 `status` 只汇总声明；`dev status` 观察 target，不启动或接管进程。`ensure` 处理一个 target，复用健康 endpoint，拒绝被占用但不健康的 endpoint，不执行 `manual` provisioner。`stop` 只执行消费者声明的清理动作，不从记录的 PID 推断权限。可执行工作按声明的 scope 协调，readiness 成功后释放进程权限。默认 worktree scope 的 probe endpoint 必须证明解析出的实例；host scope 要求 `host_key`。
+list 不调用观察脚本；status 只检查声明的自动观察，非自动方面用 `status frontend --observation <key>` 显式检查。HTTP／TCP 不可达为未知，不证明停止。exec 退出码格式约定 0 满足、1 不满足、其它未知；`format: "json"` 需输出 `{"schema_version":1,"state":"satisfied","value":"可选显示值","data_at":"带时区时间","instance":"可选实例"}`，并以 0 退出。数据过期不能满足动作条件；默认 ttl 为 60 秒。
 
-Dev 值只支持 `${dev.instance}`、`${dev.worktree.id}` 和 `${dev.target}` 插值。命令是参数数组，配置的工作目录必须位于 workspace 内。
+动作的 `intent`、`effect_scope` 必须明确，`data_effect` 为 unchanged／modify／delete／unknown；缺省为 unknown。`traits` 可组合 observe／runtime／provision／connection／installation。人工动作用 `kind: "manual"` 和非空 `steps`，不会运行命令。ensure／stop 仅访问同名显式动作。App 与 CLI 按相同合同展示影响和结果，声明“保留”本身不是独立的数据完整性证明。
+
+`exit` 等实际退出并检查可选 conditions；`ready` 需 conditions 和 terminate 策略，就绪后释放本次进程；默认 worktree scope 还需 purpose 为 runtime-readiness 的实例证明。`submitted` 只报告接受，实际控制者负责后续冲突和生命周期；需要动态引用时用 `result: "operation-json"`，将 schema 1 的 `operation.id` 和可选 HTTP(S) url 写入 `SVC_DEV_RESULT_FILE`，不要打印到日志代替结果文件。
+
+默认 wait 动作开始后收到 SIGINT／SIGTERM 仍等待实际结束并持锁。可安全中断的动作才声明 terminate 和可选 timeout。竞争有限动作立即 busy；显式 convergent 的正向条件动作可复用状态或同入口同意图的在途执行，不能用于删除动作或 submitted。App 不提供虚假的强制取消成功。
+
+默认 scope 是 worktree，repository 为本仓库共享，host 需 host_key。共享引用用 `owner: {"repo":"另一项目路径","resource":"直接资源键"}`，只共享协调身份，不继承动作、不触发观察或依赖；引用不能再引用。owner 失效阻断控制，独立观察和访问仍可返回。
+
+Dev 插值限于 `${dev.instance}`、`${dev.worktree.id}`、`${dev.target}`，后者继续表示资源键；命令为 argv 数组，cwd 必须在工作区内。查看后控制可带 `--expected-digest`，绑定 list／status 的 declaration_digest；变更时刷新重选，SVC 不自动替换请求。摘要不冻结外部脚本字节。
+
+owner-lost 表示原操作结果未知，会持续阻断变更。先核对控制者和实际资源，再用 `dev reconcile <resource> --execution <id> --acknowledge-unknown` 明确接受重复操作风险。确认只解除阻断，不杀进程、不重试、不改写成功；其后若需要执行，另发明确动作。runtime 是可能被系统清理的本机证据，不是永久资源登记库。
 
 ## 运行共同声明的命令
 
@@ -124,7 +184,7 @@ Dev 值只支持 `${dev.instance}`、`${dev.worktree.id}` 和 `${dev.target}` �
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "run": {
     "check": {
       "argv": ["pdm", "run", "test"],
@@ -144,6 +204,40 @@ svc run --inspect <execution-id> --repo /path/to/project --json
 一个 caller 拥有前台进程；同一有效 worktree entry 的并发本地 caller 跟随该次执行，不重复启动。execution ID 寻址捕获的 stdout/stderr 和有界 receipt。之后显式调用 entry 会重新执行，已结束的 receipt 不声明新鲜度或验收通过。文本模式保留原生 stdout/stderr，把 SVC 生命周期事实写入 stderr；`--json` 不显示原生输出，只返回紧凑 receipt。
 
 Overlay 可替换已有 entry 的 argv、cwd、env-file 数组并合并 inline env。相对路径从 workspace 根解析；严格环境文件按顺序加载，再应用 inline env，receipt 不保存原始环境值。`run` 不提供 shell 字符串、依赖图、任意参数、后台模式、readiness、缓存、artifact 模型或项目结果判定。
+
+## 按项目查看执行与用量
+
+App 0.2.0／CLI 18.3.0 支持执行的项目归属。主窗口选择项目或 Section 后可切换资源／执行，查看已观测进程的 CPU、内存和磁盘读写；全局执行仍包含未归属记录。临时调用可显式指定项目：
+
+```sh
+svc dev exec --project /path/to/project --cwd /path/to/working-directory --source agent --label '构建' --json -- command arguments
+```
+
+省略 --project 时只在启动目录的祖先中寻找最近 svc.json；没有找到则不归属，不要求为临时命令建立配置。来源在启动时记录，不能自动给旧进程补出身份；请使用配套 CLI，App 的“复制 Agent 接入说明”提供实际绝对路径。
+
+项目用量涵盖通过 SVC 或已接入原生管理器提供、且身份仍可验证的本机进程，包含根仍存活的已释放资源；不自动包含容器内部、远端、尚未接入的外部启动或失去关联的后代。同一进程只计一次，共享服务归实际启动来源。无读数不等于零负载，终止能力也不会因能观察而增加。
+
+顶部 swap 已用量和换入／换出是全机数据。已用量不是当前换页速率，普通页面读入也不是 swap；详情另列压缩和解压活动。项目内存优先使用 macOS 的 footprint，不能将其简单理解为关闭项目后能释放的物理内存。磁盘读写速率只说明活动，没有承诺磁盘饱和检测或负载归因。
+
+
+## 接入 Agent 原生执行
+
+在设置的“执行来源”中可查看 Pi、Codex 和 Claude Code 的连接状态。执行页会合并可见任务，并按项目归类；没有读数不代表没有负载，没有连接也不代表没有执行。
+
+```sh
+svc dev integrate pi --json
+svc dev integrate codex --socket '/现有控制入口/控制.sock' --json
+svc dev integrate claude --cli '/绝对路径/claude' --json
+svc dev monitor --project-root '/项目路径' --json
+svc dev logs 'harness:执行标识' --json
+svc dev terminate 'harness:执行标识' --by human --json
+```
+
+Pi 接入需要已安装 pi-background-tasks 的 Host API v1，执行第一条命令后在 Pi 重新加载扩展或开启下次会话；SVC 不会向现有对话发消息。Codex 只连接已有共享 app-server，入口必须属于拥有目标后台终端的同一实例；若 Desktop 以 stdio 专用方式运行且未开放共享入口，SVC 会持续显示未连接；这不是连接超时，设置页也不能为该实例启用共享模式。共享运行方式必须由 Codex 宿主支持并采用，独立启动的服务器不代表接入已有桌面任务。Claude Code 自动使用 PATH 中支持 agents --json 的版本，也可明确配置路径。
+
+Pi 可看任务和最近日志并停止单项任务，原生停止可能按其策略升级信号。Codex 可看及停止后台终端，目前接口不提供日志或可验证的本机用量。Claude 的停止范围是整个后台会话，保留会话记录；交互会话只读，会话内单个 Bash 没有独立控制入口。点击停止后，App 先显示该来源的停止范围。外部执行没有 force，回执只说明原管理器接受或完成自己的处理，不提供 SVC 受管进程组的收敛证明。
+
+App 已登记项目中的外部执行按当前 cwd 归入最深项目根；其它目录尝试最近 svc.json 祖先，否则保留未归属。原生管理器重载、身份变化或断线后旧控制标识不再可用，需要刷新。SVC 不要求被管理项目为此改造工程，也不会根据任务名推断开发工作。
 
 ## 分析 Agent 任务证据
 
@@ -175,9 +269,17 @@ schema-v3 ZIP 的权威是 `manifest.json`、`native.bin` 和 `native-index.json
 
 ## 人工迁移 CLI 配置
 
-包管理器拥有 CLI 安装和更新。CLI 15 不提供 `lookup`、`upgrade` 或 `task init/grow`，不保留别名或转发。旧配置采用 hard-cutoff，失败时保持文件不变；`init` 不清空、重建或自动迁移旧配置。
+CLI 18 只接受配置 schema 5，不提供旧字段别名或自动迁移。先备份并审查 svc.json 和存在的 svc.local.json；init 不覆盖旧配置。
 
-先备份并审查项目配置，把 `svc.json` 与存在的 `svc.local.json` 的 `schema_version` 改为 `4`，从主配置删除 `corpus_version`，保留其余 dev/run 声明与 overlay 内容。之后用 `svc status --json` 检查，再审查新的 init 计划及其受管工具导航变化。未知字段和无效有效配置继续被拒绝。
+1. 停止发起旧 CLI 控制，等待所有旧 owner 和 follower 实际结束。不要强杀调用来假装排空；旧等待者可能继续旧快照，新版恢复规则不能约束它们。
+2. 首先保留资源键、scope、host_key，只把 targets 改为 resources。probe 放入具名 observations；provision 和 stop 转为显式 actions，逐项填写意图、影响范围、数据效果、完成及中断策略。manual 必须补充步骤，原 readiness_timeout 改为动作 completion_timeout。旧停止后的“不就绪”不自动迁移成正向停止证明。
+3. 同步修改本地 overlay 的路径，将两份配置版本改为 5；早期配置的 corpus_version 删除，run 内容保留。若采用默认 worktree 的 ready，声明 runtime-readiness 观察并提供正确实例证明。
+4. 用 `svc status --json`、`svc dev list --json` 检查解析，再按需执行 `dev status`。观察会运行项目代码；list 不运行探测。完成迁移和旧调用排空后才开放新版控制。
+5. 改名、改变 scope／host_key 或引入 owner 会改变协调身份，必须另行确认旧边界没有活跃或未解决执行后再做。保持原键只保证旧 owner 持锁时新请求不平行，不保证任意热改身份安全。
+
+App 0.2.0 配套 CLI 18.3.0；资源配置仍为 schema 5，主机与临时执行不要求配置。显式保存的自定义 CLI 路径需在设置中保持兼容版本。项目列表和分组保留，旧观察不当作新会话状态。
+
+主窗口的“＋”可新建 Section，将多个项目放在同一分组。项目菜单可移入或移出 Section，分组菜单可添加项目、重命名、上下移动和删除。名称不能为空或重名。分组支持折叠并在重启后保留；删除分组仅解除归属，项目回到未分组，资源操作继续执行。分组偏好保存在本机，不需要修改项目的 svc.json。
 
 框架采用变化遵循[Corpus 版本迁移指导](corpus/migrations/index.md)，由 Agent/Human 更新消费者拥有的契约与引用；它不变换 CLI 配置，不自动迁移消费者语义；CLI 只记录自己安装文件的基线。
 

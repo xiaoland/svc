@@ -154,6 +154,13 @@
           "title": "Observation",
           "type": "string"
         },
+        "resources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Resources",
+          "type": "array"
+        },
         "status": {
           "enum": [
             "unavailable",
@@ -162,18 +169,11 @@
           ],
           "title": "Status",
           "type": "string"
-        },
-        "targets": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Targets",
-          "type": "array"
         }
       },
       "required": [
         "status",
-        "targets"
+        "resources"
       ],
       "title": "DeclaredDevStatus",
       "type": "object"
@@ -586,8 +586,8 @@
           "$ref": "#/$defs/RuntimeStatusOutput"
         },
         "schema_version": {
-          "const": 3,
-          "default": 3,
+          "const": 4,
+          "default": 4,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -688,7 +688,7 @@
       "type": "object"
     }
   },
-  "$id": "urn:svc:cli-output:status:v3",
+  "$id": "urn:svc:cli-output:status:v4",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "anyOf": [
     {
@@ -702,5 +702,5 @@
     }
   ],
   "title": "SVC status machine output",
-  "x-svc-result-schema-version": 3
+  "x-svc-result-schema-version": 4
 }

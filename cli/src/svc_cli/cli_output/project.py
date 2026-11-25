@@ -137,7 +137,7 @@ ConfigurationStatus: TypeAlias = (
 class DeclaredDevStatus(MachineModel):
     status: Literal["unavailable", "not-declared", "declared"]
     observation: Literal["declaration-only"] = "declaration-only"
-    targets: tuple[str, ...]
+    resources: tuple[str, ...]
 
 
 class DeclaredRunStatus(MachineModel):
@@ -177,7 +177,7 @@ class RuntimeStatusOutput(MachineModel):
 
 
 class RootStatusOutput(MachineModel):
-    schema_version: Literal[3] = 3
+    schema_version: Literal[4] = 4
     status: Literal["unadopted", "malformed", "actionable", "healthy"]
     next: NextActionOutput
     installed_cli_version: str | None
@@ -237,7 +237,7 @@ def project_status(result: ProjectStatusInspection) -> RootStatusOutput:
         dev=DeclaredDevStatus(
             status=result.dev.status,
             observation=result.dev.observation,
-            targets=result.dev.targets,
+            resources=result.dev.resources,
         ),
         run=DeclaredRunStatus(
             status=result.run.status,

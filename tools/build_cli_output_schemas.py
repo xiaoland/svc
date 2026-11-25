@@ -72,7 +72,7 @@ def _schema_at_ref(ref: str, key: str) -> dict[str, object] | None:
 
 def _latest_cli_release() -> tuple[str, tuple[int, int, int]] | None:
     tags = subprocess.run(
-        ("git", "tag", "--list", "v[0-9]*", "cli-v[0-9]*"),
+        ("git", "tag", "--list", "v[0-9]*", "cli-v[0-9]*", "macos-v[0-9]*"),
         cwd=ROOT,
         capture_output=True,
         check=True,
@@ -85,6 +85,15 @@ def _latest_cli_release() -> tuple[str, tuple[int, int, int]] | None:
         )
         if match:
             releases.append((tag, (int(match[1]), int(match[2]), int(match[3]))))
+        elif re.fullmatch(r"macos-v\d+\.\d+\.\d+", tag):
+            package = subprocess.check_output(
+                ("git", "show", f"{tag}:cli/pyproject.toml"), cwd=ROOT, text=True
+            )
+            version = tomllib.loads(package)["project"]["version"]
+            parts = tuple(int(part) for part in version.split("."))
+            if len(parts) != 3:
+                raise ValueError(f"Invalid bundled CLI version at {tag}")
+            releases.append((tag, (parts[0], parts[1], parts[2])))
     return max(releases, key=lambda release: release[1]) if releases else None
 
 

@@ -60,7 +60,7 @@ def test_init_apply_produces_a_healthy_idempotent_project() -> None:
         first = plan_init(root)
         result = apply_init(first, first.digest)
         assert result.status == "applied"
-        assert json.loads((root / PROJECT_FILE).read_bytes())["schema_version"] == 4
+        assert json.loads((root / PROJECT_FILE).read_bytes())["schema_version"] == 5
         assert not (root / CODEX_SKILL_FILE).exists()
         assert (root / DOCS_INDEX_FILE).is_file()
         assert b"svc:begin local-config" in (root / ".gitignore").read_bytes()
@@ -187,7 +187,7 @@ def test_status_makes_unadopted_state_and_init_plan_explicit(
     assert status.project.status == "missing"
     assert status.configuration.status == "not-configured"
     assert status.dev.status == "unavailable"
-    assert status.dev.targets == ()
+    assert status.dev.resources == ()
     assert status.run.status == "unavailable"
     assert status.run.entries == ()
     assert status.next.action == "plan-integration-establishment"
@@ -219,16 +219,28 @@ def test_status_summarizes_declarations_without_executing_them(
     (tmp_path / PROJECT_FILE).write_text(
         json.dumps(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "dev": {
-                    "targets": {
+                    "resources": {
                         "web": {
-                            "probe": {"kind": "exec", "argv": ["unreachable-probe"]},
-                            "provision": {"kind": "manual"},
+                            "observations": {
+                                "ready": {
+                                    "probe": {
+                                        "kind": "exec",
+                                        "argv": ["unreachable-probe"],
+                                    }
+                                }
+                            },
                         },
                         "api": {
-                            "probe": {"kind": "exec", "argv": ["unreachable-probe"]},
-                            "provision": {"kind": "manual"},
+                            "observations": {
+                                "ready": {
+                                    "probe": {
+                                        "kind": "exec",
+                                        "argv": ["unreachable-probe"],
+                                    }
+                                }
+                            },
                         },
                     },
                 },
@@ -244,12 +256,12 @@ def test_status_summarizes_declarations_without_executing_them(
     def unexpected_probe(*args: object, **kwargs: object) -> object:
         raise AssertionError("root status must not probe declared dev targets")
 
-    monkeypatch.setattr("svc_cli.dev.runtime.probe_target", unexpected_probe)
+    monkeypatch.setattr("svc_cli.dev.runtime.observe_resource", unexpected_probe)
     status = inspect_status(tmp_path)
 
     assert status.status == "healthy"
     assert status.dev.status == "declared"
-    assert status.dev.targets == ("api", "web")
+    assert status.dev.resources == ("api", "web")
     assert status.run.status == "declared"
     assert status.run.entries == ("a-first", "z-last")
     assert status.next.action == "continue"

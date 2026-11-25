@@ -19,34 +19,45 @@ from svc_cli.config import (
 
 def base_document() -> dict[str, object]:
     return {
-        "schema_version": 4,
+        "schema_version": 5,
         "dev": {
-            "targets": {
+            "resources": {
                 "frontend": {
-                    "probe": {
-                        "kind": "http",
-                        "url": "https://frontend-${dev.instance}.localhost/health",
-                        "success_status": [200, 399],
+                    "observations": {
+                        "ready": {
+                            "probe": {
+                                "kind": "http",
+                                "url": "https://frontend-${dev.instance}.localhost/health",
+                                "success_status": [200, 399],
+                            }
+                        }
                     },
-                    "provision": {
-                        "kind": "exec",
-                        "mode": "run",
-                        "argv": ["pnpm", "dev"],
-                    },
-                    "stop": {
-                        "kind": "exec",
-                        "argv": ["pnpm", "dev:stop", "${dev.instance}"],
+                    "actions": {
+                        "ensure": {
+                            "kind": "exec",
+                            "intent": "启动",
+                            "effect_scope": "当前实例",
+                            "argv": ["pnpm", "dev"],
+                            "conditions": ["ready"],
+                            "convergent": True,
+                        },
+                        "stop": {
+                            "kind": "exec",
+                            "intent": "停止",
+                            "effect_scope": "当前实例",
+                            "argv": ["pnpm", "dev:stop", "${dev.instance}"],
+                            "interruption": "terminate",
+                        },
                     },
                     "access": ["https://frontend-${dev.instance}.localhost/"],
                 },
                 "database": {
                     "scope": "repository",
-                    "probe": {
-                        "kind": "tcp",
-                        "host": "127.0.0.1",
-                        "port": 5432,
+                    "observations": {
+                        "ready": {
+                            "probe": {"kind": "tcp", "host": "127.0.0.1", "port": 5432}
+                        }
                     },
-                    "provision": {"kind": "manual"},
                 },
             }
         },
@@ -70,17 +81,17 @@ def test_complete_strict_base_has_a_stable_canonical_model() -> None:
     first = parse_project_config(json.dumps(document).encode())
     second = parse_project_config(json.dumps(document, indent=2).encode())
     assert first.dev is not None
-    assert first.dev.targets["frontend"].scope == "worktree"
-    assert first.dev.targets["frontend"].stop is not None
+    assert first.dev.resources["frontend"].scope == "worktree"
+    assert first.dev.resources["frontend"].actions["stop"] is not None
     assert first.model_dump() == second.model_dump()
 
     for invalid in (
-        {"schema_version": 4, "unknown": True},
+        {"schema_version": 5, "unknown": True},
         {
-            "schema_version": 4,
-            "dev": {"targets": {}},
+            "schema_version": 5,
+            "dev": {"resources": {}},
         },
-        {"schema_version": 4, "dev": None},
+        {"schema_version": 5, "dev": None},
         {"schema_version": 2, "svc_version": "10.0.1"},
     ):
         with pytest.raises(ConfigError):
@@ -89,16 +100,16 @@ def test_complete_strict_base_has_a_stable_canonical_model() -> None:
 
 def test_parser_rejects_duplicate_nonfinite_invalid_utf8_and_null() -> None:
     for content in (
-        b'{"schema_version":4,"schema_version":4}',
-        b'{"schema_version":4,"dev":NaN}',
-        b'{"schema_version":4,"dev":null}',
+        b'{"schema_version":5,"schema_version":5}',
+        b'{"schema_version":5,"dev":NaN}',
+        b'{"schema_version":5,"dev":null}',
         b"\xff",
     ):
         with pytest.raises(ConfigError):
             parse_project_config(content)
 
 
-def test_sparse_v4_overlay_merges_objects_and_replaces_scalars_and_arrays() -> None:
+def test_sparse_v5_overlay_merges_objects_and_replaces_scalars_and_arrays() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         write_config(root, PROJECT_CONFIG_FILE, base_document())
@@ -106,7 +117,7 @@ def test_sparse_v4_overlay_merges_objects_and_replaces_scalars_and_arrays() -> N
             root,
             LOCAL_CONFIG_FILE,
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "run": {
                     "check": {
                         "argv": ["pdm", "run", "test"],
@@ -116,11 +127,13 @@ def test_sparse_v4_overlay_merges_objects_and_replaces_scalars_and_arrays() -> N
                     }
                 },
                 "dev": {
-                    "targets": {
+                    "resources": {
                         "frontend": {
                             "access": ["http://127.0.0.1:3000/"],
-                            "provision": {"env": {"PORT": "3000"}},
-                            "stop": {"timeout": 120.0},
+                            "actions": {
+                                "ensure": {"env": {"PORT": "3000"}},
+                                "stop": {"timeout": 120.0},
+                            },
                         }
                     }
                 },
@@ -128,10 +141,13 @@ def test_sparse_v4_overlay_merges_objects_and_replaces_scalars_and_arrays() -> N
         )
         resolved = load_config(root)
         assert resolved.effective.dev is not None
-        target = resolved.effective.dev.targets["frontend"]
+        target = resolved.effective.dev.resources["frontend"]
         assert target.access == ["http://127.0.0.1:3000/"]
-        assert target.provision.env == {"PORT": "3000"}
-        assert target.stop is not None and target.stop.timeout == 120.0
+        assert target.actions["ensure"].env == {"PORT": "3000"}
+        assert (
+            target.actions["stop"] is not None
+            and target.actions["stop"].timeout == 120.0
+        )
         run = resolved.effective.run["check"]
         assert run.argv == ["pdm", "run", "test"]
         assert run.cwd == "tests"
@@ -151,7 +167,7 @@ def test_absent_overlay_is_noop_and_effective_config_is_not_written() -> None:
         assert resolved.base == resolved.effective
         assert sorted(path.name for path in root.iterdir()) == before
 
-        write_config(root, LOCAL_CONFIG_FILE, {"schema_version": 4})
+        write_config(root, LOCAL_CONFIG_FILE, {"schema_version": 5})
         empty_overlay = load_config(root)
         assert empty_overlay.base == empty_overlay.effective
         assert empty_overlay.local_digest is not None
@@ -161,16 +177,22 @@ def test_overlay_refuses_corpus_authority_unknown_paths_and_invalid_schema() -> 
     for overlay in (
         {},
         {"schema_version": 2},
-        {"schema_version": 4, "corpus_version": "10.0.2"},
-        {"schema_version": 4, "profile": "worktree"},
-        {"schema_version": 4, "dev": {"profiles": {}}},
+        {"schema_version": 5, "corpus_version": "10.0.2"},
+        {"schema_version": 5, "profile": "worktree"},
+        {"schema_version": 5, "dev": {"profiles": {}}},
         {
-            "schema_version": 4,
+            "schema_version": 5,
             "dev": {
-                "targets": {"frontend": {"probe": {"kind": "http", "made_up": True}}}
+                "resources": {
+                    "frontend": {
+                        "observations": {
+                            "ready": {"probe": {"kind": "http", "made_up": True}}
+                        }
+                    }
+                }
             },
         },
-        {"schema_version": 4, "run": {"check": {"unknown": True}}},
+        {"schema_version": 5, "run": {"check": {"unknown": True}}},
     ):
         with pytest.raises(ConfigError):
             parse_local_overlay(json.dumps(overlay).encode())
@@ -198,7 +220,7 @@ def test_run_entries_are_strict_and_local_overlay_cannot_create_names() -> None:
             root,
             LOCAL_CONFIG_FILE,
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "run": {"local-only": {"argv": ["tool"]}},
             },
         )
@@ -227,23 +249,36 @@ def test_non_files_and_symlinks_are_refused() -> None:
 
 def test_scope_stop_and_discriminated_models_enforce_bounded_contract() -> None:
     document = base_document()
-    target = document["dev"]["targets"]["frontend"]
+    target = document["dev"]["resources"]["frontend"]
     target["scope"] = "host"
     with pytest.raises(ConfigError):
         parse_project_config(json.dumps(document).encode())
     target["host_key"] = "local-machine"
-    target["probe"] = {
+    target["observations"]["ready"]["probe"] = {
         "kind": "exec",
         "argv": ["check"],
         "timeout": 1,
         "output_limit": 100,
     }
-    target["provision"] = {"kind": "manual"}
-    target["stop"] = {"kind": "manual"}
+    target["actions"] = {
+        "stop": {
+            "kind": "manual",
+            "intent": "停止",
+            "effect_scope": "当前实例",
+            "steps": ["请运行 stop"],
+        }
+    }
     parsed = parse_project_config(json.dumps(document).encode())
     assert parsed.dev is not None
-    assert parsed.dev.targets["frontend"].scope == "host"
+    assert parsed.dev.resources["frontend"].scope == "host"
 
-    target["stop"] = {"kind": "exec", "argv": ["stop"], "timeout": 3601}
+    target["actions"]["stop"] = {
+        "kind": "exec",
+        "intent": "停止",
+        "effect_scope": "当前实例",
+        "argv": ["stop"],
+        "interruption": "terminate",
+        "timeout": 86401,
+    }
     with pytest.raises(ConfigError):
         parse_project_config(json.dumps(document).encode())

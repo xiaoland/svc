@@ -1,0 +1,863 @@
+{
+  "$defs": {
+    "CliUsageOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "const": "invalid-cli-usage",
+          "default": "invalid-cli-usage",
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "CliUsageOutput",
+      "type": "object"
+    },
+    "ExecutionActivityOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Argv",
+          "type": "array"
+        },
+        "can_terminate": {
+          "title": "Can Terminate",
+          "type": "boolean"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "domain": {
+          "title": "Domain",
+          "type": "string"
+        },
+        "execution_id": {
+          "title": "Execution Id",
+          "type": "string"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Exit Code"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Finished At"
+        },
+        "group_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Group State"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "logs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Logs",
+          "type": "array"
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        },
+        "project_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Path"
+        },
+        "project_source": {
+          "default": "unassigned",
+          "title": "Project Source",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "starting",
+            "running",
+            "exited",
+            "interrupted",
+            "start-failed",
+            "capture-failed",
+            "owner-lost",
+            "released"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "termination_requested": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Termination Requested"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessUsageOutput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "execution_id",
+        "domain",
+        "operation",
+        "label",
+        "source",
+        "cwd",
+        "argv",
+        "state",
+        "started_at",
+        "finished_at",
+        "exit_code",
+        "can_terminate",
+        "termination_requested",
+        "group_state",
+        "usage",
+        "logs",
+        "issues"
+      ],
+      "title": "ExecutionActivityOutput",
+      "type": "object"
+    },
+    "ExternalExecutionOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "can_read_logs": {
+          "title": "Can Read Logs",
+          "type": "boolean"
+        },
+        "can_terminate": {
+          "title": "Can Terminate",
+          "type": "boolean"
+        },
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "execution_id": {
+          "title": "Execution Id",
+          "type": "string"
+        },
+        "instance_id": {
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "native_id": {
+          "title": "Native Id",
+          "type": "string"
+        },
+        "process_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Process Id"
+        },
+        "project_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Path"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "scope": {
+          "title": "Scope",
+          "type": "string"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "stop_description": {
+          "title": "Stop Description",
+          "type": "string"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessUsageOutput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "execution_id",
+        "provider",
+        "native_id",
+        "instance_id",
+        "label",
+        "command",
+        "cwd",
+        "state",
+        "scope",
+        "started_at",
+        "can_terminate",
+        "can_read_logs",
+        "stop_description",
+        "process_id",
+        "usage",
+        "project_path",
+        "issues"
+      ],
+      "title": "ExternalExecutionOutput",
+      "type": "object"
+    },
+    "HarnessStatusOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "instances": {
+          "title": "Instances",
+          "type": "integer"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "state",
+        "message",
+        "instances"
+      ],
+      "title": "HarnessStatusOutput",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "MachineError": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/MachineErrorBody"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "MachineError",
+      "type": "object"
+    },
+    "MachineErrorBody": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "details"
+      ],
+      "title": "MachineErrorBody",
+      "type": "object"
+    },
+    "MonitorOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "dev monitor",
+          "default": "dev monitor",
+          "title": "Command",
+          "type": "string"
+        },
+        "executions": {
+          "items": {
+            "$ref": "#/$defs/ExecutionActivityOutput"
+          },
+          "title": "Executions",
+          "type": "array"
+        },
+        "external_executions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ExternalExecutionOutput"
+          },
+          "title": "External Executions",
+          "type": "array"
+        },
+        "integrations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HarnessStatusOutput"
+          },
+          "title": "Integrations",
+          "type": "array"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "pressure": {
+          "$ref": "#/$defs/PressureOutput"
+        },
+        "projects": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProjectActivityOutput"
+          },
+          "title": "Projects",
+          "type": "array"
+        },
+        "resources": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ResourceActivityOutput"
+          },
+          "title": "Resources",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": 3,
+          "default": 3,
+          "title": "Schema Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pressure",
+        "executions",
+        "issues"
+      ],
+      "title": "MonitorOutput",
+      "type": "object"
+    },
+    "PressureOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "compressed_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compressed Bytes"
+        },
+        "compressions_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compressions Per Second"
+        },
+        "cpu_percent": {
+          "title": "Cpu Percent",
+          "type": "number"
+        },
+        "decompressions_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decompressions Per Second"
+        },
+        "disk_read_bytes_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Disk Read Bytes Per Second"
+        },
+        "disk_write_bytes_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Disk Write Bytes Per Second"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "level": {
+          "title": "Level",
+          "type": "string"
+        },
+        "logical_cpus": {
+          "title": "Logical Cpus",
+          "type": "integer"
+        },
+        "memory_available_bytes": {
+          "title": "Memory Available Bytes",
+          "type": "integer"
+        },
+        "memory_pressure": {
+          "title": "Memory Pressure",
+          "type": "string"
+        },
+        "memory_total_bytes": {
+          "title": "Memory Total Bytes",
+          "type": "integer"
+        },
+        "page_size_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Size Bytes"
+        },
+        "pageins_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pageins Per Second"
+        },
+        "pageouts_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pageouts Per Second"
+        },
+        "recommendation": {
+          "title": "Recommendation",
+          "type": "string"
+        },
+        "sample_window_ms": {
+          "title": "Sample Window Ms",
+          "type": "integer"
+        },
+        "sampled_at": {
+          "title": "Sampled At",
+          "type": "string"
+        },
+        "swap_total_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Swap Total Bytes"
+        },
+        "swap_used_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Swap Used Bytes"
+        },
+        "swapins_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Swapins Per Second"
+        },
+        "swapouts_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Swapouts Per Second"
+        }
+      },
+      "required": [
+        "sampled_at",
+        "sample_window_ms",
+        "cpu_percent",
+        "logical_cpus",
+        "memory_total_bytes",
+        "memory_available_bytes",
+        "memory_pressure",
+        "disk_read_bytes_per_second",
+        "disk_write_bytes_per_second",
+        "level",
+        "recommendation",
+        "issues"
+      ],
+      "title": "PressureOutput",
+      "type": "object"
+    },
+    "ProcessUsageOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "complete": {
+          "default": true,
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "cpu_percent": {
+          "title": "Cpu Percent",
+          "type": "number"
+        },
+        "disk_read_bytes_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disk Read Bytes Per Second"
+        },
+        "disk_write_bytes_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disk Write Bytes Per Second"
+        },
+        "issues": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "memory_footprint_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Memory Footprint Bytes"
+        },
+        "pageins_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pageins Per Second"
+        },
+        "process_count": {
+          "title": "Process Count",
+          "type": "integer"
+        },
+        "rss_bytes": {
+          "title": "Rss Bytes",
+          "type": "integer"
+        },
+        "scope": {
+          "const": "verified-current-descendants",
+          "title": "Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cpu_percent",
+        "rss_bytes",
+        "process_count",
+        "scope"
+      ],
+      "title": "ProcessUsageOutput",
+      "type": "object"
+    },
+    "ProjectActivityOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "execution_count": {
+          "title": "Execution Count",
+          "type": "integer"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "project_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Path"
+        },
+        "resource_count": {
+          "title": "Resource Count",
+          "type": "integer"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessUsageOutput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "project_path",
+        "execution_count",
+        "resource_count",
+        "usage",
+        "issues"
+      ],
+      "title": "ProjectActivityOutput",
+      "type": "object"
+    },
+    "ResourceActivityOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "entry_id": {
+          "title": "Entry Id",
+          "type": "string"
+        },
+        "execution_id": {
+          "title": "Execution Id",
+          "type": "string"
+        },
+        "project_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Path"
+        },
+        "resource": {
+          "title": "Resource",
+          "type": "string"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessUsageOutput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "execution_id",
+        "project_path",
+        "entry_id",
+        "resource",
+        "usage"
+      ],
+      "title": "ResourceActivityOutput",
+      "type": "object"
+    }
+  },
+  "$id": "urn:svc:cli-output:dev-monitor:v3",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/MonitorOutput"
+    },
+    {
+      "$ref": "#/$defs/MachineError"
+    },
+    {
+      "$ref": "#/$defs/CliUsageOutput"
+    }
+  ],
+  "title": "SVC dev-monitor machine output",
+  "x-svc-result-schema-version": 3
+}

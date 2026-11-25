@@ -3,40 +3,79 @@ import SwiftUI
 
 struct MenuPanel: View {
     @Bindable var store: AppStore
-    let openSettings: () -> Void
+    var openMainWindow: () -> Void = {}
+    var resourcePageChanged: (Bool) -> Void = { _ in }
+    @State private var selectedTab = 0
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "server.rack").font(.title2).foregroundStyle(.tint)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("开发服务器").font(.headline)
-                    Text("\(store.readyCount) / \(store.targetCount) 就绪")
-                        .font(.caption).foregroundStyle(.secondary)
+                Button(action: openMainWindow) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "server.rack").font(.system(size: 19)).foregroundStyle(.tint)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("SVC Dev").font(.headline)
+                            Text(summary).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }.contentShape(Rectangle())
                 }
+                .help("打开主窗口").accessibilityLabel("打开主窗口")
+                .accessibilityValue(summary).accessibilityIdentifier("panel/open-main-window")
+                .keyboardShortcut("0")
                 Spacer()
-                Button { Task { await store.refreshAll() } } label: {
-                    Image(systemName: "arrow.clockwise")
+                if let time = lastUpdated {
+                    Text(time.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+                        .help("上次更新：\(time.formatted(date: .abbreviated, time: .standard))")
+                        .accessibilityLabel("上次更新")
+                        .accessibilityValue(time.formatted(date: .omitted, time: .shortened))
+                        .accessibilityIdentifier("panel/last-updated")
                 }
-                .help("刷新服务状态").accessibilityLabel("刷新服务状态")
-                .keyboardShortcut("r").disabled(store.quitPending || !store.refreshes.isEmpty)
-                Button(action: addProject) { Image(systemName: "plus") }
-                    .help("添加项目").accessibilityLabel("添加项目").keyboardShortcut("o")
-                    .disabled(store.quitPending)
+                Button { Task { await refreshPanel() } } label: {
+                    Image(systemName: "arrow.clockwise").frame(width: 26, height: 26)
+                }
+                .help("刷新机器与当前页面").accessibilityLabel("刷新机器与当前页面")
+                .keyboardShortcut("r").disabled(store.quitPending || store.activity.refreshing || !store.refreshes.isEmpty)
             }
-            .buttonStyle(.borderless).padding(18)
+            .buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 12)
             Divider()
-            if store.projects.isEmpty {
-                VStack(spacing: 16) {
-                    Image(systemName: "folder.badge.plus").font(.system(size: 36)).foregroundStyle(.secondary)
-                    Text("添加开发项目").font(.headline)
-                    Button("选择项目文件夹…", action: addProject).buttonStyle(.borderedProminent)
-                }.frame(maxWidth: .infinity).padding(.vertical, 42)
+            if store.activity.cliUnavailable || (store.configuration.environmentMode == .fixedPath && store.configuration.resolvedExecutable == nil) {
+                HStack {
+                    Label("需要配置 SVC CLI", systemImage: "exclamationmark.circle")
+                    Spacer()
+                    Button("打开主窗口", action: openMainWindow)
+                }.font(.caption).padding(12)
+                Divider()
+            }
+            HostPressureView(activity: store.activity)
+            Picker("页面", selection: $selectedTab) {
+                Text("资源").tag(0)
+                Text("执行").tag(1)
+            }.pickerStyle(.segmented).labelsHidden()
+                .accessibilityIdentifier("panel/pages")
+                .padding(.horizontal, 12).padding(.bottom, 10)
+            Divider()
+            if selectedTab == 1 {
+                ScrollView { ExecutionListView(store: store, currentOnly: true) }.frame(height: 340)
             } else {
-                ViewThatFits(in: .vertical) {
-                    projectList.fixedSize(horizontal: false, vertical: true)
-                    ScrollView { projectList }
-                }.frame(maxHeight: 480)
+                if let error = store.sectionStorageError {
+                    DiagnosticView(title: "无法读取分组", message: error, semanticID: "sections/error").padding(12)
+                }
+                if store.projects.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "folder").font(.system(size: 36)).foregroundStyle(.secondary)
+                        Text("尚无项目").font(.headline)
+                        Button("在主窗口管理项目", action: openMainWindow).buttonStyle(.borderedProminent)
+                    }.frame(maxWidth: .infinity).padding(.vertical, 42)
+                } else {
+                    ScrollViewReader { proxy in
+                        ScrollView { projectList }
+                            .frame(height: 480)
+                            .onChange(of: store.projectReveal) { _, reveal in
+                                if let reveal { proxy.scrollTo(reveal.path, anchor: .top) }
+                            }
+                    }
+                }
             }
             if store.quitPending {
                 HStack {
@@ -48,99 +87,51 @@ struct MenuPanel: View {
             }
             if let notice = store.notice {
                 HStack(alignment: .top) {
-                    Text(notice).font(.caption).textSelection(.enabled)
+                    Text(notice).font(.caption).lineLimit(3).help(notice).textSelection(.enabled)
                     Spacer()
                     Button { store.notice = nil } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.borderless).accessibilityLabel("关闭提示")
+                        .buttonStyle(.borderless).help("关闭提示").accessibilityLabel("关闭提示")
                 }.padding(12)
             }
-            Divider()
-            HStack {
-                Button {
-                    NSApp.activate(ignoringOtherApps: true)
-                    openSettings()
-                } label: { Label("设置", systemImage: "gearshape") }
-                .keyboardShortcut(",")
-                Spacer()
-                Button("退出 SVC") { NSApp.terminate(nil) }
-                    .keyboardShortcut("q").disabled(store.quitPending)
-            }.buttonStyle(.borderless).font(.callout).padding(14)
         }
         .frame(width: 420)
-        .task(id: store.panelVisible) {
-            guard store.panelVisible else { return }
-            while !Task.isCancelled && store.panelVisible {
-                await store.refreshAll()
-                do { try await Task.sleep(for: .seconds(5)) } catch { break }
-            }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onChange(of: selectedTab) { _, _ in
+            resourcePageChanged(selectedTab == 0)
         }
+    }
+
+    private func refreshPanel() async {
+        guard !store.quitPending else { return }
+        store.reloadExecutionEnvironments()
+        await store.activity.refresh(store.configuration)
+        if selectedTab == 0 { await store.refreshAll() }
+    }
+
+    private var lastUpdated: Date? {
+        selectedTab == 0 ? store.projects.compactMap(\.checkedAt).max() : store.activity.checkedAt
     }
 
     private var projectList: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            ForEach(store.projects) { project in
-                ProjectSection(project: project, store: store)
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(store.organization.sections.filter { !store.projects(in: $0.id).isEmpty }) { section in
+                ProjectSectionView(section: section, store: store)
             }
-        }.padding(16)
-    }
-
-    private func addProject() {
-        let panel = NSOpenPanel()
-        panel.title = "添加 SVC 项目"
-        panel.prompt = "添加项目"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = true
-        NSApp.activate(ignoringOtherApps: true)
-        panel.begin { response in
-            if response == .OK { for url in panel.urls { store.addProject(url) } }
-        }
-    }
-}
-
-private struct ProjectSection: View {
-    let project: ProjectState
-    let store: AppStore
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "folder").foregroundStyle(.secondary)
-                Text(project.name).font(.headline).lineLimit(1).help(project.path)
-                Spacer()
-                if store.refreshes[project.path] != nil { ProgressView().controlSize(.mini) }
-                Menu {
-                    Text(project.path)
-                    Button("在 Finder 中显示") { NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.path) }
-                    Button("移除项目", role: .destructive) { store.removeProject(project.path) }
-                        .disabled(!store.operations.isEmpty || store.quitPending)
-                } label: { Image(systemName: "ellipsis") }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("\(project.name) 项目操作")
-            }
-            // Show the path to distinguish worktrees with identical directory names.
-            Text(project.path).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-            if let error = project.error {
-                Label("状态未知", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
-                Text(error).font(.caption).textSelection(.enabled)
-            } else if let snapshot = project.snapshot {
-                if let targets = snapshot.targets, !targets.isEmpty {
-                    ForEach(targets) { target in
-                        TargetRow(target: target, project: project.path, store: store)
-                    }
-                } else {
-                    Text(snapshot.status == "not-configured" ? "项目尚未声明开发服务" : "配置无效")
-                        .foregroundStyle(.secondary)
-                    if let reason = snapshot.reason { Text(reason).font(.caption).textSelection(.enabled) }
+            let ungrouped = store.projects(in: nil)
+            if !ungrouped.isEmpty {
+                ForEach(ungrouped) { project in
+                    ProjectView(project: project, store: store, showsProjectMenu: false).id(project.path)
                 }
-            } else {
-                Text("正在检查…").foregroundStyle(.secondary)
             }
-            ForEach(Array(store.unavailableReceipts(for: project).enumerated()), id: \.offset) { _, receipt in
-                ReceiptView(receipt: receipt, expanded: true, store: store)
-            }
-            if let time = project.checkedAt {
-                Text("检查于 \(time.formatted(date: .omitted, time: .standard))")
-                    .font(.caption2).foregroundStyle(.tertiary)
-            }
-        }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    private var summary: String {
+        let projects = "\(store.projects.count) 个项目"
+        let complete = store.projects.allSatisfy { $0.snapshot != nil && $0.error == nil }
+        if complete && !store.projects.isEmpty { return "\(projects) · \(store.resourceCount) 个资源" }
+        if store.resourceCount > 0 { return "\(projects) · 已读取 \(store.resourceCount) 个资源" }
+        return projects
     }
 }

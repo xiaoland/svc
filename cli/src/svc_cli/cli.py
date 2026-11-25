@@ -37,33 +37,27 @@ from .cli_output.double import (
     DoubleValidateRuntimeUnavailableOutput,
     DoubleValidateOutput,
 )
-from .cli_output.dev import (
-    project_dev_ensure,
-    project_dev_identity,
-    project_dev_status,
-    project_dev_stop,
-)
+from .cli_output.dev import project_catalog, project_action, project_dev_identity
 from .cli_output.project import (
     project_init_apply,
     project_init_plan,
     project_status,
 )
 from .cli_output.run import project_run_receipt, run_exit_code
+from .cli_output.activity import project_monitor, project_managed, project_termination
+from .activity.monitor import monitor
+from .activity.harness.service import (
+    terminate as terminate_external,
+    logs as external_logs,
+)
+from .activity.harness.install import setup as setup_integration
+from .cli_output.activity import project_logs, project_integration
+from .activity.managed import execute as execute_managed, request_termination
 from .cli_delivery import deliver_error, deliver_result
 from .errors import SvcError
-from .dev.runtime import (
-    DevEnsureResult,
-    DevIdentityResult,
-    DevStatusResult,
-    DevStopResult,
-    DevTargetFailure,
-    DevTargetObservation,
-    ensure_target,
-    inspect_dev_identity,
-    inspect_dev_status,
-    stop_target,
-)
-from .dev.readiness import ProbeObservation
+from .dev.runtime import catalog, act, reconcile
+from .dev.models import ActionReceipt, CatalogResult
+from .workspace import resolve_workspace_identity, WorkspaceIdentity
 from .cli_output.model import (
     CliUsageOutput,
     dump_machine_output,
@@ -253,93 +247,97 @@ def _parser() -> argparse.ArgumentParser:
         status, "status", "Emit the complete compact scripts/CI projection"
     )
 
-    dev = subparsers.add_parser(
-        "dev", help="Observe, ensure, or stop declared consumer dev capabilities"
-    )
+    dev = subparsers.add_parser("dev", help="查阅机器压力，管理开发资源与执行")
     dev_commands = dev.add_subparsers(dest="dev_command", required=True)
-    dev_status = dev_commands.add_parser(
-        "status",
-        help="Observe one or all declared dev targets without starting them",
-        description=(
-            "Execute the selected target readiness probes and report qualified runtime "
-            "state. Consumer-owned exec probes may run code, but status never invokes a "
-            "provisioner, stop action, or process takeover. Omit TARGET to inspect all."
-        ),
-        epilog=(
-            "Resolved snapshots use stdout: exit 0 only when every selected target is "
-            "ready, otherwise 3. Invalid requests and infrastructure errors use stderr. "
-            "Default text is Agent/Human-oriented; --json is the compact scripts/CI projection."
-        ),
+    monitoring = dev_commands.add_parser(
+        "monitor", help="采样本机压力并查看跨项目执行；不执行资源探测"
     )
-    dev_status.add_argument("target", nargs="?")
-    dev_status.add_argument("--repo", default=".")
-    _add_machine_output(
-        dev_status,
-        "dev-status",
-        "Emit the complete compact scripts/CI projection",
-    )
-    dev_identity = dev_commands.add_parser(
-        "identity",
-        help="Show the resolved workspace identity used for dev coordination",
-    )
-    dev_identity.add_argument(
-        "--repo", default=".", help="Workspace directory (default: current directory)"
+    monitoring.add_argument(
+        "--limit", type=int, default=20, help="最近结束执行的条数；活跃执行始终返回"
     )
     _add_machine_output(
-        dev_identity,
-        "dev-identity",
-        "Emit compact exact identity JSON for scripts and CI",
+        monitoring, "dev-monitor", "输出带采样时间的机器结果", schema_first=True
+    )
+    monitoring.add_argument(
+        "--project-root",
+        action="append",
+        type=Path,
+        default=[],
+        help="本次观察的已登记项目根，只影响外部执行归属",
+    )
+    execution = dev_commands.add_parser(
+        "exec",
+        help="运行一次显式受管命令；人可从 App 终止，无需项目配置",
+        epilog="在 -- 后传 argv，不隐式使用 shell。独立进程组、无终端输入，日志写入执行目录。先 monitor，再按压力安排并发；人为终止后不要自动重试。",
+    )
+    execution.add_argument("--cwd", default=".")
+    execution.add_argument(
+        "--project",
+        type=Path,
+        help="明确归属的项目目录；默认在 cwd 的祖先中寻找最近的 svc.json",
+    )
+    execution.add_argument("--label")
+    execution.add_argument(
+        "--source", default="terminal", help="调用来源，例如 agent；仅为调用方声明"
+    )
+    _add_machine_output(
+        execution,
+        "dev-exec",
+        "结束后输出结果；执行 ID 始终先写入 stderr",
         schema_first=True,
     )
-    dev_ensure = dev_commands.add_parser(
-        "ensure",
-        help="Reuse, join, or start exactly one declared dev target",
-        description=(
-            "Make one declared target ready. Ensure may execute its Consumer-owned "
-            "provisioner, waits for declared readiness, refuses an unhealthy responder, "
-            "and leaves a ready long-running capability running after this CLI exits."
-        ),
-        epilog=(
-            "Live start/join facts use stderr and the terminal capability result uses "
-            "stdout. Exit 0 means ready, 3 means a resolved non-ready boundary, 4 means "
-            "execution infrastructure failure, and caller Ctrl+C returns 130."
-        ),
+    execution.add_argument("argv", nargs=argparse.REMAINDER)
+    termination = dev_commands.add_parser(
+        "terminate", help="请求实际 owner 结束受管执行；不按 PID 接管"
     )
-    dev_ensure.add_argument("target")
-    dev_ensure.add_argument(
-        "--repo", default=".", help="Workspace directory (default: current directory)"
+    termination.add_argument("execution_id")
+    termination.add_argument(
+        "--force",
+        action="store_true",
+        help="对受管进程组请求 SIGKILL，可能遗留不完整产物",
+    )
+    termination.add_argument(
+        "--by", choices=("human", "agent", "terminal"), default="terminal"
     )
     _add_machine_output(
-        dev_ensure,
-        "dev-ensure",
-        "Emit one compact terminal scripts/CI result and suppress live progress",
+        termination,
+        "dev-terminate",
+        "返回请求状态；不把请求等同于实际退出",
         schema_first=True,
     )
-    dev_stop = dev_commands.add_parser(
-        "stop",
-        help="Run the declared bounded stop action for exactly one dev target",
-        description=(
-            "Stop exactly one declared dev target through its target-local stop action. "
-            "SVC never infers cleanup from a recorded PID. The final readiness probe "
-            "qualifies the result; native action output remains in the reported log."
-        ),
-        epilog=(
-            "Live owner/join facts use stderr and the terminal stop result uses stdout. "
-            "Exit 0 means the action succeeded and readiness is false; expected manual, "
-            "failed, still-ready, or unverified results exit 3; infrastructure failure "
-            "is 4; caller Ctrl+C is 130."
-        ),
+    logs = dev_commands.add_parser("logs", help="读取原生执行管理器提供的限量日志")
+    logs.add_argument("execution_id")
+    _add_machine_output(logs, "dev-logs", "读取外部执行日志", schema_first=True)
+    integration = dev_commands.add_parser(
+        "integrate", help="安装 Pi 接入或配置原生执行来源，不启动 Agent"
     )
-    dev_stop.add_argument("target")
-    dev_stop.add_argument(
-        "--repo", default=".", help="Workspace directory (default: current directory)"
-    )
+    integration.add_argument("provider", choices=("pi", "codex", "claude"))
+    integration.add_argument("--cli", dest="native_cli")
+    integration.add_argument("--socket", dest="socket_path")
     _add_machine_output(
-        dev_stop,
-        "dev-stop",
-        "Emit one compact terminal scripts/CI result and suppress live progress",
-        schema_first=True,
+        integration, "dev-integrate", "返回接入配置结果", schema_first=True
     )
+    for name in ("list", "status", "identity", "act", "ensure", "stop", "reconcile"):
+        command = dev_commands.add_parser(name)
+        if name in {"list", "status"}:
+            command.add_argument("resource", nargs="?")
+            if name == "status":
+                command.add_argument(
+                    "--observation", help="显式读取一个具名观察，包括非自动观察"
+                )
+        elif name != "identity":
+            command.add_argument("resource")
+        if name == "act":
+            command.add_argument("action")
+        if name in {"act", "ensure", "stop"}:
+            command.add_argument("--expected-digest", help="拒绝执行已变化的声明")
+        if name == "reconcile":
+            command.add_argument("--execution", required=True)
+            command.add_argument("--acknowledge-unknown", action="store_true")
+        command.add_argument("--repo", default=".")
+        _add_machine_output(
+            command, "dev-" + name, "输出严格的公开 JSON", schema_first=True
+        )
     run = subparsers.add_parser(
         "run",
         help="Execute, follow, or inspect one declared bounded run",
@@ -601,50 +599,126 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
         if args.command == "dev":
-            if args.dev_command == "identity":
-                identity_payload = inspect_dev_identity(Path(args.repo))
+            if args.dev_command == "monitor":
+                snapshot = monitor(
+                    limit=args.limit, project_roots=tuple(args.project_root)
+                )
                 return deliver_result(
-                    identity_payload,
+                    snapshot,
+                    json_output=json_output,
+                    project=project_monitor,
+                    render=_render_monitor,
+                    exit_code=0,
+                )
+            if args.dev_command == "exec":
+                command_argv = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
+                managed = execute_managed(
+                    tuple(command_argv),
+                    Path(args.cwd),
+                    label=args.label,
+                    source=args.source,
+                    project=args.project,
+                    on_started=lambda record: print(
+                        f"svc execution: {record.execution_id}",
+                        file=sys.stderr,
+                        flush=True,
+                    ),
+                )
+                result_code = (
+                    managed.record.exit_code
+                    if managed.record.state == "exited"
+                    else (130 if managed.record.state == "interrupted" else 4)
+                )
+                return deliver_result(
+                    managed,
+                    json_output=json_output,
+                    project=project_managed,
+                    render=lambda result, stream: print(
+                        f"{result.record.execution_id} {result.record.state} · {result.group_state}",
+                        file=stream,
+                    ),
+                    exit_code=int(result_code or 0),
+                )
+            if args.dev_command == "logs":
+                return deliver_result(
+                    external_logs(args.execution_id),
+                    json_output=json_output,
+                    project=project_logs,
+                    render=lambda result, stream: print(result.text, file=stream),
+                    exit_code=0,
+                )
+            if args.dev_command == "integrate":
+                return deliver_result(
+                    setup_integration(
+                        args.provider,
+                        executable=args.native_cli,
+                        socket_path=args.socket_path,
+                    ),
+                    json_output=json_output,
+                    project=project_integration,
+                    render=lambda result, stream: print(result.message, file=stream),
+                    exit_code=0,
+                )
+            if args.dev_command == "terminate":
+                terminate = (
+                    terminate_external
+                    if args.execution_id.startswith("harness:")
+                    else request_termination
+                )
+                termination_result = terminate(
+                    args.execution_id, force=args.force, by=args.by
+                )
+                return deliver_result(
+                    termination_result,
+                    json_output=json_output,
+                    project=project_termination,
+                    render=lambda result, stream: print(result.message, file=stream),
+                    exit_code=0 if termination_result.status == "requested" else 3,
+                )
+            if args.dev_command == "identity":
+                identity = resolve_workspace_identity(Path(args.repo))
+                return deliver_result(
+                    identity,
                     json_output=json_output,
                     project=project_dev_identity,
                     render=_render_dev_identity,
-                    exit_code=EXIT_OK,
+                    exit_code=0,
                 )
-            if args.dev_command == "status":
-                dev_status_payload = inspect_dev_status(Path(args.repo), args.target)
-                return deliver_result(
-                    dev_status_payload,
-                    json_output=json_output,
-                    project=project_dev_status,
-                    render=_render_dev_status,
-                    exit_code=(
-                        EXIT_OK if dev_status_payload.healthy else EXIT_CONFLICT
-                    ),
-                )
-            if args.dev_command == "stop":
-                stop_payload = stop_target(
+            if args.dev_command in {"list", "status"}:
+                observing = args.dev_command == "status"
+                result = catalog(
                     Path(args.repo),
-                    args.target,
-                    on_selected=None if json_output else _emit_dev_stop_selected,
+                    args.resource,
+                    observe=observing,
+                    observation=getattr(args, "observation", None),
                 )
                 return deliver_result(
-                    stop_payload,
+                    result,
                     json_output=json_output,
-                    project=project_dev_stop,
-                    render=_render_dev_stop,
-                    exit_code=_dev_stop_exit_code(stop_payload),
+                    project=partial(project_catalog, observe=observing),
+                    render=_render_catalog,
+                    exit_code=3 if result.status == "partial" else 0,
                 )
-            ensure_payload = ensure_target(
-                Path(args.repo),
-                args.target,
-                on_selected=None if json_output else _emit_dev_ensure_selected,
-            )
+            if args.dev_command == "reconcile":
+                action_result = reconcile(
+                    Path(args.repo),
+                    args.resource,
+                    args.execution,
+                    acknowledge=args.acknowledge_unknown,
+                )
+            else:
+                action_result = act(
+                    Path(args.repo),
+                    args.resource,
+                    args.action if args.dev_command == "act" else args.dev_command,
+                    expected_digest=args.expected_digest,
+                )
             return deliver_result(
-                ensure_payload,
+                action_result,
                 json_output=json_output,
-                project=project_dev_ensure,
-                render=_render_dev_ensure,
-                exit_code=_dev_ensure_exit_code(ensure_payload),
+                project=partial(project_action, command=args.dev_command),
+                render=_render_action,
+                exit_code=action_result.exit_code,
             )
 
         if args.command == "double":
@@ -697,6 +771,36 @@ def main(argv: Sequence[str] | None = None) -> int:
             render=_render_error,
             exit_code=EXIT_FAILURE,
         )
+
+
+def _render_monitor(snapshot: Any, stream: TextIO) -> None:
+    pressure = snapshot.pressure
+    print(
+        f"本机 · {pressure.level} · CPU {pressure.cpu_percent:.0f}% · 可用内存 {pressure.memory_available_bytes / 1024**3:.1f} GiB",
+        file=stream,
+    )
+    print(
+        f"{pressure.sampled_at} · {pressure.sample_window_ms} ms · {pressure.recommendation}",
+        file=stream,
+    )
+    for item in snapshot.executions:
+        control = "可终止" if item.can_terminate else "只读"
+        print(
+            f"{item.record.execution_id}  {item.record.state}  {item.label}  {control}\n  {item.source} · {item.record.cwd}",
+            file=stream,
+        )
+    for item in snapshot.external_executions:
+        control = "可原生停止" if item.can_terminate else "只读"
+        print(
+            f"{item.execution_id}  {item.state}  {item.label}  {control}\n  {item.provider} · {item.scope} · {item.cwd}",
+            file=stream,
+        )
+    for source in snapshot.integrations:
+        print(
+            f"来源：{source.provider} · {source.state} · {source.message}", file=stream
+        )
+    for issue in (*pressure.issues, *snapshot.issues):
+        print(f"注意：{issue}", file=stream)
 
 
 def _run_double(args: argparse.Namespace, json_output: bool) -> int:
@@ -1098,198 +1202,54 @@ def _emit_run_selected(record: Any, role: str) -> None:
     )
 
 
-def _render_dev_stop(payload: DevStopResult, stream: TextIO) -> None:
-    write = partial(print, file=stream)
-    write(
-        f"svc dev {payload.target}: {payload.status}; "
-        f"instance {payload.workspace.instance}; scope {payload.capability.scope}"
+def _render_dev_identity(workspace: WorkspaceIdentity, stream: TextIO) -> None:
+    print(
+        f"工作区：{workspace.root}\n工作树实例：{workspace.instance}\n仓库：{workspace.repository_id}",
+        file=stream,
     )
-    attempt = payload.attempt
-    if attempt is not None:
-        write(f"$ {_display_argv(attempt.argv)}")
-        role = attempt.caller_role
-        state = attempt.state
-        detail = f", exit {attempt.exit_code}" if attempt.exit_code is not None else ""
-        write(f"Execution: {attempt.execution_id} ({role}), {state}{detail}")
-        log = attempt.logs.merged
-        write(f"Stop log: {log.path}")
-        if payload.status == "stop-failed" and log.bytes:
-            tail = _file_tail(Path(log.path))
-            if tail:
-                write("Stop output (tail):")
-                for line in tail.splitlines():
-                    write(f"  {line}")
-    if payload.probe is not None:
-        disposition = "ready" if payload.probe.healthy else "not ready"
-        write(
-            f"Final probe: {payload.probe.kind} {payload.probe.reason} — {disposition}"
-        )
-    elif payload.probe_error is not None:
-        write(
-            "Final probe: unverified — "
-            f"{payload.probe_error.code}: {payload.probe_error.message}"
-        )
 
 
-def _render_dev_identity(payload: DevIdentityResult, stream: TextIO) -> None:
-    write = partial(print, file=stream)
-    workspace = payload.workspace
-    write("svc dev identity")
-    write(f"instance: {workspace.instance}")
-    write(f"root: {workspace.root}")
-    write(f"repository: {workspace.repository_kind} {workspace.repository_id}")
-    write(f"worktree: {workspace.worktree_id}")
-    write(f"namespace: {workspace.namespace_id}")
-
-
-def _render_dev_ensure(payload: DevEnsureResult, stream: TextIO) -> None:
-    write = partial(print, file=stream)
-    if payload.caller_status == "detached":
-        assert payload.attempt is not None
-        write(
-            f"svc dev {payload.target}: detached from start "
-            f"{payload.attempt.execution_id}; scope {payload.capability.scope}"
-        )
-        write(f"Execution state: {payload.attempt.state}")
-        write(f"Startup log: {payload.attempt.logs.merged.path}")
-        return
-    ready = payload.ready is True
-    lead = "ready" if ready else payload.status
-    outcome = f" ({payload.status})" if ready else ""
-    write(
-        f"svc dev {payload.target}: {lead}{outcome}; "
-        f"instance {payload.workspace.instance}; scope {payload.capability.scope}"
-    )
-    if payload.probe is not None:
-        write(f"Probe: {payload.probe.kind} {_probe_text_detail(payload.probe)}")
-    if not ready and payload.probe_argv is not None:
-        write(f"$ {_display_argv(payload.probe_argv)}")
-    if payload.access:
-        for value in payload.access:
-            write(f"Access: {value}")
-    elif payload.probe is not None:
-        if payload.probe.output:
-            output = payload.probe.output
-            preview, omitted = _text_preview(output)
-            write("Probe output:")
-            for line in preview.splitlines() or [preview]:
-                write(f"  {line}")
-            if omitted or payload.probe.output_truncated:
-                write("  … output truncated; use --json for the bounded capture")
-        elif not ready and payload.probe.kind == "exec":
-            write("Probe output: empty")
-    if payload.attempt is not None:
-        write(
-            f"Execution: {payload.attempt.execution_id} "
-            f"({payload.attempt.caller_role}), {payload.attempt.state}"
-        )
-        write(f"Startup log: {payload.attempt.logs.merged.path}")
-    if payload.status == "manual-action-required":
-        write(
-            "No SVC command can provision this target; follow the Consumer "
-            "project's guidance."
-        )
-
-
-def _emit_dev_ensure_selected(record: Any, caller_role: str, log_path: str) -> None:
-    if caller_role == "owner":
+def _render_catalog(payload: CatalogResult, stream: TextIO) -> None:
+    print(f"资源：{len(payload.resources)} · {payload.status}", file=stream)
+    for resource in payload.resources:
         print(
-            f"svc dev {record.subject}: starting `{_display_argv(record.argv)}`",
-            file=sys.stderr,
+            f"{resource.resource} · {resource.label} · {resource.source}", file=stream
         )
-    else:
-        print(
-            f"svc dev {record.subject}: joining existing start {record.execution_id}",
-            file=sys.stderr,
-        )
-    print(f"Waiting for readiness; startup log: {log_path}", file=sys.stderr)
-
-
-def _emit_dev_stop_selected(record: Any, caller_role: str, log_path: str) -> None:
-    if caller_role == "owner":
-        print(
-            f"svc dev {record.subject}: stopping `{_display_argv(record.argv)}`",
-            file=sys.stderr,
-        )
-    else:
-        print(
-            f"svc dev {record.subject}: joining stop {record.execution_id}",
-            file=sys.stderr,
-        )
-    print(f"Waiting for stop; log: {log_path}", file=sys.stderr)
-
-
-def _dev_ensure_exit_code(payload: DevEnsureResult) -> int:
-    if payload.status == "interrupted" or payload.caller_status == "detached":
-        return 130
-    return EXIT_OK if payload.ready is True else EXIT_CONFLICT
-
-
-def _render_dev_status(payload: DevStatusResult, stream: TextIO) -> None:
-    write = partial(print, file=stream)
-    status = payload.status
-    if status in {"invalid-configuration", "not-configured"}:
-        write(f"svc dev status: {status}; instance {payload.workspace.instance}")
-        if payload.reason is not None:
-            write(f"Reason: {payload.reason}")
-        if status == "not-configured":
-            write("No dev targets are declared in svc.json.")
-        return
-    targets = payload.targets or ()
-    ready_count = sum(
-        1
-        for entry in targets
-        if isinstance(entry, DevTargetObservation) and entry.probe.healthy
-    )
-    write(
-        f"svc dev status: {status} — {ready_count}/{len(targets)} ready; "
-        f"instance {payload.workspace.instance}"
-    )
-    ensure_targets: list[str] = []
-    for entry in targets:
-        if isinstance(entry, DevTargetFailure):
-            write(
-                f"error      {entry.target}  {entry.error.code}: {entry.error.message}"
+        if resource.error:
+            print(f"  {resource.error.code}: {resource.error.message}", file=stream)
+        for observation in resource.observations:
+            print(
+                f"  {observation.label}: {observation.state}{' (stale)' if observation.stale else ''} · {observation.message or ''}",
+                file=stream,
             )
-            continue
-        disposition = "ready" if entry.probe.healthy else "not-ready"
-        detail = _probe_text_detail(entry.probe)
-        continuation = entry.continuation
-        suffix = f"; {continuation}" if continuation is not None else ""
-        write(
-            f"{disposition:<10} {entry.target}  {entry.capability.scope}  "
-            f"{entry.probe.kind} {detail}{suffix}"
-        )
-        if not entry.probe.healthy and entry.probe_argv is not None:
-            write(f"  $ {_display_argv(entry.probe_argv)}")
-        for value in entry.access:
-            write(f"  Access: {value}")
-        if entry.probe.output:
-            preview, omitted = _text_preview(entry.probe.output)
-            write("  Probe output:")
-            for line in preview.splitlines() or [preview]:
-                write(f"    {line}")
-            if omitted or entry.probe.output_truncated:
-                write("    … output truncated; use --json for the bounded capture")
-        elif entry.probe.kind == "exec" and not entry.probe.healthy:
-            write("  Probe output: empty")
-        if continuation == "ensure":
-            ensure_targets.append(entry.target)
-    if ensure_targets:
-        selected = ensure_targets[0] if len(ensure_targets) == 1 else "<target>"
-        write(
-            "Ensure one: "
-            f"svc dev ensure {shlex.quote(selected)} --repo "
-            f"{shlex.quote(str(payload.workspace.root))}"
-        )
+        for action in resource.actions:
+            print(
+                f"  {action.key}: {action.intent} · {action.effect_scope} · data={action.data_effect} · {action.kind}",
+                file=stream,
+            )
+        for access in resource.access:
+            print(f"  {access}", file=stream)
+        if resource.execution:
+            print(
+                f"  execution: {resource.execution.execution_id} · {resource.execution.phase}",
+                file=stream,
+            )
 
 
-def _probe_text_detail(probe: ProbeObservation) -> str:
-    if probe.kind == "exec" and probe.exit_code is not None:
-        return f"exit {probe.exit_code}"
-    if probe.kind == "http" and probe.status_code is not None:
-        return f"status {probe.status_code}"
-    return probe.reason
+def _render_action(payload: ActionReceipt, stream: TextIO) -> None:
+    print(
+        f"{payload.resource}/{payload.action}: {payload.status} · {payload.message}",
+        file=stream,
+    )
+    for step in payload.steps:
+        print(f"  {step}", file=stream)
+    if payload.execution:
+        print(
+            f"execution: {payload.execution.execution_id} · {payload.execution.state}\n日志：{payload.execution.log_path}",
+            file=stream,
+        )
+    for item in payload.observations:
+        print(f"{item.label}: {item.state} · {item.message or ''}", file=stream)
 
 
 def _text_preview(value: str, limit: int = 1_200) -> tuple[str, bool]:
@@ -1307,12 +1267,6 @@ def _file_tail(path: Path, limit: int = 1_200) -> str | None:
     except OSError:
         return None
     return value.decode("utf-8", errors="replace").rstrip("\n") or None
-
-
-def _dev_stop_exit_code(payload: DevStopResult) -> int:
-    if payload.caller_status in {"interrupted", "detached"}:
-        return 130
-    return EXIT_OK if payload.status == "stopped" else EXIT_CONFLICT
 
 
 def _emit_run_terminal(outcome: Any, *, inspect: bool) -> None:
@@ -1504,8 +1458,8 @@ def _render_status(payload: ProjectStatusInspection, stream: TextIO) -> None:
         f"worktree {payload.workspace.worktree_id}; "
         f"instance {payload.workspace.instance})"
     )
-    if payload.dev.targets:
-        write("Dev: " + ", ".join(payload.dev.targets))
+    if payload.dev.resources:
+        write("Dev: " + ", ".join(payload.dev.resources))
     if payload.run.entries:
         write("Run: " + ", ".join(payload.run.entries))
 
@@ -1585,6 +1539,8 @@ def _exit_code(error: SvcError) -> int:
         return 130
     if error.code in {
         "apply-failed",
+        "dev-record-invalid",
+        "invalid-dev-configuration",
         "double-carrier-exited",
         "double-carrier-launch-failed",
         "double-carrier-readiness-invalid",

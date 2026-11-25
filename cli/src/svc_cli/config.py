@@ -24,7 +24,7 @@ from pydantic import (
 )
 
 
-CONFIG_SCHEMA_VERSION = 4
+CONFIG_SCHEMA_VERSION = 5
 PROJECT_CONFIG_FILE = "svc.json"
 LOCAL_CONFIG_FILE = "svc.local.json"
 
@@ -74,6 +74,7 @@ class ExecProbe(_StrictModel):
     cwd: str | None = None
     timeout: float = Field(default=5.0, gt=0, le=60)
     output_limit: int = Field(default=16_384, ge=1, le=1_048_576)
+    format: Literal["exit-code", "json"] = "exit-code"
 
 
 Probe: TypeAlias = Annotated[
@@ -81,80 +82,129 @@ Probe: TypeAlias = Annotated[
 ]
 
 
-class ExecProvision(_StrictModel):
-    kind: Literal["exec"]
-    mode: Literal["run", "activate"]
-    argv: list[str] = Field(min_length=1)
-    cwd: str | None = None
-    env: dict[str, str] = Field(default_factory=dict)
-
-    @field_validator("env")
-    @classmethod
-    def validate_env(cls, value: dict[str, str]) -> dict[str, str]:
-        _validate_environment(value)
-        return value
+class ObservationConfig(_StrictModel):
+    probe: Probe
+    label: str | None = None
+    automatic: bool = True
+    purpose: Literal["state", "runtime-readiness"] = "state"
+    ttl: float = Field(default=60.0, gt=0, le=86400)
 
 
-class ManualProvision(_StrictModel):
-    kind: Literal["manual"]
-
-
-Provision: TypeAlias = Annotated[
-    ExecProvision | ManualProvision, Field(discriminator="kind")
+ControlTrait: TypeAlias = Literal[
+    "observe", "runtime", "provision", "connection", "installation"
 ]
 
 
-class ExecStop(_StrictModel):
+class ActionDescription(_StrictModel):
+    intent: str = Field(min_length=1)
+    traits: list[ControlTrait] = Field(default_factory=list)
+    effect_scope: str = Field(min_length=1)
+    data_effect: Literal["unchanged", "modify", "delete", "unknown"] = "unknown"
+
+
+class ManualAction(ActionDescription):
+    kind: Literal["manual"]
+    steps: list[str] = Field(min_length=1)
+
+
+class ExecAction(ActionDescription):
     kind: Literal["exec"]
     argv: list[str] = Field(min_length=1)
     cwd: str | None = None
     env: dict[str, str] = Field(default_factory=dict)
-    timeout: float = Field(default=300.0, gt=0, le=3_600)
-
-    @field_validator("env")
-    @classmethod
-    def validate_env(cls, value: dict[str, str]) -> dict[str, str]:
-        _validate_environment(value)
-        return value
-
-
-class ManualStop(_StrictModel):
-    kind: Literal["manual"]
-
-
-StopAction: TypeAlias = Annotated[ExecStop | ManualStop, Field(discriminator="kind")]
-
-
-class _TargetBase(_StrictModel):
-    scope: Literal["worktree", "repository", "host"] = "worktree"
-    host_key: str | None = None
-    probe: Probe
-    provision: Provision
-    access: list[str] = Field(default_factory=list)
-    readiness_timeout: float = Field(default=60.0, gt=0, le=3_600)
+    completion: Literal["exit", "ready", "submitted"] = "exit"
+    interruption: Literal["wait", "terminate"] = "wait"
+    timeout: float | None = Field(default=None, gt=0, le=86400)
+    conditions: list[str] = Field(default_factory=list)
+    completion_timeout: float = Field(default=60.0, gt=0, le=3600)
     poll_interval: float = Field(default=0.5, gt=0, le=60)
+    convergent: bool = False
+    result: Literal["exit-code", "operation-json"] = "exit-code"
 
     @model_validator(mode="after")
-    def validate_scope(self) -> Self:
-        if self.scope == "host" and not self.host_key:
-            raise ValueError("host scope requires a non-empty host_key")
-        if self.scope != "host" and self.host_key is not None:
-            raise ValueError("host_key is valid only for host scope")
-        if self.poll_interval > self.readiness_timeout:
-            raise ValueError("poll_interval cannot exceed readiness_timeout")
+    def validate_execution(self) -> Self:
+        _validate_environment(self.env)
+        if not self.argv[0] or any("\0" in item for item in self.argv):
+            raise ValueError("action argv must have an executable and contain no NUL")
+        if self.interruption == "wait" and self.timeout is not None:
+            raise ValueError("wait actions cannot have a terminating timeout")
+        if self.completion == "ready" and (
+            not self.conditions or self.interruption != "terminate"
+        ):
+            raise ValueError(
+                "ready actions require conditions and terminate interruption"
+            )
+        if self.convergent and (
+            not self.conditions
+            or self.data_effect == "delete"
+            or self.completion == "submitted"
+        ):
+            raise ValueError(
+                "convergence requires positive conditions and cannot represent deletion or submission"
+            )
+        if self.completion == "submitted" and self.conditions:
+            raise ValueError(
+                "submitted reports acceptance, not completed resource conditions"
+            )
+        if self.result == "operation-json" and self.completion != "submitted":
+            raise ValueError("operation-json is only valid for submitted actions")
+        if self.poll_interval > self.completion_timeout:
+            raise ValueError("poll_interval cannot exceed completion_timeout")
         return self
 
 
-class TargetConfig(_TargetBase):
-    stop: StopAction | None = None
+ResourceAction: TypeAlias = Annotated[
+    ExecAction | ManualAction, Field(discriminator="kind")
+]
+
+
+class ResourceOwner(_StrictModel):
+    repo: str = Field(min_length=1)
+    resource: str = Field(min_length=1)
+
+
+class ResourceConfig(_StrictModel):
+    label: str | None = None
+    scope: Literal["worktree", "repository", "host"] = "worktree"
+    host_key: str | None = None
+    owner: ResourceOwner | None = None
+    controller: str | None = None
+    access: list[str] = Field(default_factory=list)
+    relations: list[str] = Field(default_factory=list)
+    observations: dict[str, ObservationConfig] = Field(default_factory=dict)
+    actions: dict[str, ResourceAction] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_resource(self) -> Self:
+        _validate_names(self.observations, "observation")
+        _validate_names(self.actions, "action")
+        if not (self.observations or self.actions or self.access):
+            raise ValueError("resource must offer observation, access, or an action")
+        if self.owner and ({"scope", "host_key"} & self.model_fields_set):
+            raise ValueError(
+                "owner references cannot declare their own scope or host_key"
+            )
+        if self.scope == "host" and not self.host_key:
+            raise ValueError("host scope requires host_key")
+        if self.scope != "host" and self.host_key is not None:
+            raise ValueError("host_key is valid only for host scope")
+        for key, action in self.actions.items():
+            if isinstance(action, ExecAction):
+                if set(action.conditions) - set(self.observations):
+                    raise ValueError(
+                        f"action {key} references an undeclared observation"
+                    )
+                if key == "ensure" and not action.convergent:
+                    raise ValueError("ensure must explicitly declare convergence")
+        return self
 
 
 class DevConfig(_StrictModel):
-    targets: dict[str, TargetConfig] = Field(min_length=1)
+    resources: dict[str, ResourceConfig] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_target_names(self) -> Self:
-        _validate_names(self.targets, "target")
+    def validate_resource_names(self) -> Self:
+        _validate_names(self.resources, "resource")
         return self
 
 
@@ -195,7 +245,7 @@ class RunEntry(_StrictModel):
 
 
 class ProjectConfig(_StrictModel):
-    schema_version: Literal[4]
+    schema_version: Literal[5]
     dev: DevConfig | None = None
     run: dict[str, RunEntry] = Field(default_factory=dict)
 
@@ -218,7 +268,7 @@ class ResolvedConfig:
 
 
 def load_config(repo: Path) -> ResolvedConfig:
-    """Load one runnable schema-v3 base and optional v3 overlay."""
+    """Load the current base and its same-version sparse overlay."""
 
     root = repo.resolve()
     base_data = _load_required_json(root / PROJECT_CONFIG_FILE, PROJECT_CONFIG_FILE)
@@ -352,6 +402,12 @@ def _reject_nulls(value: object, source: str, path: str = "$") -> None:
 
 
 def _validate_project(value: dict[str, Any], source: str) -> ProjectConfig:
+    if value.get("schema_version") == 4:
+        raise ConfigError(
+            f"{source} 使用旧配置 schema 4；当前 CLI 要求 schema {CONFIG_SCHEMA_VERSION}。"
+            "请先排空旧 CLI 的执行者和等待者，再将 dev.targets 迁移为 dev.resources，"
+            "补充明确动作合同，并同步 svc.local.json。操作步骤见 USER_MANUAL.md 的“人工迁移 CLI 配置”。"
+        )
     try:
         return ProjectConfig.model_validate(value)
     except ValidationError as error:
@@ -399,64 +455,40 @@ def _validate_overlay_run(
 def _validate_overlay_dev(value: object, path: str) -> None:
     if not isinstance(value, dict):
         return
-    _validate_overlay_object(value, {"targets"}, path)
-    if "targets" in value and isinstance(value["targets"], dict):
-        for name, target in value["targets"].items():
-            _validate_overlay_target(target, f"{path}.targets.{name}")
-
-
-def _validate_overlay_target(value: object, path: str) -> None:
-    if not isinstance(value, dict):
+    _validate_overlay_object(value, {"resources"}, path)
+    resources = value.get("resources")
+    if not isinstance(resources, dict):
         return
-    _validate_overlay_object(
-        value,
-        {
-            "scope",
-            "host_key",
-            "probe",
-            "provision",
-            "stop",
-            "access",
-            "readiness_timeout",
-            "poll_interval",
-        },
-        path,
-    )
-    if "probe" in value and isinstance(value["probe"], dict):
-        kind = value["probe"].get("kind")
-        allowed = {
-            "http": {
-                "kind",
-                "url",
-                "method",
-                "success_status",
-                "timeout",
-                "network_scope",
-                "insecure_tls",
-            },
-            "tcp": {"kind", "host", "port", "timeout", "network_scope"},
-            "exec": {"kind", "argv", "cwd", "timeout", "output_limit"},
-        }
-        if kind in allowed:
-            _validate_overlay_object(value["probe"], allowed[kind], f"{path}.probe")
-    if "provision" in value and isinstance(value["provision"], dict):
-        kind = value["provision"].get("kind")
-        allowed = {
-            "exec": {"kind", "mode", "argv", "cwd", "env"},
-            "manual": {"kind"},
-        }
-        if kind in allowed:
+    for name, resource in resources.items():
+        if isinstance(resource, dict):
             _validate_overlay_object(
-                value["provision"], allowed[kind], f"{path}.provision"
+                resource, set(ResourceConfig.model_fields), f"{path}.resources.{name}"
             )
-    if "stop" in value and isinstance(value["stop"], dict):
-        kind = value["stop"].get("kind")
-        allowed = {
-            "exec": {"kind", "argv", "cwd", "env", "timeout"},
-            "manual": {"kind"},
-        }
-        if kind in allowed:
-            _validate_overlay_object(value["stop"], allowed[kind], f"{path}.stop")
+            for section, fields in (
+                ("observations", set(ObservationConfig.model_fields)),
+                (
+                    "actions",
+                    set(ExecAction.model_fields) | set(ManualAction.model_fields),
+                ),
+            ):
+                entries = resource.get(section)
+                if isinstance(entries, dict):
+                    for key, entry in entries.items():
+                        if isinstance(entry, dict):
+                            _validate_overlay_object(
+                                entry,
+                                fields,
+                                f"{path}.resources.{name}.{section}.{key}",
+                            )
+                            probe = entry.get("probe")
+                            if section == "observations" and isinstance(probe, dict):
+                                _validate_overlay_object(
+                                    probe,
+                                    set(HttpProbe.model_fields)
+                                    | set(TcpProbe.model_fields)
+                                    | set(ExecProbe.model_fields),
+                                    f"{path}.resources.{name}.{section}.{key}.probe",
+                                )
 
 
 def _validate_overlay_object(

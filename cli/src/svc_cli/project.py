@@ -158,7 +158,7 @@ ConfigurationStatus: TypeAlias = (
 class DeclaredDevStatus(ValueModel):
     status: Literal["unavailable", "not-declared", "declared"]
     observation: Literal["declaration-only"] = "declaration-only"
-    targets: tuple[str, ...]
+    resources: tuple[str, ...]
 
 
 class DeclaredRunStatus(ValueModel):
@@ -678,11 +678,11 @@ def _inspect_configuration(
 
 def _inspect_dev_declaration(resolved: ResolvedConfig | None) -> DeclaredDevStatus:
     if resolved is None:
-        return DeclaredDevStatus(status="unavailable", targets=())
+        return DeclaredDevStatus(status="unavailable", resources=())
     dev = resolved.effective.dev
     if dev is None:
-        return DeclaredDevStatus(status="not-declared", targets=())
-    return DeclaredDevStatus(status="declared", targets=tuple(sorted(dev.targets)))
+        return DeclaredDevStatus(status="not-declared", resources=())
+    return DeclaredDevStatus(status="declared", resources=tuple(sorted(dev.resources)))
 
 
 def _inspect_run_declaration(resolved: ResolvedConfig | None) -> DeclaredRunStatus:

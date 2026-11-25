@@ -85,43 +85,36 @@ def test_dev_identity_text_describes_workspace() -> None:
         root = Path(tmp)
         code, stdout, stderr = invoke_text(["dev", "identity", "--repo", str(root)])
         assert (code, stderr) == (EXIT_OK, "")
-        assert "svc dev identity\ninstance:" in stdout
-        assert f"root: {root.resolve()}" in stdout
-        assert "repository: non-git " in stdout
-        assert "worktree:" in stdout and "namespace:" in stdout
+        assert "工作树实例：" in stdout
+        assert f"工作区：{root.resolve()}" in stdout
+        assert "仓库：" in stdout
 
 
 def test_dev_ensure_text_exposes_probe_and_manual_continuation() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        diagnostic = '{"code":"RECEIPT_MISSING","ready":false}'
         write_project_config(
             root,
-            dev_targets={
+            dev_resources={
                 "builder": {
-                    "scope": "repository",
-                    "probe": {
-                        "kind": "exec",
-                        "argv": [
-                            sys.executable,
-                            "-c",
-                            f"print({diagnostic!r}); raise SystemExit(1)",
-                        ],
+                    "actions": {
+                        "ensure": {
+                            "kind": "manual",
+                            "intent": "准备构建环境",
+                            "effect_scope": "当前实例",
+                            "steps": ["运行外部构建器"],
+                        }
                     },
-                    "provision": {"kind": "manual"},
                     "access": ["offline-receipt"],
                 }
             },
         )
-
         code, stdout, stderr = invoke_text(
             ["dev", "ensure", "builder", "--repo", str(root)]
         )
         assert (code, stderr) == (EXIT_CONFLICT, "")
-        assert "svc dev builder: manual-action-required" in stdout
-        assert "Probe: exec exit 1" in stdout
-        assert "Access: offline-receipt" in stdout
-        assert "No SVC command can provision this target" in stdout
+        assert "manual" in stdout
+        assert "运行外部构建器" in stdout
 
 
 def test_root_status_text_exposes_its_primary_gate() -> None:

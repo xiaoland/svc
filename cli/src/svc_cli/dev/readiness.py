@@ -14,14 +14,12 @@ from typing import Callable, Iterable, Literal, Protocol, TypeAlias
 
 import urllib3
 
-from ..config import ExecProbe, HttpProbe, TargetConfig, TcpProbe
+from ..config import ExecProbe, HttpProbe, TcpProbe
 from ..errors import SvcError
 from ..model import ValueModel
 from ..workspace import WorkspaceIdentity
 from .identity import (
-    interpolate_dev_argv,
     interpolate_dev_value,
-    require_worktree_provenance,
 )
 
 
@@ -65,60 +63,6 @@ class ResolvedProbe(ValueModel):
     url: str | None = None
     host: str | None = None
     argv: tuple[str, ...] | None = None
-
-
-def resolve_probe(
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    *,
-    target_name: str,
-) -> ResolvedProbe:
-    """Resolve identity-bearing probe inputs without performing probe I/O."""
-
-    probe = target.probe
-    if isinstance(probe, HttpProbe):
-        url = interpolate_dev_value(probe.url, workspace, target=target_name)
-        require_worktree_provenance(target.scope, url, workspace)
-        return ResolvedProbe(kind="http", endpoint_identity=url, url=url)
-    if isinstance(probe, TcpProbe):
-        host = interpolate_dev_value(probe.host, workspace, target=target_name)
-        endpoint = f"tcp://{host}:{probe.port}"
-        require_worktree_provenance(target.scope, endpoint, workspace)
-        return ResolvedProbe(kind="tcp", endpoint_identity=endpoint, host=host)
-    argv = interpolate_dev_argv(probe.argv, workspace, target=target_name)
-    endpoint = "exec:" + "\0".join(argv)
-    require_worktree_provenance(target.scope, endpoint, workspace)
-    return ResolvedProbe(kind="exec", endpoint_identity=endpoint, argv=argv)
-
-
-def probe_target(
-    target: TargetConfig,
-    workspace: WorkspaceIdentity,
-    *,
-    target_name: str,
-    timeout: float | None = None,
-) -> ProbeObservation:
-    probe = target.probe
-    resolved = resolve_probe(target, workspace, target_name=target_name)
-    effective_timeout = (
-        min(probe.timeout, timeout) if timeout is not None else probe.timeout
-    )
-    if effective_timeout <= 0:
-        return ProbeObservation(
-            kind=probe.kind,
-            healthy=False,
-            reason="deadline-exhausted",
-            endpoint_identity=resolved.endpoint_identity,
-        )
-    if isinstance(probe, HttpProbe):
-        assert resolved.url is not None
-        return probe_http(probe, resolved.url, timeout=effective_timeout)
-    if isinstance(probe, TcpProbe):
-        assert resolved.host is not None
-        return probe_tcp(probe, resolved.host, timeout=effective_timeout)
-    assert resolved.argv is not None
-    cwd = resolve_dev_cwd(workspace.root, probe.cwd, workspace, target_name)
-    return probe_exec(probe, resolved.argv, cwd, timeout=effective_timeout)
 
 
 def probe_http(
