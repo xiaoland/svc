@@ -179,7 +179,7 @@ def validate_artifacts(
     expected = _artifacts(version, revision, source)
     if {path.name for path in directory.iterdir()} != set(expected):
         raise ValueError(
-            "Release directory must contain exactly six Skill ZIPs, a catalog, and their checksums"
+            "Release directory must contain exactly the declared Skill ZIPs, a catalog, and their checksums"
         )
     for filename, raw in expected.items():
         if (directory / filename).read_bytes() != raw:

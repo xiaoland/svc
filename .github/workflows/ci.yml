@@ -75,7 +75,9 @@ jobs:
               plan = svc(*install)
               assert plan["status"] == "ready"
               assert svc(*install, "--apply", plan["plan_digest"])["status"] == "applied"
-          assert len(svc("status", *scope)["targets"][0]["units"]) == 6
+          expected = {path.parent.name for path in Path("corpus").glob("*/SKILL.md")}
+          units = svc("status", *scope)["targets"][0]["units"]
+          assert {unit["name"]: unit["installation_status"] for unit in units} == dict.fromkeys(expected, "current")
           adoption = svc("adopt", *scope)
           assert svc("adopt", *scope, "--apply", adoption["plan_digest"])["status"] == "applied"
           assert "every non-trivial task" in Path("/tmp/svc-skills-project/AGENTS.md").read_text()

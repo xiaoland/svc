@@ -1,5 +1,5 @@
-<!-- Create when one owner needs a recoverable ordered route with bounded returns. Do not create for one obvious next action, a mere assignment list, or a completed-work log. -->
-# Plan: <Owner / Expected Return>
+<!-- Create when the plan exceeds 30 lines or needs independent revision history. Use `packet.md` for plans under 30 lines. -->
+# Plan
 
 ## Owner and Expected Return
 
@@ -8,29 +8,18 @@
 - Owner: <person, unit, or bounded work owner>
 - Expected return: <observable contribution or integration input>
 
-## Current Partial Route
+## Ordered Steps
 
-<!-- Record only the route currently knowable from this boundary; do not invent distant completeness. -->
+<!-- Keep steps in order. Each step includes owner, input, output, and any blocking dependencies. -->
 
-<current position, assumptions, and next route boundary>
-
-## Ordered Slices
-
-<!-- Keep bounded independently useful returns in order. Retain current state only where it improves steering or recovery. -->
-
-1. **<Slice>** — <bounded return and current state>
-2. **<Slice>** — <bounded return and current state>
-
-## TBC Continuation Condition
-
-<!-- TBC is an honest knowledge horizon, not a work item. State what evidence, decision, or return permits continuation; omit TBC only when the route has no such horizon. -->
-
-- TBC when: <why planning stops at the current boundary>
-- Continue when: <condition that reopens the route>
+1. **<Step>** — <owner, what it consumes, what it produces>
+   - Depends on: <prior step or external input, if any>
+2. **<Step>** — <owner, what it consumes, what it produces>
+   - Depends on: <prior step or external input, if any>
 
 ## Material Relations
 
-<!-- Link only dependencies, consumers, or barriers that materially change this route. -->
+<!-- Link only dependencies, consumers, or convergence points that materially change this route. -->
 
-- Depends on: <owner, Cell, decision, or evidence>
-- Feeds: <owner, Cell, module, or integration barrier>
+- Depends on: <owner, decision, or evidence>
+- Feeds: <owner, module, or convergence point>

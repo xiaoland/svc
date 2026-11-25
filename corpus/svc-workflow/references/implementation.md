@@ -1,21 +1,36 @@
 # Implementation
 
-Implementation makes one bounded intended change real through feedback. Use it when the intended horizon, effect boundary, and a useful local observation are clear enough to act. It may change code, configuration, data, deployment, or another real system surface; it does not imply that the change is correct, qualified, accepted, or complete for the whole Task.
+Use this Workflow method to realize an authorized change and obtain behavior feedback. Recover the selected increment and its basis: intended use, promises, important relations, and reasons for the mechanism. Develop a changed meaning or responsibility with the shared judgment before building dependents. Use [Planning](planning.md) to develop an executable order when needed.
 
-```mermaid
-flowchart LR
-  I["Bounded intent + effect boundary"] --> R["Realize a small coherent change"]
-  R --> O["Observe task-specific feedback"]
-  O -->|"local mismatch"| R
-  O -->|"solution mismatch"| D["Revisit Design"]
-  O -->|"information gap"| E["Explore"]
-  O --> Q["Realized return + residual"]
-```
+## Choose the Mechanism
 
-Before committing to a route, identify unknowns that could change it: external protocol, permission, runtime, migration, or another hard boundary. Test a consequential unknown with the smallest real probe and record what would stop or redirect the change. Use [Planning](planning.md) when the next route or dependency order is unclear, then implement the bounded path supported by the evidence with local feedback. For a simple local change with no route-changing unknown, act directly. If no feasible authorized continuation can complete the intended return, preserve the changed state and name the unmet condition and next action rather than inventing future certainty.
+| Work | Useful approach |
+| --- | --- |
+| Local change preserving the understood behavior and ownership | Edit directly and observe the relevant result. |
+| Repeated structural edits | Define a deterministic transformation, inspect its coverage and diff, and check the resulting contract. |
+| Known defect | Reuse a reliable reproduction or obtain feedback that detects the symptom, then repair its cause. |
+| Stateful transition | Apply the selected sequence, observing commitment, intermediate invariants, and the resulting state. |
 
-Realize the smallest coherent change that can produce useful feedback. Keep the canonical owner and derived surfaces synchronized inside that return. Use low-latency compiler, type, test, replay, runtime, visual, or Human feedback to steer the local loop, but distinguish steering from independent qualification. When feedback reveals a material information gap, use [Explore](explore.md); when it invalidates the solution, authority, or Product expectation, use [Design](design.md) and revisit the affected owner instead of burying the mismatch in exceptions. Repair failures of already agreed behavior within existing authority; pause only work depending on an unsettled product premise or missing permission, while continuing independent authorized work. When realization introduces a consequential authority, data, state, boundary, naming, performance, or complexity choice, discover Implementation Taste in `svc-taste` through the host when available, only for that pressure; its guidance is optional and does not replace the responsibilities here.
+For a repeated transformation, try representative matches and cases that must remain unchanged. Inspect missed and unintended matches before broad application. A structural rename can miss string-based configuration or external consumers. Automate the known mapping and handle semantic exceptions explicitly.
 
-Discover `svc-verification` by name through the host when criteria are unclear, observations do not establish the promised behavior, evidence selection or reuse is uncertain, checks conflict with observed outcomes, or feedback arrives too late or is too ambiguous to steer the next change. Use adequate existing criteria and applicable evidence directly. That Skill provides optional guidance; Implementation remains responsible for useful feedback and must surface actual evidence or capability gaps when it is unavailable.
+Make a coherent change that produces useful feedback, even if it spans several files. Group edits by the promise they establish. Keep unrelated cleanup separate when it would obscure a failure's cause.
 
-Return the actual changed state or artifact, the achieved horizon, local feedback, and material residual. Discover `svc-agent-collaboration` by name when another Agent could own a useful result, or responsibility, dependencies, or result adoption need coordination; compare the full cost with direct work or a deterministic transformation and keep coupled investigation, realization, and repair with one owner. Its guidance is optional; use applicable project mechanisms and surface actual capability gaps when unavailable. Implementation remains responsible for an honest bounded return with the mechanisms available.
+## Obtain Feedback That Can Reject the Change
+
+For stable behavior, test-first can establish a useful boundary: the check fails for the intended absence, the change makes it pass, and refactoring preserves that behavior. Reuse adequate evidence and select proportionate checks.
+
+Observe visual work in the running product, performance under a suitable workload, and data under the relevant identity and history.
+
+A rendered interface needs two observation channels, and neither substitutes for the other. Structure snapshots verify semantics, states, and operability; screenshots verify hierarchy, density, proportion, and composition. Inspect at the sizes the surface ships at, operate the real flows, and batch the checks — fix what one look shows before looking again. A visible result is not complete until someone has seen it rendered. [UI Design](ui-design.md) owns the craft floor these checks observe against.
+
+Use the choice's defining relation to select feedback during construction: identify a relevant condition under which a plausible wrong mechanism would fail. Keep the actual user or caller entry and necessary data connections in that observation. Combine it with fast local feedback and reuse applicable evidence. Use `svc-verification` for criteria, observation design, and evidence applicability.
+
+## Correct and Return
+
+Compare actual behavior and the emerging code with the choice's reasons. New coordination between owners, duplicated facts, or restrictions on normal use can expose an unsuitable arrangement before a reported failure. Check the observation and distinguish a local cause, unsuitable mechanism or responsibility, and inadequate problem framing. Repair a supported local cause or revise the choice at the affected level, then observe the relevant result.
+
+Update the affected plan, criteria, authoritative source, and consumers with a revised choice. Inspect related paths sharing the premise; remove workarounds that lost their basis while preserving independent uses and unaffected authorized work. Keep dependent commitments within what the current judgment supports.
+
+Use `svc-taste` for consequential state, interface, performance, or complexity choices. For recurring rework suggesting a change in future practice, use [work-system learning](work-system-learning.md).
+
+Record the realized change, local feedback, and corrections in the plan, then continue with the next authorized increment. Return to the Human only at a boundary named in Workflow's Complete and Return.

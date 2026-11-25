@@ -1,6 +1,6 @@
 # Requirements and Oracles
 
-Read this reference when the intended behavior, requirement interpretation, or judgment rule is uncertain, too weak, or too specific. Return a requirement-to-observation relationship that distinguishes relevant behavior from incidental implementation and names the remaining interpretation risk. This expands the [Verification Skill](../SKILL.md); use this reference directly when its pressure is already known.
+Read this reference when the intended behavior, requirement interpretation, or judgment rule is uncertain, too weak, or too specific. Return a requirement-to-observation relationship that distinguishes relevant behavior from incidental implementation and names the remaining interpretation risk. This expands the Verification Skill; use this reference directly when its pressure is already known.
 
 Start with the result the product is meant to provide. Product purpose, a behavior requirement, a design proposal, and an implementation are related but not interchangeable. “A user can use their own workspace after signing in” constrains a result and its ownership; “the URL is `/dashboard` and the page contains an `h1`” constrains a representation unless the product explicitly promises those details. Verification can establish conformity to the written requirement, while validation can reveal that the requirement or its realized result does not serve the intended use.
 

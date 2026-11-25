@@ -1,0 +1,1 @@
+svc-workflow 新增 ui-design 工作方法（界面 Mode、视觉权威继承/扩展/替换、参考驱动方向、设计计划自检、先删减后装饰、双通道渲染验证）；svc-specs 新增 DESIGN.md 作为项目视觉真相的规范所有者（含准入条件与起始模板）；svc-taste 的判断校准补充外部校准，并附确定性默认模式检测脚本 scripts/check-default-patterns.sh。

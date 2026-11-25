@@ -12,14 +12,24 @@ import pytest
 
 from svc_cli import skills
 from test_cli import assert_compact_json, invoke_text
-from test_skills import release_bytes, standalone_files
+from test_skills import RELEASE_SKILLS, release_bytes, standalone_files
+
+
+CORPUS_17_SKILLS = (*RELEASE_SKILLS, "svc-writing")
 
 
 @pytest.fixture
 def releases(monkeypatch: pytest.MonkeyPatch):
     assets = {
-        f"/16.0.0/{filename}": content
-        for filename, content in standalone_files().items()
+        f"/{version}/{filename}": content
+        for version, names in (
+            ("16.0.0", RELEASE_SKILLS),
+            ("16.0.1", RELEASE_SKILLS),
+            ("17.0.0", CORPUS_17_SKILLS),
+        )
+        for filename, content in standalone_files(
+            version=version, skill_names=names
+        ).items()
     }
     legacy = release_bytes(version="15.0.0")
     assets["/15.0.0/svc-corpus-15.0.0.zip"] = legacy
@@ -122,6 +132,110 @@ def test_http_selection_preserves_per_skill_identity_and_check_fetches_only_cata
         "/16.0.0/svc-skills-16.0.0.json.sha256",
     }
     assert not any("svc-corpus" in request for request in requests)
+
+
+def test_existing_six_skill_installation_upgrades_to_corpus_17(
+    tmp_path: Path, releases
+) -> None:
+    scope = ["--repo", str(tmp_path), "--agent", "codex", "--json"]
+    assert (
+        apply(["skills", "install", *scope, "--version", "16.0.1"])["status"]
+        == "applied"
+    )
+
+    upgrade = ["skills", "update", *scope, "--version", "17.0.0"]
+    code, stdout, stderr = invoke_text(upgrade)
+    assert (code, stderr) == (3, "")
+    plan = assert_compact_json(stdout)
+    assert plan["status"] == "blocked"
+    assert {
+        unit["name"]
+        for unit in plan["targets"][0]["units"]
+        if unit["installation_status"] == "absent"
+    } == {"svc-writing"}
+
+    add_writing = [
+        "skills",
+        "install",
+        *scope,
+        "--version",
+        "17.0.0",
+        "--skill",
+        "svc-writing",
+    ]
+    assert apply(add_writing)["status"] == "applied"
+    assert apply(upgrade)["status"] == "applied"
+    code, stdout, stderr = invoke_text(
+        ["skills", "check", *scope, "--version", "17.0.0"]
+    )
+    assert (code, stderr) == (0, "")
+    status = assert_compact_json(stdout)
+    assert status["status"] == "current"
+    assert {unit["name"] for unit in status["targets"][0]["units"]} == set(
+        CORPUS_17_SKILLS
+    )
+
+
+@pytest.mark.parametrize("version", ["15.0.0", "16.0.1"])
+def test_explicit_skill_selection_rejects_skill_missing_from_target_release(
+    tmp_path: Path, releases, version: str
+) -> None:
+    _, requests = releases
+    code, stdout, stderr = invoke_text(
+        [
+            "skills",
+            "install",
+            "--repo",
+            str(tmp_path),
+            "--agent",
+            "codex",
+            "--version",
+            version,
+            "--skill",
+            "svc-writing",
+            "--json",
+        ]
+    )
+    assert (code, stdout) == (4, "")
+    error = assert_compact_json(stderr)["error"]
+    assert error["code"] == "invalid-release"
+    assert f"Release {version} does not contain Skill 'svc-writing'" == error["message"]
+    assert not any("svc-writing" in request for request in requests)
+
+
+@pytest.mark.parametrize(
+    ("version", "catalog_names"),
+    [
+        ("16.0.1", CORPUS_17_SKILLS),
+        ("17.0.0", RELEASE_SKILLS),
+        ("17.0.0", (*RELEASE_SKILLS, "svc-unknown")),
+    ],
+)
+def test_offline_catalog_rejects_incorrect_skill_set_even_for_known_zip(
+    tmp_path: Path, version: str, catalog_names: tuple[str, ...]
+) -> None:
+    for filename, content in standalone_files(
+        version=version, skill_names=catalog_names
+    ).items():
+        (tmp_path / filename).write_bytes(content)
+    with pytest.raises(skills.SkillArchiveError):
+        skills.read_release(tmp_path / f"svc-workflow-{version}.zip")
+
+
+def test_implicit_offline_catalog_must_match_version_in_archive_name(
+    tmp_path: Path,
+) -> None:
+    files = standalone_files(version="17.0.0", skill_names=CORPUS_17_SKILLS)
+    archive = tmp_path / "svc-workflow-16.0.1.zip"
+    archive.write_bytes(files["svc-workflow-17.0.0.zip"])
+    for suffix in (".json", ".json.sha256"):
+        (tmp_path / f"svc-skills-16.0.1{suffix}").write_bytes(
+            files[f"svc-skills-17.0.0{suffix}"]
+        )
+    with pytest.raises(
+        skills.SkillArchiveError, match="Catalog version does not match"
+    ):
+        skills.read_release(archive)
 
 
 def test_offline_single_zip_defaults_to_contained_skill_and_supports_renaming(

@@ -42,7 +42,7 @@ RECORD_SCHEMA_VERSION = 1
 MAX_ARCHIVE_BYTES = 16 * 1024 * 1024
 MAX_MEMBER_BYTES = 4 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 4096
-DEFAULT_SKILLS = (
+LEGACY_SKILLS = (
     "svc-workflow",
     "svc-verification",
     "svc-task-packet",
@@ -50,6 +50,7 @@ DEFAULT_SKILLS = (
     "svc-specs",
     "svc-taste",
 )
+DEFAULT_SKILLS = (*LEGACY_SKILLS, "svc-writing")
 Host = Literal["codex", "claude"]
 Scope = Literal["project", "global"]
 Operation = Literal["install", "update", "remove"]
@@ -293,12 +294,8 @@ def _read_catalog(
     if sha256_bytes(raw) != _read_checksum(str(source) + ".sha256", timeout):
         raise SkillArchiveError("Skills catalog checksum does not match")
     manifest = _parse_manifest(raw)
-    if manifest.schema_version != 2 or {skill.name for skill in manifest.skills} != set(
-        DEFAULT_SKILLS
-    ):
-        raise SkillArchiveError(
-            "Catalog must describe exactly the current six SVC Skills"
-        )
+    if manifest.schema_version != 2:
+        raise SkillArchiveError("Standalone Skill archive requires a schema-2 catalog")
     return manifest, raw, str(label)
 
 
@@ -325,6 +322,7 @@ def read_release(
         if sha256_bytes(raw) != expected:
             raise SkillArchiveError("Skills release checksum does not match archive")
         return parse_release(raw, source=str(label))
+    inferred_version = None
     if catalog is None:
         filename = Path(urlsplit(str(source)).path).name
         match = re.fullmatch(
@@ -333,8 +331,11 @@ def read_release(
         )
         if match is None:
             raise SkillArchiveError("Renamed standalone ZIP requires --catalog")
-        catalog = _adjacent_source(source, f"svc-skills-{match[1]}.json")
+        inferred_version = match[1]
+        catalog = _adjacent_source(source, f"svc-skills-{inferred_version}.json")
     manifest, _, _ = _read_catalog(catalog, timeout)
+    if inferred_version is not None and manifest.version != inferred_version:
+        raise SkillArchiveError("Catalog version does not match the Skill archive name")
     if checksum is not None and sha256_bytes(raw) != _read_checksum(checksum, timeout):
         raise SkillArchiveError("Skills release checksum does not match archive")
     return parse_release(raw, source=str(label), catalog=manifest)
@@ -380,14 +381,8 @@ def resolve_release(
             raise SkillArchiveError(
                 "Downloaded release identity does not match requested version"
             )
+        _select_release_skills(archive.manifest, names)
         return archive
-    selection = tuple(names) if names is not None else DEFAULT_SKILLS
-    if (
-        not selection
-        or len(set(selection)) != len(selection)
-        or any(name not in DEFAULT_SKILLS for name in selection)
-    ):
-        raise SkillArchiveError("Select distinct current SVC Skill names")
     source = CATALOG_DOWNLOAD.format(version=selected)
     manifest, raw, label = _read_catalog(source, timeout)
     if manifest.version != selected:
@@ -395,10 +390,10 @@ def resolve_release(
             "Downloaded catalog identity does not match requested version"
         )
     artifacts: dict[str, SkillArchive] = {}
-    selected_skills = []
+    selected_skills = _select_release_skills(manifest, names)
     files: dict[str, bytes] = {}
-    for name in selection:
-        skill = next(skill for skill in manifest.skills if skill.name == name)
+    for skill in selected_skills:
+        name = skill.name
         asset_source = _adjacent_source(source, skill.archive or "")
         if fetch_contents:
             content, asset_label = _read_source(asset_source, timeout)
@@ -421,14 +416,13 @@ def resolve_release(
                 skill.archive_sha256 or "",
             )
         artifacts[name] = artifact
-        selected_skills.append(skill)
         files.update(artifact.files)
     return SkillArchive(
         ReleaseManifest(
             manifest.version,
             manifest.repository,
             manifest.revision,
-            tuple(selected_skills),
+            selected_skills,
             2,
         ),
         files,
@@ -436,6 +430,22 @@ def resolve_release(
         sha256_bytes(raw),
         artifacts,
     )
+
+
+def _select_release_skills(
+    manifest: ReleaseManifest, names: Sequence[str] | None
+) -> tuple[SkillManifest, ...]:
+    available = {skill.name: skill for skill in manifest.skills}
+    if names is None:
+        return tuple(available[name] for name in DEFAULT_SKILLS if name in available)
+    if not names or len(set(names)) != len(names):
+        raise SkillArchiveError("Select distinct SVC Skill names")
+    try:
+        return tuple(available[name] for name in names)
+    except KeyError as error:
+        raise SkillArchiveError(
+            f"Release {manifest.version} does not contain Skill {error.args[0]!r}"
+        ) from error
 
 
 def parse_release(
@@ -509,10 +519,6 @@ def parse_release(
                     )
                 if relative.lower().endswith(".md"):
                     _validate_markdown_links(skill.path, relative, members)
-        if manifest.schema_version == 1 and {
-            skill.name for skill in manifest.skills
-        } != set(DEFAULT_SKILLS):
-            raise SkillArchiveError("Release must contain exactly the six SVC Skills")
         extras = sorted(
             member
             for member in set(members) - expected
@@ -1319,9 +1325,10 @@ def _parse_manifest(raw: bytes) -> ReleaseManifest:
     version, repository, revision, entries = (
         value.get(key) for key in ("version", "repository", "revision", "skills")
     )
+    parsed_version = _stable_semver(version) if isinstance(version, str) else None
     if (
         not isinstance(version, str)
-        or not _SEMVER.fullmatch(version)
+        or parsed_version is None
         or repository != REPOSITORY
         or not isinstance(revision, str)
         or not _REVISION.fullmatch(revision)
@@ -1330,6 +1337,11 @@ def _parse_manifest(raw: bytes) -> ReleaseManifest:
     ):
         raise SkillArchiveError("Invalid Skills release identity")
     schema_version = value["schema_version"]
+    if parsed_version[0] >= 17 and schema_version == 1:
+        raise SkillArchiveError(
+            f"Skills release {version} requires a standalone catalog"
+        )
+    expected_names = set(DEFAULT_SKILLS if parsed_version[0] >= 17 else LEGACY_SKILLS)
     skills: list[SkillManifest] = []
     seen: set[str] = set()
     for entry in entries:
@@ -1344,7 +1356,7 @@ def _parse_manifest(raw: bytes) -> ReleaseManifest:
         if (
             not isinstance(name, str)
             or not _NAME.fullmatch(name)
-            or name not in DEFAULT_SKILLS
+            or name not in expected_names
             or name in seen
             or not isinstance(path, str)
             or _relative_path(path) is None
@@ -1372,6 +1384,10 @@ def _parse_manifest(raw: bytes) -> ReleaseManifest:
                 entry.get("archive"),
                 entry.get("archive_sha256"),
             )
+        )
+    if seen != expected_names:
+        raise SkillArchiveError(
+            f"Skills release {version} must describe exactly its SVC Skill set"
         )
     return ReleaseManifest(version, repository, revision, tuple(skills), schema_version)
 

@@ -26,3 +26,5 @@ Cross-unit contract documents:
 
 - Contract tests or schema checks: <paths/commands>
 - Product claim realization pointers: <links when useful>
+
+Keep one contract's content in this index until a second contract or a distinct cadence justifies per-contract projections; then the index keeps only routes and each projection opens with its use condition.

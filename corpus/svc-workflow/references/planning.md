@@ -1,13 +1,36 @@
 # Planning
 
-Use Planning when the next useful work, dependency order, allocation, or point for reconsideration is unclear. It supplies the workflow with a limited executable route and the observations that could change it. Planning determines and revises that route; the Task Packet owns its persistent representation, dependencies, and recoverable state.
+Use this Workflow method to develop or update useful increments and an executable order. Carry the intended result, selected route, and judgment basis into the sequence; use the shared judgment to resolve a choice before committing its dependent steps.
 
-Begin with the intended result, actual state, current commitment and authorization, and uncertainties that can affect the route. Work backward from what must be true for the consumer to use the result. Identify dependencies that constrain action, distinguish evidence needed to choose a route from evidence needed to judge its result, and select a coherent next horizon. An obvious local action needs no elaborate plan.
+## Choose Useful Results
 
-Order work for a reason. Resolve a route-changing protocol, permission, data, migration, or runtime uncertainty before building dependent machinery when a small real probe can discriminate it. Prefer an early usable result or informative observation when it can expose wrong assumptions cheaply. Keep coupled work together so that preparation, implementation, repair, and verification do not become unowned gaps. Do not optimize apparent parallelism by fragmenting a result whose parts must continually correct each other.
+Work backward from the intended result and actual state. For a feature, choose a narrow behavior that works through its necessary layers and can be observed. One input with real persistence can be a useful slice, grouping database, API, and UI changes by the behavior they deliver. Increments order the work toward the whole authorized result; they do not reduce its scope.
 
-Make the next actions clear enough to execute, including their intended return, real prerequisites, and the feedback that will redirect or stop them. Plan farther only where the dependencies and choices are stable; preserve a later open choice instead of inventing certainty. Name a material external dependency or Human decision and its consequence without turning every routine action into a gate. The route should remain compatible with the current collaboration approach and actual authority.
+Group related requests around the result and shared choices before dividing edits. A mechanical rename can be one coordinated transformation; a migration may need intermediate states. Keep parts together when they must continually correct one another, and preserve unaffected work when a choice is revised.
 
-When new evidence arrives, ask what changed: the desired result, an assumption, a dependency, the realized state, the judgment basis, or only a local execution detail. Revise the affected route and retain unaffected progress. A failed ordinary step calls for local recovery; feedback contradicting a product premise calls for the corresponding design or Human decision. Continue independent authorized work while dependent action is paused.
+## Resolve and Order the Draft
 
-Return the next executable route, reasons for its ordering, current owners or dependency consumers when material, and the condition for reconsideration. Preserve it in the existing Task Packet at the useful resolution rather than creating a competing plan document by default. For arrangements involving multiple Agents, discover `svc-agent-collaboration` by name when available; its guidance supplements Planning without supplying authority or becoming an installation requirement.
+Draft concrete changes with their results, prerequisites, and feedback. Derive dependencies from required inputs, state, interfaces, permissions, or guarantees. Distinguish hard prerequisites from an order chosen for easier feedback and recovery. Exercise a shared contract before spreading its assumptions through dependent consumers.
+
+Before splitting work across parallel Tracks or owners, name each work line's primary inputs: the code regions, files, and domain context it must understand to do its work. Work lines that share most primary inputs belong in one Track; a single owner builds that understanding incrementally at lower total cost than parallel owners who each load the same context independently.
+
+Trace each step's output into the next against relevant code, interfaces, and failure paths. Check intermediate compatibility, ownership, and recovery. Name a route-deciding question exposed by that rehearsal, resolve it through investigation or a concrete candidate, and revise the draft.
+
+For independently deployed consumers that must coexist, a possible migration order is:
+
+1. Readers accept both forms while writers use the old form.
+2. Writers adopt the new form.
+3. Existing data is migrated and observed under the intended invariant.
+4. The old form is removed after accounting for remaining consumers.
+
+Derive this from actual compatibility needs. Coordinated replacement may be cheaper when coexistence is unnecessary.
+
+Run a preparation experiment only when its possible outcomes can change the route. State that difference and exercise the smallest boundary that distinguishes it. Before planning replacement after owner loss, for example, observe lock ownership and whether the prior work can still produce effects. Keep experimental state isolated or recoverable and feed findings into the plan.
+
+Use paper rehearsal to check coherence and experiments to resolve the route-deciding question.
+
+## Finish a Ready Sequence
+
+An investigation plan can contain questions. A ready implementation plan must select its intended result, route, and judgment basis. When actual use is needed to test an upstream premise, plan an authorized, isolated or reversible learning increment with a clear question and feedback. Keep unsettled later commitments outside the ready sequence.
+
+Arrange ready work as linearly and clearly as practical, naming external dependencies and providers and keeping useful independent work visible. Include feedback that can challenge the reasons for consequential choices. When evidence changes the framing or route, revise that judgment and its dependent steps; retain valid progress. Preserve the route, ordering reasons, and reconsideration conditions in the existing Packet; `svc-task-packet` owns its structure.

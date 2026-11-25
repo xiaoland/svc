@@ -1,4 +1,4 @@
-"""Check the six authored Skill interfaces and their local Markdown references."""
+"""Check the authored Skill interfaces and their local Markdown references."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ SKILL_NAMES = frozenset(
         "svc-agent-collaboration",
         "svc-specs",
         "svc-taste",
+        "svc-writing",
     }
 )
 _LINK = re.compile(r'\[[^\]\n]+\]\((?:<([^>\n]+)>|([^\s)]+))(?:\s+"[^"]*")?\)')
@@ -163,7 +164,7 @@ def check(
     entries = sorted(corpus_root.rglob("SKILL.md"))
     expected = {corpus_root / name / "SKILL.md" for name in SKILL_NAMES}
     if set(entries) != expected:
-        raise ValueError("Corpus must contain exactly the six declared Skill entries")
+        raise ValueError("Corpus must contain exactly the declared Skill entries")
     for entry in entries:
         skill_metadata(entry)
     for source in sorted(corpus_root.rglob("*.md")):
