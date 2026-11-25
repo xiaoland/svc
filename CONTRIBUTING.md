@@ -17,7 +17,7 @@ pdm build -p cli
 pdm run svc --help
 ```
 
-框架权威源位于 `corpus/`，从 `corpus/index.md` 与六个 Skill 入口进入；维护者须遵守 `corpus/AGENTS.md`。CLI workspace member 使用 `cli/src/svc_cli`，测试位于 `cli/tests`。SVC 自身持久的产品、技术与运行时事实位于 `docs/`。CLI 构建和运行均不读取 Corpus，归档不包含框架正文、模板或 catalog。
+框架权威源位于 `corpus/`，从 `corpus/index.md` 与各 Skill 入口进入；维护者须遵守 `corpus/AGENTS.md`。CLI workspace member 使用 `cli/src/svc_cli`，测试位于 `cli/tests`。SVC 自身持久的产品、技术与运行时事实位于 `docs/`。CLI 构建和运行均不读取 Corpus，归档不包含框架正文、模板或 catalog。
 
 ## 提交说明
 
@@ -72,7 +72,7 @@ CLI 输出 schema 仍维护自己的结果版本；它要求的 package major �
 
 发布顺序如下：
 
-1. 功能 PR 合并 `.changes/cli/` 或 `.changes/corpus/` 的片段。改变 Corpus 源内容时维护根 `pyproject.toml` 的 `[tool.svc.corpus].version` 与需要的迁移指导：未发布目标可以继续积累变更，已发布版本的源内容变化需要新的目标版本。版本检查需要完整的发行 tags；CI 使用完整 Git 历史，发布比较采用 `v<version>` 与 `corpus-v<version>` 对应的源码。根 `LICENSE` 是 MIT 许可权威源，六个 Skill 和 CLI 各带逐字副本。Corpus release PR 合并前运行发布准备命令，把版本元数据和已存在的许可副本同步后与正文一起提交。
+1. 功能 PR 合并 `.changes/cli/` 或 `.changes/corpus/` 的片段。改变 Corpus 源内容时维护根 `pyproject.toml` 的 `[tool.svc.corpus].version` 与需要的迁移指导：未发布目标可以继续积累变更，已发布版本的源内容变化需要新的目标版本。版本检查需要完整的发行 tags；CI 使用完整 Git 历史，发布比较采用 `v<version>` 与 `corpus-v<version>` 对应的源码。根 `LICENSE` 是 MIT 许可权威源，各 Skill 和 CLI 各带逐字副本。Corpus release PR 合并前运行发布准备命令，把版本元数据和已存在的许可副本同步后与正文一起提交。
 2. 维护者更新 `cli/pyproject.toml` 静态版本，准备 CLI 发布 PR 并生成 changelog：
 
    ```console
@@ -91,7 +91,7 @@ CLI 输出 schema 仍维护自己的结果版本；它要求的 package major �
 
    可先用 `pdm run build-corpus-archive --output-dir /tmp/svc-skills-release` 构建全部附件，再用 `pdm run check-corpus-release --artifacts /tmp/svc-skills-release` 校验。构建要求版本、Skill 元数据和正文已提交且与 HEAD 相符。
 
-   提交并合并包含 `CORPUS_CHANGELOG.md`、六个 Skill 元数据和许可副本的 release PR 后，发布 workflow 以同一 commit 创建 `corpus-v<version>`。workflow 只读校验已提交源文件，从 v16 起，发布物为六个 `<skill-name>-<version>.zip` 及各自 `.sha256`，加上 `svc-skills-<version>.json` 与其 `.sha256`；每个 ZIP 仅含 `<skill-name>/` 的完整源码目录，外部 schema-2 catalog 记录共同发布身份、逐文件摘要和各 ZIP 摘要，不再生成整体 Corpus ZIP；CLI wheel 不再携带 Corpus，归档重跑不得覆盖不同内容。
+   提交并合并包含 `CORPUS_CHANGELOG.md`、各 Skill 元数据和许可副本的 release PR 后，发布 workflow 以同一 commit 创建 `corpus-v<version>`。workflow 只读校验已提交源文件，从 v16 起，每个 Skill 的发布物为 `<skill-name>-<version>.zip` 及各自 `.sha256`，加上 `svc-skills-<version>.json` 与其 `.sha256`；每个 ZIP 仅含 `<skill-name>/` 的完整源码目录，外部 schema-2 catalog 记录共同发布身份、逐文件摘要和各 ZIP 摘要，不再生成整体 Corpus ZIP；CLI wheel 不再携带 Corpus，归档重跑不得覆盖不同内容。
 
 
 ## macOS 版本与发布

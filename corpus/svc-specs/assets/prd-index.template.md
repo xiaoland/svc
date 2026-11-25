@@ -26,4 +26,4 @@
 
 - **<term>**: <stable product meaning>
 
-Keep this as `docs/prd/index.md` until distinct consumers or change cadence justify a split. Do not add implementation topology or internal contracts.
+Keep this as `docs/prd/index.md` until a capability gains a distinct consumer or change cadence. On split, each projection file opens with its use condition and owns its capability's content; the index keeps only the projection routes. Do not add implementation topology or internal contracts.

@@ -1,51 +1,48 @@
 # Explore
 
-Explore finds the key information needed by consuming work. Use it when reliable progress depends on a material information need and the answer or a fitting way to obtain it is not already obvious. Directly query an obvious authoritative target; do not wrap lookup in ceremony.
+Use this Workflow method to learn unfamiliar facts or relations, discover possible directions, or obtain evidence distinguishing explanations. Read an obvious authoritative source directly.
 
-Explore owns a stateless information method. It does not own persistent Inquiry state, Task sequencing, effect authority, claim qualification, Human decisions, or Agent collaboration. Discover `svc-agent-collaboration` by name when assigning a substantial inquiry, coordinating its owner, or adopting another Agent's result needs guidance; its availability is not required to use Explore.
+## Frame the Question
 
-```mermaid
-flowchart TD
-  N["Non-obvious information need"] --> F["Define relevance provisionally"]
-  F --> M["Choose a proportionate information move"]
-  M --> I["Supported information + residual"]
-  I --> J{"Return adequate? Another move worth its cost?"}
-  J -->|"relevance changed"| F
-  J -->|"another move has value"| M
-  J -->|"another kind of work owns the need"| C["Compose another method or return control"]
-  J -->|"adequate"| S["Satisfied return"]
-  J -->|"inadequate; no proportionate continuation"| B["Bounded-incomplete return"]
-```
+Start with what you want to understand or discover. When the question is open, inspect contrasting examples, uses, or approaches; follow unexpected differences to find a useful question or opportunity. Refine the problem, terminology, and question as findings reveal what matters.
 
-The graph is a reasoning topology, not required steps or lifecycle states.
+When the inquiry serves a specific decision, identify that decision and what different answers would change about the next action. Locating a handler needs less support than explaining a recurring failure across environments. Check versions, state, and observation windows when they can change the answer. Distinguish observations, interpretations, and provisional hypotheses as they guide investigation.
 
-## Frame What Counts as Key
+## Build a Useful Model
 
-Define the smallest useful provisional Frame:
+Build a model when relationships need explanation. For system behavior, follow a representative operation through relevant data and state owners to the result its consumer receives. Inspect definitions, callers, configuration, and runtime behavior where those connections need explanation.
 
-1. **Purpose** — what should become possible after this inquiry?
-2. **Sought answer** — locate, understand, explain, predict, compare, or what other answer about which target is missing?
-3. **Material scope and resolution** — which boundary, scale, environment, or freshness distinction can change relevance?
-4. **Keyness test** — what decision, route, alternative, constraint, owner, mechanism, or model distinction must the information change or secure?
+Choose the representation for the question:
 
-Frame is revisable. Preserve supported findings when evidence changes the question; discard only support invalidated by the new relevance definition. For explanation, prediction, or intervention, deepen only when useful with the outcome, possible interventions, relevant environments, mechanisms, counterfactuals, and the smallest representation that preserves the needed distinctions. Not every key fact is causal or invariant.
+| Question | Useful representation |
+| --- | --- |
+| Where does a change belong? | Owners, writers, readers, affected consumers, and repeated knowledge. |
+| Why does behavior change over time? | A sequence or state transition showing waiting, interruption, and commitment. |
+| What explains a mismatch? | Possible mechanisms and the conditions they predict differently. |
+| Which policy applies? | A decision table of relevant identities, states, and allowed transitions. |
 
-## Route by Consequence
+Connect Product meaning to implementation where the question needs both. Mark observed and expected relations distinctly; preserve evidence anchors, uncertainty, and mismatches. Use the model to locate a change, explain a contrasting case, or predict an observation. Follow unexplained relations when they could improve the answer or reveal a useful direction for the inquiry.
 
-When the next move is non-obvious, choose the reasoning job and evidence path whose plausible result could most economically change or secure the key distinction. Useful embedded logic includes:
+## Generate and Separate Explanations
 
-- query a known applicable authority directly
-- model the smallest structure, behavior, mechanism, or relation needed
-- generate materially different candidate families when shared assumptions may have narrowed the space
-- discriminate material candidates with an observation they predict differently
+Distinguish missing candidates from missing evidence about existing candidates. To find alternatives, change the mechanism, boundary, or assumption behind the first idea; use a contrasting case or a different evidence source. Keep relevant candidates that are plausible under known constraints and differ in consequences. Develop a useful range of candidates covering important possibilities, then compare their consequences.
 
-Inspect or query existing sources, observe current behavior, elicit Human knowledge or preference, or produce a bounded observation as appropriate. Tool choice, Human authority, observation effects, and independent proof stay with their respective owners.
+When comparing explanations, state what each predicts and choose a feasible observation whose outcomes would change the next action. After a save appears to fail, establish which state the same operation reached:
 
-## Judge Sufficiency Economically
+| Observation | Supported conclusion |
+| --- | --- |
+| A complete acceptance record for the relevant window contains no matching operation | The operation was not accepted at that boundary. |
+| Acceptance is recorded, but the outcome is unresolved | Acceptance occurred; completion or failure is still unknown. |
+| The durable result exists under the same operation identity | The write committed; investigate the response or display if the user still sees failure. |
 
-Ask both:
+A committed write can coexist with a lost reply, a stale view, or both. Inspect reply receipt and view updates if that distinction changes the repair. Repeating the write can add ambiguity or duplicate effects.
 
-1. Does the supported result enable the Frame's purpose at the needed scope and freshness, with material residual within the applicable tolerance?
-2. Is there a feasible authorized next discriminator whose plausible outcomes could improve the return enough to repay acquisition, delay, attention, side-effect, and opportunity cost?
+For a causal question, seek a relevant contrast with and without the symptom, then challenge the mechanism that could explain the difference. If all predictions fail, check the observation and reopen the candidate set. Seek evidence supporting the explanation you adopt. Preferences between otherwise adequate experiences need Product judgment.
 
-A satisfied return is the smallest supported answer or model that enables the consumer, plus material residual. Evidence volume, search logs, and subjective confidence are not substitutes. When evidence is unavailable or continued search is uneconomic, return the supported partial result, unmet condition, consequence, and viable continuation as bounded-incomplete.
+## Decide Whether to Continue
+
+Judge progress against the inquiry's purpose. A useful return may be a clearer problem, promising directions, a model, or a supported answer. For a specific decision, recommend once the available basis is adequate. Continue investigation for an uncertainty that could change the choice or a material recovery or long-term consequence; weigh another observation against its total cost.
+
+Choose further work by what it could teach and its cost. An open inquiry can end when it has found useful questions or directions worth pursuing.
+
+Return what was learned, why it is useful, the supporting observations or reasoning, and consequential uncertainty. If the requested result remains incomplete, name the missing condition and useful continuation. For an inquiry into recurring rework or future working practice, use [work-system learning](work-system-learning.md).

@@ -2,7 +2,7 @@
 
 ## 阅读框架指导
 
-框架权威源从[框架介绍与导航](corpus/index.md)进入，按当前工作选择六个 Skills：
+框架权威源从[框架介绍与导航](corpus/index.md)进入，按当前工作选择 Skills：
 
 | Skill | 工作职责 |
 | --- | --- |
@@ -12,10 +12,11 @@
 | [svc-agent-collaboration](corpus/svc-agent-collaboration/SKILL.md) | 安排 Agent 间工作、采用结果、协调依赖与转移责任 |
 | [svc-specs](corpus/svc-specs/SKILL.md) | 持久项目知识的准入、归属与维护 |
 | [svc-taste](corpus/svc-taste/SKILL.md) | 有真实压力的设计与实施取舍 |
+| [svc-writing](corpus/svc-writing/SKILL.md) | 面向读者的文档、说明和其他正文的撰写与修订 |
 
-描述提供目标与触发条件，正文明确首动作和完成条件，条件引用连接深层内容。Workflow 区分协作承诺与方法选择：阶段确认式按共同确认的范围推进，持续迭代式通过结果和反馈调整需求与路线；两者都要求关键设计、工程自主推进和适当验证。工作方法按当前缺口选择，可递归组合，专业 V&V 指导由独立 Verification Skill 所有；六个 Skills 不构成固定流水线。这些源结构不保证每个宿主或模型都能可靠发现、加载和执行指导。
+描述提供目标与触发条件，正文明确首动作和完成条件，条件引用连接深层内容。Workflow 先从协作约定确定当前应交付的结果，再选择适用方法。默认阶段式推进到用户授权覆盖的范围，持续迭代式通过结果和反馈调整需求与路线。专业 V&V 方法归 Verification Skill。这些源结构不保证每个宿主或模型都能可靠发现、加载和执行指导。
 
-每个 Skill 的必需指导与资源都位于自身目录内，不要求加载仓库根文件或其它 Skill。完整采用需要常驻入口，使授权边界与所有非平凡任务使用 Task Packet 的规则在工作开始时可见。[消费者 AGENTS 模板](corpus/svc-specs/assets/AGENTS.root.template.md)提供带路径占位的起始形状，项目所有者须适配实际可访问位置并维护自己的内容。下面的安装与采用步骤建立可访问入口；仍需在目标宿主中观察发现与执行，不能只凭文件存在宣称生效。
+每个 Skill 的必需指导与资源都位于自身目录内，不要求加载仓库根文件或其它 Skill。完整采用需要常驻入口，使授权边界与所有非平凡任务使用 Workflow、Task Packet 和 Specs 的规则在工作开始时可见。[消费者 AGENTS 模板](corpus/svc-specs/assets/AGENTS.root.template.md)提供带路径占位的起始形状，项目所有者须适配实际可访问位置并维护自己的内容。下面的安装与采用步骤建立可访问入口；仍需在目标宿主中观察发现与执行，不能只凭文件存在宣称生效。
 
 ## 安装与初始化 CLI
 
@@ -60,9 +61,9 @@ docs/index.md              缺失时创建，带有界 CLI 工具导航块
 
 ## 安装、升级与采用 Skills
 
-六个 Skills 共用一个 Corpus 发布版本，可以选装。CLI 安装默认复制到项目目录，写操作必须显式选择宿主；Codex 使用 `.agents/skills`，Claude Code 使用 `.claude/skills`。`--global` 显式选择对应的用户目录。`--skill NAME` 可重复，省略时选择六个。安装、更新、移除和采用默认返回只读计划；重复相同命令并添加 `--apply <plan-digest>` 才写入。计划绑定当前文件状态，过期后必须重新审阅。
+Skills 共用一个 Corpus 发布版本，可以选装。CLI 安装默认复制到项目目录，写操作必须显式选择宿主；Codex 使用 `.agents/skills`，Claude Code 使用 `.claude/skills`。`--global` 显式选择对应的用户目录。`--skill NAME` 可重复。在线安装和更新省略时选择目标发布包含的全部 Skills，离线单 ZIP 选择其包含的 Skill。安装、更新、移除和采用默认返回只读计划；重复相同命令并添加 `--apply <plan-digest>` 才写入。计划绑定当前文件状态，过期后必须重新审阅。
 
-v15 的六入口包含替代 Methods 的 `svc-workflow`、独立 `svc-verification`，以及 `svc-agent-collaboration`。如果曾安装开发期间的 `svc-methods` 或 `svc-sub-agents` 草稿，显式检查并移除旧名、安装对应新名、更新其余已安装项，再重新 `adopt` 刷新项目指针；修改过的文件和第三方管理器安装继续受所有权保护。开发期间的入口调整没有形成额外发布版本；当前发布清单只接受最终六入口。工作流升级与草稿安装整理见 [Skills 采用指导](corpus/migrations/agent-skills.md)，Agent 协作调整见 [协作指导](corpus/migrations/agent-collaboration.md)。下例的版本应替换为实际已发布并准备采用的目标版本。
+v15 的六入口包含替代 Methods 的 `svc-workflow`、独立 `svc-verification`，以及 `svc-agent-collaboration`。如果曾安装开发期间的 `svc-methods` 或 `svc-sub-agents` 草稿，显式检查并移除旧名、安装对应新名、更新其余已安装项，再重新 `adopt` 刷新项目指针；修改过的文件和第三方管理器安装继续受所有权保护。开发期间的入口调整没有形成额外发布版本；v15 归档只接受该版本的最终六入口。工作流升级与草稿安装整理见 [Skills 采用指导](corpus/migrations/agent-skills.md)，Agent 协作调整见 [协作指导](corpus/migrations/agent-collaboration.md)。下例的版本应替换为实际已发布并准备采用的目标版本。
 
 ```bash
 svc skills install --repo /path/to/project --agent codex --version <target-version> --json
@@ -77,6 +78,8 @@ svc skills remove --repo /path/to/project --agent codex --json
 ```
 
 `--version` 指向正式 `corpus-v<version>` 发布。`check` 未指定版本时只选择最新稳定 Corpus 发布，不使用同仓库的 CLI latest Release；`status` 不访问网络。v16 起，在线安装和更新只下载所选 Skill ZIP，`check` 使用发布清单比较文件摘要。离线安装与更新用 `--archive /path/svc-workflow-<version>.zip`，默认选择该包内的 Skill，并读取相邻 `svc-skills-<version>.json` 及其 `.json.sha256`，用清单中的包摘要核对 ZIP；可用 `--catalog` 指定清单，`--checksum` 额外指定 ZIP 校验文件。旧整体包默认读取相邻 `.zip.sha256`。新版 CLI 仍支持已发布 v15 的整体 ZIP；旧 v15 CLI 必须先升级，才能消费新的独立包发行物。发布附件必须先实际发布才能通过在线路径下载；本地源码开发不把尚未发布的版本当作可下载发行物。
+
+完整六件套升级到 v17 时，先用兼容的 CLI 单独安装 `svc-writing`，再计划更新全套。部分安装可用 `--skill` 指定已有的项。当前可用版本以发布记录为准。
 
 更新先校验目标发行物，再比较实际目录与安装基线。本地改动、新增文件、未知目录、另一管理器安装或符号链接均阻止覆盖；CLI 不提供强制覆盖或三方合并。安装记录位于目标 Skills 根下的 `.svc/<name>.json`。`recorded_version` 是记录版本，`actual_version` 仅在文件与目标发行物匹配时确认。多目标先做整体冲突预检，再逐 Skill 执行；失败停止后续项，已成功项保留并报告真实状态。受控错误与中断按文件事务回滚当前项；掉电或强制终止后的混合状态由下次检查识别并拒绝覆盖，没有自动恢复承诺。
 
@@ -289,4 +292,4 @@ App 0.2.0 配套 CLI 18.3.0；资源配置仍为 schema 5，主机与临时执�
 - **MINOR**：增加可选、向后兼容的能力。
 - **PATCH**：修正或澄清已有协议而不改变上述行为。
 
-Towncrier 分别记录 `.changes/cli/` 和 `.changes/corpus/`。CLI 发布通过 Trusted Publishing 发布已验证 wheel；Corpus 发布有独立 `corpus-v<version>` tag 与 GitHub Release。CLI wheel 不含框架内容，因此新 Corpus 不随 CLI 发布投递。框架版本权威是根 `pyproject.toml` 的 `[tool.svc.corpus].version`，六个 Skill 的 `metadata.version` 由发布准备命令同步；v16 起发布物提供六个独立 Skill ZIP、外部 `svc-skills-<version>.json` 清单与各自 SHA-256 校验文件，不再提供整体 Corpus ZIP。MIT 声明随每个独立 Skill 与 CLI 发行物携带，详见[贡献指南](CONTRIBUTING.md)。
+Towncrier 分别记录 `.changes/cli/` 和 `.changes/corpus/`。CLI 发布通过 Trusted Publishing 发布已验证 wheel；Corpus 发布有独立 `corpus-v<version>` tag 与 GitHub Release。CLI wheel 不含框架内容，因此新 Corpus 不随 CLI 发布投递。框架版本权威是根 `pyproject.toml` 的 `[tool.svc.corpus].version`，各 Skill 的 `metadata.version` 由发布准备命令同步；v16 起发布物为每个 Skill 提供独立 ZIP、外部 `svc-skills-<version>.json` 清单与各自 SHA-256 校验文件，不再提供整体 Corpus ZIP。MIT 声明随每个独立 Skill 与 CLI 发行物携带，详见[贡献指南](CONTRIBUTING.md)。

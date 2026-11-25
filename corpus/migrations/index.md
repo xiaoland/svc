@@ -2,13 +2,13 @@
 
 Use these living guides when a Consumer project adopts a newer SVC framework release. Version 15 remains the compatibility anchor for the retained release chain; there is no adoption chain from pre-v15 baselines. An Agent and Human evaluate and update Consumer-owned truth before adoption; SVC never rewrites or claims to have verified those documents.
 
-Capability-named guides describe a semantic transition. The framework now has six Skill entries and an independent source version; CLI installation and current-only CLI configuration contracts are not owned here.
+Capability-named guides describe a semantic transition. The framework source version is independent of the CLI; CLI installation and current-only CLI configuration contracts are not owned here.
 
 Current guides:
 
 - [Agent collaboration](agent-collaboration.md): replace the `svc-sub-agents` address and role-based guidance with collaboration across execution forms, including installation and adoption changes.
 - [Six Agent Skills](agent-skills.md): replace concept-directory and CLI-mediated navigation, replace Methods with Workflow while retaining independent V&V, and align draft installations while preserving task and authority obligations.
-- [Workflow collaboration](workflow-collaboration.md): adopt the default staged collaboration for non-trivial Tasks while preserving established iterative agreements and existing implementation authority.
+- [Workflow collaboration](workflow-collaboration.md): adopt the explicit staged workflow, the Task Map, and the seventh Skill in Corpus 17 while preserving established agreements and authority.
 - [Coding Agent debugger and profiler evidence](analysis-debugger-corpus.md): adopt the current evidence and analysis contracts when exporting or consuming that evidence.
 
 Version classification follows Consumer behavior:

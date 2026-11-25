@@ -74,7 +74,7 @@ def register(subparsers: Any, add_output: Callable[..., None]) -> None:
             parser.add_argument(
                 "--skill",
                 action="append",
-                help="Select one SVC Skill (repeat; default all six online or in a legacy bundle, contained Skill for a standalone ZIP)",
+                help="Select one SVC Skill (repeat; default all Skills in the selected release, or the contained Skill for a standalone ZIP)",
             )
         if name in {"install", "check", "update"}:
             source = parser.add_mutually_exclusive_group(required=name != "check")

@@ -4,20 +4,21 @@
 
 ## 知识所有者
 
-- 框架目的和六入口导航：`corpus/index.md`
+- 框架目的和 Skill 导航：`corpus/index.md`
 - Skill 作者与布局规则：`corpus/AGENTS.md`，仅供维护者使用
 - 人机协作流程与共通工作方法：`corpus/svc-workflow/`
 - 产品迭代的判据、证据与反馈：`corpus/svc-verification/`
 - Task Packet 语义与增长：`corpus/svc-task-packet/`
 - Agent 间工作安排、协调与结果采用：`corpus/svc-agent-collaboration/`
 - 设计与实施判断：`corpus/svc-taste/`
+- 面向读者的写作与修订：`corpus/svc-writing/`
 - 产品、技术、单元、运行时与协调规范：`corpus/svc-specs/`
 - Consumer Agent 指导起始形状：`corpus/svc-specs/assets/`
 - SVC 自身持久的产品、技术与运行时事实：`docs/`
 - Corpus 版本迁移选择与指导：`corpus/migrations/`
 - CLI 发布配置、版本、Behavioral SemVer 证据与说明：`towncrier.cli.toml`、`.changes/cli/`、`cli/pyproject.toml`、生成的 `CLI_CHANGELOG.md`、GitHub Releases 和 `CONTRIBUTING.md`
 - Corpus 发布配置、版本、Behavioral SemVer 证据与说明：`towncrier.corpus.toml`、`.changes/corpus/`、根 `pyproject.toml` 的 `[tool.svc.corpus].version`、生成的 `CORPUS_CHANGELOG.md`、GitHub Releases 和 `CONTRIBUTING.md`
-- 许可权威源与发布副本：根 `LICENSE`；六个 Skill 与 CLI 的 `LICENSE` 必须由发布准备同步并由检查器核对
+- 许可权威源与发布副本：根 `LICENSE`；各 Skill 与 CLI 的 `LICENSE` 必须由发布准备同步并由检查器核对
 - 消费者 runtime、工具项目集成与 CLI 静态资源：`cli/src/svc_cli/`；测试位于 `cli/tests/`
 - CLI 归档构建：`cli/pyproject.toml`；构建与运行不得依赖 Corpus
 - macOS 发布：`macos/VERSION`、`towncrier.macos.toml`、`.changes/macos/`、`MACOS_CHANGELOG.md`、`.github/workflows/macos.yml`；安装与归档由 `tools/macos_app.py` 拥有，发布由 `tools/publish_macos_release.py` 拥有
@@ -39,7 +40,7 @@
 
 ## 执行规则
 
-- 所有非平凡任务使用 `corpus/svc-task-packet/SKILL.md`；修改前读取 `corpus/index.md` 与对应知识所有者。
+- 所有非平凡任务读取并使用 `corpus/svc-workflow/SKILL.md` 与 `corpus/svc-specs/SKILL.md`，并维护 `corpus/svc-task-packet/SKILL.md` 所定义的 Task Packet。修改前读取 `corpus/index.md` 与对应知识所有者。
 - 实质修改 Corpus 前读取最近的 `corpus/AGENTS.md` 作者合同。
 - 只有改变涉及代码结构、边界、数据、权限、命名、抽象或复杂度时，才加载 `corpus/svc-taste/references/implementation.md`。
 - 最近的本地 `AGENTS.md` 是附加约束。

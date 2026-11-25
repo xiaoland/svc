@@ -109,12 +109,15 @@ def standalone_files(
     version: str = "16.0.0",
     body: bytes = b"# SVC\n",
     names: tuple[str, ...] = ("svc-workflow",),
+    skill_names: tuple[str, ...] = RELEASE_SKILLS,
 ) -> dict[str, bytes]:
-    legacy = release_bytes(version=version, body=body, names=names)
+    legacy = release_bytes(
+        version=version, body=body, names=names, skill_names=skill_names
+    )
     assets: dict[str, bytes] = {}
     entries = []
     with zipfile.ZipFile(io.BytesIO(legacy)) as stream:
-        for name in RELEASE_SKILLS:
+        for name in skill_names:
             prefix = f"corpus/{name}/"
             files = {
                 path.removeprefix("corpus/"): stream.read(path)
@@ -169,7 +172,10 @@ def test_default_selection_does_not_take_over_unrelated_skill(tmp_path: Path) ->
 
     result = apply_plan(plan, plan.digest)
     assert result.status == "applied"
-    assert {unit.name for unit in status(target)} == set(RELEASE_SKILLS)
+    assert {unit.name: unit.status for unit in status(target)} == {
+        **dict.fromkeys(RELEASE_SKILLS, "current"),
+        "svc-writing": "absent",
+    }
     assert {
         path.name
         for path in target.skills_root.iterdir()

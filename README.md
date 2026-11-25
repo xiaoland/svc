@@ -13,7 +13,7 @@ SVC 把工作指导与软件工具分开提供，可以按需要独立采用：
 
 它不规定所有项目必须遵守同一套开发流水线，也不接管项目自己的代码、文档和决策权限。
 
-[快速开始](#快速开始) · [六个-skills](#六个-skills) · [cli-能做什么](#cli-能做什么) · [用户手册](USER_MANUAL.md) · [发布记录](https://github.com/xiaoland/svc/releases)
+[快速开始](#快速开始) · [Agent Skills](#agent-skills) · [cli-能做什么](#cli-能做什么) · [用户手册](USER_MANUAL.md) · [发布记录](https://github.com/xiaoland/svc/releases)
 
 ## 为什么做 SVC？
 
@@ -28,7 +28,7 @@ SVC 尝试把这些负担放回合适的位置：
 
 ![Skills、CLI 与项目事实的关系](docs/assets/svc-overview.svg)
 
-## 六个 Skills
+## Agent Skills
 
 每个 Skill 都是自包含的目录，可以单独安装。它们按当前任务需要使用，**不会组成一条强制的线性流程**。
 
@@ -40,6 +40,7 @@ SVC 尝试把这些负担放回合适的位置：
 | [`svc-agent-collaboration`](corpus/svc-agent-collaboration/SKILL.md) | 什么时候值得交给另一个 Agent，怎样交接并采用结果？ |
 | [`svc-specs`](corpus/svc-specs/SKILL.md) | 哪些事实值得长期保存，应该由哪里负责维护？ |
 | [`svc-taste`](corpus/svc-taste/SKILL.md) | 面对多个可行设计，怎样按真实代价与后果作取舍？ |
+| [`svc-writing`](corpus/svc-writing/SKILL.md) | 怎样撰写和修订面向读者的文档与说明？ |
 
 Skills 的完整导航见 [`corpus/index.md`](corpus/index.md)。安装后是否被 Agent 正确发现、加载和使用，仍需在目标宿主中实际检查。
 
@@ -75,7 +76,7 @@ svc analysis query --schema
 npx skills@1.7.0 add xiaoland/svc --skill svc-task-packet --agent codex --copy
 ```
 
-其他五个 Skill 可按需选择。Claude Code 在该管理器中的宿主名称是 `claude-code`。这条路径不需要先安装 SVC CLI。
+其余 Skills 可按需选择。Claude Code 在该管理器中的宿主名称是 `claude-code`。这条路径不需要先安装 SVC CLI。
 
 > **注意：**把 Skill 安装到目录，并不等于 Agent 一定会使用它。完整采用 SVC 时，还需在项目常驻的 Agent 指令入口中声明必要工作规则；请参见[安装与采用指南](USER_MANUAL.md#安装升级与采用-skills)。
 
@@ -100,14 +101,30 @@ CLI 可以从独立版本的发行物安装 Skills，也可以管理在项目中
 
 ## 版本与边界
 
-**Skills（Corpus）与 CLI 分别发行、独立升级。** 从 Corpus v16 起，六个 Skills 分别提供 ZIP 发行物；CLI 包本身不携带这些框架正文。项目可以按需要采用特定 Skill 与版本。
+**Skills（Corpus）与 CLI 分别发行、独立升级。** 从 Corpus v16 起，每个 Skill 分别提供 ZIP 发行物；CLI 包本身不携带这些框架正文。项目可以按需要采用特定 Skill 与版本。
 
 SVC 保留使用者已有文件和权限边界：CLI 的受管写操作需要明确应用计划；框架指导不会自动授予修改代码、委派任务或执行外部操作的权限。项目始终拥有自己的正式事实，临时任务记录不自动成为长期规范。
+
+## 致谢与参考来源
+
+SVC 的部分工作方法吸收自公开资料与社区实践，按 Skill 列出：
+
+**svc-workflow**
+- `ui-design` 方法融合了四个来源的设计机制：[Impeccable](https://github.com/pbakaus/impeccable)（Paul Bakaus）的 Mode 划分、视觉权威继承/扩展/替换、distill；[Anthropic frontend-design](https://claude.com/marketplace/plugins/frontend-design) 的设计计划两遍法与换需求自检；[Addy Osmani frontend-ui-engineering](https://github.com/addyosmani/agent-skills) 的 reference-led 工作流与状态完备性；[Vercel Web Interface Guidelines](https://vercel.com/design/guidelines) 的可检查规则作为项目验收语料。`product-design` 的界面文案削减与 UX/DX/AX 合并评估来自 [@Voxyz_ai 的推文](https://x.com/Voxyz_ai/status/2113254050170843418)。方向探索部分参考了社区关于 [DESIGN.md 实践](https://reddit.com/r/ClaudeAI/comments/1t24gan/)与[原则驱动设计](https://reddit.com/r/ClaudeAI/comments/1qj2lwg/)的讨论。
+
+**svc-taste**
+- "Calibrate the Judgment" 的参考学习与具体决策分析受 [Emil Kowalski《Developing Taste》](https://emilkowal.ski/ui/developing-taste)启发。确定性检测脚本 `check-default-patterns.sh` 的规则来自上述四个 UI 来源中可机械化的部分。
+
+**svc-agent-collaboration**
+- Design Explorer 角色的"隔离探索避免过早收敛"来自上述社区 DESIGN.md 讨论；Explorer/Executor 角色契约承袭本仓库早期 `core-mechanism-evolution` 推导（D-083–D-088）。
+
+**svc-writing**
+- 信息承载与删除测试来自[西乔的推文](https://x.com/recatm/status/2111112485549781129)；读者负荷均匀（句间连接、具体主语、拆解嵌套修饰）来自[李继刚分享的论文](https://arxiv.org/abs/2610.29162)《Why is AI-generated language so hard to understand?》。
 
 ## 项目文档与贡献
 
 - [用户手册](USER_MANUAL.md)：安装、采用、CLI 命令与行为边界
-- [框架入口](corpus/index.md)：六个 Skills 与迁移指导
+- [框架入口](corpus/index.md)：Skills 与迁移指导
 - [贡献指南](CONTRIBUTING.md)：源码工作区、验证和发布
 - [安全政策](SECURITY.md)：安全问题的报告方式
 - [CLI 变更记录](CLI_CHANGELOG.md) / [Corpus 变更记录](CORPUS_CHANGELOG.md)：独立发行历史

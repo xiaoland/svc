@@ -1,4 +1,4 @@
-<!-- Create one packet for every non-trivial Consumer Task. Do not create family children until their topology or information owner is admitted; keep this as a compact Human collaboration surface, not a completed-work log. -->
+<!-- Create one packet for every non-trivial Consumer Task. Do not create family children until their topology or information owner is admitted; keep this as a compact Human collaboration surface, not a completed-work log. Write field names and content in the Human's language. -->
 # <Task>
 
 <!-- State the outcome, not the process. This lets a returning Human judge what the work is for. -->

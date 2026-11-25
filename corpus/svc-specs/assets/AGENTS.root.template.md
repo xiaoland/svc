@@ -9,10 +9,11 @@
 
 <!-- Replace these pointers with the actual adopted locations. The placeholders do not prescribe an installation layout; this entry must remain visible to the Agent during ordinary project work. -->
 
-- Human authority covers Product intent, preferences, permissions, consequential trade-offs, and acceptance. Check factual and technical claims against evidence. Before durable mutation, establish the authorized effect, semantic owner, affected consumers and invariants, and proportionate verification.
-- For every non-trivial Task, read and use `svc-workflow` at `<adopted-svc-workflow-entry-path>` for Human–Agent collaboration and autonomous working methods.
+- Human authority covers Product intent, preferences, permissions, consequential trade-offs, and acceptance. Check factual and technical claims against evidence. Check the authority and consequences relevant to actual changes.
+- For every non-trivial Task, read and use `svc-workflow` at `<adopted-svc-workflow-entry-path>`. Use its collaboration guidance to determine the result currently due and choose methods that serve it. Read linked guidance as needed and reuse what remains applicable; the Skill owns the protocol without requiring its stage rules to be copied here.
 - For every non-trivial Task, use `svc-task-packet` at `<adopted-svc-task-packet-entry-path>`. Recover an existing Packet before creating another, and keep task state sufficient to resume and verify completion.
-- Beyond Workflow and Task Packet, load adopted SVC Skills only when their pressure is present. No Skill grants write, delegation, external-effect, or acceptance authority.
+- For every non-trivial Task, use `svc-specs` at `<adopted-svc-specs-entry-path>`. Keep durable knowledge at its canonical owner, preferring executable sources for enforceable facts, and admit a new durable surface only when its admission rule holds.
+- Beyond Workflow, Task Packet, and Specs, load adopted SVC Skills only when their pressure is present. No Skill grants write, delegation, external-effect, or acceptance authority.
 
 ## Repository Map
 

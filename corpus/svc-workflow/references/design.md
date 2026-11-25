@@ -1,30 +1,36 @@
 # Design
 
-Design shapes possible futures into one coherent proposed solution. Use it when intended product or system behavior, realization, or transition is materially underdetermined, conflicting, or likely to become incoherent through local choices. Design owns the evolving relation among forces, commitments, and consequences; it does not own authority to mutate, proof, implementation sequence, or durable project truth.
+Use this Workflow method to construct and compare proposed arrangements. Return a concrete recommendation for the current review. Develop the shared judgment through candidates that make behavior, responsibilities, and consequences visible.
 
-```mermaid
-flowchart LR
-  F["Intent, reality, constraints, resources, taste"] <--> S["Proposed product + technical solution"]
-  S <--> C["Representative behavior, failure, transition, operation, and change consequences"]
-  C -->|"contradiction"| F
-  C -->|"invalid commitment"| S
-  S --> R["Consumer-relative solution + material residual"]
-```
+## Construct Different Arrangements
 
-Start with a representative journey or state transition where a decision matters. Trace the current claim through its entry point, owner of data and state, dependencies, and failure or recovery path. Propose one arrangement and challenge it with a plausible counterexample or change. If it fails, revisit the Product claim or Technical boundary and carry the consequences across the affected owners. Stop when the consumer can implement the current horizon without silently deciding a material requirement. Cheap, reversible, local choices remain Implementation freedom unless their consequence is material.
+Start with the intended use and the choice that determines the arrangement. Retain the purpose and actual obligations while changing the premise, interaction, ownership, data flow, reversibility, or machinery of a candidate. Sketch enough to follow the important operation; use differences between candidates to discover missing choices. Compare the current arrangement, reuse, or removal when credible.
 
-## Keep the Solution and Its Judgment Basis Coherent
+For a unified interface, distinguish a common set of operations from a common representation of all information. One can simplify callers while preserving native meaning; the other may discard distinctions a consumer needs. Develop candidates around the distinction that matters to the purpose.
 
-- [Product Design](product-design.md) shapes what users and stakeholders can perceive, do, understand, trust, recover from, and value.
-- [Technical Design](technical-design.md) shapes how the system realizes, sustains, changes, and operates those obligations.
-- [Verification Design](verification-design.md) shapes how the promised result can be observed and judged under relevant conditions.
+A mechanism explicitly required by the Human remains a constraint. Separate temporary delivery limits from lasting architectural requirements. If a candidate depends on an uncertain fact, identify the observation that would change the recommendation and obtain it within current authority.
 
-They are independent views of one solution, not phases or mandatory files. Start from the local design pressure, then load only the methods, taste, examples, and counter-pressure that could change that judgment.
+## Make the Choice Judgeable
 
-When the solution needs a judgment basis or observable boundary, use [Verification Design](verification-design.md). It keeps expected behavior, technical arrangements, and the means of judging them coherent; discover `svc-verification` by name through the host when a requirement has no clear judgment rule, the proposed observations cannot distinguish success from a relevant failure, or evidence selection or reuse is uncertain. Adequate existing criteria and observations need no additional guidance. That Skill is not a required next phase; Design still owns a coherent solution and must expose any unresolved judgment or observation gap when it is unavailable.
+Compare candidates through the same important use, including its relevant repetition or recovery. Explain what the person or caller does, which facts change or persist, who makes each promise hold, and what reaches the consumer. Use the directly relevant view for additional depth:
 
-## Return at the Useful Resolution
+- [Product Design](product-design.md) for behavior, interaction, meaning, and experience.
+- [Technical Design](technical-design.md) for responsibilities, information, interfaces, failure, and transition.
 
-Design enough for the current bounded implementation horizon: the consumer should not be forced to make a silent material Product, Technical, transition, or verification-solution decision. Preserve material assumptions, alternatives that remain live, consequences, and residuals; do not attempt a complete upfront specification.
+Discover `svc-verification` to design conditions, observations, and judgment rules for the result.
 
-Choose the cheapest truthful carrier for collaboration and memory: prose, table, topology, sequence, state model, pseudocode, prototype, or code. A document is not required, but code must not hide rationale, rejected material alternatives, or cross-owner obligations that future consumers cannot recover. Distinguish a proposed arrangement from behavior established by applicable evidence; a coherent design alone does not establish its realization or fitness for the intended need.
+Use a sequence for ordering, a state model for history-dependent meaning, a structural sketch for responsibility or dependencies, or a prototype when embodiment answers the question more cheaply. Show concrete consequences. Keep comparison assumptions consistent so the differences reflect the proposed arrangements.
+
+## Challenge the Arrangement
+
+Choose a variation that tests the candidate's reason for working: repeat an operation, change a participant, or delay a result where it affects the promise. Predict what should change and what should remain true, then follow the arrangement to check that prediction. This can reveal conflicting rules before implementation.
+
+For a likely future change, identify which owners need new knowledge and must change together. Compare that coordination with the cost of the candidate's boundaries. For an addition or removal, account for consumers, data, compatibility, and recovery obligations alongside the capability or simplicity gained.
+
+Revise the framing or arrangement when the walkthrough exposes a better explanation or conflict. Resolve the consequential choice within current authority before dependent work; bring Human-owned changes back with reasons and consequences.
+
+## Return at the Needed Resolution
+
+Return the recommended arrangement and its decisive reasons, consequences, and open choices. Match detail to the current review: a Product proposal can leave Technical choices for later, while an implementation-ready solution must settle the choices its implementation depends on. Cheap, reversible local choices can remain implementation freedom.
+
+For a deferred choice, state what can proceed independently and what must be settled before dependent commitment. Keep the interim arrangement easy to revise when that choice is settled.
