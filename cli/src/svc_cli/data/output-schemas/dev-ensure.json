@@ -1,44 +1,5 @@
 {
   "$defs": {
-    "CapabilityIdentity": {
-      "additionalProperties": false,
-      "properties": {
-        "capability_id": {
-          "title": "Capability Id",
-          "type": "string"
-        },
-        "endpoint_id": {
-          "title": "Endpoint Id",
-          "type": "string"
-        },
-        "scope": {
-          "enum": [
-            "worktree",
-            "repository",
-            "host"
-          ],
-          "title": "Scope",
-          "type": "string"
-        },
-        "scope_id": {
-          "title": "Scope Id",
-          "type": "string"
-        },
-        "target": {
-          "title": "Target",
-          "type": "string"
-        }
-      },
-      "required": [
-        "scope",
-        "target",
-        "endpoint_id",
-        "scope_id",
-        "capability_id"
-      ],
-      "title": "CapabilityIdentity",
-      "type": "object"
-    },
     "CliUsageOutput": {
       "additionalProperties": false,
       "properties": {
@@ -59,39 +20,225 @@
       "title": "CliUsageOutput",
       "type": "object"
     },
-    "DevAttempt": {
+    "Coordination": {
       "additionalProperties": false,
       "properties": {
-        "argv": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Argv",
-          "type": "array"
+        "coordination_id": {
+          "title": "Coordination Id",
+          "type": "string"
         },
-        "caller_role": {
+        "owner_repo": {
+          "title": "Owner Repo",
+          "type": "string"
+        },
+        "owner_resource": {
+          "title": "Owner Resource",
+          "type": "string"
+        },
+        "scope": {
           "enum": [
-            "owner",
-            "follower"
+            "worktree",
+            "repository",
+            "host"
           ],
-          "title": "Caller Role",
+          "title": "Scope",
           "type": "string"
         },
-        "cwd": {
-          "title": "Cwd",
+        "scope_id": {
+          "title": "Scope Id",
           "type": "string"
         },
-        "duration_ms": {
+        "workspace_instance": {
+          "title": "Workspace Instance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "coordination_id",
+        "scope",
+        "scope_id",
+        "workspace_instance",
+        "owner_repo",
+        "owner_resource"
+      ],
+      "title": "Coordination",
+      "type": "object"
+    },
+    "DevEnsureOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "command": {
+          "const": "dev ensure",
+          "default": "dev ensure",
+          "title": "Command",
+          "type": "string"
+        },
+        "coordination": {
           "anyOf": [
             {
-              "type": "integer"
+              "$ref": "#/$defs/Coordination"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "declaration_digest": {
+          "title": "Declaration Digest",
+          "type": "string"
+        },
+        "entry_id": {
+          "title": "Entry Id",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Failure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "execution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "joined": {
+          "default": false,
+          "title": "Joined",
+          "type": "boolean"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "observations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Observation"
+          },
+          "title": "Observations",
+          "type": "array"
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OperationReference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "requested_signal": {
+          "anyOf": [
+            {
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Duration Ms"
+          "title": "Requested Signal"
+        },
+        "resource": {
+          "title": "Resource",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 3,
+          "default": 3,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "ready",
+            "accepted",
+            "reused",
+            "busy",
+            "manual",
+            "absent",
+            "stale",
+            "condition-unmet",
+            "owner-lost",
+            "failed",
+            "interrupted",
+            "acknowledged",
+            "nothing-to-reconcile"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "steps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "resource",
+        "entry_id",
+        "action",
+        "declaration_digest",
+        "coordination",
+        "status",
+        "message"
+      ],
+      "title": "DevEnsureOutput",
+      "type": "object"
+    },
+    "ExecutionView": {
+      "additionalProperties": false,
+      "properties": {
+        "acknowledged": {
+          "default": false,
+          "title": "Acknowledged",
+          "type": "boolean"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action"
+        },
+        "entry_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entry Id"
         },
         "execution_id": {
           "title": "Execution Id",
@@ -109,321 +256,57 @@
           "default": null,
           "title": "Exit Code"
         },
-        "failure_reason": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Failure Reason"
+        "log_path": {
+          "title": "Log Path",
+          "type": "string"
         },
-        "logs": {
-          "$ref": "#/$defs/DevMergedLogs"
-        },
-        "requested_signal": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+        "phase": {
+          "enum": [
+            "pending",
+            "settled",
+            "owner-lost"
           ],
-          "default": null,
-          "title": "Requested Signal"
+          "title": "Phase",
+          "type": "string"
         },
         "state": {
-          "enum": [
-            "starting",
-            "running",
-            "exited",
-            "interrupted",
-            "start-failed",
-            "capture-failed",
-            "owner-lost",
-            "released"
-          ],
           "title": "State",
           "type": "string"
-        },
-        "termination_signal": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Termination Signal"
-        },
-        "timed_out": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Timed Out"
         }
       },
       "required": [
-        "caller_role",
         "execution_id",
         "state",
-        "argv",
-        "cwd",
-        "logs"
+        "phase",
+        "log_path"
       ],
-      "title": "DevAttempt",
+      "title": "ExecutionView",
       "type": "object"
     },
-    "DevEnsureOutput": {
+    "Failure": {
       "additionalProperties": false,
+      "description": "An immutable snapshot when a failure is part of a larger service result.",
       "properties": {
-        "access": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Access",
-          "type": "array"
-        },
-        "attempt": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DevAttempt"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "caller_status": {
-          "anyOf": [
-            {
-              "const": "detached",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Caller Status"
-        },
-        "capability": {
-          "$ref": "#/$defs/CapabilityIdentity"
-        },
-        "cleanup": {
-          "anyOf": [
-            {
-              "enum": [
-                "completed",
-                "unknown"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cleanup"
-        },
-        "command": {
-          "const": "dev ensure",
-          "default": "dev ensure",
-          "title": "Command",
+        "code": {
+          "title": "Code",
           "type": "string"
         },
-        "effective_target_digest": {
-          "title": "Effective Target Digest",
-          "type": "string"
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
         },
-        "execution_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Execution Id"
-        },
-        "probe": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ProbeObservation"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "probe_argv": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Probe Argv"
-        },
-        "provision": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ManualProvisionOutput"
-            },
-            {
-              "$ref": "#/$defs/ExecProvisionOutput"
-            }
-          ],
-          "title": "Provision"
-        },
-        "ready": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Ready"
-        },
-        "schema_version": {
-          "const": 2,
-          "default": 2,
-          "title": "Schema Version",
-          "type": "integer"
-        },
-        "status": {
-          "anyOf": [
-            {
-              "enum": [
-                "starting",
-                "running",
-                "exited",
-                "interrupted",
-                "start-failed",
-                "capture-failed",
-                "owner-lost",
-                "released"
-              ],
-              "type": "string"
-            },
-            {
-              "enum": [
-                "reused",
-                "manual-action-required",
-                "lock-timeout",
-                "activation-timeout",
-                "activation-failed",
-                "started",
-                "readiness-timeout",
-                "child-exit",
-                "joined",
-                "conflict",
-                "waiting"
-              ],
-              "type": "string"
-            }
-          ],
-          "title": "Status"
-        },
-        "target": {
-          "title": "Target",
-          "type": "string"
-        },
-        "workspace": {
-          "$ref": "#/$defs/WorkspaceIdentity"
-        }
-      },
-      "required": [
-        "target",
-        "ready",
-        "status",
-        "effective_target_digest",
-        "workspace",
-        "capability",
-        "access",
-        "provision"
-      ],
-      "title": "DevEnsureOutput",
-      "type": "object"
-    },
-    "DevLogReference": {
-      "additionalProperties": false,
-      "properties": {
-        "bytes": {
-          "title": "Bytes",
-          "type": "integer"
-        },
-        "path": {
-          "title": "Path",
+        "message": {
+          "title": "Message",
           "type": "string"
         }
       },
       "required": [
-        "path",
-        "bytes"
+        "code",
+        "message",
+        "details"
       ],
-      "title": "DevLogReference",
-      "type": "object"
-    },
-    "DevMergedLogs": {
-      "additionalProperties": false,
-      "properties": {
-        "merged": {
-          "$ref": "#/$defs/DevLogReference"
-        }
-      },
-      "required": [
-        "merged"
-      ],
-      "title": "DevMergedLogs",
-      "type": "object"
-    },
-    "ExecProvisionOutput": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "exec",
-          "default": "exec",
-          "title": "Kind",
-          "type": "string"
-        },
-        "mode": {
-          "enum": [
-            "run",
-            "activate"
-          ],
-          "title": "Mode",
-          "type": "string"
-        }
-      },
-      "required": [
-        "mode"
-      ],
-      "title": "ExecProvisionOutput",
+      "title": "Failure",
       "type": "object"
     },
     "JsonValue": {},
@@ -473,52 +356,14 @@
       "title": "MachineErrorBody",
       "type": "object"
     },
-    "ManualProvisionOutput": {
+    "Observation": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "const": "manual",
-          "default": "manual",
-          "title": "Kind",
-          "type": "string"
-        }
-      },
-      "title": "ManualProvisionOutput",
-      "type": "object"
-    },
-    "ProbeObservation": {
-      "additionalProperties": false,
-      "properties": {
-        "endpoint_identity": {
-          "title": "Endpoint Identity",
+        "checked_at": {
+          "title": "Checked At",
           "type": "string"
         },
-        "exit_code": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Exit Code"
-        },
-        "healthy": {
-          "title": "Healthy",
-          "type": "boolean"
-        },
-        "kind": {
-          "enum": [
-            "http",
-            "tcp",
-            "exec"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "output": {
+        "data_at": {
           "anyOf": [
             {
               "type": "string"
@@ -528,122 +373,127 @@
             }
           ],
           "default": null,
-          "title": "Output"
+          "title": "Data At"
         },
-        "output_bytes": {
+        "error": {
           "anyOf": [
             {
-              "type": "integer"
+              "$ref": "#/$defs/Failure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Output Bytes"
+          "title": "Expires At"
         },
-        "output_truncated": {
+        "instance": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Output Truncated"
+          "title": "Instance"
         },
-        "reason": {
-          "enum": [
-            "accepted-status",
-            "unexpected-status",
-            "connected",
-            "timeout",
-            "unreachable",
-            "deadline-exhausted",
-            "exec-start-failed",
-            "zero-exit",
-            "nonzero-exit",
-            "output-limit"
-          ],
-          "title": "Reason",
+        "key": {
+          "title": "Key",
           "type": "string"
         },
-        "responded": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "stale": {
           "default": false,
-          "title": "Responded",
+          "title": "Stale",
           "type": "boolean"
         },
-        "status_code": {
+        "state": {
+          "enum": [
+            "satisfied",
+            "unsatisfied",
+            "unknown"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "state",
+        "source",
+        "checked_at"
+      ],
+      "title": "Observation",
+      "type": "object"
+    },
+    "OperationReference": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "url": {
           "anyOf": [
             {
-              "type": "integer"
+              "maxLength": 2048,
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Status Code"
+          "title": "Url"
         }
       },
       "required": [
-        "kind",
-        "healthy",
-        "reason",
-        "endpoint_identity"
+        "id"
       ],
-      "title": "ProbeObservation",
-      "type": "object"
-    },
-    "WorkspaceIdentity": {
-      "additionalProperties": false,
-      "description": "Stable identity facts for one executable workspace.",
-      "properties": {
-        "instance": {
-          "title": "Instance",
-          "type": "string"
-        },
-        "namespace_id": {
-          "title": "Namespace Id",
-          "type": "string"
-        },
-        "repository_id": {
-          "title": "Repository Id",
-          "type": "string"
-        },
-        "repository_kind": {
-          "enum": [
-            "git",
-            "non-git"
-          ],
-          "title": "Repository Kind",
-          "type": "string"
-        },
-        "root": {
-          "format": "path",
-          "title": "Root",
-          "type": "string"
-        },
-        "worktree_id": {
-          "title": "Worktree Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "root",
-        "namespace_id",
-        "repository_kind",
-        "repository_id",
-        "worktree_id",
-        "instance"
-      ],
-      "title": "WorkspaceIdentity",
+      "title": "OperationReference",
       "type": "object"
     }
   },
-  "$id": "urn:svc:cli-output:dev-ensure:v2",
+  "$id": "urn:svc:cli-output:dev-ensure:v3",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "anyOf": [
     {
@@ -657,5 +507,5 @@
     }
   ],
   "title": "SVC dev-ensure machine output",
-  "x-svc-result-schema-version": 2
+  "x-svc-result-schema-version": 3
 }

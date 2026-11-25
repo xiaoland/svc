@@ -1,0 +1,173 @@
+import AppKit
+import SwiftUI
+
+struct ResourceRow: View {
+    let resource: DevResource
+    let project: String
+    let store: AppStore
+    @State private var expanded = false
+    @State private var showingDiagnostics = false
+    @State private var confirmRecovery = false
+    private var busy: Bool { resource.coordination.map { store.operations[$0.coordinationId] != nil } ?? false }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if busy { ProgressView().controlSize(.mini) }
+                resourceTitle.frame(maxWidth: .infinity, alignment: .leading)
+                observationSummary
+                ResourceActionButton(title: "", semanticID: resource.entryId + "/details", bordered: false,
+                                     symbol: expanded ? "chevron.up" : "chevron.down",
+                                     accessibilityName: "\(expanded ? "收起" : "展开") \(resource.label) 详情", expanded: expanded) { expanded.toggle() }
+                    .frame(width: 28, height: 24)
+            }
+            ResourceAccessView(addresses: visibleAddresses, store: store)
+            if let error = resource.error {
+                DiagnosticView(title: "资源需要处理", message: error.message, semanticID: resource.entryId + "/error", context: resource.label)
+            }
+            if resource.needsReconciliation { recovery }
+            if !visibleActions.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(visibleActions) { action in actionButton(action) }
+                }
+            }
+            if let receipt = store.receipts[resource.entryId] {
+                ReceiptView(receipt: receipt, expanded: expanded, store: store)
+            }
+            if expanded {
+                ForEach(resource.facets.filter { !$0.automatic }) { facet in
+                    ResourceActionButton(title: "检查\(facet.label)", semanticID: resource.entryId + "/observe/" + facet.key,
+                        enabled: !store.quitPending && store.refreshes[project] == nil) {
+                            Task { await store.refresh(project, resource: resource.resource, observation: facet.key) }
+                        }.fixedSize()
+                }
+                if let runtime = store.activity.snapshot?.resources?.first(where: { $0.entryId == resource.entryId && $0.projectPath == project }),
+                   let usage = runtime.usage {
+                    ProcessUsageView(usage: usage)
+                }
+                ResourceActionButton(title: "诊断信息", semanticID: resource.entryId + "/diagnostics", bordered: false,
+                    symbol: showingDiagnostics ? "chevron.down" : "chevron.right",
+                    accessibilityName: "\(showingDiagnostics ? "收起" : "展开") \(resource.label) 诊断信息",
+                    expanded: showingDiagnostics) {
+                        $showingDiagnostics.immediateDisclosure.wrappedValue.toggle()
+                    }.font(.caption).fixedSize()
+                if showingDiagnostics {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(resource.observations) { item in observationDetails(item) }
+                        Text(resource.scopeLabel)
+                        if let controller = resource.controller { Text(controller).textSelection(.enabled) }
+                        if let owner = resource.coordination, owner.ownerRepo != resource.source || owner.ownerResource != resource.resource {
+                            Text("共享：\(owner.ownerRepo) · \(owner.ownerResource)").textSelection(.enabled)
+                        }
+                        ForEach(resource.relations, id: \.self) { Text($0) }
+                        ForEach(resource.actions) { action in
+                            if !action.traits.isEmpty {
+                                Text("\(action.intent) · \(action.traitLabels)")
+                            }
+                        }
+                    }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var resourceTitle: some View {
+        Text(resource.label).font(.system(size: 13, weight: .medium))
+            .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            .help(resource.label).accessibilityAddTraits(.isHeader)
+    }
+
+    private var observationSummary: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            ForEach(visibleObservations) { item in
+                Label {
+                    Text(expanded || item.state != "satisfied" || item.isStale
+                         ? "\(item.label) · \(item.stateLabel)" : item.label)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: item.symbol)
+                        .foregroundStyle(item.state == "satisfied" && !item.isStale ? .green : .secondary)
+                }.font(.caption)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(item.label)：\(item.stateLabel)")
+                    .help("\(item.label)：\(item.stateLabel)")
+            }
+        }.multilineTextAlignment(.trailing)
+    }
+
+    private var visibleObservations: [ResourceObservation] {
+        if expanded { return resource.observations }
+        let important = resource.observations.filter { item in
+            item.state != "satisfied" || item.isStale || resource.facets.contains { $0.key == item.key && $0.purpose == "runtime-readiness" }
+        }
+        return important.isEmpty ? Array(resource.observations.prefix(1)) : important
+    }
+
+    private var visibleActions: [ResourceAction] {
+        expanded ? resource.actions : resource.actions.filter {
+            $0.traits.contains("runtime") || $0.traits.contains("connection")
+        }
+    }
+
+    private var visibleAddresses: [String] {
+        if expanded { return resource.access }
+        // Keep a direct web entry; paths and other copy-only entries belong in details.
+        return Array(resource.access.filter {
+            guard let scheme = URL(string: $0)?.scheme?.lowercased() else { return false }
+            return ["http", "https"].contains(scheme)
+        }.prefix(1))
+    }
+
+    private func actionButton(_ action: ResourceAction) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ResourceActionButton(title: action.intent, semanticID: resource.entryId + "/" + action.key,
+                enabled: !busy && !store.quitPending && resource.coordination != nil && !resource.needsReconciliation,
+                accessibilityName: "\(resource.label)：\(action.intent)",
+                accessibilityHelp: "\(action.effectScope)；\(action.effectLabel)") {
+                    if action.kind == "manual" { expanded = true }
+                    store.perform(action, resource: resource, project: project)
+                }.fixedSize()
+            if expanded || action.dataEffect != "unchanged" {
+                Text("\(action.effectScope) · \(action.effectLabel)")
+                    .font(.caption).foregroundStyle(action.dataEffect == "delete" ? .red : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if expanded {
+                if action.kind == "manual" && store.receipts[resource.entryId]?.result?.action != action.key {
+                    ForEach(Array(action.steps.enumerated()), id: \.offset) { _, step in Text(step).font(.caption) }
+                }
+                if action.interruption == "wait" { Text("开始后等待实际结束").font(.caption).foregroundStyle(.secondary) }
+                if action.completion == "submitted" { Text("提交后由控制者继续处理").font(.caption).foregroundStyle(.secondary) }
+            }
+        }
+    }
+
+    private func observationDetails(_ item: ResourceObservation) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(item.label) · \(item.stateLabel)").font(.caption.weight(.medium))
+            if let value = item.value, !value.text.isEmpty { Text(value.text).textSelection(.enabled) }
+            if let message = item.error?.message ?? item.message { Text(message).textSelection(.enabled) }
+            Text(item.source.replacingOccurrences(of: "\0", with: " ")).font(.caption.monospaced()).textSelection(.enabled)
+            Text("检查：\(item.checkedAt)")
+            if let time = item.dataAt { Text("数据：\(time)") }
+            if let instance = item.instance { Text("实例：\(instance)").textSelection(.enabled) }
+        }.font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var recovery: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("前次操作结果未知", systemImage: "exclamationmark.circle.fill")
+                .font(.caption).foregroundStyle(.orange)
+            ResourceActionButton(title: "核对并恢复…", semanticID: resource.entryId + "/reconcile",
+                enabled: !busy && !store.quitPending) { confirmRecovery = true }
+                .fixedSize()
+                .confirmationDialog("确认原操作结果未知，重新操作可能重复？", isPresented: $confirmRecovery) {
+                    Button("已核对控制者，解除阻断") { store.reconcile(resource, project: project) }
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    Text("只解除 SVC 的阻断，不终止旧进程、不重试，也不将原结果改为成功。")
+                }
+        }.padding(.vertical, 4)
+    }
+}

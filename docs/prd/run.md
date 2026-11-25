@@ -8,13 +8,15 @@ The observable outcome is one execution ID, recoverable command output, and hone
 
 Declared bounded runs and long-lived dev capabilities remain separate public domains. Both may reuse private process-attempt mechanics, but `svc dev` alone owns capability readiness, scope, reuse, and release after readiness.
 
+SVC Dev 另提供无需项目配置的一次性受管执行和主机压力入口，产品边界见[开发资源与执行管理](development.md)。它复用机械 run/managed 记录，但不改变本文具名 `svc run` 的声明、收敛、终端输入和跟随合同；旧执行不会因出现在清单中就获得额外终止权。
+
 ## CLI Contract
 
 Use a separate `run` map for bounded project-owned commands that Humans, Agents, editor carriers, or CI should invoke through the same project name:
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "run": {
     "check": {
       "argv": ["pdm", "run", "test"],

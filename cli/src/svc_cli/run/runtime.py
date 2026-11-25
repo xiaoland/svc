@@ -28,6 +28,7 @@ from .._execution import (
 )
 from ..config import ConfigError, RunEntry, load_config
 from ..errors import SvcError
+from ..activity.provenance import register as register_observation
 from ..workspace import WorkspaceIdentity, resolve_workspace_identity
 
 
@@ -234,6 +235,9 @@ def _own_run(
             LaunchSpec(selected.argv, selected.cwd, selected.environment),
             stdout_sink=stdout_sink,
             stderr_sink=stderr_sink,
+            on_started=lambda record: register_observation(
+                store, record, selected.workspace.root, "declared"
+            ),
         )
     except KeyboardInterrupt:
         current = store.read(published.record.execution_id)

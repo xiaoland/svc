@@ -365,6 +365,8 @@ def start_isolated(
     store: ExecutionStore,
     published: PublishedExecution,
     spec: LaunchSpec,
+    *,
+    wait_on_record_failure: bool = False,
 ) -> OwnedExecution | ExecutionRecord:
     """Start an isolated/null-stdin process using a pre-opened merged log."""
 
@@ -399,6 +401,9 @@ def start_isolated(
     try:
         store.write(record)
     except BaseException:
+        if wait_on_record_failure:
+            process.wait()
+            raise
         owned = OwnedExecution(record, process, True)
         _signal_owned_group(owned, signal.SIGTERM)
         try:
@@ -417,6 +422,7 @@ def run_foreground(
     *,
     stdout_sink: BinaryIO | None,
     stderr_sink: BinaryIO | None,
+    on_started: Callable[[ExecutionRecord], None] | None = None,
 ) -> ExecutionRecord:
     """Own one foreground process through child settlement and capture EOF."""
 
@@ -480,6 +486,8 @@ def run_foreground(
                 process.wait()
             raise
         assert process.stdout is not None and process.stderr is not None
+        if on_started is not None:
+            on_started(record)
         readers = (
             threading.Thread(
                 target=drain, args=("stdout", process.stdout), daemon=True
@@ -1041,7 +1049,7 @@ def _parse_timestamp(value: str) -> datetime:
     return parsed
 
 
-def _read_json(path: Path) -> dict[str, object]:
+def _read_json(path: Path, *, allow_null: bool = False) -> dict[str, object]:
     try:
         raw = path.read_bytes()
         value = json.loads(
@@ -1053,7 +1061,7 @@ def _read_json(path: Path) -> dict[str, object]:
         raise _state_error(
             "execution-state-unreadable", "Execution state cannot be read safely.", path
         ) from error
-    if not isinstance(value, dict) or _contains_null(value):
+    if not isinstance(value, dict) or (not allow_null and _contains_null(value)):
         raise _state_error(
             "execution-state-invalid",
             "Execution state must be a strict JSON object.",

@@ -14,13 +14,22 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from pathlib import Path
-
-from tools.release_notes import release_section
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ID = "dev.svc.menubar"
-DEFAULT_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+CLI_RESULT_SCHEMAS = {
+    "list": 1,
+    "status": 4,
+    "act": 1,
+    "reconcile": 1,
+    "monitor": 3,
+    "exec": 1,
+    "logs": 1,
+    "integrate": 1,
+    "terminate": 1,
+}
 
 
 def run(*args: str, capture: bool = False) -> str:
@@ -72,7 +81,7 @@ def verify(path: Path) -> None:
     run("codesign", "--verify", "--strict", str(path))
 
 
-def build(profile: str, output: Path, cli: str = "") -> Path:
+def build(profile: str, output: Path) -> Path:
     release = profile == "release"
     identity = "-" if release else signing_identity()
     configuration = "release" if release else "debug"
@@ -81,7 +90,19 @@ def build(profile: str, output: Path, cli: str = "") -> Path:
     build_number = run(
         "git", "rev-list", "--first-parent", "--count", "HEAD", capture=True
     )
-    run("swift", "build", "--package-path", str(ROOT / "macos"), "-c", configuration)
+    jobs = os.environ.get("SVC_BUILD_JOBS", "2")
+    if not jobs.isdigit() or not 1 <= int(jobs) <= 8:
+        raise ValueError("SVC_BUILD_JOBS 必须在 1 到 8 之间；默认 2，避免占满本机")
+    run(
+        "swift",
+        "build",
+        "--jobs",
+        jobs,
+        "--package-path",
+        str(ROOT / "macos"),
+        "-c",
+        configuration,
+    )
     binary_dir = Path(
         run(
             "swift",
@@ -119,10 +140,6 @@ def build(profile: str, output: Path, cli: str = "") -> Path:
             "LSUIElement": True,
             "SVCSourceRevision": revision + ("-dirty" if dirty else ""),
             "SVCBuildProfile": profile,
-            "SVCDefaultCLIPath": "" if release else cli,
-            "SVCDefaultSearchPath": DEFAULT_PATH
-            if release
-            else os.environ.get("PATH", DEFAULT_PATH),
         }
         with (prepared / "Contents/Info.plist").open("wb") as stream:
             plistlib.dump(info, stream)
@@ -212,50 +229,9 @@ def build_wheel(output: Path) -> Path:
     return wheels[0]
 
 
-def install_runtime(wheel: Path) -> Path:
-    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
-    root = Path.home() / "Library/Application Support/SVC/runtimes" / digest[:20]
-    executable = root / "bin/svc"
-    marker = root / ".svc-wheel-sha256"
-    if (
-        marker.is_file()
-        and marker.read_text().strip() == digest
-        and executable.is_file()
-    ):
-        return executable
-    if root.exists():
-        raise ValueError(f"发现未完成的 CLI 环境，请先检查：{root}")
-    root.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        run(sys.executable, "-m", "venv", str(root))
-        run(
-            str(root / "bin/python"),
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            str(wheel),
-        )
-        schema = json.loads(
-            run(str(executable), "dev", "status", "--json-schema", capture=True)
-        )
-        if schema.get("x-svc-result-schema-version") != 3:
-            raise ValueError("配套 CLI 的 dev-status schema 不是 3")
-        marker.write_text(digest + "\n")
-        return executable
-    except BaseException:
-        shutil.rmtree(root)
-        raise
-
-
 def install(destination: Path, launch: bool) -> Path:
-    # A fixed source timestamp lets app-only iterations reuse the exact same CLI wheel/runtime.
-    os.environ.setdefault(
-        "SOURCE_DATE_EPOCH", run("git", "log", "-1", "--format=%ct", capture=True)
-    )
-    with tempfile.TemporaryDirectory(prefix="svc-cli-wheel-") as temporary:
-        cli = install_runtime(build_wheel(Path(temporary)))
-    bundle = build("local", ROOT / "dist/macos/local", str(cli))
+    # The user owns CLI installation and version selection independently of the App.
+    bundle = build("local", ROOT / "dist/macos/local")
     verify(bundle)
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists() or destination.is_symlink():
@@ -267,16 +243,15 @@ def install(destination: Path, launch: bool) -> Path:
     return destination
 
 
-def check_release(require_clean: bool = False) -> str:
+def check_source(require_clean: bool = False) -> str:
     value = version()
-    release_section((ROOT / "MACOS_CHANGELOG.md").read_text(), value)
     if require_clean and run("git", "status", "--porcelain", capture=True):
-        raise ValueError("发布只接受干净且已提交的源码")
+        raise ValueError("归档只接受干净且已提交的源码")
     return value
 
 
 def archive(output: Path, require_clean: bool) -> None:
-    value = check_release(require_clean)
+    value = check_source(require_clean)
     os.environ.setdefault(
         "SOURCE_DATE_EPOCH", run("git", "log", "-1", "--format=%ct", capture=True)
     )
@@ -310,7 +285,10 @@ def archive(output: Path, require_clean: bool) -> None:
         "signing": "ad-hoc",
         "notarized": False,
         "cli_wheel": wheel.name,
-        "dev_status_schema": 3,
+        "cli_version": tomllib.loads((ROOT / "cli/pyproject.toml").read_text())[
+            "project"
+        ]["version"],
+        "cli_result_schemas": CLI_RESULT_SCHEMAS,
     }
     (output / "release.json").write_text(json.dumps(manifest, indent=2) + "\n")
     shutil.copy2(ROOT / "macos/INSTALL.md", output / "INSTALL.md")
@@ -331,7 +309,6 @@ def main() -> int:
     build_command.add_argument(
         "--profile", choices=["local", "release"], default="local"
     )
-    build_command.add_argument("--cli", default="")
     build_command.add_argument("--output", type=Path, default=ROOT / "dist/SVC-build")
     install_command = commands.add_parser("install")
     install_command.add_argument(
@@ -348,9 +325,9 @@ def main() -> int:
         if args.command == "version":
             print(version())
         elif args.command == "check":
-            print(check_release(args.require_clean))
+            print(check_source(args.require_clean))
         elif args.command == "build":
-            print(build(args.profile, args.output.resolve(), args.cli))
+            print(build(args.profile, args.output.resolve()))
         elif args.command == "install":
             print(install(args.destination.absolute(), args.launch))
         else:

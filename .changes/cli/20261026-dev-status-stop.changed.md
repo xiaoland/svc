@@ -1,1 +1,0 @@
-`svc dev status --json` 的目标观察新增 `stop.kind`（`absent`、`manual` 或 `exec`），使图形客户端可以在执行之前展示停止能力。该查询不执行停止动作；dev-status 结果 schema 升为 3，其他 dev 命令保持原有 schema。严格依赖 schema 2 的消费者需要更新；依据当前 schema 版本政策，CLI package 进入 17.0.0 开发线；macOS 预览随附同一源码的 wheel，PyPI 发布仍由 CLI 独立发布流程负责。

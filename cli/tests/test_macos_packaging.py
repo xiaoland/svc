@@ -111,24 +111,6 @@ def test_signing_requires_an_unambiguous_development_identity(
         app.signing_identity()
 
 
-def test_local_runtime_is_reused_only_for_matching_wheel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    wheel = tmp_path / "fixture.whl"
-    wheel.write_bytes(b"wheel")
-    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
-    runtime = tmp_path / "Library/Application Support/SVC/runtimes" / digest[:20]
-    (runtime / "bin").mkdir(parents=True)
-    (runtime / "bin/svc").write_text("fixture")
-    marker = runtime / ".svc-wheel-sha256"
-    marker.write_text(digest)
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    assert app.install_runtime(wheel) == runtime / "bin/svc"
-    marker.write_text("wrong")
-    with pytest.raises(ValueError, match="未完成"):
-        app.install_runtime(wheel)
-
-
 def assets(path: Path) -> Path:
     path.mkdir()
     manifest = {
@@ -138,6 +120,8 @@ def assets(path: Path) -> Path:
         "signing": "ad-hoc",
         "notarized": False,
         "cli_wheel": "svc-17.0.0.whl",
+        "cli_version": "17.0.0",
+        "cli_result_schemas": app.CLI_RESULT_SCHEMAS,
     }
     (path / "release.json").write_text(json.dumps(manifest))
     for name in ["SVC-0.1.0-macos-arm64.zip", "svc-17.0.0.whl", "INSTALL.md"]:
@@ -149,6 +133,25 @@ def assets(path: Path) -> Path:
         )
     )
     return path
+
+
+def test_unreleased_source_can_be_checked_but_not_published(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "macos").mkdir()
+    (tmp_path / "macos/VERSION").write_text("0.1.0\n")
+    changelog = tmp_path / "MACOS_CHANGELOG.md"
+    changelog.write_text("## [0.0.9] - 2026-10-26\n\n上次发布。\n")
+    monkeypatch.setattr(app, "ROOT", tmp_path)
+    monkeypatch.setattr(
+        release, "validate_tag", lambda *_: pytest.fail("publish reached GitHub")
+    )
+
+    assert app.check_source() == "0.1.0"
+    with pytest.raises(
+        ValueError, match="latest changelog version is 0.0.9, expected 0.1.0"
+    ):
+        release.publish("owner/repo", assets(tmp_path / "assets"), SHA, changelog)
 
 
 def test_release_rejects_wrong_source_corruption_and_extra_assets(

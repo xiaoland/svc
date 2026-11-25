@@ -50,7 +50,7 @@ private final class TestPreferences: UserDefaults {
     #expect(store.projects[0].snapshot == nil)
     await requests.failFirst()
     try await waitUntil { store.projects[0].error != nil }
-    #expect(store.readyCount == 0)
+    #expect(store.resourceCount == 0)
     let next = Task { await store.refresh("/tmp/project") }
     try await waitUntil { await requests.count == 1 }
     store.removeProject("/tmp/project")
@@ -64,11 +64,11 @@ private final class TestPreferences: UserDefaults {
     let store = AppStore(preferences: preferences(["/tmp/project"])) { _, command, _, _ in
         try await requests.call(command)
     }
-    let target = try #require(CLIResponse.decode(DevStatus.self, data: statusData(), command: .status).targets?.first)
+    let target = try #require(CLIResponse.decode(DevCatalog.self, data: statusData(), command: .status).resources.first)
     let old = Task { await store.refresh("/tmp/project") }
     try await waitUntil { await requests.count == 1 }
-    store.perform(.ensure, target: target, project: "/tmp/project")
-    store.perform(.ensure, target: target, project: "/tmp/project")
+    store.perform(target.actions.first { $0.key == "ensure" }!, resource: target, project: "/tmp/project")
+    store.perform(target.actions.first { $0.key == "ensure" }!, resource: target, project: "/tmp/project")
     try await waitUntil { await requests.count == 2 }
     #expect(store.operations.count == 1)
     await requests.resolveFirst(statusData())
@@ -80,10 +80,10 @@ private final class TestPreferences: UserDefaults {
     #expect(quitReply == false)
     try await waitUntil { await requests.count == 2 }
     store.waitToQuit { quitReply = $0 }
-    await requests.resolveFirst(Data("{\"schema_version\":2,\"command\":\"dev ensure\",\"status\":\"started\",\"ready\":true}".utf8))
+    await requests.resolveFirst(actionData())
     try await waitUntil { store.operations.isEmpty }
     #expect(quitReply == true)
-    #expect(store.receipts["shared"]?.message == "服务已就绪")
+    #expect(store.receipts["entry-web"]?.message == "声明动作已完成。")
     await requests.resolveFirst(statusData())
 }
 
@@ -92,15 +92,15 @@ private final class TestPreferences: UserDefaults {
     let store = AppStore(preferences: preferences(["/tmp/project"])) { _, command, _, _ in
         try await requests.call(command)
     }
-    let target = try #require(CLIResponse.decode(DevStatus.self, data: statusData(), command: .status).targets?.first)
-    store.perform(.stop, target: target, project: "/tmp/project")
+    let target = try #require(CLIResponse.decode(DevCatalog.self, data: statusData(), command: .status).resources.first)
+    store.perform(target.actions.first { $0.key == "stop" }!, resource: target, project: "/tmp/project")
     try await waitUntil { await requests.count == 1 }
     var quitReply = false
     store.waitToQuit { quitReply = $0 }
     await requests.failFirst()
     try await waitUntil { store.operations.isEmpty }
     #expect(quitReply)
-    #expect(store.receipts["shared"]?.message == "fixture failure")
+    #expect(store.receipts["entry-web"]?.message == "fixture failure")
 }
 
 @Test @MainActor func operationReceiptRemainsReachableAfterRefreshFails() async throws {
@@ -108,19 +108,16 @@ private final class TestPreferences: UserDefaults {
     let store = AppStore(preferences: preferences(["/tmp/project"])) { _, command, _, _ in
         try await requests.call(command)
     }
-    let target = try #require(CLIResponse.decode(DevStatus.self, data: statusData(), command: .status).targets?.first)
-    store.perform(.ensure, target: target, project: "/tmp/project")
+    let target = try #require(CLIResponse.decode(DevCatalog.self, data: statusData(), command: .status).resources.first)
+    store.perform(target.actions.first { $0.key == "ensure" }!, resource: target, project: "/tmp/project")
     try await waitUntil { await requests.count == 1 }
-    await requests.resolveFirst(Data("""
-    {"schema_version":2,"command":"dev ensure","status":"started","ready":true,
-    "attempt":{"execution_id":"receipt","logs":{"merged":{"path":"/tmp/output.log"}}}}
-    """.utf8))
+    await requests.resolveFirst(actionData())
     try await waitUntil { await requests.count == 1 }
     await requests.failFirst()
     try await waitUntil { store.projects[0].error != nil }
-    #expect(store.readyCount == 0)
+    #expect(store.resourceCount == 0)
     let receipt = try #require(store.unavailableReceipts(for: store.projects[0]).first)
-    #expect(receipt.target == "web")
-    #expect(receipt.message == "服务已就绪")
+    #expect(receipt.resource == "web")
+    #expect(receipt.message == "声明动作已完成。")
     #expect(receipt.logPath == "/tmp/output.log")
 }

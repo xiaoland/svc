@@ -8,11 +8,20 @@ struct ReceiptView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(receipt.message).font(.caption).foregroundStyle(.secondary)
-                .lineLimit(expanded ? nil : 2).textSelection(.enabled)
+            Label {
+                Text(receipt.message).lineLimit(expanded ? nil : 2).textSelection(.enabled)
+            } icon: {
+                Image(systemName: symbol).foregroundStyle(needsAttention ? .orange : .secondary).accessibilityHidden(true)
+            }.font(.caption).foregroundStyle(needsAttention ? .primary : .secondary)
             if expanded {
+                if let result = receipt.result {
+                    ForEach(Array(result.steps.enumerated()), id: \.offset) { _, step in Text(step).font(.caption).textSelection(.enabled) }
+                    ForEach(result.observations) { item in Text("\(item.label)：\(item.stateLabel)").font(.caption) }
+                    if let operation = result.operation { Text("控制者操作：\(operation.id)").font(.caption.monospaced()).textSelection(.enabled) }
+                    if let execution = result.execution { Text(execution.executionId).font(.caption2.monospaced()).textSelection(.enabled) }
+                }
                 HStack {
-                    Text("\(receipt.target) · \(receipt.command.title) · \(receipt.date.formatted(date: .omitted, time: .standard))")
+                    Text("\(receipt.resource) · \(receipt.action) · \(receipt.date.formatted(date: .omitted, time: .standard))")
                         .font(.caption2).foregroundStyle(.tertiary)
                     Spacer()
                     if let path = receipt.logPath {
@@ -28,5 +37,15 @@ struct ReceiptView: View {
                 }
             }
         }
+    }
+
+    private var needsAttention: Bool {
+        guard let status = receipt.result?.status else { return true }
+        return ["failed", "condition-unmet", "owner-lost", "stale", "interrupted", "absent"].contains(status)
+    }
+
+    private var symbol: String {
+        if needsAttention { return "exclamationmark.circle.fill" }
+        return receipt.result?.status == "completed" ? "checkmark.circle" : "info.circle"
     }
 }

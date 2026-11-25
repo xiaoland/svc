@@ -11,6 +11,9 @@ from pydantic import JsonValue, TypeAdapter
 
 from .cli_output.dev import (
     DevEnsureOutput,
+    DevListOutput,
+    DevActOutput,
+    DevReconcileOutput,
     DevIdentityOutput,
     DevStatusOutput,
     DevStopOutput,
@@ -30,6 +33,13 @@ from .cli_output.double import (
 from .cli_output.project import InitApplyOutput, InitPlanOutput, RootStatusOutput
 from .cli_output.model import CliUsageOutput, MachineError
 from .cli_output.run import RunReceipt
+from .cli_output.activity import (
+    MonitorOutput,
+    ManagedOutput,
+    TerminationOutput,
+    ExecutionLogsOutput,
+    IntegrationSetupOutput,
+)
 from .cli_output.skills import SkillsOutput, AdoptionOutput
 
 
@@ -74,12 +84,18 @@ DoubleStopMachineOutput: TypeAlias = (
 )
 
 RegisteredMachineOutput: TypeAlias = (
-    SkillsOutput
+    MonitorOutput
+    | ManagedOutput
+    | TerminationOutput
+    | SkillsOutput
     | AdoptionOutput
     | InitPlanOutput
     | InitApplyOutput
     | RootStatusOutput
     | DevIdentityOutput
+    | DevListOutput
+    | DevActOutput
+    | DevReconcileOutput
     | DevStatusOutput
     | DevEnsureOutput
     | DevStopOutput
@@ -106,15 +122,39 @@ class OutputSchemaSpec:
 
 
 OUTPUT_SCHEMA_SPECS = {
+    "dev-logs": OutputSchemaSpec(
+        1, TypeAdapter(ExecutionLogsOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-integrate": OutputSchemaSpec(
+        1, TypeAdapter(IntegrationSetupOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-monitor": OutputSchemaSpec(
+        3, TypeAdapter(MonitorOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-exec": OutputSchemaSpec(
+        1, TypeAdapter(ManagedOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-terminate": OutputSchemaSpec(
+        1, TypeAdapter(TerminationOutput | MachineError | CliUsageOutput)
+    ),
     "skills": OutputSchemaSpec(
         1, TypeAdapter(SkillsOutput | AdoptionOutput | MachineError | CliUsageOutput)
     ),
     "init": OutputSchemaSpec(4, TypeAdapter(InitMachineOutput)),
-    "status": OutputSchemaSpec(3, TypeAdapter(StatusMachineOutput)),
-    "dev-identity": OutputSchemaSpec(2, TypeAdapter(DevIdentityMachineOutput)),
-    "dev-status": OutputSchemaSpec(3, TypeAdapter(DevStatusMachineOutput)),
-    "dev-ensure": OutputSchemaSpec(2, TypeAdapter(DevEnsureMachineOutput)),
-    "dev-stop": OutputSchemaSpec(2, TypeAdapter(DevStopMachineOutput)),
+    "status": OutputSchemaSpec(4, TypeAdapter(StatusMachineOutput)),
+    "dev-identity": OutputSchemaSpec(3, TypeAdapter(DevIdentityMachineOutput)),
+    "dev-status": OutputSchemaSpec(4, TypeAdapter(DevStatusMachineOutput)),
+    "dev-ensure": OutputSchemaSpec(3, TypeAdapter(DevEnsureMachineOutput)),
+    "dev-stop": OutputSchemaSpec(3, TypeAdapter(DevStopMachineOutput)),
+    "dev-list": OutputSchemaSpec(
+        1, TypeAdapter(DevListOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-act": OutputSchemaSpec(
+        1, TypeAdapter(DevActOutput | MachineError | CliUsageOutput)
+    ),
+    "dev-reconcile": OutputSchemaSpec(
+        1, TypeAdapter(DevReconcileOutput | MachineError | CliUsageOutput)
+    ),
     "run": OutputSchemaSpec(2, TypeAdapter(RunMachineOutput)),
     "double-validate": OutputSchemaSpec(1, TypeAdapter(DoubleValidateMachineOutput)),
     "double-start": OutputSchemaSpec(1, TypeAdapter(DoubleStartMachineOutput)),
