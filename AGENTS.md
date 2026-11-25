@@ -28,6 +28,7 @@
 
 ## 开发流程
 
+- 主工作树检出 `develop`。小修和局部更新直接提交到 `develop`，其余工作从 `develop` 建独立分支和工作树，验证后合回 `develop`。分支与发布约定见[贡献指南](CONTRIBUTING.md#开发分支与工作树)。
 - Runtime：Python 3.11+
 - 环境与命令：PDM 2.28+
 - 安装：`pdm install`

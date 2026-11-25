@@ -4,7 +4,7 @@ on:
   pull_request:
     paths: ["macos/**", "script/**", "tools/macos_app.py", "tools/publish_macos_release.py", "cli/**", "pdm.lock", "MACOS_CHANGELOG.md", ".github/workflows/macos.yml"]
   push:
-    branches: [main]
+    branches: [main, develop]
     paths: ["macos/**", "script/**", "tools/macos_app.py", "tools/publish_macos_release.py", "cli/**", "pdm.lock", "MACOS_CHANGELOG.md", ".github/workflows/macos.yml"]
   workflow_dispatch:
 
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: svc-macos-${{ github.event.pull_request.number || 'release' }}
+  group: svc-macos-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -53,7 +53,7 @@ jobs:
       - run: pdm install --frozen-lockfile -d -G quality -G test -G double
       - name: Check isolated source and public contracts
         env:
-          SVC_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+          SVC_BASE_REF: ${{ github.event.pull_request.base.sha || (github.event.created && github.sha) || github.event.before || github.sha }}
         run: |
           pdm run check
           pdm run python -m tools.macos_app check --require-clean

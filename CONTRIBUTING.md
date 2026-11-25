@@ -19,6 +19,12 @@ pdm run svc --help
 
 框架权威源位于 `corpus/`，从 `corpus/index.md` 与各 Skill 入口进入；维护者须遵守 `corpus/AGENTS.md`。CLI workspace member 使用 `cli/src/svc_cli`，测试位于 `cli/tests`。SVC 自身持久的产品、技术与运行时事实位于 `docs/`。CLI 构建和运行均不读取 Corpus，归档不包含框架正文、模板或 catalog。
 
+## 开发分支与工作树
+
+`develop` 是日常开发和集成分支。主工作树保持检出 `develop`。范围明确的小修或局部更新可以直接在主工作树提交并推送到 `develop`。新功能、跨模块改动或需要并行推进的工作，从当前 `develop` 创建独立分支和工作树，并通过以 `develop` 为基线的 PR 合入。工作树按开发目录的约定建立，合入后清理已结束且无未提交改动的工作树和分支。
+
+普通 CI 覆盖 PR 和推送到 `develop`、`main` 的提交。涉及 App、CLI 或相应构建文件的变更也运行 macOS 验证。发布从已通过验证的 `develop` 选定内容，通过发布 PR 合入受保护的 `main`，之后把 `main` 的发布提交同步回 `develop`。
+
 ## 提交说明
 
 使用以下语法，人类可读的说明写中文：
@@ -62,7 +68,7 @@ CLI 输出 schema 仍维护自己的结果版本；它要求的 package major �
 
 ## 发布边界
 
-`main` 是唯一集成与发布源，不创建或面向长期 `develop` 或 release 分支。每个已接纳的 `main` commit 都已通过必要 CI，可进入后续发布。
+`main` 是唯一发布源。发布 PR 集成已验证的源码和对应发行记录，发布工作流使用合入后的 `main` 提交生成发行物。
 
 维护者在首次发布前配置：
 
@@ -72,7 +78,7 @@ CLI 输出 schema 仍维护自己的结果版本；它要求的 package major �
 
 发布顺序如下：
 
-1. 功能 PR 合并 `.changes/cli/` 或 `.changes/corpus/` 的片段。改变 Corpus 源内容时维护根 `pyproject.toml` 的 `[tool.svc.corpus].version` 与需要的迁移指导：未发布目标可以继续积累变更，已发布版本的源内容变化需要新的目标版本。版本检查需要完整的发行 tags；CI 使用完整 Git 历史，发布比较采用 `v<version>` 与 `corpus-v<version>` 对应的源码。根 `LICENSE` 是 MIT 许可权威源，各 Skill 和 CLI 各带逐字副本。Corpus release PR 合并前运行发布准备命令，把版本元数据和已存在的许可副本同步后与正文一起提交。
+1. 开发变更进入 `develop` 时，把面向消费者的变更写成对应的 `.changes/` 片段。改变 Corpus 源内容时维护根 `pyproject.toml` 的 `[tool.svc.corpus].version` 与需要的迁移指导：未发布目标可以继续积累变更，已发布版本的源内容变化需要新的目标版本。版本检查需要完整的发行 tags；CI 使用完整 Git 历史，发布比较采用 `v<version>` 与 `corpus-v<version>` 对应的源码。根 `LICENSE` 是 MIT 许可权威源，各 Skill 和 CLI 各带逐字副本。Corpus release PR 合并前运行发布准备命令，把版本元数据和已存在的许可副本同步后与正文一起提交。
 2. 维护者更新 `cli/pyproject.toml` 静态版本，准备 CLI 发布 PR 并生成 changelog：
 
    ```console
