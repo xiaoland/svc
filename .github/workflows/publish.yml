@@ -145,9 +145,14 @@ jobs:
             auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 --wrap=0)
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "refs/tags/$TAG"
           fi
+      - name: Stage distributions for PyPI
+        run: |
+          # The publisher writes attestation files alongside its inputs.
+          mkdir -p release/pypi
+          cp -- release/python/*.whl release/python/*.tar.gz release/pypi/
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
-          packages-dir: release/python/
+          packages-dir: release/pypi/
           skip-existing: true
       - name: Verify uploaded PyPI distributions
         run: python -m tools.check_pypi_release release/python --complete
