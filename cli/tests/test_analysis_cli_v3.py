@@ -62,7 +62,7 @@ def test_v3_cli_discovers_exports_and_analyzes_standard_pi(tmp_path: Path) -> No
     assert json.loads(stdout)["schema_version"] == 4
 
     request = tmp_path / "overview.json"
-    request.write_text('{"version":3,"intent":"overview"}')
+    request.write_text('{"intent":"overview"}')
     code, stdout, stderr = _invoke(
         ["analysis", "query", "--input", str(bundle), "--request", str(request)]
     )

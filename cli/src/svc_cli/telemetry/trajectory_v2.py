@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import re
+from types import MappingProxyType
 from typing import Annotated, Any, Literal, Mapping, TypeAlias
 
 from pydantic import (
@@ -16,11 +18,50 @@ from pydantic import (
     model_validator,
 )
 
-from .trajectory import TrajectoryError, canonical_json_bytes
-
-
 TRAJECTORY_SCHEMA_V2 = "svc.trajectory/v2"
 _NAMESPACED = re.compile(r"^[a-z][a-z0-9_.-]*/v[1-9][0-9]*$")
+
+
+class TrajectoryError(ValueError):
+    """Stable trajectory failure with a machine-readable code."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        details: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.details = MappingProxyType(dict(details or {}))
+
+    def as_dict(self) -> dict[str, Any]:
+        value: dict[str, Any] = {"code": self.code, "message": self.message}
+        if self.details:
+            value["details"] = dict(self.details)
+        return value
+
+
+def canonical_json_bytes(value: Any, *, newline: bool = False) -> bytes:
+    """Encode one JSON-ready value deterministically for durable writing."""
+
+    if isinstance(value, BaseModel):
+        value = value.model_dump(mode="json", exclude_unset=True)
+    try:
+        encoded = json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8", errors="strict")
+    except (TypeError, ValueError, UnicodeEncodeError) as error:
+        raise TrajectoryError(
+            "invalid-json",
+            "Value cannot be encoded as deterministic JSON.",
+        ) from error
+    return encoded + (b"\n" if newline else b"")
 
 
 class TrajectoryV2Model(BaseModel):
@@ -454,12 +495,14 @@ __all__ = [
     "SemanticEvent",
     "SourceRef",
     "TRAJECTORY_SCHEMA_V2",
+    "TrajectoryError",
     "TrajectoryRecordV2",
     "UsageEvent",
     "UsageMeasurement",
     "UsageOwner",
     "UsagePayload",
     "ValidatedTrajectoryV2",
+    "canonical_json_bytes",
     "encode_trajectory_v2",
     "trajectory_v2_schema",
     "validate_trajectory_v2",

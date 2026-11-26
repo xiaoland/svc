@@ -22,7 +22,7 @@ struct MainWindowView: View {
                 List(selection: $selection) {
                     Label("全部项目", systemImage: "server.rack")
                         .tag(MainWindowSelection.projects)
-                    Label("执行", systemImage: "terminal")
+                    Label("全部执行", systemImage: "terminal")
                         .tag(MainWindowSelection.executions)
                     ForEach(store.organization.sections) { section in
                         DisclosureGroup(isExpanded: Binding(
@@ -73,11 +73,11 @@ struct MainWindowView: View {
             .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 320)
         } detail: {
             VStack(spacing: 0) {
-                if store.activity.cliUnavailable || (store.configuration.environmentMode == .fixedPath && store.configuration.resolvedExecutable == nil) {
+                if store.needsCLISetup {
                     CLISetupView(openSettings: openSettings)
-                    Divider()
+                } else {
+                    HostPressureView(activity: store.activity)
                 }
-                HostPressureView(activity: store.activity)
                 Divider()
                 if selection == .executions {
                     ScrollView { ExecutionListView(store: store) }
@@ -144,11 +144,6 @@ struct MainWindowView: View {
                 }.pickerStyle(.segmented).labelsHidden()
                     .accessibilityIdentifier("main/project-pages")
                 if showingExecutions {
-                    if !isSingleProject {
-                        ForEach(selectedProjects) { project in
-                            ProjectUsageView(project: project.path, activity: store.activity, title: project.name)
-                        }
-                    }
                     ExecutionListView(store: store, projectPaths: Set(selectedProjects.map(\.path)))
                 } else if selectedProjects.isEmpty {
                     ContentUnavailableView {

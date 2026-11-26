@@ -1,7 +1,7 @@
 ---
 name: svc-agent-collaboration
 description: "Agent collaboration through delegation, independent judgment, coordination, result adoption, and responsibility transfer."
-metadata: {"version": "17.0.0"}
+metadata: {"version": "1.0.0"}
 ---
 
 # Agent Collaboration

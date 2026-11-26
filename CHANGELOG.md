@@ -1,4 +1,4 @@
-# Changelog
+# Changelog before the CLI and Corpus release split (through 14.0.0)
 
 This release record is assembled by Changie from versioned release files.
 SVC uses Behavioral SemVer: MAJOR changes required obligations, defaults,

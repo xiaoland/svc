@@ -21,7 +21,7 @@ struct ExecutionRow: View {
                         ResourceActionButton(title: "", semanticID: "execution/\(execution.id)/terminate",
                             enabled: !busy && execution.terminationRequested == nil, symbol: "stop.fill",
                             accessibilityName: "终止 \(execution.label)", accessibilityHelp: "请求结束本次受管进程组") {
-                                store.activity.terminate(execution, force: false, configuration: store.configuration)
+                                store.terminate(.svc(execution))
                             }.frame(width: 28, height: 24)
                     }
                     ResourceActionButton(title: "", semanticID: "execution/\(execution.id)/details", bordered: false,
@@ -45,7 +45,7 @@ struct ExecutionRow: View {
                             ResourceActionButton(title: "强制终止", semanticID: "execution/\(execution.id)/confirm-force", enabled: !busy && execution.canTerminate,
                                 destructive: true) {
                                     confirmingForce = false
-                                    store.activity.terminate(execution, force: true, configuration: store.configuration)
+                                    store.terminate(.svc(execution), force: true)
                                 }
                         }
                     }.padding(10).background(.red.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
@@ -91,7 +91,7 @@ struct ExecutionRow: View {
         }
     }
 
-    private var busy: Bool { store.activity.pending.contains(execution.id) }
+    private var busy: Bool { store.quitPending || store.operations[.execution(execution.id)] != nil }
 
     private func shellQuoted(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"

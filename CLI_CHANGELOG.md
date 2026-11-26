@@ -1,3 +1,15 @@
+## [1.0.0] - 2026-11-26
+
+### Changed
+
+- CLI 继续在原 PyPI 项目发布，采用发行版本 1!1.0.0，保留 svc 入口与 schema 5 配置。Skills 默认发现新发行线，旧版文件记录可继续用于迁移。 (#release-1.0.0)
+
+### Fixed
+
+- 采用 Skills 时指向可用的 svc-writing，并在 Workflow 和 Specs 可用时提示非平凡任务读取。导出 Codex 证据时跳过相邻会话文件中的非对象 JSON 记录。 (#development-baseline-navigation)
+- 分析查询与读取支持省略版本号。Pi 清单按归档条件筛选，开发资源保留合法的空参数，观察命令无法启动时返回具体原因。 (#20261125-installed-audit)
+
+
 ## [18.3.0] - 2026-11-25
 
 ### Added

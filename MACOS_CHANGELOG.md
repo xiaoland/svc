@@ -1,3 +1,14 @@
+## [1.0.0] - 2026-11-26
+
+### Changed
+
+- App 1.0.0 沿用现有 Bundle ID 和本机偏好。配套 CLI 发行版 `sustainable-vibe-coding==1!1.0.0` 可从原 PyPI 项目安装，也可从 macOS 发行附件 `SVC-CLI.zip` 解压 wheel 后安装。 (#release-1.0.0)
+
+### Fixed
+
+- 主窗口标明项目与全机执行范围，合并重复的 CLI 缺失提示，收紧资源快捷动作布局，并在设置底栏保留保存入口。修复整秒观察有效期、自定义 PATH 恢复以及终止执行期间切换配置或退出的问题。 (#20261125-installed-audit)
+
+
 ## [0.2.0] - 2026-11-25
 
 ### Added

@@ -7,8 +7,8 @@ import zipfile
 
 import pytest
 
-from svc_cli.telemetry.evidence import EvidenceError
 from svc_cli.telemetry.evidence_v4 import (
+    EvidenceError,
     build_evidence_v4_manifest,
     validate_evidence_v4,
     write_evidence_v4_stream,

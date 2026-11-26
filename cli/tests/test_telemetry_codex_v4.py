@@ -153,3 +153,15 @@ def test_codex_v4_ignores_gaps_outside_selected_closure(tmp_path: Path) -> None:
     trajectory = validate_trajectory_v2(trajectory_bytes)
     assert [item.native_id for item in trajectory.executions] == ["child"]
     assert manifest.gaps == ()
+
+
+def test_codex_v4_ignores_non_object_json_in_adjacent_rollout(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    (home / "unrelated.jsonl").write_text("null\n[1, 2]\n42\n")
+    manifest, _, materials = collect_codex_v4(
+        ProviderContext(home=home),
+        ThreadSelection(thread_id="root"),
+    )
+
+    assert manifest.schema_version == 4
+    assert len(materials) == 2

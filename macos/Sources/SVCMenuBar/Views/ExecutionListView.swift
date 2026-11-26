@@ -14,7 +14,7 @@ struct ExecutionListView: View {
             let active = executions.filter(\.currentlyObserved)
             let recent = executions.filter { !$0.currentlyObserved }
             HStack {
-                Text("当前执行").font(.system(size: 12, weight: .semibold))
+                Text(projectPaths == nil ? "当前执行" : "项目内的当前执行").font(.system(size: 12, weight: .semibold))
                 if !active.isEmpty { Text("\(active.count)").foregroundStyle(.secondary) }
                 Spacer()
                 if !currentOnly {
@@ -46,15 +46,20 @@ struct ExecutionListView: View {
                     .transaction { $0.animation = nil; $0.disablesAnimations = true }
             }
             if active.isEmpty {
-                Text(store.activity.snapshot == nil ? "尚未取得执行清单" : "暂无当前执行")
+                Text(store.activity.snapshot == nil ? "尚未取得执行清单" : (projectPaths == nil ? "暂无当前执行" : "所选项目暂无当前执行"))
                     .font(.caption).foregroundStyle(.secondary).padding(.vertical, 16)
                     .frame(maxWidth: .infinity)
             }
             let groups = Dictionary(grouping: active, by: { $0.projectPath ?? "" })
             ForEach(groups.keys.sorted(), id: \.self) { project in
                 if projectPaths?.count != 1 {
-                    Text(project.isEmpty ? "未归属项目" : URL(fileURLWithPath: project).lastPathComponent)
-                        .font(.headline).help(project).accessibilityAddTraits(.isHeader)
+                    HStack {
+                        Text(project.isEmpty ? "未归属项目" : URL(fileURLWithPath: project).lastPathComponent)
+                            .font(.headline).help(project).accessibilityAddTraits(.isHeader)
+                        if !currentOnly, projectPaths != nil {
+                            ProjectUsageView(project: project, activity: store.activity)
+                        }
+                    }
                 }
                 ForEach(groups[project] ?? []) { executionRow($0) }
             }

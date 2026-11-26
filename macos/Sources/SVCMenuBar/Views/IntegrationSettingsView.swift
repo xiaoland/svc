@@ -24,14 +24,16 @@ struct IntegrationSettingsView: View {
                     }
                 }
             }
-            if store.activity.snapshot == nil {
+            if let error = store.activity.error {
+                DiagnosticView(title: "无法更新执行来源", message: error, semanticID: "settings/integrations/error")
+            } else if store.activity.snapshot == nil {
                 ProgressView().controlSize(.small)
             }
             if let notice = store.activity.notice {
                 Text(notice).font(.caption).textSelection(.enabled)
             }
         }
-        .task { await store.activity.refresh(store.configuration) }
+        .task(id: store.configuration) { await store.activity.refresh(store.configuration) }
     }
 
     private func setup(_ provider: String, arguments: [String] = []) {

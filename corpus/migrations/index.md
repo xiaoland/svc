@@ -6,6 +6,7 @@ Capability-named guides describe a semantic transition. The framework source ver
 
 Current guides:
 
+- [Public Skills release](public-skills-release.md): move a managed Corpus installation to the public `skills-v` line and retain a rollback path.
 - [Agent collaboration](agent-collaboration.md): replace the `svc-sub-agents` address and role-based guidance with collaboration across execution forms, including installation and adoption changes.
 - [Six Agent Skills](agent-skills.md): replace concept-directory and CLI-mediated navigation, replace Methods with Workflow while retaining independent V&V, and align draft installations while preserving task and authority obligations.
 - [Workflow collaboration](workflow-collaboration.md): adopt the explicit staged workflow, the Task Map, and the seventh Skill in Corpus 17 while preserving established agreements and authority.

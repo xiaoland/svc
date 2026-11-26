@@ -1,7 +1,7 @@
 ---
 name: svc-taste
 description: "Judgment of design and implementation trade-offs by their consequences when Product or Technical facts do not decide the choice."
-metadata: {"version": "17.0.0"}
+metadata: {"version": "1.0.0"}
 ---
 
 # Taste and Design Judgment

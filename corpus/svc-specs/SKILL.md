@@ -1,7 +1,7 @@
 ---
 name: svc-specs
 description: "Canonical ownership and maintenance of durable project knowledge: product requirements, technical design, deployment, and local instructions. Use for every non-trivial Task."
-metadata: {"version": "17.0.0"}
+metadata: {"version": "1.0.0"}
 ---
 
 # Specifications

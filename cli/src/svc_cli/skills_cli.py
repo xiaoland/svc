@@ -79,7 +79,7 @@ def register(subparsers: Any, add_output: Callable[..., None]) -> None:
         if name in {"install", "check", "update"}:
             source = parser.add_mutually_exclusive_group(required=name != "check")
             source.add_argument(
-                "--version", help="Explicit stable corpus-v release version"
+                "--version", help="Stable x.y.z version from the skills-v release line"
             )
             source.add_argument(
                 "--archive",
@@ -203,8 +203,8 @@ def run(args: argparse.Namespace) -> tuple[SkillsOutput | AdoptionOutput, int]:
         if archive is None
         else {
             "target_version": archive.manifest.version,
-            "release_notes": f"https://github.com/xiaoland/svc/releases/tag/corpus-v{archive.manifest.version}",
-            "migration_guidance": f"https://github.com/xiaoland/svc/tree/{archive.manifest.revision}/corpus/migrations",
+            "release_notes": f"{archive.manifest.repository}/releases/tag/{archive.manifest.release_tag}",
+            "migration_guidance": f"{archive.manifest.repository}/tree/{archive.manifest.revision}/corpus/migrations",
         }
     )
     if command == "check":

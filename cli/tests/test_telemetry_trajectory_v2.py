@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from svc_cli.telemetry.trajectory import TrajectoryError, canonical_json_bytes
 from svc_cli.telemetry.trajectory_v2 import (
+    TrajectoryError,
+    canonical_json_bytes,
     Coverage,
     CoverageIssue,
     ExecutionRecord,

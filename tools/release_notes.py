@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import re
 from pathlib import Path
 
@@ -24,14 +25,30 @@ def release_section(changelog: str, version: str) -> str:
     return "\n".join(lines[first:end]).rstrip() + "\n"
 
 
+def publication_date(section: str) -> date | None:
+    header = section.splitlines()[0]
+    match = re.fullmatch(r"## \[[^]]+] - (\d{4}-\d{2}-\d{2})", header)
+    return date.fromisoformat(match[1]) if match else None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("changelog", type=Path)
     parser.add_argument("version")
-    parser.add_argument("--output", type=Path)
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument("--output", type=Path)
+    output.add_argument("--date-only", action="store_true")
     args = parser.parse_args()
-    notes = release_section(args.changelog.read_text(encoding="utf-8"), args.version)
-    if args.output is None:
+    text = args.changelog.read_text(encoding="utf-8")
+    try:
+        notes = release_section(text, args.version)
+    except ValueError:
+        if args.date_only:
+            return 0  # A development version may only have Towncrier fragments.
+        raise
+    if args.date_only:
+        print(publication_date(notes) or "")
+    elif args.output is None:
         print(notes, end="")
     else:
         args.output.write_text(notes, encoding="utf-8")

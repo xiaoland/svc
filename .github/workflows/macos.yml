@@ -2,24 +2,27 @@ name: macOS App
 
 on:
   pull_request:
-    paths: ["macos/**", "script/**", "tools/macos_app.py", "tools/publish_macos_release.py", "cli/**", "pdm.lock", "MACOS_CHANGELOG.md", ".github/workflows/macos.yml"]
+    paths: ["macos/**", "script/**", "tools/macos_app.py", "tools/publish_macos_release.py", "tools/cli_release.py", "tools/release_notes.py", "cli/**", "pdm.lock", "MACOS_CHANGELOG.md", ".github/workflows/macos.yml"]
   push:
     branches: [main, develop]
-    paths: ["macos/**", "script/**", "tools/macos_app.py", "tools/publish_macos_release.py", "cli/**", "pdm.lock", "MACOS_CHANGELOG.md", ".github/workflows/macos.yml"]
+    paths: ["macos/**", "script/**", "tools/macos_app.py", "tools/publish_macos_release.py", "tools/cli_release.py", "tools/release_notes.py", "cli/**", "pdm.lock", "MACOS_CHANGELOG.md", ".github/workflows/macos.yml"]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      publish:
+        type: boolean
+        required: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: svc-macos-${{ github.event.pull_request.number || github.ref }}
+  group: svc-macos-${{ github.event.pull_request.number || github.ref }}-${{ inputs.publish && 'publication' || 'preview' }}
   cancel-in-progress: false
 
 jobs:
   verify:
     runs-on: macos-15
-    outputs:
-      publish: ${{ steps.release.outputs.publish }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -64,24 +67,18 @@ jobs:
         run: pdm run python -m tools.macos_app archive --require-clean --output dist/macos-release
       - name: Accept the packaged CLI and native controls together
         run: |
+          pdm run python - <<'PYTHON'
+          import os
+          from pathlib import Path
+
+          from tools.publish_macos_release import verified_assets
+
+          verified_assets(Path("dist/macos-release"), os.environ["GITHUB_SHA"])
+          PYTHON
+          unzip dist/macos-release/SVC-CLI.zip -d "$RUNNER_TEMP/svc-release-wheel"
           pdm run python -m venv "$RUNNER_TEMP/svc-release-cli"
-          "$RUNNER_TEMP/svc-release-cli/bin/pip" install dist/macos-release/*.whl
+          "$RUNNER_TEMP/svc-release-cli/bin/pip" install "$RUNNER_TEMP"/svc-release-wheel/*.whl
           SVC_TEST_CLI="$RUNNER_TEMP/svc-release-cli/bin/svc" SVC_TEST_PYTHON="$PWD/.venv/bin/python" XDG_RUNTIME_DIR="$RUNNER_TEMP/svc-wheel-runtime" swift test --package-path macos --filter 'realCLIService|appActionsControlRealServer'
-      - id: release
-        name: Detect an authorized prepared release on main
-        env:
-          EVENT: ${{ github.event_name }}
-          BEFORE: ${{ github.event.before }}
-        run: |
-          publish=false
-          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
-            if [[ "$EVENT" == workflow_dispatch ]]; then
-              publish=true
-            elif [[ "$EVENT" == push ]] && git diff --name-only "$BEFORE" "$GITHUB_SHA" -- MACOS_CHANGELOG.md | grep -q MACOS_CHANGELOG.md; then
-              publish=true
-            fi
-          fi
-          echo "publish=$publish" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: svc-macos-release
@@ -91,7 +88,9 @@ jobs:
 
   publish:
     needs: verify
-    if: needs.verify.outputs.publish == 'true'
+    if: >-
+      inputs.publish && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      github.workflow_ref == format('{0}/.github/workflows/publish.yml@refs/heads/main', github.repository)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -103,7 +102,7 @@ jobs:
         with:
           name: svc-macos-release
           path: dist/macos-release
-      - name: Publish immutable GitHub preview
+      - name: Publish immutable macOS GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: python -m tools.publish_macos_release --repo "$GITHUB_REPOSITORY" --revision "$GITHUB_SHA" --artifacts dist/macos-release

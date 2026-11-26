@@ -73,16 +73,17 @@ func actionData(_ action: String = "ensure") -> Data {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     let executable = root.appendingPathComponent("fake svc")
-    let encoded = String(decoding: statusData(), as: UTF8.self)
+    try statusData().write(to: root.appendingPathComponent("status.json"))
     let source = """
     #!/usr/bin/python3
-    import json, os, sys
+    import os, sys
+    from pathlib import Path
     assert sys.argv[1:4] == ['dev', 'status', '--repo']
     assert os.path.realpath(sys.argv[4]) == os.getcwd()
     assert sys.argv[5:] == ['--json']
     assert os.environ['PATH'] == '/usr/bin:/bin'
     sys.stderr.write('x' * 1000000)
-    print(\(String(reflecting: encoded)))
+    sys.stdout.buffer.write(Path("status.json").read_bytes())
     sys.exit(3)
     """
     try source.write(to: executable, atomically: true, encoding: .utf8)
@@ -101,5 +102,17 @@ func actionData(_ action: String = "ensure") -> Data {
 extension Data {
     func replacingUTF8(_ before: String, with after: String) -> Data {
         Data(String(decoding: self, as: UTF8.self).replacingOccurrences(of: before, with: after).utf8)
+    }
+}
+
+@Test func providerExpiryAcceptsWholeAndFractionalSeconds() throws {
+    let decoder = JSONDecoder()
+    decoder.keyDecodingStrategy = .convertFromSnakeCase
+    for timestamp in ["2099-01-02T03:04:05+00:00", "2099-01-02T03:04:05.123456+00:00", "invalid"] {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "key": "ready", "label": "就绪", "state": "satisfied", "source": "probe",
+            "checked_at": "2026-01-01T00:00:00Z", "stale": false, "expires_at": timestamp
+        ])
+        #expect(try decoder.decode(ResourceObservation.self, from: data).isStale == (timestamp == "invalid"))
     }
 }

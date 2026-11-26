@@ -3,16 +3,15 @@ import Foundation
 struct CLIClient: Sendable {
     let configuration: CLIConfiguration
 
-    func request(_ command: DevCommand, repo: String, arguments: [String] = []) async throws -> Data {
+    func request(_ command: DevCommand, repo: String? = nil, arguments: [String] = []) async throws -> Data {
         try await Task.detached(priority: .utility) {
-            try await run(arguments: ["dev", command.rawValue] + arguments + ["--repo", repo, "--json"], repo: repo)
+            let scope = repo.map { ["--repo", $0] } ?? []
+            return try await run(arguments: ["dev", command.rawValue] + arguments + scope + ["--json"], repo: repo)
         }.value
     }
 
     func requestGlobal(_ command: DevCommand, arguments: [String] = []) async throws -> Data {
-        try await Task.detached(priority: .utility) {
-            try await run(arguments: ["dev", command.rawValue] + arguments + ["--json"], repo: nil)
-        }.value
+        try await request(command, arguments: arguments)
     }
 
     private func run(arguments: [String], repo: String?) async throws -> Data {

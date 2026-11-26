@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 
 from tools.check_skills import SKILL_NAMES, check
-from tools.corpus import CORPUS_REPOSITORY, read_corpus_version
+from tools.corpus import CORPUS_REPOSITORY, CorpusRelease, read_corpus_release
 
 
 _SHA = re.compile(r"[0-9a-f]{40}")
@@ -111,8 +111,9 @@ def _zip(files: dict[str, bytes]) -> bytes:
 
 
 def _artifacts(
-    version: str, revision: str, source: dict[str, bytes]
+    release: CorpusRelease, revision: str, source: dict[str, bytes]
 ) -> dict[str, bytes]:
+    version = release.version
     artifacts: dict[str, bytes] = {}
     entries = []
     for name in sorted(SKILL_NAMES):
@@ -138,8 +139,9 @@ def _artifacts(
             }
         )
     catalog = {
-        "schema_version": 2,
+        "schema_version": 3,
         "version": version,
+        "tag": release.tag,
         "repository": CORPUS_REPOSITORY,
         "revision": revision,
         "skills": entries,
@@ -167,8 +169,8 @@ def _write_once(path: Path, content: bytes) -> None:
 def validate_artifacts(
     root: Path, directory: Path, expected_revision: str | None = None
 ) -> None:
-    version = read_corpus_version(root / "pyproject.toml")
-    catalog_path = directory / f"svc-skills-{version}.json"
+    release = read_corpus_release(root / "pyproject.toml")
+    catalog_path = directory / f"svc-skills-{release.version}.json"
     try:
         catalog = json.loads(catalog_path.read_bytes())
         revision = _revision(root, expected_revision or catalog["revision"])
@@ -176,7 +178,7 @@ def validate_artifacts(
         raise ValueError(f"Invalid Skills release catalog: {catalog_path}") from error
     source = _source_files(root)
     _assert_revision_sources(root, revision, source)
-    expected = _artifacts(version, revision, source)
+    expected = _artifacts(release, revision, source)
     if {path.name for path in directory.iterdir()} != set(expected):
         raise ValueError(
             "Release directory must contain exactly the declared Skill ZIPs, a catalog, and their checksums"
@@ -191,11 +193,11 @@ def validate_artifacts(
 def build(root: Path, output: Path, revision: str | None = None) -> tuple[Path, ...]:
     """Build only standalone Skill ZIPs and their shared provenance catalog."""
     _assert_clean_source(root)
-    version = read_corpus_version(root / "pyproject.toml")
+    release = read_corpus_release(root / "pyproject.toml")
     resolved_revision = _revision(root, revision)
     source = _source_files(root)
     _assert_revision_sources(root, resolved_revision, source)
-    artifacts = _artifacts(version, resolved_revision, source)
+    artifacts = _artifacts(release, resolved_revision, source)
     for filename, raw in artifacts.items():
         _write_once(output / filename, raw)
     validate_artifacts(root, output, resolved_revision)

@@ -54,7 +54,9 @@ def test_schema_release_policy_uses_published_history(
                 prior["x-svc-result-schema-version"] -= 1
         (schema_dir / f"{key}.json").write_text(json.dumps(prior))
     package = tmp_path / "cli/pyproject.toml"
-    package.write_text('[project]\nversion = "15.0.0"\n')
+    package.write_text(
+        '[project]\nname = "sustainable-vibe-coding"\nversion = "18.3.0"\n'
+    )
     git(tmp_path, "add", ".")
     git(
         tmp_path,
@@ -69,7 +71,7 @@ def test_schema_release_policy_uses_published_history(
     baseline = git(tmp_path, "rev-parse", "HEAD")
     # Numeric ordering, legacy tag names, and rejected release streams are inputs,
     # not substitutions for the implementation's release-selection function.
-    for tag in ("v14.0.0", "cli-v14.9.0", "cli-v14.10.0"):
+    for tag in ("v99.0.0", "cli-v99.9.0", "macos-v0.2.0", "svc-cli-v14.10.0"):
         git(tmp_path, "tag", tag)
     if published_matches:
         for key, value in current.items():
@@ -85,10 +87,10 @@ def test_schema_release_policy_uses_published_history(
             "-qm",
             "Published target",
         )
-    git(tmp_path, "tag", f"cli-v{published_major}.20.0")
+    git(tmp_path, "tag", f"svc-cli-v{published_major}.20.0")
     for tag in ("corpus-v99.0.0", "cli-v16.0.0-rc1"):
         git(tmp_path, "tag", tag)
-    package.write_text(f'[project]\nversion = "{package_major}.0.0"\n')
+    package.write_text(f'[project]\nversion = "1!{package_major}.0.0"\n')
     monkeypatch.setattr(schemas, "ROOT", tmp_path)
 
     assert bool(schemas.compare_ref(baseline)) is not accepted

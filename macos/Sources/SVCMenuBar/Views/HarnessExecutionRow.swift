@@ -7,7 +7,7 @@ struct HarnessExecutionRow: View {
     @State private var confirmingStop = false
     @State private var readingLogs = false
     @State private var logs: ExecutionLogsResponse?
-    private var busy: Bool { store.activity.pending.contains(execution.id) }
+    private var busy: Bool { store.quitPending || store.operations[.execution(execution.id)] != nil }
 
     var body: some View {
         GroupBox {
@@ -43,7 +43,7 @@ struct HarnessExecutionRow: View {
                             ResourceActionButton(title: "取消", semanticID: execution.id + "/cancel-stop") { confirmingStop = false }
                             ResourceActionButton(title: "停止", semanticID: execution.id + "/confirm-stop", enabled: !busy, destructive: true) {
                                 confirmingStop = false
-                                store.activity.terminateExternal(execution, configuration: store.configuration)
+                                store.terminate(.harness(execution))
                             }
                         }
                     }.padding(8)

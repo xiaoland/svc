@@ -1,7 +1,7 @@
 ---
 name: svc-task-packet
 description: "Task-local state, plan records, and continuity. Use for every non-trivial Task."
-metadata: {"version": "17.0.0"}
+metadata: {"version": "1.0.0"}
 ---
 
 # Task Packet
