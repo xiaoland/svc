@@ -21,16 +21,17 @@ pdm run svc --help
 
 ## 本机试用
 
-先提交待试用的改动，再从源码干净的工作树运行下面的命令。CLI 安装需要 uv，App 安装需要 [本机开发签名](macos/README.md)。两项安装可以分别更新。
+先提交待试用的改动。从干净的工作树运行对应的命令，CLI、App 与 Skills 可以分别更新。CLI 安装需要 uv，App 安装需要[本机开发签名](macos/README.md)，Skills 安装只需要 Git 和 Python。
 
 ```console
 ./script/install_local_cli.sh
 ./script/build_and_run.sh --verify
+python3 -m tools.install_local_skills
 ```
 
-CLI 脚本只归档当前 Git `HEAD` 的 CLI 源码，按提交保留构建出的 wheel，安装到 `${XDG_DATA_HOME:-$HOME/.local/share}/svc/dogfood`。终端试用时可将这个目录的 `bin` 放在 PATH 前面，或直接调用脚本打印的绝对路径。App 可在设置中固定同一路径，后续重新安装 CLI 会沿用该入口。mise 管理的公开包安装留作独立入口。
+CLI 脚本归档 Git `HEAD` 的 CLI 源码，按提交保留 wheel，安装到 `${XDG_DATA_HOME:-$HOME/.local/share}/svc/dogfood`。将该目录的 `bin` 放到日常终端的 PATH 前面，并在 App 设置中填入脚本打印的绝对路径。回退 CLI 时从上次验证的提交重跑 CLI 安装，App 回退使用上次验证的源码重装。App 的实际源码 revision 记录在已安装 bundle 的 `SVCSourceRevision`。
 
-试用 Skills 时，用 `pdm run build-corpus-archive --output-dir <目录>` 从干净提交构建附件，再用本机 CLI 在测试项目里显式指定 `skills install --archive <ZIP>` 或 `skills update --archive <ZIP>`。既有修改过的 Skill 先审阅其改动和所有权。
+Skills 安装器从 Git 提取并校验已提交的 Skill 目录，在 `~/.agents/skills` 建立宿主入口。首次迁移前先对比本机修改，将对应旧目录和 `.svc` 安装记录一起备份到宿主发现范围之外。每次更新后在新会话检查实际读取的 Skill。回退时运行 `python3 -m tools.install_local_skills <上一提交>`。验证公开交付时，在隔离环境构建并安装正式归档。
 
 ## 开发分支与工作树
 
@@ -81,7 +82,7 @@ CLI 输出 schema 仍维护自己的结果版本；它要求的 package major �
 
 ## Release PR
 
-`main` 是唯一发布源。先将已验收的功能、静态版本和 Towncrier 片段合入 `develop`。从待发布的 `develop` 提交建立同仓库的 `release/<名称>` 分支，以 `main` 为目标。只发布部分产品时，先确认选定源码不会把其它产品的未发布合同暴露给消费者。
+`main` 是唯一发布源。先试用待发变更，将已验收的功能、静态版本和 Towncrier 片段合入 `develop`。从待发布的 `develop` 提交建立同仓库的 `release/<名称>` 分支，以 `main` 为目标。只发布部分产品时，先确认选定源码不会把其它产品的未发布合同暴露给消费者。
 
 生成此次发布计划和选定产品的 changelog。以下命令准备三个产品，独立发布可只选需要的产品。
 
