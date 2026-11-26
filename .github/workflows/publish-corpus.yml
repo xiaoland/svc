@@ -1,9 +1,11 @@
 name: Publish Corpus
 
 on:
-  push:
-    branches: [main]
-    paths: [CORPUS_CHANGELOG.md]
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -14,6 +16,9 @@ concurrency:
 
 jobs:
   publish:
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      github.workflow_ref == format('{0}/.github/workflows/publish.yml@refs/heads/main', github.repository)
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -32,12 +37,14 @@ jobs:
       - run: pdm install --frozen-lockfile -d -G quality -G test
       - id: release
         name: Bind the prepared Corpus version
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          version=$(python -c 'from pathlib import Path; from tools.corpus import read_corpus_version; print(read_corpus_version(Path("pyproject.toml")))')
-          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-          python -m tools.release_notes CORPUS_CHANGELOG.md "$version" --output /tmp/corpus-release-notes.md
-          echo "artifacts=/tmp/svc-skills-$version" >> "$GITHUB_OUTPUT"
-          echo "tag=corpus-v$version" >> "$GITHUB_OUTPUT"
+          tag=$(python -c 'from pathlib import Path; from tools.corpus import read_corpus_release; print(read_corpus_release(Path("pyproject.toml")).tag)')
+          test "$tag" = "skills-v$VERSION"
+          python -m tools.release_notes CORPUS_CHANGELOG.md "$VERSION" --output /tmp/corpus-release-notes.md
+          echo "artifacts=/tmp/svc-skills-$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Check prepared Corpus release
         env:
           SVC_BASE_REF: ${{ github.event.before }}
@@ -71,16 +78,24 @@ jobs:
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --verify-tag --draft --notes-file /tmp/corpus-release-notes.md --title "$TAG"
           fi
+          draft=$(gh release view "$TAG" --json isDraft --jq .isDraft)
+          existing=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          while IFS= read -r name; do
+            [ -z "$name" ] || [ -f "$ARTIFACTS/$name" ]
+          done <<< "$existing"
           for asset in "$ARTIFACTS"/*; do
             directory=$(mktemp -d)
             name=$(basename "$asset")
-            if gh release download "$TAG" --pattern "$name" --dir "$directory" >/dev/null 2>&1; then
+            if grep -Fxq -- "$name" <<< "$existing"; then
+              gh release download "$TAG" --pattern "$name" --dir "$directory"
               cmp -- "$asset" "$directory/$name"
             else
+              test "$draft" = "true"
               gh release upload "$TAG" "$asset"
             fi
             rm -rf "$directory"
           done
-          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true" ]; then
-            gh release edit "$TAG" --draft=false
+          if [ "$draft" = "true" ]; then
+            gh release edit "$TAG" --draft=false --latest=false
           fi
+          test "$(gh release view "$TAG" --json isDraft,isPrerelease --jq '(.isDraft or .isPrerelease)')" = "false"

@@ -70,8 +70,17 @@ def list_agent_threads(
     }
 
 
-def list_pi_agent_threads(home: Path | None, limit: int) -> dict[str, object]:
-    threads, truncated = list_pi_sessions(home, limit)
+def list_pi_agent_threads(
+    home: Path | None,
+    limit: int,
+    archive_state: ArchiveFilter | str = ArchiveFilter.ALL,
+) -> dict[str, object]:
+    # Pi session headers do not report lifecycle state.
+    threads, truncated = (
+        list_pi_sessions(home, limit)
+        if archive_state == ArchiveFilter.ALL
+        else ([], False)
+    )
     return {
         "schema_version": 4,
         "command": "telemetry agent-thread list",

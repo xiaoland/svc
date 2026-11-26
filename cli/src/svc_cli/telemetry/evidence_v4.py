@@ -7,15 +7,18 @@ import hashlib
 import io
 import json
 from pathlib import Path, PurePosixPath
+from types import MappingProxyType
 from typing import Annotated, Any, BinaryIO, Literal, Mapping
 import zipfile
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .agent_threads import MAX_SOURCE_BYTES
-from .evidence import EvidenceError
-from .trajectory import canonical_json_bytes
-from .trajectory_v2 import ValidatedTrajectoryV2, validate_trajectory_v2
+from .trajectory_v2 import (
+    ValidatedTrajectoryV2,
+    canonical_json_bytes,
+    validate_trajectory_v2,
+)
 
 
 EVIDENCE_SCHEMA_VERSION_V4 = 4
@@ -23,6 +26,27 @@ EVIDENCE_FORMAT_V4 = "svc-agent-thread-evidence"
 TRAJECTORY_MEMBER = "trajectory.jsonl"
 _IDENTITY_DOMAIN = b"svc-agent-thread-evidence-id\x00v4\x00"
 _NonNegativeInt = Annotated[int, Field(ge=0)]
+
+
+class EvidenceError(ValueError):
+    """Stable evidence bundle failure."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        details: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.details = MappingProxyType(dict(details or {}))
+
+    def as_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {"code": self.code, "message": self.message}
+        if self.details:
+            result["details"] = dict(self.details)
+        return result
 
 
 class EvidenceV4Model(BaseModel):
@@ -336,6 +360,7 @@ def validate_evidence_v4(path: Path) -> ValidatedEvidenceV4:
 
 __all__ = [
     "CollectionGap",
+    "EvidenceError",
     "EVIDENCE_SCHEMA_VERSION_V4",
     "EvidenceV4Manifest",
     "MaterialDescriptor",

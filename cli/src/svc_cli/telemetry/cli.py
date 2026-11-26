@@ -71,19 +71,18 @@ def register(subparsers: argparse._SubParsersAction[Any]) -> None:
 def run(args: argparse.Namespace, json_output: bool) -> int:
     if args.home is not None and args.codex_home is not None:
         raise SvcError("invalid-cli-usage", "Use only one of --home and --codex-home.")
+    home = args.home or args.codex_home
     if args.agent_thread_command == "list":
         payload = (
-            list_pi_agent_threads(args.home, args.limit)
+            list_pi_agent_threads(home, args.limit, args.archive_state)
             if args.provider == "pi"
-            else list_agent_threads(
-                args.home or args.codex_home, args.limit, args.archive_state
-            )
+            else list_agent_threads(home, args.limit, args.archive_state)
         )
         _emit_list(payload, json_output)
         return 0
     payload = export_agent_thread_v4(
         provider_id=args.provider or "codex",
-        home=args.home or args.codex_home,
+        home=home,
         thread_id=args.thread_id,
         source=args.source,
         output=args.output,

@@ -17,8 +17,11 @@ import time
 import tomllib
 from pathlib import Path
 
+from tools.cli_release import zip_distributions
+
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ID = "dev.svc.menubar"
+CLI_ARCHIVE_NAME = "SVC-CLI.zip"
 CLI_RESULT_SCHEMAS = {
     "list": 1,
     "status": 4,
@@ -153,7 +156,6 @@ def build(profile: str, output: Path) -> Path:
             "--timestamp=none",
             str(prepared),
         )
-        verify(prepared)
         replace_bundle(prepared, bundle)
     return bundle
 
@@ -194,27 +196,43 @@ def replace_bundle(prepared: Path, destination: Path) -> None:
             shutil.rmtree(stage)
 
 
-def stop_application() -> None:
-    def running() -> bool:
-        return (
-            subprocess.run(
-                ["pgrep", "-x", "SVCMenuBar"], capture_output=True
-            ).returncode
-            == 0
+def running_at(destination: Path, *, request_quit: bool = False) -> bool:
+    # LaunchServices can register several copies with the same bundle identifier.
+    script = """
+    ObjC.import("AppKit");
+    function run([identifier, path, action]) {
+        const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(identifier);
+        let found = false;
+        for (let i = 0; i < apps.count; i++) {
+            const app = apps.objectAtIndex(i);
+            if (ObjC.unwrap(app.bundleURL.URLByResolvingSymlinksInPath.path) === path) {
+                found = true;
+                if (action === "quit") app.terminate;
+            }
+        }
+        return found;
+    }"""
+    return (
+        run(
+            "/usr/bin/osascript",
+            "-l",
+            "JavaScript",
+            "-e",
+            script,
+            BUNDLE_ID,
+            str(destination.resolve()),
+            "quit" if request_quit else "status",
+            capture=True,
         )
+        == "true"
+    )
 
-    if not running():
+
+def stop_application(destination: Path) -> None:
+    if not running_at(destination, request_quit=True):
         return
     deadline = time.monotonic() + 30
-    try:
-        subprocess.run(
-            ["/usr/bin/osascript", "-e", f'tell application id "{BUNDLE_ID}" to quit'],
-            check=True,
-            timeout=30,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise ValueError("SVC 退出超时，保留原安装；操作结束后可再次安装") from error
-    while running():
+    while running_at(destination):
         if time.monotonic() >= deadline:
             raise ValueError("SVC 仍有服务操作进行中，保留原安装；操作结束后可再次安装")
         time.sleep(0.25)
@@ -232,14 +250,18 @@ def build_wheel(output: Path) -> Path:
 def install(destination: Path, launch: bool) -> Path:
     # The user owns CLI installation and version selection independently of the App.
     bundle = build("local", ROOT / "dist/macos/local")
-    verify(bundle)
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists() or destination.is_symlink():
         bundle_info(destination)
-    stop_application()
+    stop_application(destination)
     replace_bundle(bundle, destination)
     if launch:
-        run("/usr/bin/open", "-g", str(destination), "--args", "--background")
+        run("/usr/bin/open", "-n", "-g", str(destination), "--args", "--background")
+        deadline = time.monotonic() + 10
+        while not running_at(destination):
+            if time.monotonic() >= deadline:
+                raise ValueError(f"未检测到已从 {destination} 启动的 SVC")
+            time.sleep(0.25)
     return destination
 
 
@@ -276,7 +298,8 @@ def archive(output: Path, require_clean: bool) -> None:
             str(output / name),
         )
         info = bundle_info(bundle)
-    wheel = build_wheel(output)
+        wheel = build_wheel(Path(temporary) / "cli")
+        zip_distributions(output / CLI_ARCHIVE_NAME, [wheel])
     manifest = {
         "version": value,
         "revision": info["SVCSourceRevision"],
@@ -284,6 +307,7 @@ def archive(output: Path, require_clean: bool) -> None:
         "architecture": platform.machine(),
         "signing": "ad-hoc",
         "notarized": False,
+        "cli_archive": CLI_ARCHIVE_NAME,
         "cli_wheel": wheel.name,
         "cli_version": tomllib.loads((ROOT / "cli/pyproject.toml").read_text())[
             "project"

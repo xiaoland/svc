@@ -9,11 +9,11 @@ SVC 把工作指导与软件工具分开提供，可以按需要独立采用：
 - **Agent Skills**：为任务推进、人机协作、验证、知识维护和设计取舍提供按需加载的工作指导。
 - **软件工具**：CLI 提供 Skills 安装与采用、开发资源管理、项目命令执行和 Agent 执行证据分析；原生 macOS App 提供开发资源的图形入口。
 
-[SVC Dev](docs/prd/development.md) 是面向人和 Agent 的开发资源管理能力，围绕资源状态、访问和明确的控制动作展开，不推断开发任务。[macOS 菜单栏 App](macos/README.md) 与 `svc dev` 分别提供图形和程序化入口。App 使用用户安装的兼容 CLI，不自动安装独立环境；找不到时提供 GitHub Releases 与 PyPI 安装入口。两者各自维护版本，通过公开 JSON 协议协作；职责与兼容规则见 [App 与 CLI 合同](docs/product-tdd/macos-client.md)。当前交付仍以项目声明的长驻开发能力为主。
+[SVC Dev](docs/prd/development.md) 是面向人和 Agent 的开发资源管理能力，围绕资源状态、访问和明确的控制动作展开，不推断开发任务。[macOS 菜单栏 App](macos/README.md) 与 `svc dev` 分别提供图形和程序化入口。App 使用用户安装的兼容 CLI，不自动安装独立环境；找不到时提供 GitHub Releases 与 PyPI 安装入口。两者各自维护版本，通过公开 JSON 协议协作；职责与兼容规则见 [App 与 CLI 合同](docs/product-tdd/macos-client.md)。
 
 它不规定所有项目必须遵守同一套开发流水线，也不接管项目自己的代码、文档和决策权限。
 
-[快速开始](#快速开始) · [Agent Skills](#agent-skills) · [cli-能做什么](#cli-能做什么) · [用户手册](USER_MANUAL.md) · [发布记录](https://github.com/xiaoland/svc/releases)
+[快速开始](#快速开始) · [Agent Skills](#agent-skills) · [CLI 能做什么](#cli-能做什么) · [用户手册](USER_MANUAL.md) · [发布记录](https://github.com/xiaoland/svc/releases)
 
 ## 为什么做 SVC？
 
@@ -64,7 +64,7 @@ svc telemetry agent-thread export --thread-id <id> --output /path/to/evidence.zi
 svc analysis query --schema
 ```
 
-`analysis` 处理的是结构化执行证据；**任务为什么失败、结果是否可接受**，仍需要 Agent 或使用者结合实际目标判断。完整协议和敏感数据注意事项见[用户手册](USER_MANUAL.md#分析-agent-任务证据)。
+`analysis` 处理的是结构化执行证据；**任务为什么失败、结果是否可接受**，仍需要 Agent 或使用者结合实际目标判断。使用步骤见[用户手册](USER_MANUAL.md#分析-agent-任务证据)，完整协议见[证据合同](docs/product-tdd/agent-analysis.md)与命令的 `--schema`。
 
 ## 快速开始
 
@@ -101,6 +101,8 @@ CLI 可以从独立版本的发行物安装 Skills，也可以管理在项目中
 
 ## 版本与边界
 
+旧版用户可按[迁移步骤](USER_MANUAL.md#从旧发行线迁移到-100)切换到 1.0.0。
+
 **Skills（Corpus）与 CLI 分别发行、独立升级。** 从 Corpus v16 起，每个 Skill 分别提供 ZIP 发行物；CLI 包本身不携带这些框架正文。项目可以按需要采用特定 Skill 与版本。
 
 SVC 保留使用者已有文件和权限边界：CLI 的受管写操作需要明确应用计划；框架指导不会自动授予修改代码、委派任务或执行外部操作的权限。项目始终拥有自己的正式事实，临时任务记录不自动成为长期规范。
@@ -127,10 +129,8 @@ SVC 的部分工作方法吸收自公开资料与社区实践，按 Skill 列出
 - [框架入口](corpus/index.md)：Skills 与迁移指导
 - [贡献指南](CONTRIBUTING.md)：源码工作区、验证和发布
 - [安全政策](SECURITY.md)：安全问题的报告方式
-- [CLI 变更记录](CLI_CHANGELOG.md) / [Corpus 变更记录](CORPUS_CHANGELOG.md)：独立发行历史
+- [CLI 变更记录](CLI_CHANGELOG.md) / [Corpus 变更记录](CORPUS_CHANGELOG.md) / [macOS 变更记录](MACOS_CHANGELOG.md)
 
 在源码仓库中参与开发，需要 Python 3.11+ 与 PDM 2.28+。构建和检查命令见[贡献指南](CONTRIBUTING.md)，避免与使用者的安装步骤混淆。
-
-原生 macOS 菜单栏面板可统一查阅和控制本机项目声明的开发服务器，构建与使用入口见 [macOS App](macos/README.md)。
 
 本项目采用 [MIT 许可证](LICENSE)。

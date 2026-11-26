@@ -11,9 +11,8 @@ import json
 import os
 import sqlite3
 import stat
-import tempfile
 from pathlib import Path
-from typing import Any, BinaryIO, Iterable, Mapping, cast
+from typing import Any, BinaryIO, Iterable
 from ...errors import SvcError
 from ..agent_threads import (
     ArchiveFilter,
@@ -21,19 +20,13 @@ from ..agent_threads import (
     MAX_FIRST_MESSAGE_CHARS,
     MAX_TITLE_CHARS,
     MAX_WORKSPACE_CHARS,
-    NativeCaptureResult,
-    NormalizationResult,
-    NormalizedRecordSink,
-    NormalizationStatus,
     ProviderContext,
     ResolvedThread,
-    SourceStatus,
     ThreadInventoryListing,
     ThreadInventoryQuery,
     ThreadInventoryRow,
     ThreadSelection,
 )
-from .codex_trajectory import CodexTrajectoryNormalizer, DEFAULT_BOUNDS
 
 
 MAX_INDEX_RECORD_BYTES = 4 * 1024 * 1024
@@ -612,238 +605,6 @@ class CodexRolloutProvider:
             source_format=_SOURCE_FORMAT,
             thread_id=thread_id,
             source_path=source,
-        )
-
-    def capture_native(
-        self,
-        resolved: ResolvedThread,
-        output: BinaryIO,
-        bounds: Mapping[str, int],
-    ) -> NativeCaptureResult:
-        """Copy and frame the descriptor-bound initial rollout extent once."""
-
-        if (
-            resolved.provider_id != self.provider_id
-            or resolved.adapter_id != _ADAPTER_ID
-            or resolved.source_format != _SOURCE_FORMAT
-        ):
-            raise _error(
-                "thread-source-incompatible",
-                "Resolved source does not belong to codex-rollout-v1.",
-            )
-        source_limit = int(bounds.get("source_bytes", DEFAULT_BOUNDS["source_bytes"]))
-        if source_limit <= 0:
-            raise ValueError("source_bytes must be a positive integer")
-        source = Path(resolved.source_path)
-        stream, initial_info = _open_source(source)
-        extent = min(initial_info.st_size, source_limit)
-        remaining = extent
-        captured = 0
-        frame_start = 0
-        frames: list[dict[str, Any]] = []
-        read_interrupted = False
-        final_info: os.stat_result | None = None
-
-        def finish_frame(end: int, status: str) -> None:
-            ordinal = len(frames)
-            frames.append(
-                {
-                    "native_record_id": f"n{ordinal:06d}",
-                    "byte_start": frame_start,
-                    "byte_end": end,
-                    "frame_status": status,
-                    "source_coordinate": {
-                        "event_index": ordinal,
-                        "line": ordinal,
-                        "byte_offset": frame_start,
-                    },
-                }
-            )
-
-        try:
-            while remaining:
-                try:
-                    chunk = stream.read(min(1024 * 1024, remaining))
-                except OSError:
-                    read_interrupted = True
-                    break
-                if not chunk:
-                    read_interrupted = True
-                    break
-                output.write(chunk)
-                cursor = 0
-                while True:
-                    newline = chunk.find(b"\n", cursor)
-                    if newline < 0:
-                        break
-                    captured += newline + 1 - cursor
-                    finish_frame(captured, "complete")
-                    frame_start = captured
-                    cursor = newline + 1
-                captured += len(chunk) - cursor
-                remaining -= len(chunk)
-            final_info = os.fstat(stream.fileno())
-        except OSError as error:
-            raise _error(
-                "thread-source-unreadable",
-                "Codex rollout source cannot be captured.",
-                path=str(source),
-            ) from error
-        finally:
-            stream.close()
-
-        unknown_remainder = initial_info.st_size > captured or read_interrupted
-        if frame_start < captured:
-            finish_frame(
-                captured,
-                "incomplete" if unknown_remainder else "complete",
-            )
-
-        status = SourceStatus.STABLE
-        assert final_info is not None
-        if final_info.st_size < initial_info.st_size or (
-            final_info.st_size == initial_info.st_size
-            and final_info.st_mtime_ns != initial_info.st_mtime_ns
-        ):
-            status = SourceStatus.CHANGED
-        elif final_info.st_size > initial_info.st_size:
-            status = SourceStatus.GREW
-
-        output.seek(0)
-        return NativeCaptureResult(
-            provider_id=self.provider_id,
-            adapter_id=_ADAPTER_ID,
-            source_format=_SOURCE_FORMAT,
-            source_status=status,
-            frames=tuple(frames),
-            native_bytes=captured,
-            unknown_remainder=unknown_remainder,
-            read_interrupted=read_interrupted,
-        )
-
-    def stream_normalize_captured(
-        self,
-        resolved: ResolvedThread,
-        native: BinaryIO,
-        capture: NativeCaptureResult,
-        sink: NormalizedRecordSink,
-        bounds: Mapping[str, int],
-    ) -> NormalizationResult:
-        """Derive the trajectory only from the immutable captured bytes."""
-
-        if (
-            resolved.provider_id != self.provider_id
-            or resolved.adapter_id != _ADAPTER_ID
-            or resolved.source_format != _SOURCE_FORMAT
-            or capture.provider_id != self.provider_id
-            or capture.adapter_id != _ADAPTER_ID
-            or capture.source_format != _SOURCE_FORMAT
-        ):
-            raise _error(
-                "thread-source-incompatible",
-                "Captured source does not belong to codex-rollout-v1.",
-            )
-        effective = dict(DEFAULT_BOUNDS)
-        effective.update(
-            {
-                key: int(value)
-                for key, value in bounds.items()
-                if isinstance(value, int) and not isinstance(value, bool) and value > 0
-            }
-        )
-        projection = tempfile.SpooledTemporaryFile(
-            max_size=1024 * 1024,
-            mode="w+b",
-        )
-        omitted_frames: list[Mapping[str, Any]] = []
-        try:
-            for frame in capture.frames:
-                start = int(frame["byte_start"])
-                end = int(frame["byte_end"])
-                size = end - start
-                if (
-                    frame["frame_status"] != "complete"
-                    or size > effective["native_line_bytes"]
-                ):
-                    omitted_frames.append(frame)
-                    projection.write(
-                        json.dumps(
-                            {
-                                "type": "session_meta",
-                                "payload": {"id": resolved.thread_id},
-                            },
-                            separators=(",", ":"),
-                        ).encode("utf-8")
-                        + b"\n"
-                    )
-                    continue
-                native.seek(start)
-                data = native.read(size)
-                if not isinstance(data, bytes) or len(data) != size:
-                    raise _error(
-                        "thread-source-unreadable",
-                        "Captured Codex rollout frame cannot be read.",
-                    )
-                projection.write(data)
-            projection.seek(0)
-
-            def mapped_sink(record: Mapping[str, Any]) -> bool:
-                if record.get("type") == "meta":
-                    return sink(record)
-                source_ref = record.get("source_ref")
-                if not isinstance(source_ref, Mapping):
-                    raise _error(
-                        "thread-source-incompatible",
-                        "Normalized record omitted its source coordinate.",
-                    )
-                ordinal = source_ref.get("event_index")
-                if (
-                    not isinstance(ordinal, int)
-                    or isinstance(ordinal, bool)
-                    or not 0 <= ordinal < len(capture.frames)
-                ):
-                    raise _error(
-                        "thread-source-incompatible",
-                        "Normalized record source coordinate is outside the capture.",
-                    )
-                mapped = dict(record)
-                mapped_source = dict(source_ref)
-                mapped_source["native_record_id"] = capture.frames[ordinal][
-                    "native_record_id"
-                ]
-                mapped["source_ref"] = mapped_source
-                return sink(mapped)
-
-            result = CodexTrajectoryNormalizer().normalize(
-                cast(BinaryIO, projection),
-                resolved,
-                mapped_sink,
-                DEFAULT_BOUNDS,
-            )
-        finally:
-            projection.close()
-
-        lossiness = dict(result.lossiness)
-        result_status = result.result_status
-        oversized = [
-            frame
-            for frame in omitted_frames
-            if frame["frame_status"] == "complete"
-            and int(frame["byte_end"]) - int(frame["byte_start"])
-            > effective["native_line_bytes"]
-        ]
-        incomplete = [
-            frame for frame in omitted_frames if frame["frame_status"] != "complete"
-        ]
-        lossiness["dropped_records"] += len(oversized)
-        lossiness["unavailable_records"] += len(incomplete)
-        lossiness["partial_frames"] += len(incomplete)
-        if oversized or capture.is_partial:
-            result_status = NormalizationStatus.PARTIAL
-        return NormalizationResult(
-            result_status=result_status,
-            capabilities=result.capabilities,
-            lossiness=lossiness,
         )
 
 

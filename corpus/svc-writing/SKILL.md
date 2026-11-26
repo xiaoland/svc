@@ -1,7 +1,7 @@
 ---
 name: svc-writing
 description: "Writing and revising substantial prose for human readers, including documentation, design documents, issues, PR descriptions, and reports. Use when drafting, condensing, or reviewing such text."
-metadata: {"version": "17.0.0"}
+metadata: {"version": "1.0.0"}
 ---
 
 # Writing for Human Readers

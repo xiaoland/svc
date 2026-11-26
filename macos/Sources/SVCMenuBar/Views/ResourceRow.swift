@@ -8,7 +8,7 @@ struct ResourceRow: View {
     @State private var expanded = false
     @State private var showingDiagnostics = false
     @State private var confirmRecovery = false
-    private var busy: Bool { resource.coordination.map { store.operations[$0.coordinationId] != nil } ?? false }
+    private var busy: Bool { resource.coordination.map { store.operations[.resource($0.coordinationId)] != nil } ?? false }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -27,8 +27,13 @@ struct ResourceRow: View {
             }
             if resource.needsReconciliation { recovery }
             if !visibleActions.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(visibleActions) { action in actionButton(action) }
+                if !expanded && visibleActions.count > 1 && visibleActions.allSatisfy({ $0.dataEffect == "unchanged" }) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { actionButtons }.fixedSize()
+                        VStack(alignment: .leading, spacing: 8) { actionButtons }
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 8) { actionButtons }
                 }
             }
             if let receipt = store.receipts[resource.entryId] {
@@ -102,6 +107,10 @@ struct ResourceRow: View {
             item.state != "satisfied" || item.isStale || resource.facets.contains { $0.key == item.key && $0.purpose == "runtime-readiness" }
         }
         return important.isEmpty ? Array(resource.observations.prefix(1)) : important
+    }
+
+    private var actionButtons: some View {
+        ForEach(visibleActions) { action in actionButton(action) }
     }
 
     private var visibleActions: [ResourceAction] {

@@ -6,6 +6,7 @@ import shutil
 
 from svc_cli.telemetry.agent_threads import ProviderContext, ThreadSelection
 from svc_cli.telemetry.providers.pi_v4 import collect_pi_v4
+from svc_cli.telemetry.service import list_pi_agent_threads
 from svc_cli.telemetry.trajectory_v2 import validate_trajectory_v2
 from svc_cli.analysis.engine_v3 import usage_for_execution
 
@@ -88,3 +89,16 @@ def test_pi_v4_does_not_charge_copied_fork_history_twice(tmp_path: Path) -> None
         if item.source_refs[0].record_id == "a2" and item.kind == "message"
     )
     assert fork_user_event.predecessor_ids == (copied_event.event_id,)
+
+
+def test_archive_filters_exclude_pi_sessions_with_unknown_lifecycle(
+    tmp_path: Path,
+) -> None:
+    session = tmp_path / "sessions" / "session.jsonl"
+    session.parent.mkdir()
+    shutil.copyfile(FIXTURES / "pi" / "session.jsonl", session)
+    assert list_pi_agent_threads(tmp_path, 10)["threads"]
+    for state in ("active", "archived"):
+        filtered = list_pi_agent_threads(tmp_path, 10, state)
+        assert filtered["threads"] == []
+        assert not filtered["inventory_truncated"]

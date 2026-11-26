@@ -14,7 +14,7 @@ struct ProjectView: View {
     var body: some View {
         DisclosureGroup(isExpanded: expansion) {
             VStack(alignment: .leading, spacing: 4) {
-                if let error = project.error {
+                if let error = store.projectDiagnostic(project) {
                     DiagnosticView(title: "无法读取项目", message: error, semanticID: "project/\(project.path)/error", context: project.name)
                 } else if let snapshot = project.snapshot {
                     if !snapshot.resources.isEmpty {
@@ -26,7 +26,7 @@ struct ProjectView: View {
                         Text(snapshot.status == "not-configured" ? "项目尚未声明开发资源" : "配置无效")
                             .font(.caption).foregroundStyle(.secondary).padding(.vertical, 6)
                     }
-                } else {
+                } else if project.error == nil && !store.missingSharedCLI {
                     Text("正在读取资源…").font(.caption).foregroundStyle(.secondary).padding(.vertical, 6)
                 }
                 ForEach(Array(store.unavailableReceipts(for: project).enumerated()), id: \.offset) { _, receipt in

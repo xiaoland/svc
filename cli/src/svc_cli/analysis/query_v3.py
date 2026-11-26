@@ -8,8 +8,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from ..telemetry.evidence_v4 import ValidatedEvidenceV4
-from ..telemetry.trajectory_v2 import SemanticEvent, UsageEvent
-from ..telemetry.trajectory import canonical_json_bytes
+from ..telemetry.trajectory_v2 import SemanticEvent, UsageEvent, canonical_json_bytes
 from .engine_v3 import (
     UsageAggregate,
     aggregate_usage,

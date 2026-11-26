@@ -16,6 +16,7 @@ from websockets.exceptions import WebSocketException
 from websockets.sync.client import unix_connect
 
 from ...errors import SvcError
+from ...release import runtime_version
 
 MAX_FRAME = 1024 * 1024
 
@@ -178,7 +179,7 @@ class CodexClient:
             self.call(
                 "initialize",
                 {
-                    "clientInfo": {"name": "svc-dev", "version": "0.2.0"},
+                    "clientInfo": {"name": "svc-dev", "version": runtime_version()},
                     "capabilities": {"experimentalApi": True},
                 },
             )

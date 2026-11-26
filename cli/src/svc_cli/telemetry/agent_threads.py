@@ -1,17 +1,11 @@
-"""Provider-neutral contracts for local agent-thread inventory and collection.
-
-The trajectory side deliberately exposes a sink-oriented normalisation seam.
-Providers translate one bounded native source into canonical records while the
-bundle core owns canonical JSONL, manifests, and publication.  No provider
-record is accumulated in this module.
-"""
+"""Contracts for local Agent-thread inventory and source selection."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, BinaryIO, Callable, Iterable, Mapping, Protocol
+from typing import Iterable
 import unicodedata
 
 
@@ -21,7 +15,6 @@ MAX_TITLE_CHARS = 160
 MAX_FIRST_MESSAGE_CHARS = 512
 MAX_THREAD_ID_CHARS = 512
 MAX_SOURCE_BYTES = 256 * 1024 * 1024
-MAX_NATIVE_FRAME_BYTES = 4 * 1024 * 1024
 _SIGNED_64_MAX = 9_223_372_036_854_775_807
 _CONTROL_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
 
@@ -40,28 +33,6 @@ class ArchiveFilter(StrEnum):
     ACTIVE = "active"
     ARCHIVED = "archived"
     ALL = "all"
-
-
-class SourceStatus(StrEnum):
-    """Descriptor-bound source status reported by a normalizer."""
-
-    STABLE = "stable"
-    GREW = "grew"
-    CHANGED = "changed"
-
-
-class NormalizationStatus(StrEnum):
-    """Whether a structurally valid normalized trajectory is complete."""
-
-    READY = "ready"
-    PARTIAL = "partial"
-
-
-class NativeFrameStatus(StrEnum):
-    """Whether one captured native frame contains its full provider record."""
-
-    COMPLETE = "complete"
-    INCOMPLETE = "incomplete"
 
 
 @dataclass(frozen=True)
@@ -314,110 +285,3 @@ class ResolvedThread:
             object.__setattr__(self, "source_path", Path(self.source_path))
         if not self.thread_id.strip():
             raise ValueError("thread_id must not be blank")
-
-
-NormalizedRecordSink = Callable[[Mapping[str, Any]], bool]
-
-
-@dataclass(frozen=True, slots=True)
-class NativeCaptureResult:
-    """Descriptor-bound facts for one immutable native capture.
-
-    Providers own native record framing and source-change observation.  The
-    evidence core owns typed index encoding, validation, snapshot identity,
-    and publication. ``frames`` contains only JSON-ready byte boundaries and
-    source coordinates; digests are computed from the captured authority when
-    a reader needs them.
-    """
-
-    provider_id: str
-    adapter_id: str
-    source_format: str
-    source_status: SourceStatus | str
-    frames: tuple[Mapping[str, Any], ...]
-    native_bytes: int
-    unknown_remainder: bool = False
-    read_interrupted: bool = False
-
-    def __post_init__(self) -> None:
-        try:
-            object.__setattr__(self, "source_status", SourceStatus(self.source_status))
-        except (TypeError, ValueError) as error:
-            raise ValueError("invalid native capture source status") from error
-        frames = tuple(self.frames)
-        object.__setattr__(self, "frames", frames)
-        if (
-            isinstance(self.native_bytes, bool)
-            or not isinstance(self.native_bytes, int)
-            or self.native_bytes < 0
-        ):
-            raise ValueError("native_bytes must be a non-negative integer")
-
-    @property
-    def is_partial(self) -> bool:
-        return (
-            self.source_status is not SourceStatus.STABLE
-            or self.unknown_remainder
-            or self.read_interrupted
-            or any(
-                frame.get("frame_status") == NativeFrameStatus.INCOMPLETE.value
-                for frame in self.frames
-            )
-        )
-
-
-@dataclass(frozen=True)
-class NormalizationResult:
-    """Small derived-view summary returned after streaming records.
-
-    Source identity and capture state already belong to ``ResolvedThread`` and
-    ``NativeCaptureResult``. Record counts are computed from the emitted
-    trajectory, so providers return only facts that cannot be recovered by
-    counting its records.
-    """
-
-    result_status: NormalizationStatus | str
-    capabilities: Mapping[str, str]
-    lossiness: Mapping[str, Any]
-
-    def __post_init__(self) -> None:
-        try:
-            object.__setattr__(
-                self, "result_status", NormalizationStatus(self.result_status)
-            )
-        except (TypeError, ValueError) as error:
-            raise ValueError("invalid normalization status") from error
-
-
-class EvidenceThreadProvider(Protocol):
-    """Provider capable of immutable native capture and captured projection."""
-
-    provider_id: str
-
-    def list_inventory(
-        self,
-        context: ProviderContext,
-        query: ThreadInventoryQuery,
-    ) -> ThreadInventoryListing: ...
-
-    def resolve(
-        self,
-        context: ProviderContext,
-        selection: ThreadSelection,
-    ) -> ResolvedThread: ...
-
-    def capture_native(
-        self,
-        resolved: ResolvedThread,
-        output: BinaryIO,
-        bounds: Mapping[str, int],
-    ) -> NativeCaptureResult: ...
-
-    def stream_normalize_captured(
-        self,
-        resolved: ResolvedThread,
-        native: BinaryIO,
-        capture: NativeCaptureResult,
-        sink: NormalizedRecordSink,
-        bounds: Mapping[str, int],
-    ) -> NormalizationResult: ...

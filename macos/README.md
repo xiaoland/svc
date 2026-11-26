@@ -1,53 +1,50 @@
 # SVC 菜单栏 App
 
-这个原生 macOS App 是 [SVC Dev 开发资源管理](../docs/prd/development.md) 面向人的图形入口，当前通过公开 CLI 协议管理用户添加的本机项目与工作树中的声明资源。从 Finder 打开或重新打开时展示唯一主窗口；开发安装默认只在后台启动。面板分别显示具名观察状态，提供逐项控制、访问地址与操作日志入口。CLI 负责配置解释与执行协调，实际资源的初始化、停止和清理由项目声明的控制入口负责。跨单元职责与兼容规则见 [App 与 CLI 合同](../docs/product-tdd/macos-client.md)。
+SVC Dev 提供菜单栏面板和主窗口，用于查看机器压力、访问项目声明的资源，以及跟踪和控制本机执行。资源操作通过用户选择的 SVC CLI 完成。[产品定位](../docs/prd/development.md) · [App 与 CLI 合同](../docs/product-tdd/macos-client.md)
 
-App 0.2.0 提供菜单栏快捷面板和独立主窗口。主窗口使用原生侧栏选择全部资源、Section、项目或全局执行；大小和位置自动保留。面板左上角的应用标识区或应用菜单的“打开主窗口”（⌘0）可唤起已有窗口，普通启动打开主窗口，后台启动保持安静。主窗口打开时可通过 Dock／⌘Tab 切换，关闭最后一个管理窗口后继续在菜单栏常驻。两个界面共享项目、分组、观察、操作和回执，页面选择与详情展开各自保留。
+## 安装和运行
 
-资源页之外提供机器概览与执行页。人可查看压力、命令来源、工作目录、输出和实际终止状态；Agent 通过同一 CLI 查询并运行受管命令。项目声明仍采用 schema 5，共享 owner 只统一协调，不合并动作权限。没有全局资源登记库或开发任务语义推断。旧 App 0.1.0 的 targets 配置需要按[人工迁移步骤](../USER_MANUAL.md#人工迁移-cli-配置)更新。
-
-面板以不透明系统背景避免过度透出桌面内容，页面切换采用原生分段 Picker，项目和执行使用原生 GroupBox。文字沿用系统正文、辅助文字与次要颜色，按钮和焦点由系统绘制，不另画选择边框或焦点环。展开按钮仍提供具体对象、展开值和展开属性；资源动作保留对象及影响提示，装饰图标不进入 AX 树。CLI 协议不因呈现调整改变。
-
-主窗口的“＋”提供添加项目与新建 Section。Section 菜单可重命名、上下移动、添加项目或删除；项目菜单中的“移到 Section”可调整归属。点击分组标题折叠或展开，重启后保留分组与折叠状态。项目使用无卡片的原生折叠行，两个界面共享本次运行的项目折叠状态；不停止资源，重新定位时展开。删除 Section 只把项目放回未分组，不停止资源。已有项目升级后保持原顺序与 CLI 设置。
-
-面板按 Section、项目、资源区分层级，不给项目套卡片、不单列“未分组”，Section 也不显示项目数量；列表对齐滚动视口并保留对称边距，Section、项目菜单与资源详情入口位于同一视觉尾部列。顶部显示项目数量，所有项目读取成功后才显示完整资源数量；部分读取成功时标明“已读取”，全部读取失败时不显示零资源。项目或资源诊断先呈现短原因，点击展开箭头查看、选择或复制完整原文。首个网页入口与运行／连接快捷动作直接显示，其他路径与动作按需展开，动作旁保留影响对象与数据影响；展开资源详情后可查看观察来源、时间、实例依据及完整动作范围。菜单栏面板在顶部刷新按钮旁显示更新时间。
-
-需要 macOS 14+、Swift 6 工具链，以及配套 CLI 18.3.0（dev status schema 4、monitor schema 3，其余 App 调用的 list／act／reconcile／terminate／logs／integrate 为 schema 1）。从仓库根目录执行：
+公开预览的安装条件、签名和附件校验见[发行包安装说明](INSTALL.md)。从源码开发需要 macOS 14+、Swift 6、PDM 和钥匙串中的 Apple Development 签名身份。在仓库根目录运行：
 
 ```sh
 pdm install
 ./script/build_and_run.sh --verify
 ```
 
-应用稳定安装到 `/Applications/SVC.app`，Codex Run 使用同一入口。`--install` 安装后不启动；`--build-only` 只在 `dist/SVC-build/SVC.app` 构建，不退出当前 App。安装先完成构建、签名和校验，再请求旧 App 正常退出，等待最多 30 秒；不强杀服务操作。替换后的签名校验失败时恢复旧包。新 App 通过后台模式启动，不主动展示面板或夺取焦点。
+脚本构建、签名并校验 App，正常退出旧实例后替换 `/Applications/SVC.app`，随后在后台启动。正在进行的控制操作最多等待 30 秒；替换后的签名校验失败会恢复旧包。Codex Run 使用同一入口。`--install` 只安装，`--build-only` 只在 `dist/SVC-build/SVC.app` 中构建。Swift 默认使用两个并发任务，可通过 `SVC_BUILD_JOBS` 设置为 1 到 8。
 
-Swift 构建默认限制为 2 个并发任务；`SVC_BUILD_JOBS` 可显式设为 1 到 8。不要同时运行多份原生观察宿主、构建或检查来追求验收数量。AppStore 在主窗口或面板可见时约每 5 秒请求一次采样，两个界面共用一组循环。两处都不可见时停止；主窗口最小化、应用隐藏或窗口被完全遮挡时不产生可见需求。只要任一可见界面在资源页，项目观察就顺序进行；全都只看执行时不启动周期项目探测。隐藏时允许在途请求自然结束，快速重开不叠加新循环。更新失败保留上次机器快照并标为过期，不能拿旧值声称当前压力正常。
+存在多个开发身份时，以 `SVC_SIGNING_IDENTITY` 指定已有证书的 SHA-1 或完整名称。开发安装使用固定 Bundle ID `dev.svc.menubar`，保留用户偏好。从旧 ad-hoc 包迁移后，系统可能重新询问目录访问权限。[Apple 关于代码签名身份的说明](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements)
 
-本机安装从钥匙串选择唯一的 Apple Development 身份；存在多个身份时，通过 `SVC_SIGNING_IDENTITY` 指定证书 SHA-1 或完整名称。证书私钥始终留在本机。签名使用固定 Bundle ID `dev.svc.menubar`，重装保留当前用户设置。
+需要核对安装时，检查实际运行进程的路径以及应用签名。旧工作树的 `dist` 中可能还有同名包。
 
-安装验收还须核对正在运行的进程来自 `/Applications/SVC.app`，不能只检查该路径的包或发现同名进程就认定交付完成。旧工作树中的 `dist/SVC.app` 可能仍是旧版 ad-hoc 包；从 Finder 或旧快捷方式启动它，会得到旧界面和另一种签名身份。发现这类副本时，先正常退出并归档旧包，再修正启动入口。`codesign -dvvv /Applications/SVC.app` 应显示 Apple Development Authority 和 TeamIdentifier；`codesign --verify --strict /Applications/SVC.app` 应通过。重新启动后，再检查进程的可执行路径与包内版本。
+```sh
+ps -A -o pid=,comm= | awk '/\/SVCMenuBar$/'
+codesign --verify --strict /Applications/SVC.app
+codesign -dvvv /Applications/SVC.app
+```
 
-macOS 依据签名的 designated requirement 跟踪应用身份；不同签名身份不自动共享隐私授权，详见 [Apple TN3127](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements)。从旧 ad-hoc 包切换到开发签名包后，首次访问受保护目录可能需要重新授权。固定开发身份与安装入口可以避免迭代时反复切换身份，但后台启动未访问项目，不能据此证明磁盘授权已经保留；还需区分首次授权与同一身份下的重复请求。
+## 选择 CLI
 
-首次使用时选择包含 `svc.json` 的项目目录。添加的目录会执行项目声明的 自动观察（包括 exec probe），因此只添加自己信任的项目。添加项目不执行控制动作。项目列表保存在当前用户的 `dev.svc.menubar` 偏好中；配置无效或路径失效时直接显示错误。
+App 1.0.0 配套 `sustainable-vibe-coding` 发行版 `1!1.0.0`。CLI 由用户安装和升级。公开预览附带 `SVC-CLI.zip`，解压得到可独立安装的 wheel。安装步骤见[发行包安装说明](INSTALL.md)。
 
-App 安装只构建、签名和替换应用，不安装 CLI，不创建 Python 环境。用户通过 mise、pipx、uv 或 pip 自行安装和升级 SVC CLI；App 与终端共用用户管理的安装。没有找到 CLI 时，主窗口、菜单栏面板和设置提供 [GitHub latest release](https://github.com/xiaoland/svc/releases/latest) 与 [PyPI](https://pypi.org/project/sustainable-vibe-coding/) 安装入口。
+本机自用可运行 `./script/install_local_cli.sh`，由脚本通过 `uv` 从当前已提交的源码安装 CLI。首次使用时，在 App 设置中选择脚本输出的 `svc` 绝对路径，默认是 `~/.local/share/svc/dogfood/bin/svc`。后续重复运行脚本即可更新这份 CLI，App 重装会继续使用已保存的路径。开发和调试未提交的改动时，也可选择本工作树的 `.venv/bin/svc`。
 
-CLI 路径留空时，App 从准备好的项目终端环境 PATH 查找 svc；自定义 PATH 模式沿用设置中的路径。显式填写可执行文件绝对路径时优先使用该路径。App 不保存构建机 PATH。旧安装器设置的 Library/Application Support/SVC/runtimes 路径会恢复为自动查找，其余显式路径保留。旧私有环境不会自动删除，以免影响仍在运行的调用。项目显式声明的环境变量继续覆盖调用环境。
+CLI 路径留空时，App 从所选执行环境的 PATH 查找。项目终端模式读取项目的 zsh 或 bash 登录环境，自定义 PATH 模式使用填写的目录。
 
-CLI 必须满足 App 实际调用的公开结果 schema；已安装不等于协议兼容。公开发行物可以提供独立 wheel 供用户安装，但 App 不会安装或切换它。当前开发预览可能要求尚未进入 PyPI 的 CLI，不能用旧公开包伪装为兼容版本。
+开发资源配置使用 schema 5。已有 0.1.0 targets 配置须排空旧操作并迁移。App 会校验实际使用的命令结果版本；各项兼容条件详见[公开调用与兼容性](../docs/product-tdd/macos-client.md#公开调用与兼容性)，迁移步骤见[用户手册](../USER_MANUAL.md#人工迁移-cli-配置)。
 
-App 的唯一版本源是 `VERSION`，构建号来自当前 Git 的主线提交计数，包内记录完整源码 revision；未提交构建标记为 `-dirty`。设置窗口显示版本与构建号。发布流程和版本准备见根目录 `CONTRIBUTING.md`，公开预览安装条件见 `INSTALL.md`。GitHub 附件是 arm64 的 ad-hoc 签名预览，未公证，与本机开发签名安装分开构建；公开包不带本机 CLI 路径、PATH 或调试源码路径。
+## 使用两个界面
 
-资源状态按具名观察分别呈现，未满足不等于进程不存在。所有控制只执行项目显式声明的动作，人工动作显示步骤。仓库或主机共享资源明确显示作用范围，App 按 coordination ID 互斥控制，跨进程协调由 CLI 负责。
+- **菜单栏面板**用于速览状态、打开资源地址和执行声明动作。点面板左上角的应用标识或按 ⌘0 可打开主窗口。
+- **主窗口**支持按全部项目、Section 或单个项目查看资源与执行，也能浏览全局执行历史。侧栏底部的“＋”用于添加项目或新建 Section。只添加可信目录，刷新可能运行项目声明的自动观察命令。删除分组后，项目回到未分组，资源继续运行。
+- **执行与用量**只统计已观测到且身份可验证的进程。点机器压力状态查看 CPU、内存、磁盘和 swap，点项目旁的信息按钮查看已观测项目用量。使用“执行来源”设置可接入 Pi、Codex 和 Claude Code。可用的日志与停止范围由各来源决定。[执行与项目用量](../USER_MANUAL.md#按项目查看执行与用量) · [原生执行接入](../USER_MANUAL.md#接入-agent-原生执行)
+- **指令结果通知**显示 App 发起的资源动作与恢复确认回执。“请求已接受”表示控制者已接手，仍需核对结果。点通知可定位原项目和当次回执摘要。在“设置”里的“通知”可查看权限、打开系统设置或发送测试通知。
 
-App 中的资源指令和恢复确认返回后会发送系统通知，显示项目、资源、动作及实际结果；“请求已接受”表示控制者接手，并不代表后续任务已完成。首次收到结果时会请求原生通知授权；系统不会重复弹出已处理过的授权提示。SVC 设置的“通知”区显示当前权限，可主动请求首次授权、直接打开系统通知设置，并在允许后发送测试通知。横幅、声音和预览由系统设置的“通知 > SVC”管理。拒绝通知不影响指令回执。点击通知打开对应项目，并保留这条通知原本的时间和摘要，避免与后续操作混淆。通知覆盖 App 发起的资源操作和恢复确认。
+从 Finder 打开或重新打开会显示主窗口；关闭窗口后 App 继续在菜单栏运行。隐藏所有界面会停止新的周期观察。退出时 App 等待在途资源操作，允许取消退出。关闭窗口或退出 App 后，已就绪服务继续运行。[刷新、资源与执行的职责](../docs/product-tdd/macos-client.md)
 
-关闭面板、主窗口或退出 App 不停止已经就绪的服务。正常退出时若启动／停止尚在进行，App 会等待结果，并允许取消退出。最近的操作回执仅保留在当前会话；日志入口仅代表对应操作的已有文件，不保证服务全生命周期的输出，也不扫描私有 runtime 存储。
+## 验证
 
-临时命令使用 `svc dev exec --source agent --label 名称 --cwd /项目路径 --json -- 命令 参数`，无需改项目配置。前台 CLI 拥有执行，App 关闭不会停止它。执行页的“复制 Agent 接入说明”包含实际所选 CLI 路径和压力／重试约定。正常终止不自动升级强杀；强制终止需在行内明确确认。组内仍有子进程时继续显示运行；只读的旧 run、资源动作、已释放服务和 owner-lost 不提供本通道终止。详细边界见[使用手册](../USER_MANUAL.md#观察机器与管理临时执行)及[技术合同](../docs/product-tdd/activity.md)。
-
-运行原生测试及真实服务生命周期检查：
+从仓库根目录执行。使用临时的测试项目，真实生命周期测试会通过配套 CLI 启动并停止专用的 loopback HTTP 服务。
 
 ```sh
 SVC_TEST_CLI="$PWD/.venv/bin/svc" swift test --package-path macos
@@ -55,22 +52,6 @@ SVC_RENDER_DIR="$PWD/dist/ui-evidence" swift test --package-path macos --filter 
 pdm run check
 ```
 
-`SVC_TEST_CLI` 指向本次待验证 CLI。生命周期测试使用临时目录和临时 loopback HTTP 服务，通过声明的停止请求清理。未设置该变量时只执行不依赖真实 CLI 的测试。App 动作验收通过公开 Store 动作入口连接真实 CLI，不依赖 SwiftUI 私有视图树或为了测试而替换标准按钮。资源及执行控件使用原生 SwiftUI Button；离屏快照与 Store 行为检查不等同于物理点击或 VoiceOver 验收。离屏渲染不创建可见窗口，输出浅色／深色 PNG；它是渲染证据，不代表系统菜单栏锚定或人工体验。原生代码与测试位于 `Sources/SVCMenuBar`、`Tests/SVCMenuBarTests`；Python 测试仍由仓库 `cli/tests` 管理。
-
-主窗口的导航与工具栏调整优先使用原生离屏检查：构造实际 MainWindowController，在禁止激活且未展示窗口的条件下读取工具栏项、窗口样式和不同宽度的布局，再输出一次快照后退出。SwiftUI 统一拥有导航和工具栏；AppKit 只保留窗口生命周期、固定标题、fullSizeContentView 与 unified 样式，不叠加手工 NSToolbar。已有检查支持的行为不反复用 computer use 重跑；系统激活、菜单栏锚定等确需真实系统交互的行为单独说明证据，不能拿离屏图代替。
-
-Swift 的 `CLIClient` 只通过 argv 调用公开命令，不经 shell，不解析 `svc.json` 或私有运行时记录。`AppStore` 持有项目、操作和请求代次；修改配置、控制操作与项目移除会使旧刷新失效。界面只呈现这些状态。AppDelegate 拥有 NSStatusItem、NSPopover、设置窗口和唯一 MainWindowController。后者用 AppKit 管理主窗口、尺寸与可见性，内容和工具栏由 SwiftUI NavigationSplitView／toolbar 呈现。AppStore 按两个界面的可见性和页面需求统一调度观察；内容视图不各自启动轮询。菜单栏及主窗口宿主沿用 AppKit 生命周期，不另建应用入口或第二个 Store。标准编辑菜单为设置输入框提供复制、粘贴与全选快捷键。子进程 stdout／stderr 使用临时文件，避免大量输出或已释放服务器继承描述符导致的管道等待。控制操作使用 CLI 自身的超时，不被 App 的短超时打断。
-
-
-项目内可切换资源和执行，并查看“已观测用量”：CPU、macOS 计入的内存及磁盘读写。全局执行按项目分组，未归属仍保留入口；新执行在启动时记录归属，旧进程不会按名称或 PID 自动认领。身份可验证的本地就绪服务释放后继续计入项目，但终止仍使用其声明动作。机器概览的 swap／换入换出与磁盘活动始终是全机数据；详情区分压缩和普通页面读入，不能把这些值伪装成项目 swap。
-
-用量范围、预算和兼容性见 [activity 合同](../docs/product-tdd/activity.md#项目归属与用量观察)。项目用量不等于整个项目的所有负载，未接入的容器、远端服务和外部进程不在统计内。验证优先使用独立验收项目及有上限的脚本，不通过制造真实 swap 压力验证告警，也不反复操作真实开发项目。
-
-主机概览常驻一行压力状态，点击后在原生浮层查看 CPU、内存、磁盘和 Swap；底层指标再按需展开，不挤占项目列表。项目标题旁的 info 按钮以中性／黄／红提示已观测占用，点击浮层可查看 CPU、内存、容量比例、磁盘和进程数；没有数据或过期时也明确说明。颜色使用项目 CPU 与 footprint 的本机容量占比，RSS 不替代 footprint，详细阈值在浮层说明；资源默认显示名称、具名状态、首个网页入口及运行／连接快捷动作；安装等其他动作、路径复制与用量按需展开，数据影响仍紧随动作。原始观察、命令与时间戳进入默认收起的“诊断信息”。执行详情提供证据、日志与高级操作。普通终止及修改／删除数据的影响仍直接可见。
-
-下次公开发布前，App 本地迭代统一使用 0.2.0，构建号和源码 revision 区分每次安装。压力底层指标、项目颜色说明、执行来源、历史与侧栏分组的原生 DisclosureGroup 都在写入展开绑定时禁用 transaction 动画，同时保留组内约束；不改用自绘折叠控件，也不关闭整个应用的动画。
-
-
-执行页也显示原生 Agent 管理器提供的任务。设置中的“执行来源”可安装 Pi 桥接并配置已有 Codex socket，Claude Code 从用户 PATH 发现；没有连接时明确展示状态。Pi 扩展需在 Pi 重新加载后生效；Codex 不自动启动新服务器。原生停止先确认具体范围，Claude 是整个后台会话，交互会话只读。详细能力与限制见[原生执行接入说明](../USER_MANUAL.md#接入-agent-原生执行)。
+设置 `SVC_TEST_CLI` 才会运行真实 CLI 生命周期测试。离屏测试用于核对布局，系统菜单栏锚点、窗口激活和通知展示要在运行中的 App 上验证。版本准备与发布见[贡献指南](../CONTRIBUTING.md#macos-版本与发布)。
 
 默认执行环境接入用户的 zsh／bash 项目终端配置，包括已配置的目录及 prompt hooks；周期观察复用准备结果，点击刷新或保存设置后重载。已有自定义 PATH 保留为显式模式，可在设置切换。准备失败／超时会说明项目命令尚未执行，不静默回退；项目动作 env 仍优先，CLI 继承语义不变。启动配置可能执行代码，完整环境不会写入诊断；不自动批准工具的项目信任请求。详见[项目执行环境合同](../docs/product-tdd/macos-execution-environment.md)。

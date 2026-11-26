@@ -33,6 +33,7 @@ RELEASE_SKILLS = (
     "svc-specs",
     "svc-taste",
 )
+PUBLIC_SKILLS = (*RELEASE_SKILLS, "svc-writing")
 
 
 def release_bytes(
@@ -110,6 +111,7 @@ def standalone_files(
     body: bytes = b"# SVC\n",
     names: tuple[str, ...] = ("svc-workflow",),
     skill_names: tuple[str, ...] = RELEASE_SKILLS,
+    tag: str | None = None,
 ) -> dict[str, bytes]:
     legacy = release_bytes(
         version=version, body=body, names=names, skill_names=skill_names
@@ -150,8 +152,9 @@ def standalone_files(
             )
     assets[f"svc-skills-{version}.json"] = json.dumps(
         {
-            "schema_version": 2,
+            "schema_version": 3 if tag is not None else 2,
             "version": version,
+            **({"tag": tag} if tag is not None else {}),
             "repository": REPOSITORY,
             "revision": "a" * 40,
             "skills": entries,
@@ -283,7 +286,7 @@ def test_global_targets_preserve_existing_home_installations(
         ).read_bytes() == b"existing home installation\n"
 
 
-def test_latest_release_filters_pages_prereleases_and_non_corpus_tags(
+def test_latest_release_filters_pages_prereleases_and_legacy_tags(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class Response:
@@ -310,25 +313,28 @@ def test_latest_release_filters_pages_prereleases_and_non_corpus_tags(
             return Response(assets[url.rsplit("/", 1)[1]])
         page = int(url.rsplit("page=", 1)[1])
         if page == 1:
-            value = [{"tag_name": "cli-v99.0.0", "draft": False, "prerelease": False}]
-            value += [
-                {"tag_name": "corpus-v8.0.0", "draft": True, "prerelease": False},
-                {"tag_name": "corpus-v9.0.0", "draft": False, "prerelease": True},
+            value = [
+                {"tag_name": "cli-v99.0.0", "draft": False, "prerelease": False},
+                {"tag_name": "corpus-v17.0.0", "draft": False, "prerelease": False},
+                {"tag_name": "skills-v8.0.0", "draft": True, "prerelease": False},
+                {"tag_name": "skills-v9.0.0", "draft": False, "prerelease": True},
             ]
             value += [
-                {"tag_name": "corpus-v1.0.0", "draft": False, "prerelease": False}
-                for _ in range(97)
+                {"tag_name": "skills-v1.0.0", "draft": False, "prerelease": False}
+                for _ in range(96)
             ]
         else:
             value = [
-                {"tag_name": "corpus-v1.2.0", "draft": False, "prerelease": False},
-                {"tag_name": "corpus-v1.10.0", "draft": False, "prerelease": False},
+                {"tag_name": "skills-v1.2.0", "draft": False, "prerelease": False},
+                {"tag_name": "skills-v1.10.0", "draft": False, "prerelease": False},
             ]
         return Response(value)
 
     monkeypatch.setattr(skills.urllib.request, "urlopen", open_url)
 
-    assets = standalone_files(version="1.10.0")
+    assets = standalone_files(
+        version="1.10.0", skill_names=PUBLIC_SKILLS, tag="skills-v1.10.0"
+    )
     downloads = []
     assert skills.resolve_release(names=["svc-workflow"]).manifest.version == "1.10.0"
     assert {url.rsplit("/", 1)[1] for url in downloads} == {
@@ -336,17 +342,20 @@ def test_latest_release_filters_pages_prereleases_and_non_corpus_tags(
         "svc-skills-1.10.0.json.sha256",
         "svc-workflow-1.10.0.zip",
     }
-    assert all("/corpus-v1.10.0/" in url for url in downloads)
+    assert all("/skills-v1.10.0/" in url for url in downloads)
 
 
-def test_resolve_release_rejects_archive_with_wrong_requested_version(
+@pytest.mark.parametrize("version", ["", "corpus-v17.0.0", "1.0.0+local"])
+def test_resolve_release_rejects_non_public_version_selectors(
+    version: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    wrong = release(version="2.0.0")
-    monkeypatch.setattr(skills, "read_release", lambda *args, **kwargs: wrong)
+    def network_call(*args: object, **kwargs: object) -> None:
+        pytest.fail("Invalid version selector must fail before network activity")
 
-    with pytest.raises(SkillArchiveError):
-        skills.resolve_release("15.0.0")
+    monkeypatch.setattr(skills.urllib.request, "urlopen", network_call)
+    with pytest.raises(SkillArchiveError, match="Invalid Skills release version"):
+        skills.resolve_release(version)
 
 
 def test_source_network_errors_are_structured(monkeypatch: pytest.MonkeyPatch) -> None:

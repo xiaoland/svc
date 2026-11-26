@@ -1,6 +1,6 @@
 # macOS App 与 CLI 合同
 
-本文拥有 SVC Dev 图形入口与程序化入口之间的职责、公开协议和生命周期合同。产品定位见 [开发资源管理](../prd/development.md)，使用与迁移见[用户手册](../../USER_MANUAL.md)，发行流程见[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)。本文描述 CLI 18.3.0／App 0.2.0 的源码合同；旧版 App 0.1.0／CLI 17.0.0 使用 targets 合同，不能混用。安装和公开发布是独立的交付步骤，不能由源码版本推断。
+本文拥有 SVC Dev 图形入口与程序化入口之间的职责、公开协议和生命周期合同。产品定位见 [开发资源管理](../prd/development.md)，使用与迁移见[用户手册](../../USER_MANUAL.md)，发行流程见[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)。本文描述 App 1.0.0 与配套 `sustainable-vibe-coding` 发行版 `1!1.0.0` 的源码合同。旧版 App 0.1.0／CLI 17.0.0 需要使用 targets 合同。已安装版本与公开发行状态分别核对。
 
 App 与 CLI 是同一产品能力的两个入口。App 拥有项目来源偏好、呈现、刷新调度、当前会话回执、CLI 路径及项目环境准备／显式 PATH；CLI 拥有配置解释、资源身份、观察、声明动作执行和跨进程协调。项目脚本或实际控制者拥有资源内部的初始化、数据清理、权限和异步操作生命周期。App 不直接读取配置和私有 runtime，也不根据端口或历史 PID 推导权限。
 
@@ -27,13 +27,13 @@ App 在环境准备后通过绝对路径启动独立 CLI，以 argv 传入项目
 
 以上调用都支持 `--repo`、`--json` 和 `--json-schema`。根 status 结果 schema 为 4，init 结果仍为 4；配置 schema 5 与这些结果版本相互独立。App 校验 command、schema 和必要字段，拒绝不兼容或损坏结果，不能造出成功或未就绪。非零 CLI 退出也可能携带有效回执。
 
-App SemVer、CLI package 版本及逐命令结果版本独立管理。App 0.2.0 配套 CLI 18.3.0，将 dev-monitor 推进到 schema 3，exec／terminate 仍为 schema 1；原 list／status／act／reconcile 的结果版本不变。本开发线包含主窗口、统一的原生导航与工具栏，并沿用系统文字层级和可访问语义；CLI package 的 minor 表示新增独立能力，不由本地 App 迭代次数决定。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
+App SemVer、CLI Python 发行版版本及逐命令结果版本独立管理。App 1.0.0 配套发行版 `1!1.0.0`，将 dev-monitor 推进到 schema 3，exec／terminate 仍为 schema 1，原 list／status／act／reconcile 的结果版本不变。本开发线包含主窗口、统一的原生导航与工具栏，并沿用系统文字层级和可访问语义。CLI 的 minor 表示新增独立能力。CLI 17.0.0 已作为 macOS 0.1.0 的公开附件交付，即使未发布 PyPI，也属于兼容性基线。基线选择由 [build_cli_output_schemas.py](../../tools/build_cli_output_schemas.py) 拥有。
 
 机器与执行页使用 `dev monitor --json`，通过重复 --project-root 提供 App 已登记目录，但不依赖项目配置能否解析；`dev terminate <execution-id> [--force] --by human --json` 只请求执行 owner 终止。App 不自己发送进程信号。主机采样、一次性执行及停止证明由[主机与受管执行合同](activity.md)拥有；执行页不会将旧资源动作的 wait、ready 释放或 submitted 改成可强杀。CLI 仍可独立于 App 使用；App 退出不终止前台 CLI 拥有的一次性执行。
 
 ## 主窗口与菜单栏面板
 
-Popover 使用单一 ScrollView 承载唯一项目列表，资源视口固定 480 点，内容占满系统提供的视口宽度并保留对称内边距；少量内容也保持相同视口高度，空清单仍使用简短引导。资源开合不再切换“普通列表／滚动列表”两份视图。系统滚动条可以占用自身宽度，内容以实际视口对齐。资源动作按一列排列，不因详情文字改变而切换横纵候选布局。
+Popover 使用单一 ScrollView 承载唯一项目列表，资源视口固定 480 点，内容占满系统提供的视口宽度并保留对称内边距；少量内容也保持相同视口高度，空清单仍使用简短引导。资源开合不再切换“普通列表／滚动列表”两份视图。系统滚动条可以占用自身宽度，内容以实际视口对齐。折叠资源有多个快捷动作、且全部声明不改变数据时，宽度足够便共用一行。其余动作纵向排列，让影响数据的说明紧邻相应按钮。
 
 项目标题省略重复的文件夹图标；首个资源直接跟随项目标题，分隔线仅放在资源之间。项目内资源容器使用较小间隔，资源行不叠加额外上下外边距，项目之间保留较大间隔，以距离呈现归属关系。资源自身的状态、访问、动作与展开内容间距及原生控件命中范围保留。
 
@@ -65,7 +65,9 @@ AppStore 在校验并保存 OperationReceipt 后调用一次完成回调，覆�
 
 一次请求对应一个 CLI 子进程。App 不额外给控制请求加短超时；退出等待在途操作，用户可取消退出，取消退出不取消动作。就绪释放后的服务不随 CLI 或 App 退出；移除来源和关闭面板也不是停止指令。观察和会话回执不作为下次启动的新鲜事实；运行证据由 CLI 保存，App 只使用公开回执中的日志路径。
 
-App 依赖用户安装的系统可用 CLI，不捆绑 Python 或 CLI，也不在 App 安装期间创建 Python 环境、安装 wheel 或改变用户的 CLI 版本。CLI 路径留空时，在准备好的项目终端环境 PATH 中查找 svc；用户选择自定义 PATH 时沿用其显式路径。准备结果按项目与显式刷新代次复用，动作仍走同一 CLI。显式绝对路径优先，不存在时不偷偷换用另一版本。App 的默认环境准备读取用户登录交互 shell 并完成项目钩子，带截止时间、独立进程组及失败缓存；自定义 PATH 保持兼容，不把构建机 PATH 写入包。详见[项目执行环境合同](macos-execution-environment.md)。旧安装器留下的 SVC 私有 runtimes 路径恢复为自动查找，其余用户偏好保留。缺少 CLI 时，两个界面和设置提供 GitHub latest release 与 PyPI 安装入口；协议不兼容时明确要求升级或选择兼容版本，不自动安装。公开发布可以交付同 commit 的独立 CLI wheel，manifest 记录协议与版本，安装仍由用户完成；macOS CD 不自动发布 PyPI。安装和信任条件见 [macOS README](../../macos/README.md) 与 [INSTALL](../../macos/INSTALL.md)。
+App 依赖用户安装的系统可用 CLI，不捆绑 Python 或 CLI，也不在 App 安装期间创建 Python 环境、安装 wheel 或改变用户的 CLI 版本。CLI 路径留空时，在准备好的项目终端环境 PATH 中查找 svc；用户选择自定义 PATH 时沿用其显式路径。准备结果按项目与显式刷新代次复用，动作仍走同一 CLI。显式绝对路径优先，不存在时不偷偷换用另一版本。App 的默认环境准备读取用户登录交互 shell 并完成项目钩子，带截止时间、独立进程组及失败缓存；自定义 PATH 保持兼容，不把构建机 PATH 写入包。详见[项目执行环境合同](macos-execution-environment.md)。旧安装器留下的 SVC 私有 runtimes 路径恢复为自动查找，其余用户偏好保留。缺少共享 CLI 时，每个界面只提示一次安装或选择路径。按项目终端环境自动查找时，某个项目查找失败仍在该项目显示原因。两个界面和设置提供 GitHub Releases 与 PyPI 安装入口；协议不兼容时明确要求升级或选择兼容版本，不自动安装。
+
+macOS 发行附带同一 commit 构建的 `SVC-CLI.zip`，保留可供 pip 安装的原始 wheel 文件名及其中的 epoch 标记 `!`。`release.json` 记录附件名 `cli_archive`、原始 wheel 文件名 `cli_wheel`、CLI 发行版版本 `cli_version` 和逐命令结果 schema。macOS 发行工作流只发布 GitHub 附件，由用户安装配套 CLI。安装和信任条件见 [macOS README](../../macos/README.md) 与 [INSTALL](../../macos/INSTALL.md)。
 
 ## 资源合同
 
@@ -112,9 +114,9 @@ App 按来源展示资源及具名状态，详情承载实例依据、关系、�
 
 ## 项目范围与用量
 
-App 0.2.0 的主窗口在全部项目、Section 或项目范围内保留原生资源／执行切换；全局执行入口仍呈现未归属记录。执行列表使用“当前执行”和“最近记录”，避免将仍有可观测进程的 owner-lost 描述为已结束；它仍明确显示结果未知并禁用终止。项目筛选只使用 monitor 返回的 project_path 精确匹配 App 已规范化的来源路径，不在客户端根据 cwd 或命令内容重新归属。项目和执行展示来自同一 monitor 快照的用量；资源详情通过 entry_id／project_path 关联仍可观察的本地资源运行。App 不因观察到 released 进程而提供直接终止按钮，资源继续走声明动作。
+主窗口在全部项目、Section 或项目范围内保留原生资源／执行切换；侧栏“全部执行”包含未归属记录。项目范围的列表直接显示有当前执行的项目分组，用量入口位于分组标题旁。执行列表使用“当前执行”和“最近记录”，避免将仍有可观测进程的 owner-lost 描述为已结束；它仍明确显示结果未知并禁用终止。项目筛选只使用 monitor 返回的 project_path 精确匹配 App 已规范化的来源路径，不在客户端根据 cwd 或命令内容重新归属。项目和执行展示来自同一 monitor 快照的用量；资源详情通过 entry_id／project_path 关联仍可观察的本地资源运行。App 不因观察到 released 进程而提供直接终止按钮，资源继续走声明动作。
 
-机器概览始终保留全机含义，磁盘读写、swap 已用量与真实换入／换出不会随所选项目变为该项目的值。项目用量明确标为“已观测”，不涵盖未接入的外部程序、容器或远端工作；不可用显示不可用而不是零。Swift 模型保留指标不可用时的空值表达，不伪造读数。本机及配套发行使用 18.3.0 的 monitor schema 3；旧 monitor schema 1／2 明确拒绝混用。exec／terminate schema 1 与资源配置 schema 5 不变。
+机器概览始终保留全机含义，磁盘读写、swap 已用量与真实换入／换出不会随所选项目变为该项目的值。项目用量明确标为“已观测”，不涵盖未接入的外部程序、容器或远端工作；不可用显示不可用而不是零。Swift 模型保留指标不可用时的空值表达，不伪造读数。本机及配套发行使用现行 monitor schema 3；旧 monitor schema 1／2 明确拒绝混用。exec／terminate schema 1 与资源配置 schema 5 不变。
 
 ## 默认信息与深入查看
 
@@ -132,7 +134,6 @@ App 0.2.0 的主窗口在全部项目、Section 或项目范围内保留原生�
 
 压力浮层中的底层指标、项目颜色说明、最近记录与侧栏 Section 的 DisclosureGroup 保留系统控件，但每处局部 transaction 同时设置 animation 为 nil、disablesAnimations 为 true，避免默认展开／收起过渡造成内容缩放、淡入或布局迟滞。该约束不施加到整个窗口，也不改变展开状态的所有者、Section 偏好或刷新调度。做法来自 nearby-audio 的修复提交 `027c894`，不复制其项目业务。
 
-当前 App 0.2.0 是未发布目标，后续本地迭代沿用该版本；区分安装用构建号和源码 revision。此前临时使用的 0.3.x 到 0.6.x 没有公开发布，不作为兼容性基线。正式版本与发布记录按[贡献指南](../../CONTRIBUTING.md#macos-版本与发布)维护。
 
 
 原生执行与机械执行共享项目列表，但采用独立模型。HarnessExecution 保留来源、scope 和动作能力；HarnessExecutionRow 仅在来源允许时展示日志／停止，停止前显示原管理器的作用范围并确认，不提供外部 force。IntegrationSettingsView 消费同一 ActivityStore 的 integrations，在设置内安装 Pi 桥接或配置现有 Codex socket；Claude 从用户 PATH 自动发现。执行页的折叠来源状态区区分尚未接入与空清单，沿用原生 DisclosureGroup 的局部无动画处理。连接、身份失效、日志预算和用量限制由 [activity 原生来源合同](activity.md#原生-agent-执行来源)拥有。

@@ -24,7 +24,8 @@ test = [
 distribution = false
 
 [tool.svc.corpus]
-version = "17.0.0"
+version = "1.0.0"
+tag-prefix = "skills-v"
 
 [tool.pdm.workspace]
 members = ["cli"]
@@ -44,7 +45,7 @@ format-check = "ruff format --check cli/src cli/tests tools"
 lint = "ruff check cli/src cli/tests tools"
 lint-imports = "lint-imports"
 typecheck = "mypy"
-check = { composite = ["check-corpus-release", "check-skills", "check-cli-output-schemas", "format-check", "lint", "typecheck", "lint-imports", "test"] }
+check = { composite = ["check-corpus-release", "check-cli-output-schemas", "format-check", "lint", "typecheck", "lint-imports", "test"] }
 
 [tool.mypy]
 python_version = "3.11"

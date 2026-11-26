@@ -12,6 +12,7 @@ import sqlite3
 import subprocess
 import tempfile
 import venv
+import zipfile
 from pathlib import Path
 from typing import Sequence
 
@@ -75,6 +76,8 @@ def source_fixture(path: Path) -> None:
 
 
 def run_case(name: str, python: Path, root: Path) -> None:
+    root = root / name
+    root.mkdir()
     if name == "inventory":
         home = root / "codex-home"
         home.mkdir()
@@ -109,6 +112,8 @@ def run_case(name: str, python: Path, root: Path) -> None:
         "export",
         "--provider",
         "codex",
+        "--home",
+        root,
         "--source",
         source,
         "--output",
@@ -126,23 +131,36 @@ def run_case(name: str, python: Path, root: Path) -> None:
     schema = cli(python, root, "analysis", name, "--schema")
     if schema.get("version") != 3:
         raise Failure(name)
+    request = root / "request.json"
     if name == "query":
-        request = root / "query.json"
         request.write_text('{"version":3,"intent":"overview"}')
-        response = cli(
-            python,
-            root,
-            "analysis",
-            "query",
-            "--input",
-            bundle,
-            "--request",
-            request,
+    else:
+        with zipfile.ZipFile(bundle) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+        (native,) = (
+            item["name"] for item in manifest["materials"] if item["kind"] == "native"
         )
-        if response.get("version") != 3 or response.get("status") not in {
-            "complete",
-            "partial",
-        }:
+        ref = {"evidence_id": evidence["evidence_id"], "kind": "native", "id": native}
+        request.write_text(json.dumps({"version": 3, "ref": ref}))
+    response = cli(
+        python, root, "analysis", name, "--input", bundle, "--request", request
+    )
+    if response.get("version") != 3 or response.get("status") not in {
+        "complete",
+        "partial",
+    }:
+        raise Failure(name)
+    if name == "read":
+        items = response.get("items")
+        if (
+            not isinstance(items, list)
+            or len(items) != 1
+            or items[0].get("payload")
+            != {
+                "encoding": "utf-8",
+                "text": source.read_text(),
+            }
+        ):
             raise Failure(name)
 
 

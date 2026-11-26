@@ -5,7 +5,9 @@ import json
 import plistlib
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
@@ -14,6 +16,7 @@ from tools import publish_macos_release as release
 
 
 SHA = "a" * 40
+EPOCH_WHEEL = "sustainable_vibe_coding-1!1.0.0-py3-none-any.whl"
 
 
 def bundle(path: Path, identity: str = app.BUNDLE_ID, content: str = "old") -> Path:
@@ -111,6 +114,16 @@ def test_signing_requires_an_unambiguous_development_identity(
         app.signing_identity()
 
 
+def write_asset_hashes(path: Path) -> None:
+    (path / "SHA256SUMS").write_text(
+        "".join(
+            f"{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.name}\n"
+            for file in sorted(path.iterdir())
+            if file.name != "SHA256SUMS"
+        )
+    )
+
+
 def assets(path: Path) -> Path:
     path.mkdir()
     manifest = {
@@ -126,13 +139,95 @@ def assets(path: Path) -> Path:
     (path / "release.json").write_text(json.dumps(manifest))
     for name in ["SVC-0.1.0-macos-arm64.zip", "svc-17.0.0.whl", "INSTALL.md"]:
         (path / name).write_text(name)
-    (path / "SHA256SUMS").write_text(
-        "".join(
-            f"{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.name}\n"
-            for file in sorted(path.iterdir())
-        )
-    )
+    write_asset_hashes(path)
     return path
+
+
+@pytest.fixture
+def packaged_release(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    (tmp_path / "macos").mkdir()
+    (tmp_path / "macos/VERSION").write_text("1.0.0\n")
+    (tmp_path / "macos/INSTALL.md").write_text("安装说明\n")
+    (tmp_path / "cli").mkdir()
+    (tmp_path / "cli/pyproject.toml").write_text('[project]\nversion = "1!1.0.0"\n')
+    monkeypatch.setattr(app, "ROOT", tmp_path)
+
+    def build(profile: str, path: Path) -> Path:
+        assert profile == "release"
+        result = bundle(path / "SVC.app")
+        info = app.bundle_info(result)
+        info.update(SVCSourceRevision=SHA, CFBundleVersion="100")
+        (result / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
+        return result
+
+    def build_wheel(path: Path) -> Path:
+        path.mkdir()
+        wheel = path / EPOCH_WHEEL
+        wheel.write_bytes(b"original wheel bytes")
+        return wheel
+
+    def run(*args: str, capture: bool = False) -> str:
+        if args[0] == "git" and capture:
+            return "1764151200"
+        assert args[0] == "/usr/bin/ditto"
+        Path(args[-1]).write_bytes(b"app ZIP")
+        return ""
+
+    monkeypatch.setattr(app, "build", build)
+    monkeypatch.setattr(app, "build_wheel", build_wheel)
+    monkeypatch.setattr(app, "run", run)
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "1764151200")
+    directory = tmp_path / "assets"
+    app.archive(directory, require_clean=False)
+    return directory
+
+
+def test_packaged_release_keeps_original_epoch_wheel(packaged_release: Path) -> None:
+    manifest = json.loads((packaged_release / "release.json").read_text())
+    assert manifest["version"] == "1.0.0"
+    assert manifest["cli_version"] == "1!1.0.0"
+    assert manifest["cli_wheel"] == EPOCH_WHEEL
+    assert manifest["cli_archive"] == "SVC-CLI.zip"
+    with ZipFile(packaged_release / "SVC-CLI.zip") as archive:
+        assert archive.namelist() == [EPOCH_WHEEL]
+        assert archive.read(EPOCH_WHEEL) == b"original wheel bytes"
+    hashes = release.verified_assets(packaged_release, SHA)
+    assert "SVC-CLI.zip" in hashes
+    assert EPOCH_WHEEL not in hashes
+
+
+@pytest.mark.parametrize("members", [[f"nested/{EPOCH_WHEEL}"], [EPOCH_WHEEL, "extra"]])
+def test_release_rejects_incorrect_cli_zip_members(
+    packaged_release: Path, members: list[str]
+) -> None:
+    with ZipFile(packaged_release / "SVC-CLI.zip", "w") as archive:
+        for member in members:
+            archive.writestr(member, b"wrong content")
+    write_asset_hashes(packaged_release)
+    with pytest.raises(ValueError, match="完整包含一个声明的 wheel"):
+        release.verified_assets(packaged_release, SHA)
+
+
+def test_release_rejects_incorrect_cli_zip_digest_and_structure(
+    packaged_release: Path,
+) -> None:
+    (packaged_release / "SVC-CLI.zip").write_bytes(b"invalid ZIP")
+    with pytest.raises(ValueError, match="附件摘要不匹配：SVC-CLI.zip"):
+        release.verified_assets(packaged_release, SHA)
+    write_asset_hashes(packaged_release)
+    with pytest.raises(ValueError, match="ZIP 已损坏"):
+        release.verified_assets(packaged_release, SHA)
+
+
+def test_release_rejects_epoch_wheel_attachments_without_zip(tmp_path: Path) -> None:
+    directory = assets(tmp_path / "assets")
+    manifest_path = directory / "release.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["cli_version"] = "1!1.0.0"
+    manifest_path.write_text(json.dumps(manifest))
+    write_asset_hashes(directory)
+    with pytest.raises(ValueError, match="必须使用 ZIP 附件"):
+        release.verified_assets(directory, SHA)
 
 
 def test_unreleased_source_can_be_checked_but_not_published(
@@ -285,3 +380,27 @@ def test_release_lookup_distinguishes_absence_from_access_failure(
     else:
         with pytest.raises(subprocess.CalledProcessError):
             release.find_release("owner/repo", "macos-v0.1.0")
+
+
+def test_unreleased_macos_notes_cannot_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        release, "validate_tag", lambda *_: pytest.fail("unexpected remote lookup")
+    )
+    directory = assets(tmp_path / "assets")
+    notes = tmp_path / "CHANGELOG.md"
+    notes.write_text("## [0.1.0] - 未发布\n")
+    with pytest.raises(ValueError, match="发布日期"):
+        release.publish("example/svc", directory, SHA, notes)
+
+
+def test_macos_date_probe_allows_development_without_a_release_section(tmp_path: Path):
+    notes = tmp_path / "MACOS_CHANGELOG.md"
+    notes.write_text("## [0.1.0] - 2026-10-26\n")
+    command = [sys.executable, "-m", "tools.release_notes", str(notes)]
+    assert subprocess.check_output([*command, "0.2.0", "--date-only"], text=True) == ""
+    assert (
+        subprocess.check_output([*command, "0.1.0", "--date-only"], text=True).strip()
+        == "2026-10-26"
+    )

@@ -14,7 +14,7 @@ from svc_cli.telemetry.evidence_v4 import (
     validate_evidence_v4,
     write_evidence_v4_stream,
 )
-from svc_cli.telemetry.trajectory import canonical_json_bytes
+from svc_cli.telemetry.trajectory_v2 import canonical_json_bytes
 from svc_cli.telemetry.trajectory_v2 import (
     Coverage,
     ExecutionRecord,

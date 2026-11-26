@@ -4,6 +4,7 @@ Current cross-unit contracts are:
 
 - [shared execution](execution.md)
 - [macOS App 与 CLI](macos-client.md)
+- [macOS 项目终端环境](macos-execution-environment.md)
 - [主机压力与受管执行](activity.md)
 - [Double boundary harness](double.md)
 - [Agent evidence query/read](agent-analysis.md)

@@ -17,6 +17,7 @@ from .plans import (
     make_write,
     sha256_bytes,
 )
+from .skills import DEFAULT_SKILLS
 
 
 _BEGIN = "<!-- svc:begin adoption"
@@ -25,14 +26,6 @@ _BLOCK = re.compile(
     r"<!-- svc:begin adoption sha256=([0-9a-f]{64}) -->\n(.*?)\n"
     r"<!-- svc:end adoption -->(?:\n)?",
     re.DOTALL,
-)
-_SKILL_NAMES = (
-    "svc-task-packet",
-    "svc-workflow",
-    "svc-verification",
-    "svc-agent-collaboration",
-    "svc-specs",
-    "svc-taste",
 )
 
 
@@ -47,7 +40,7 @@ class AdoptionPlan:
 
 def _entry_snapshot(root: Path) -> tuple[tuple[str, str], ...]:
     entries = []
-    for name in _SKILL_NAMES:
+    for name in DEFAULT_SKILLS:
         entry = root / name / "SKILL.md"
         if not entry.exists():
             continue
@@ -74,7 +67,7 @@ def _entry_snapshot(root: Path) -> tuple[tuple[str, str], ...]:
     if not any(name == "svc-task-packet" for name, _ in entries):
         raise SvcError(
             "task-packet-unavailable",
-            "Full SVC project adoption requires an available svc-task-packet entry.",
+            "SVC project adoption requires an available svc-task-packet entry.",
             {"path": str(root)},
         )
     return tuple(entries)
@@ -88,7 +81,7 @@ def _body(repo: Path, root: Path, snapshot: tuple[tuple[str, str], ...]) -> str:
         "",
         "For every non-trivial task, first recover its existing Task Packet or create the smallest actual `packet.md` in the project's task location. Keep the objective, authorization, current facts, next action, and completion verification recoverable. Skill invocations and child assignments do not create competing tasks or packets.",
         "",
-        "Load `svc-task-packet` for that rule, then only the additional Skill whose description matches the current pressure. Required resources stay inside each Skill; optional routes to other Skills do not require them to be installed. Project instructions and local conventions remain authoritative.",
+        "Load `svc-task-packet` for that rule. For every non-trivial task, also read and use `svc-workflow` and `svc-specs` when those entries are available. Load the other installed Skills as needed for the task. Project instructions and local conventions remain authoritative.",
         "",
         "Available entries at adoption planning time:",
         "",

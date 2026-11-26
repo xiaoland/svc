@@ -10,7 +10,9 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+from svc_cli import DISTRIBUTION_NAME
 from svc_cli.output_schema import OUTPUT_SCHEMA_KEYS, generate_output_schema
+from tools.cli_release import CLI_EPOCH, cli_release_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,12 +51,8 @@ def build(*, check: bool) -> list[str]:
 def _package_version() -> tuple[int, int, int]:
     raw = (ROOT / "cli/pyproject.toml").read_bytes()
     version = tomllib.loads(raw.decode())["project"].get("version")
-    if not isinstance(version, str):
-        raise ValueError("package version is not static")
-    parts = version.split(".")
-    if len(parts) != 3 or any(not part.isdigit() for part in parts):
-        raise ValueError(f"invalid package version: {version}")
-    return int(parts[0]), int(parts[1]), int(parts[2])
+    major, minor, patch = map(int, cli_release_version(version).split("."))
+    return major, minor, patch
 
 
 def _schema_at_ref(ref: str, key: str) -> dict[str, object] | None:
@@ -72,7 +70,7 @@ def _schema_at_ref(ref: str, key: str) -> dict[str, object] | None:
 
 def _latest_cli_release() -> tuple[str, tuple[int, int, int]] | None:
     tags = subprocess.run(
-        ("git", "tag", "--list", "v[0-9]*", "cli-v[0-9]*", "macos-v[0-9]*"),
+        ("git", "tag", "--list", "svc-cli-v[0-9]*", "macos-v[0-9]*"),
         cwd=ROOT,
         capture_output=True,
         check=True,
@@ -81,7 +79,7 @@ def _latest_cli_release() -> tuple[str, tuple[int, int, int]] | None:
     releases = []
     for tag in tags:
         match = re.fullmatch(
-            r"(?:cli-)?v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag
+            r"svc-cli-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag
         )
         if match:
             releases.append((tag, (int(match[1]), int(match[2]), int(match[3]))))
@@ -89,11 +87,14 @@ def _latest_cli_release() -> tuple[str, tuple[int, int, int]] | None:
             package = subprocess.check_output(
                 ("git", "show", f"{tag}:cli/pyproject.toml"), cwd=ROOT, text=True
             )
-            version = tomllib.loads(package)["project"]["version"]
-            parts = tuple(int(part) for part in version.split("."))
-            if len(parts) != 3:
-                raise ValueError(f"Invalid bundled CLI version at {tag}")
-            releases.append((tag, (parts[0], parts[1], parts[2])))
+            project = tomllib.loads(package)["project"]
+            if project.get("name") != DISTRIBUTION_NAME:
+                continue
+            version = project["version"]
+            if not isinstance(version, str) or not version.startswith(CLI_EPOCH):
+                continue
+            major, minor, patch = map(int, cli_release_version(version).split("."))
+            releases.append((tag, (major, minor, patch)))
     return max(releases, key=lambda release: release[1]) if releases else None
 
 
