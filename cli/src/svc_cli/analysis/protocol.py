@@ -5,11 +5,9 @@ from __future__ import annotations
 import base64
 import json
 from types import MappingProxyType
-from typing import Any, Mapping, Never
+from typing import Any, Mapping
 
-from pydantic import BaseModel, ConfigDict, ValidationError
-
-ANALYSIS_CONTRACT_VERSION = 2
+from pydantic import BaseModel, ConfigDict
 
 
 class AnalysisProtocolError(ValueError):
@@ -42,59 +40,6 @@ class AnalysisModel(BaseModel):
     """Strict immutable base for every typed analysis boundary object."""
 
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
-
-
-class EvidenceRef(AnalysisModel):
-    """Stable reference into one validated evidence snapshot."""
-
-    evidence_id: str
-    record_kind: str
-    record_id: str
-
-    def require_scope(
-        self,
-        evidence_id: str,
-        *,
-        expected_kind: str | None = None,
-    ) -> None:
-        if self.evidence_id != evidence_id:
-            raise AnalysisProtocolError(
-                "reference-scope-mismatch",
-                "Evidence reference belongs to a different evidence snapshot.",
-            )
-        if expected_kind is not None and self.record_kind != expected_kind:
-            raise AnalysisProtocolError(
-                "reference-kind-mismatch",
-                f"Evidence reference must identify a {expected_kind} record.",
-            )
-
-
-def adapt_validation_error(
-    error: ValidationError,
-    *,
-    code: str,
-    message: str,
-) -> Never:
-    """Hide Pydantic diagnostics behind the stable analysis error family."""
-
-    raise AnalysisProtocolError(code, message) from error
-
-
-def evidence_ref(
-    evidence_id: str,
-    record_kind: str,
-    record_id: str,
-) -> dict[str, str]:
-    reference = EvidenceRef(
-        evidence_id=evidence_id,
-        record_kind=record_kind,
-        record_id=record_id,
-    )
-    return {
-        "evidence_id": reference.evidence_id,
-        "record_kind": reference.record_kind,
-        "record_id": reference.record_id,
-    }
 
 
 def encode_cursor(payload: BaseModel | Mapping[str, object]) -> str:
@@ -158,12 +103,8 @@ def decode_cursor(value: object) -> dict[str, Any]:
 
 
 __all__ = [
-    "ANALYSIS_CONTRACT_VERSION",
     "AnalysisModel",
     "AnalysisProtocolError",
-    "EvidenceRef",
-    "adapt_validation_error",
     "decode_cursor",
     "encode_cursor",
-    "evidence_ref",
 ]

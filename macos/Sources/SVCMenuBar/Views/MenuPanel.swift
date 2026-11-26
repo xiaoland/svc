@@ -39,15 +39,15 @@ struct MenuPanel: View {
             }
             .buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 12)
             Divider()
-            if store.activity.cliUnavailable || (store.configuration.environmentMode == .fixedPath && store.configuration.resolvedExecutable == nil) {
+            if store.needsCLISetup {
                 HStack {
                     Label("需要配置 SVC CLI", systemImage: "exclamationmark.circle")
                     Spacer()
                     Button("打开主窗口", action: openMainWindow)
                 }.font(.caption).padding(12)
-                Divider()
+            } else {
+                HostPressureView(activity: store.activity)
             }
-            HostPressureView(activity: store.activity)
             Picker("页面", selection: $selectedTab) {
                 Text("资源").tag(0)
                 Text("执行").tag(1)

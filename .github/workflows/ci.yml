@@ -27,6 +27,12 @@ jobs:
           cache: true
       - run: pdm lock --check
       - run: pdm install --frozen-lockfile -d -G quality -G test -G double
+      - name: Check release intent against main
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          BRANCH: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref || 'fork' }}
+        run: python -m tools.release_pr check --base "$BASE" --pr-branch "$BRANCH"
       - name: Check repository contract
         env:
           SVC_BASE_REF: ${{ github.event.pull_request.base.sha || (github.event.created && github.sha) || github.event.before || github.sha }}

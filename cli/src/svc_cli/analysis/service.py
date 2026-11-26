@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..telemetry.evidence import EvidenceError
-from ..telemetry.evidence_v4 import validate_evidence_v4
+from ..telemetry.evidence_v4 import EvidenceError, validate_evidence_v4
 from .protocol import AnalysisProtocolError
 from .query_v3 import query_evidence_v3
 from .read_v3 import read_evidence_v3

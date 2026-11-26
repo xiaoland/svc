@@ -13,7 +13,7 @@ import os
 import re
 import urllib.request
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, Mapping, Sequence
 from urllib.parse import unquote, urljoin, urlsplit
@@ -34,10 +34,9 @@ from .plans import (
 
 REPOSITORY = "https://github.com/xiaoland/svc"
 RELEASE_API = "https://api.github.com/repos/xiaoland/svc/releases"
-RELEASE_DOWNLOAD = "https://github.com/xiaoland/svc/releases/download/corpus-v{version}/svc-corpus-{version}.zip"
-CHECKSUM_DOWNLOAD = RELEASE_DOWNLOAD + ".sha256"
-CATALOG_DOWNLOAD = "https://github.com/xiaoland/svc/releases/download/corpus-v{version}/svc-skills-{version}.json"
-MANIFEST_SCHEMA_VERSION = 1
+SKILLS_TAG_PREFIX = "skills-v"
+CATALOG_DOWNLOAD = REPOSITORY + "/releases/download/{tag}/svc-skills-{version}.json"
+SKILLS_CATALOG_SCHEMA_VERSION = 3
 RECORD_SCHEMA_VERSION = 1
 MAX_ARCHIVE_BYTES = 16 * 1024 * 1024
 MAX_MEMBER_BYTES = 4 * 1024 * 1024
@@ -109,6 +108,11 @@ class ReleaseManifest:
     revision: str
     skills: tuple[SkillManifest, ...]
     schema_version: int = 1
+    tag: str | None = None
+
+    @property
+    def release_tag(self) -> str:
+        return self.tag or f"corpus-v{self.version}"
 
 
 @dataclass(frozen=True)
@@ -145,6 +149,7 @@ class SkillRecord:
     archive_sha256: str
     path: str
     files: Mapping[str, str]
+    tag: str | None = None
 
 
 SkillStatus = Literal[
@@ -294,8 +299,8 @@ def _read_catalog(
     if sha256_bytes(raw) != _read_checksum(str(source) + ".sha256", timeout):
         raise SkillArchiveError("Skills catalog checksum does not match")
     manifest = _parse_manifest(raw)
-    if manifest.schema_version != 2:
-        raise SkillArchiveError("Standalone Skill archive requires a schema-2 catalog")
+    if manifest.schema_version == 1:
+        raise SkillArchiveError("Standalone Skill archive requires a release catalog")
     return manifest, raw, str(label)
 
 
@@ -369,25 +374,18 @@ def resolve_release(
     fetch_contents: bool = True,
 ) -> SkillArchive:
     """Resolve one immutable release, fetching only selected Skill bodies."""
-    selected = version or _latest_release_version(timeout)
-    if not _SEMVER.fullmatch(selected):
-        raise SkillArchiveError(f"Invalid release version: {selected!r}")
-    # v15 is the published legacy contract, not a fallback for failed new downloads.
-    if selected == "15.0.0":
-        archive = read_release(
-            RELEASE_DOWNLOAD.format(version=selected), timeout=timeout
-        )
-        if archive.manifest.version != selected:
-            raise SkillArchiveError(
-                "Downloaded release identity does not match requested version"
-            )
-        _select_release_skills(archive.manifest, names)
-        return archive
-    source = CATALOG_DOWNLOAD.format(version=selected)
-    manifest, raw, label = _read_catalog(source, timeout)
-    if manifest.version != selected:
+    selected = version if version is not None else _latest_release_version(timeout)
+    if _stable_semver(selected) is None:
         raise SkillArchiveError(
-            "Downloaded catalog identity does not match requested version"
+            f"Invalid Skills release version: {selected!r}. Use x.y.z for a skills-v "
+            "release or --archive for an earlier Corpus release."
+        )
+    tag = SKILLS_TAG_PREFIX + selected
+    source = CATALOG_DOWNLOAD.format(tag=tag, version=selected)
+    manifest, raw, label = _read_catalog(source, timeout)
+    if manifest.tag != tag:
+        raise SkillArchiveError(
+            f"Downloaded Skills catalog does not identify the requested release {tag}"
         )
     artifacts: dict[str, SkillArchive] = {}
     selected_skills = _select_release_skills(manifest, names)
@@ -404,13 +402,7 @@ def resolve_release(
                 )
         else:
             artifact = SkillArchive(
-                ReleaseManifest(
-                    manifest.version,
-                    manifest.repository,
-                    manifest.revision,
-                    (skill,),
-                    2,
-                ),
+                replace(manifest, skills=(skill,)),
                 {},
                 str(asset_source),
                 skill.archive_sha256 or "",
@@ -418,13 +410,7 @@ def resolve_release(
         artifacts[name] = artifact
         files.update(artifact.files)
     return SkillArchive(
-        ReleaseManifest(
-            manifest.version,
-            manifest.repository,
-            manifest.revision,
-            selected_skills,
-            2,
-        ),
+        replace(manifest, skills=selected_skills),
         files,
         label,
         sha256_bytes(raw),
@@ -490,7 +476,7 @@ def parse_release(
             expected = {"manifest.json"}
         else:
             roots = {PurePosixPath(path).parts[0] for path in members}
-            if catalog.schema_version != 2 or len(roots) != 1:
+            if catalog.schema_version == 1 or len(roots) != 1:
                 raise SkillArchiveError(
                     "Standalone ZIP must contain exactly one Skill directory"
                 )
@@ -502,9 +488,7 @@ def parse_release(
                 raise SkillArchiveError(
                     "Standalone ZIP checksum or Skill identity does not match catalog"
                 )
-            manifest = ReleaseManifest(
-                catalog.version, catalog.repository, catalog.revision, (skill,), 2
-            )
+            manifest = replace(catalog, skills=(skill,))
             expected = set()
         for skill in manifest.skills:
             for relative, digest in skill.files.items():
@@ -612,36 +596,13 @@ def check(
                 skill = archive.skill(name)
             except SkillArchiveError:
                 skill = None
-            if (
-                skill is None
-                or inspection.record is None
-                or inspection.record.version != archive.manifest.version
-                or inspection.record.revision != archive.manifest.revision
-                or dict(inspection.record.files) != dict(skill.files)
-            ):
-                inspection = SkillInspection(
-                    name,
-                    "outdated",
-                    inspection.path,
-                    inspection.version,
-                    inspection.revision,
-                    inspection.files,
-                    "A newer or different release is available",
-                    inspection.record,
-                    archive.manifest.version,
+            if skill is None or not _matches_archive(inspection, skill, archive):
+                inspection = replace(
+                    inspection,
+                    status="outdated",
+                    message="A newer or different release is available",
                 )
-            else:
-                inspection = SkillInspection(
-                    inspection.name,
-                    inspection.status,
-                    inspection.path,
-                    inspection.version,
-                    inspection.revision,
-                    inspection.files,
-                    inspection.message,
-                    inspection.record,
-                    archive.manifest.version,
-                )
+            inspection = replace(inspection, actual_version=archive.manifest.version)
         units.append(inspection)
     return SkillCheck(target, tuple(units))
 
@@ -910,29 +871,13 @@ def _observe_after_failure(
 
 
 def _actualize(inspection: SkillInspection, archive: SkillArchive) -> SkillInspection:
-    if inspection.status != "current" or inspection.record is None:
-        return inspection
     try:
         skill = archive.skill(inspection.name)
     except SkillArchiveError:
         return inspection
-    if (
-        inspection.record.version != archive.manifest.version
-        or inspection.record.revision != archive.manifest.revision
-        or dict(inspection.record.files) != dict(skill.files)
-    ):
+    if not _matches_archive(inspection, skill, archive):
         return inspection
-    return SkillInspection(
-        inspection.name,
-        inspection.status,
-        inspection.path,
-        inspection.version,
-        inspection.revision,
-        inspection.files,
-        inspection.message,
-        inspection.record,
-        archive.manifest.version,
-    )
+    return replace(inspection, actual_version=archive.manifest.version)
 
 
 def _matches_archive(
@@ -943,6 +888,7 @@ def _matches_archive(
         inspection.status == "current"
         and record is not None
         and record.version == archive.manifest.version
+        and record.tag == archive.manifest.tag
         and record.revision == archive.manifest.revision
         and dict(record.files) == dict(skill.files)
     )
@@ -1171,6 +1117,7 @@ def _record_for_archive(
         archive.archive_sha256,
         _skill_path(target, skill.name),
         dict(skill.files),
+        archive.manifest.tag,
     )
 
 
@@ -1182,6 +1129,7 @@ def _record_bytes(record: SkillRecord) -> bytes:
             "host": record.host,
             "scope": record.scope,
             "version": record.version,
+            **({"tag": record.tag} if record.tag is not None else {}),
             "source": record.source,
             "repository": record.repository,
             "revision": record.revision,
@@ -1220,6 +1168,12 @@ def _read_record(
             value["version"]
         ):
             raise ValueError("invalid record version")
+        tag = value.get("tag")
+        if "tag" in value and (
+            _stable_semver(value["version"]) is None
+            or tag != SKILLS_TAG_PREFIX + value["version"]
+        ):
+            raise ValueError("invalid record release tag")
         if not isinstance(value.get("source"), str) or not value["source"]:
             raise ValueError("invalid record source location")
         if value.get("repository") != REPOSITORY or not _REVISION.fullmatch(
@@ -1244,6 +1198,7 @@ def _read_record(
             value["archive_sha256"],
             path_value,
             dict(files),
+            tag,
         ), None
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as error:
         return None, str(error)
@@ -1315,17 +1270,22 @@ def _parse_manifest(raw: bytes) -> ReleaseManifest:
         )
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
         raise SkillArchiveError("manifest.json is not valid UTF-8 JSON") from error
+    if not isinstance(value, dict):
+        raise SkillArchiveError("Unsupported Skills release manifest schema")
+    schema_version = value.get("schema_version")
+    fields = {"schema_version", "version", "repository", "revision", "skills"}
+    if schema_version == SKILLS_CATALOG_SCHEMA_VERSION:
+        fields.add("tag")
     if (
-        not isinstance(value, dict)
-        or set(value)
-        != {"schema_version", "version", "repository", "revision", "skills"}
-        or value.get("schema_version") not in {1, 2}
+        type(schema_version) is not int
+        or schema_version not in (1, 2, SKILLS_CATALOG_SCHEMA_VERSION)
+        or value.keys() != fields
     ):
         raise SkillArchiveError("Unsupported Skills release manifest schema")
     version, repository, revision, entries = (
         value.get(key) for key in ("version", "repository", "revision", "skills")
     )
-    parsed_version = _stable_semver(version) if isinstance(version, str) else None
+    parsed_version = _SEMVER.fullmatch(version) if isinstance(version, str) else None
     if (
         not isinstance(version, str)
         or parsed_version is None
@@ -1336,12 +1296,20 @@ def _parse_manifest(raw: bytes) -> ReleaseManifest:
         or not entries
     ):
         raise SkillArchiveError("Invalid Skills release identity")
-    schema_version = value["schema_version"]
-    if parsed_version[0] >= 17 and schema_version == 1:
+    tag = value.get("tag")
+    is_current_line = schema_version == SKILLS_CATALOG_SCHEMA_VERSION
+    if is_current_line and (
+        _stable_semver(version) is None or tag != SKILLS_TAG_PREFIX + version
+    ):
+        raise SkillArchiveError("Skills release tag does not match its version")
+    legacy_major = int(parsed_version.group(1))
+    if schema_version == 1 and legacy_major >= 17:
         raise SkillArchiveError(
             f"Skills release {version} requires a standalone catalog"
         )
-    expected_names = set(DEFAULT_SKILLS if parsed_version[0] >= 17 else LEGACY_SKILLS)
+    expected_names = set(
+        DEFAULT_SKILLS if is_current_line or legacy_major >= 17 else LEGACY_SKILLS
+    )
     skills: list[SkillManifest] = []
     seen: set[str] = set()
     for entry in entries:
@@ -1368,7 +1336,7 @@ def _parse_manifest(raw: bytes) -> ReleaseManifest:
             _validate_files(files)
         except ValueError as error:
             raise SkillArchiveError(str(error)) from error
-        if schema_version == 2 and (
+        if schema_version != 1 and (
             entry["archive"] != f"{name}-{version}.zip"
             or not isinstance(entry["archive_sha256"], str)
             or not _SHA256.fullmatch(entry["archive_sha256"])
@@ -1389,7 +1357,9 @@ def _parse_manifest(raw: bytes) -> ReleaseManifest:
         raise SkillArchiveError(
             f"Skills release {version} must describe exactly its SVC Skill set"
         )
-    return ReleaseManifest(version, repository, revision, tuple(skills), schema_version)
+    return ReleaseManifest(
+        version, repository, revision, tuple(skills), schema_version, tag
+    )
 
 
 _MARKDOWN_LINK = re.compile(r'\[[^\]\n]+\]\((?:<([^>\n]+)>|([^\s)]+))(?:\s+"[^"]*")?\)')
@@ -1594,9 +1564,9 @@ def _latest_release_version(timeout: float) -> str:
             ):
                 continue
             tag = entry.get("tag_name")
-            if not isinstance(tag, str) or not tag.startswith("corpus-v"):
+            if not isinstance(tag, str) or not tag.startswith(SKILLS_TAG_PREFIX):
                 continue
-            version = tag.removeprefix("corpus-v")
+            version = tag.removeprefix(SKILLS_TAG_PREFIX)
             parsed = _stable_semver(version)
             if parsed is not None:
                 candidates.append((parsed, version))
@@ -1604,12 +1574,12 @@ def _latest_release_version(timeout: float) -> str:
             break
     if candidates:
         return max(candidates)[1]
-    raise SkillArchiveError("No stable corpus Skills release is available")
+    raise SkillArchiveError("No stable skills-v release is available")
 
 
 def _stable_semver(value: str) -> tuple[int, int, int] | None:
     match = _SEMVER.fullmatch(value)
-    if match is None:
+    if match is None or "+" in value:
         return None
     return (
         int(match.group(1)),

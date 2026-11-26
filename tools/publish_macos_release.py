@@ -10,9 +10,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
+from zipfile import BadZipFile, ZipFile
 
-from tools.macos_app import CLI_RESULT_SCHEMAS
-from tools.release_notes import release_section
+from tools.macos_app import CLI_ARCHIVE_NAME, CLI_RESULT_SCHEMAS
+from tools.release_notes import publication_date, release_section
 
 
 def gh(*args: str) -> str:
@@ -39,7 +40,11 @@ def verified_assets(directory: Path, revision: str) -> dict[str, str]:
     manifest = json.loads((directory / "release.json").read_text())
     if manifest.get("cli_result_schemas") != CLI_RESULT_SCHEMAS:
         raise ValueError("配套 CLI schema 清单不匹配")
-    if re.fullmatch(r"\d+\.\d+\.\d+", manifest.get("cli_version", "")) is None:
+    cli_version = manifest.get("cli_version")
+    if (
+        not isinstance(cli_version, str)
+        or re.fullmatch(r"(?:[1-9]\d*!)?\d+\.\d+\.\d+", cli_version) is None
+    ):
         raise ValueError("配套 CLI 版本无效")
     if manifest["revision"] != revision:
         raise ValueError("发布制品与目标 commit 不一致，或来自脏工作区")
@@ -60,9 +65,16 @@ def verified_assets(directory: Path, revision: str) -> dict[str, str]:
         if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise ValueError(f"附件摘要不匹配：{name}")
         hashes[name] = digest
+    cli_asset = manifest["cli_wheel"]
+    if "cli_archive" in manifest:
+        cli_asset = manifest["cli_archive"]
+        if cli_asset != CLI_ARCHIVE_NAME:
+            raise ValueError("配套 CLI ZIP 文件名无效")
+    elif "!" in cli_version:
+        raise ValueError("含 epoch 的配套 CLI 必须使用 ZIP 附件")
     expected = {
         f"SVC-{manifest['version']}-macos-{manifest['architecture']}.zip",
-        manifest["cli_wheel"],
+        cli_asset,
         "release.json",
         "INSTALL.md",
     }
@@ -70,6 +82,23 @@ def verified_assets(directory: Path, revision: str) -> dict[str, str]:
         "SHA256SUMS"
     }:
         raise ValueError("附件缺失或存在未声明的附件")
+    if "cli_archive" in manifest:
+        wheel_name = manifest["cli_wheel"]
+        if (
+            not isinstance(wheel_name, str)
+            or re.fullmatch(
+                rf"[A-Za-z0-9_]+-{re.escape(cli_version)}-[A-Za-z0-9_.-]+\.whl",
+                wheel_name,
+            )
+            is None
+        ):
+            raise ValueError("配套 CLI wheel 文件名与版本不一致")
+        try:
+            with ZipFile(directory / cli_asset) as archive:
+                if archive.namelist() != [wheel_name] or archive.testzip() is not None:
+                    raise ValueError("配套 CLI ZIP 必须完整包含一个声明的 wheel")
+        except BadZipFile as error:
+            raise ValueError("配套 CLI ZIP 已损坏") from error
     hashes["SHA256SUMS"] = hashlib.sha256(
         (directory / "SHA256SUMS").read_bytes()
     ).hexdigest()
@@ -112,6 +141,8 @@ def publish(repo: str, directory: Path, revision: str, changelog: Path) -> None:
     version = manifest["version"]
     tag = f"macos-v{version}"
     notes = release_section(changelog.read_text(), version)
+    if publication_date(notes) is None:
+        raise ValueError("macOS 版本记录须先填写发布日期")
     validate_tag(repo, tag, revision)
     release = find_release(repo, tag)
     with tempfile.TemporaryDirectory(prefix="svc-release-") as temporary:

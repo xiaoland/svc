@@ -8,12 +8,17 @@ import json
 import os
 import subprocess
 import tarfile
-import tomllib
 from pathlib import Path
 
 from tools.build_corpus_archive import validate_artifacts
 from tools.check_skills import SKILL_NAMES, check as check_skills, skill_metadata
-from tools.corpus import read_corpus_version, require_version
+from tools.corpus import (
+    LEGACY_CORPUS_TAG_PREFIX,
+    CorpusRelease,
+    parse_corpus_release,
+    read_corpus_release,
+    require_version,
+)
 
 
 def _current_snapshot(corpus_root: Path) -> dict[str, bytes]:
@@ -50,21 +55,7 @@ def _git_snapshot(root: Path, ref: str) -> dict[str, bytes]:
     return snapshot
 
 
-def _version_from_old_pyproject(content: bytes) -> str | None:
-    try:
-        value = tomllib.loads(content.decode("utf-8"))
-        return require_version(value["tool"]["svc"]["corpus"]["version"])
-    except (
-        KeyError,
-        TypeError,
-        UnicodeDecodeError,
-        tomllib.TOMLDecodeError,
-        ValueError,
-    ):
-        return None
-
-
-def _version_at_ref(root: Path, ref: str) -> str:
+def _release_at_ref(root: Path, ref: str) -> CorpusRelease:
     pyproject = subprocess.run(
         ("git", "show", f"{ref}:pyproject.toml"),
         cwd=root,
@@ -72,9 +63,12 @@ def _version_at_ref(root: Path, ref: str) -> str:
         capture_output=True,
     )
     if pyproject.returncode == 0:
-        version = _version_from_old_pyproject(pyproject.stdout)
-        if version is not None:
-            return version
+        try:
+            return parse_corpus_release(
+                pyproject.stdout.decode("utf-8"), allow_legacy=True
+            )
+        except ValueError:
+            pass
     for path in ("corpus/version.json", "src/version.json"):
         legacy = subprocess.run(
             ("git", "show", f"{ref}:{path}"),
@@ -88,7 +82,7 @@ def _version_at_ref(root: Path, ref: str) -> str:
         if isinstance(value, dict):
             version = value.get("corpus_version")
             if isinstance(version, str):
-                return require_version(version)
+                return CorpusRelease(require_version(version), LEGACY_CORPUS_TAG_PREFIX)
             releases = value.get("releases")
             if (
                 isinstance(releases, list)
@@ -97,7 +91,9 @@ def _version_at_ref(root: Path, ref: str) -> str:
             ):
                 version = releases[-1].get("version")
                 if isinstance(version, str):
-                    return require_version(version)
+                    return CorpusRelease(
+                        require_version(version), LEGACY_CORPUS_TAG_PREFIX
+                    )
         raise ValueError(f"Cannot read Corpus version from {ref}:{path}")
     raise ValueError(f"Cannot read Corpus version from {ref}")
 
@@ -113,7 +109,8 @@ def check(
     version_path = root / "corpus" / "version.json"
     if version_path.exists():
         raise ValueError("corpus/version.json is obsolete; use pyproject.toml")
-    version = read_corpus_version(root / "pyproject.toml")
+    release = read_corpus_release(root / "pyproject.toml")
+    version = release.version
     check_skills(root / "corpus", root / "LICENSE", root / "cli" / "LICENSE")
     for name in sorted(SKILL_NAMES):
         metadata = skill_metadata(root / "corpus" / name / "SKILL.md")
@@ -121,26 +118,35 @@ def check(
             raise ValueError(
                 f"{name}: metadata.version {metadata['metadata']!r} does not match {version!r}"
             )
-    if compare_ref is not None:
-        old_version = _version_at_ref(root, compare_ref)
-        current_snapshot = _current_snapshot(root / "corpus")
-        changed = _git_snapshot(root, compare_ref) != current_snapshot
-        published = subprocess.run(
-            ("git", "tag", "--list", f"v{version}", f"corpus-v{version}"),
+    published_ref = f"refs/tags/{release.tag}"
+    published = (
+        subprocess.run(
+            ("git", "show-ref", "--verify", "--quiet", published_ref),
             cwd=root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.splitlines()
-        if (
-            _version_key(version) < _version_key(old_version)
-            or (not changed and version != old_version)
-            or any(_git_snapshot(root, tag) != current_snapshot for tag in published)
+            check=False,
+        ).returncode
+        == 0
+    )
+    if published or compare_ref is not None:
+        current_snapshot = _current_snapshot(root / "corpus")
+    if published and (
+        _release_at_ref(root, published_ref) != release
+        or _git_snapshot(root, published_ref) != current_snapshot
+    ):
+        raise ValueError(f"Published Corpus release is immutable: {release.tag}")
+    if compare_ref is not None:
+        previous = _release_at_ref(root, compare_ref)
+        if previous.tag_prefix == release.tag_prefix and (
+            _version_key(version) < _version_key(previous.version)
+            or (
+                version != previous.version
+                and _git_snapshot(root, compare_ref) == current_snapshot
+            )
         ):
             raise ValueError(
                 "Corpus version must not regress; source changes need a new version "
                 "after publication, while an unpublished version may keep evolving: "
-                f"{old_version} -> {version}"
+                f"{previous.tag} -> {release.tag}"
             )
     if artifacts is not None:
         validate_artifacts(root, artifacts)

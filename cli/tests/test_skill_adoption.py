@@ -125,3 +125,17 @@ def test_adoption_refreshes_legacy_pointer_and_preserves_outside_content(
     assert (
         plan_adoption(tmp_path, agent=agent, skills_root=skills).local.status == "noop"
     )
+
+
+def test_adoption_surfaces_writing_and_core_guidance(tmp_path: Path) -> None:
+    skills = tmp_path / "skills"
+    for name in ("svc-task-packet", "svc-workflow", "svc-specs", "svc-writing"):
+        entry(skills, name)
+
+    plan = plan_adoption(tmp_path, agent="codex", skills_root=skills)
+    assert "svc-writing" in plan.entries
+    assert apply_adoption(plan, plan.local.digest).status == "applied"
+
+    guidance = (tmp_path / "AGENTS.md").read_text()
+    assert "skills/svc-writing/SKILL.md" in guidance
+    assert "also read and use `svc-workflow` and `svc-specs`" in guidance

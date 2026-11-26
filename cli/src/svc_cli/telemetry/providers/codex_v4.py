@@ -61,8 +61,10 @@ def _session_meta(path: Path) -> dict[str, Any] | None:
                     value = json.loads(raw)
                 except (UnicodeDecodeError, json.JSONDecodeError):
                     continue
-                if value.get("type") == "session_meta" and isinstance(
-                    value.get("payload"), dict
+                if (
+                    isinstance(value, dict)
+                    and value.get("type") == "session_meta"
+                    and isinstance(value.get("payload"), dict)
                 ):
                     return value["payload"]
     except OSError:

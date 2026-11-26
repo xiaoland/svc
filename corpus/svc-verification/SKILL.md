@@ -1,7 +1,7 @@
 ---
 name: svc-verification
 description: "Guidance for judging whether results meet requirements and serve user goals, using criteria, evidence, and feedback."
-metadata: {"version": "17.0.0"}
+metadata: {"version": "1.0.0"}
 ---
 
 # Verification

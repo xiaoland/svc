@@ -113,3 +113,25 @@ def test_exec_probe_enforces_its_declared_output_limit() -> None:
         assert result.reason == "output-limit"
         assert result.output_truncated
         assert result.output_bytes == 10
+
+
+def test_missing_probe_reports_which_command_could_not_run(tmp_path: Path) -> None:
+    missing = str(tmp_path / "missing-probe")
+    write_project_config(
+        tmp_path,
+        dev_resources={
+            "api": {
+                "scope": "repository",
+                "observations": {
+                    "ready": {"probe": {"kind": "exec", "argv": [missing]}}
+                },
+            }
+        },
+    )
+    result = catalog(tmp_path, observe=True)
+    observation = result.resources[0].observations[0]
+    assert observation.state == "unknown"
+    assert (
+        observation.error is not None and observation.error.code == "exec-start-failed"
+    )
+    assert missing in observation.error.message

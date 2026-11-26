@@ -101,9 +101,10 @@ def interpolate_dev_value(
 def interpolate_dev_argv(
     argv: Sequence[str], workspace: WorkspaceIdentity, *, target: str
 ) -> tuple[str, ...]:
-    if not argv or any(not isinstance(item, str) or not item for item in argv):
+    if not argv or not argv[0] or any("\0" in item for item in argv):
         raise SvcError(
-            "invalid-dev-argv", "Dev command argv must be a non-empty string array."
+            "invalid-dev-argv",
+            "Dev command argv must have an executable and contain no NUL.",
         )
     return tuple(interpolate_dev_value(item, workspace, target=target) for item in argv)
 

@@ -19,6 +19,20 @@ pdm run svc --help
 
 框架权威源位于 `corpus/`，从 `corpus/index.md` 与各 Skill 入口进入；维护者须遵守 `corpus/AGENTS.md`。CLI workspace member 使用 `cli/src/svc_cli`，测试位于 `cli/tests`。SVC 自身持久的产品、技术与运行时事实位于 `docs/`。CLI 构建和运行均不读取 Corpus，归档不包含框架正文、模板或 catalog。
 
+## 本机试用
+
+先提交待试用的改动。从干净的工作树运行对应的命令，CLI、App 与 Skills 可以分别更新。CLI 安装需要 uv，App 安装需要[本机开发签名](macos/README.md)，Skills 安装只需要 Git 和 Python。
+
+```console
+./script/install_local_cli.sh
+./script/build_and_run.sh --verify
+python3 -m tools.install_local_skills
+```
+
+CLI 脚本归档 Git `HEAD` 的 CLI 源码，按提交保留 wheel，安装到 `${XDG_DATA_HOME:-$HOME/.local/share}/svc/dogfood`。将该目录的 `bin` 放到日常终端的 PATH 前面，并在 App 设置中填入脚本打印的绝对路径。回退 CLI 时从上次验证的提交重跑 CLI 安装，App 回退使用上次验证的源码重装。App 的实际源码 revision 记录在已安装 bundle 的 `SVCSourceRevision`。
+
+Skills 安装器从 Git 提取并校验已提交的 Skill 目录，在 `~/.agents/skills` 建立宿主入口。首次迁移前先对比本机修改，将对应旧目录和 `.svc` 安装记录一起备份到宿主发现范围之外。每次更新后在新会话检查实际读取的 Skill。回退时运行 `python3 -m tools.install_local_skills <上一提交>`。验证公开交付时，在隔离环境构建并安装正式归档。
+
 ## 开发分支与工作树
 
 `develop` 是日常开发和集成分支。主工作树保持检出 `develop`。范围明确的小修或局部更新可以直接在主工作树提交并推送到 `develop`。新功能、跨模块改动或需要并行推进的工作，从当前 `develop` 创建独立分支和工作树，并通过以 `develop` 为基线的 PR 合入。工作树按开发目录的约定建立，合入后清理已结束且无未提交改动的工作树和分支。
@@ -45,7 +59,7 @@ ref(cli): 移除框架内容依赖
 
 ## 声明行为影响
 
-Towncrier 位于 PDM quality dependency group。每项消费者可见的 CLI 或 Corpus 变化向对应产品添加简洁中文片段：
+Towncrier 位于 PDM quality dependency group。每项消费者可见的变化向 CLI、Corpus 或 macOS 对应队列添加简洁中文片段：
 
 ```console
 printf '%s\n' '说明 CLI 变化。' > .changes/cli/123.added.md
@@ -58,47 +72,32 @@ printf '%s\n' '说明 Corpus 变化。' > .changes/corpus/123.added.md
 - `minor`：可选的向后兼容能力，或扩大可接受输入。
 - `patch`：修正或澄清而保持已声明协议行为。
 
-没有消费者可见影响则不添加片段；影响两产品则向两队列各添加片段。功能 PR 不修改生成的 changelog；`CHANGELOG.md` 保留发布流拆分前的共同历史。
+没有消费者可见影响则不添加片段。影响多个产品时分别添加片段。Release PR 消费片段并生成 changelog，`CHANGELOG.md` 保留发布流拆分前的共同历史。
 
-版本相对于最近的已发布版本评估，不能把同一未发布开发线中的每个提交或功能当成一次发布。尚未发布的目标版本可以持续积累变化和片段；例如本轮 v15 同时包含布局拆分、Skills 分发、Verification 与 Agent 协作改进。已发布 tag 对应的版本不能通过后续源码修改重新使用。
+在同一发行线内，相对于最近已发布版本评估 Behavioral SemVer。未发布版本可以继续积累变化和片段。已发布 tag 对应的版本不可复用。
 
-CLI 输出 schema 仍维护自己的结果版本；它要求的 package major 以最近已发布的 `v<version>`、`cli-v<version>` 或包含 CLI wheel 的 `macos-v<version>` 为基线（取 tag 对应 cli/pyproject.toml 的版本），而不是分支中的暂定 package version。Corpus 的 `corpus-v<version>` 不参与 CLI 的 major 判定。
+CLI 输出 schema 仍维护自己的结果版本；它要求的 package major 以现行 CLI 发行项目的 `svc-cli-v<version>` 或随附同一发行项目 wheel 的 `macos-v<version>` 为基线。命令结果版本继续与发行包版本独立管理。
 
 消费者需要版本相关步骤或判断时，在 `corpus/migrations/` 添加 Markdown 指导。它是可选指导，不是通用文件迁移图，也不负责 CLI 配置变换。CLI 配置采用 current-only 合同，schema 5 的人工迁移说明由[用户手册](USER_MANUAL.md)拥有，不加入自动迁移或字段别名。
 
-## 发布边界
+## Release PR
 
-`main` 是唯一发布源。发布 PR 集成已验证的源码和对应发行记录，发布工作流使用合入后的 `main` 提交生成发行物。
+`main` 是唯一发布源。先试用待发变更，将已验收的功能、静态版本和 Towncrier 片段合入 `develop`。从待发布的 `develop` 提交建立同仓库的 `release/<名称>` 分支，以 `main` 为目标。只发布部分产品时，先确认选定源码不会把其它产品的未发布合同暴露给消费者。
 
-维护者在首次发布前配置：
+生成此次发布计划和选定产品的 changelog。以下命令准备三个产品，独立发布可只选需要的产品。
 
-- `main` 只通过 PR 接纳，要求 CI 通过，禁止 force-push/删除，并明确狭窄 bypass 政策。
-- 标准发布 workflow 的 PyPI Trusted Publishing。
-- 禁止更新或删除 workflow 创建的发布 tag。
+```console
+pdm run python -m tools.release_pr prepare --base origin/main skills cli macos
+```
 
-发布顺序如下：
+提交生成的 `.release-plan.json`、changelog 和已消费的片段删除，审阅 Release PR，等 CI 通过后合入 `main`。发布工作流核对合入的 Release PR 和实际提交，并从同一个提交按 Skills、CLI、macOS 的顺序发布所选产品。普通同步 PR 可以推进 `main`，无需提交发布计划。出现失败时按原运行重新执行，发行 tag 与附件绑定原提交。
 
-1. 开发变更进入 `develop` 时，把面向消费者的变更写成对应的 `.changes/` 片段。改变 Corpus 源内容时维护根 `pyproject.toml` 的 `[tool.svc.corpus].version` 与需要的迁移指导：未发布目标可以继续积累变更，已发布版本的源内容变化需要新的目标版本。版本检查需要完整的发行 tags；CI 使用完整 Git 历史，发布比较采用 `v<version>` 与 `corpus-v<version>` 对应的源码。根 `LICENSE` 是 MIT 许可权威源，各 Skill 和 CLI 各带逐字副本。Corpus release PR 合并前运行发布准备命令，把版本元数据和已存在的许可副本同步后与正文一起提交。
-2. 维护者更新 `cli/pyproject.toml` 静态版本，准备 CLI 发布 PR 并生成 changelog：
+- CLI 的 PyPI 项目仍为 `sustainable-vibe-coding`，`cli/pyproject.toml` 使用 `1!<version>`。Release PR、changelog 和 `svc-cli-v<version>` 使用后面的 SemVer。沿用仓库 `xiaoland/svc`、workflow `publish.yml` 与环境 `release` 的 Trusted Publisher。GitHub 的 Python 下载包以 ZIP 保留 wheel 和 sdist 的原始文件名。
+- Skills 版本和 tag 前缀见根 `pyproject.toml` 的 `[tool.svc.corpus]`。修改 Skill 版本或许可后，在开发分支运行 `pdm run prepare-corpus-release` 并提交结果。发布器从同一提交构建每个 Skill 的 ZIP、共同清单及校验文件。
+- macOS 版本见 `macos/VERSION`，tag 为 `macos-v<version>`。App 的构建号和源码 revision 记录在发行附件中。
+- 保护 `main` 的 PR 和 CI 检查。旧 `v*`、`cli-v*`、`corpus-v*` 及现行 `svc-cli-v*`、`skills-v*`、`macos-v*` 发行 tag 禁止移动或删除。
 
-   ```console
-   pdm run towncrier build --config towncrier.cli.toml --version 16.0.0 --yes
-   pdm run check
-   ```
-
-   版本须等于 package version。合并 `CLI_CHANGELOG.md` 后，验证并以 `cli-v<version>` 发布接受的 wheel。
-3. Corpus 发布 PR 使用功能变更已接纳的 Corpus 版本并消费其片段：
-
-   ```console
-   pdm run towncrier build --config towncrier.corpus.toml --version 16.0.0 --yes
-   pdm run prepare-corpus-release
-   pdm run check
-   ```
-
-   可先用 `pdm run build-corpus-archive --output-dir /tmp/svc-skills-release` 构建全部附件，再用 `pdm run check-corpus-release --artifacts /tmp/svc-skills-release` 校验。构建要求版本、Skill 元数据和正文已提交且与 HEAD 相符。
-
-   提交并合并包含 `CORPUS_CHANGELOG.md`、各 Skill 元数据和许可副本的 release PR 后，发布 workflow 以同一 commit 创建 `corpus-v<version>`。workflow 只读校验已提交源文件，从 v16 起，每个 Skill 的发布物为 `<skill-name>-<version>.zip` 及各自 `.sha256`，加上 `svc-skills-<version>.json` 与其 `.sha256`；每个 ZIP 仅含 `<skill-name>/` 的完整源码目录，外部 schema-2 catalog 记录共同发布身份、逐文件摘要和各 ZIP 摘要，不再生成整体 Corpus ZIP；CLI wheel 不再携带 Corpus，归档重跑不得覆盖不同内容。
-
+发布后把 `main` 同步回 `develop`，防止已消费的片段或旧发布计划重新进入下一轮。
 
 ## macOS 版本与发布
 
@@ -106,22 +105,13 @@ App 与 CLI 的职责、公开调用和运行时兼容性由 [跨单元合同](d
 
 macOS App 使用独立的 `macos/VERSION` 与 `macos-v<version>` tag。版本遵循 SemVer；首版 `0.1.0` 是 macOS 14+ Apple Silicon 开发预览。构建号由 Git 主线提交计数生成，包和 `release.json` 记录准确 commit；本地未提交源码标记为 `-dirty`，不能发布。
 
-当前未发布的 macOS 开发线使用 `0.2.0`。本机迭代使用构建号和源码 revision 区分安装，功能变化记录在 `.changes/macos/` 的中文 Towncrier 片段中。CLI 继续按自己的兼容性规则管理版本。
+源码版本见 `macos/VERSION`，公开版本见 [macOS 发行记录](MACOS_CHANGELOG.md)。本机迭代使用构建号和源码 revision 区分安装，功能变化记录在 `.changes/macos/` 的中文 Towncrier 片段中。CLI 继续按自己的兼容性规则管理版本。
 
-源码检查和 CI 归档可以使用开发版本；发布器会核对当次版本的发布说明。准备发布时确认 `macos/VERSION`，在仓库根目录生成对应章节：
-
-```console
-mkdir -p .changes/macos
-pdm run towncrier build --config towncrier.macos.toml --version 0.2.0 --yes
-pdm run check
-SVC_TEST_CLI="$PWD/.venv/bin/svc" swift test --package-path macos
-```
-
-版本须等于 `macos/VERSION`。将生成的 `MACOS_CHANGELOG.md` 与版本、实现一起通过 PR 合入 `main`；macOS workflow 先执行仓库检查、后台原生测试和配套 wheel 的真实服务验收，再发布 GitHub prerelease。普通功能合并只验证和归档，只有发布记录变更或在 `main` 手动运行 workflow 才发布。重试同一次失败运行可以继续已校验的草稿；不同 commit、同名不同内容或已发布但缺失附件均会被拒绝，不移动 tag，不覆盖附件。新的发布使用新版本。
+普通 CI 为 App 和配套 CLI 验证原生测试、构建归档及服务验收。Release PR 选中 macOS 后发布 GitHub prerelease。重试同一次失败运行可以继续已校验的草稿。不同提交、同名不同内容或已发布但缺失附件会被拒绝。
 
 macOS runner 使用 PDM 管理的独立 CPython 3.12.10，并在独立进程中验证 HTTPServer 能在 10 秒内构造完成。此选择处理 framework Python 在 macOS 15+ runner 上的 [loopback 反向解析延迟](https://github.com/actions/setup-python/issues/1223)；构建环境的修正不改变 CLI 的业务超时或跳过服务生命周期测试。更换解释器时，须同时保持最终 wheel 验收使用同一解释器来源。
 
-每次发布包含 App ZIP、同一 commit 的 CLI wheel、`INSTALL.md`、`release.json` 和 `SHA256SUMS`。macOS CD 不发布 PyPI；CLI schema 或 package 变化仍遵守 CLI 的版本规则。当前未发布 App 0.2.0 配套 CLI 18.3.0，dev-status 为 schema 4，monitor 为 schema 3，list／act／reconcile／exec／terminate／logs／integrate 为 schema 1。App 版本变化不自动映射为 CLI major；CLI 由用户自行安装和选版，App 安装器不创建私有 CLI 环境；随附 wheel 只是可独立安装的产物。
+每次发布包含 App ZIP、装有同一提交 CLI wheel 的 `SVC-CLI.zip`、`INSTALL.md`、`release.json` 和 `SHA256SUMS`。配套 CLI 的版本及原始 wheel 文件名记录在发行元数据中，接口兼容性由[跨单元合同](docs/product-tdd/macos-client.md#公开调用与兼容性)维护。
 
 公开预览使用 ad-hoc 签名，不含本机路径或私钥，也未经公证，不能承诺通过其他机器的 Gatekeeper。Developer ID 分发与公证需要另行配置有效身份和凭据。当前工作流只需 GitHub 自带的短期 token；本机 Apple Development 私钥不上传到 CI。
 

@@ -1,7 +1,7 @@
 ---
 name: svc-workflow
 description: "Human–Agent collaboration workflows and methods for software exploration, design, planning, implementation, and delivery. Read and use for every non-trivial Task."
-metadata: {"version": "17.0.0"}
+metadata: {"version": "1.0.0"}
 ---
 
 # Software Workflow and Methods

@@ -1,9 +1,13 @@
 import Foundation
 import Observation
 
+enum ControlID: Hashable {
+    case resource(String)
+    case execution(String)
+}
+
 struct ActiveOperation {
-    let command: DevCommand
-    let projectPath: String
+    let projectPath: String?
 }
 
 enum ObservationSurface: Hashable {
@@ -14,22 +18,22 @@ struct ProjectState: Identifiable {
     let path: String
     var snapshot: DevCatalog?
     var checkedAt: Date?
-    var error: String?
+    var error: CLIError?
     var id: String { path }
     var name: String { URL(fileURLWithPath: path).lastPathComponent }
 }
 
 @MainActor @Observable
 final class AppStore {
-    let activity = ActivityStore()
-    typealias Request = @Sendable (CLIConfiguration, DevCommand, String, [String]) async throws -> Data
+    let activity: ActivityStore
+    typealias Request = @Sendable (CLIConfiguration, DevCommand, String?, [String]) async throws -> Data
     private(set) var projects: [ProjectState]
     private(set) var organization = ProjectOrganization()
     private(set) var sectionStorageError: String?
     private(set) var projectReveal: ProjectReveal?
     private(set) var collapsedProjects: Set<String> = []
     private(set) var configuration: CLIConfiguration
-    private(set) var operations: [String: ActiveOperation] = [:]
+    private(set) var operations: [ControlID: ActiveOperation] = [:]
     private(set) var receipts: [String: OperationReceipt] = [:]
     private(set) var refreshes: [String: UUID] = [:]
     private(set) var quitPending = false
@@ -42,26 +46,26 @@ final class AppStore {
     @ObservationIgnored private var quitCompletion: ((Bool) -> Void)?
     @ObservationIgnored var operationCompleted: ((OperationReceipt, String, String) async -> Void)?
 
-    init(preferences: UserDefaults = .standard, request: @escaping Request = { config, command, repo, arguments in
+    nonisolated static let cliRequest: Request = { config, command, repo, arguments in
         try await CLIClient(configuration: config).request(command, repo: repo, arguments: arguments)
-    }) {
+    }
+
+    init(preferences: UserDefaults = .standard, request: @escaping Request = cliRequest) {
+        activity = ActivityStore(request: request)
         self.preferences = preferences
         self.request = request
         projects = (preferences.stringArray(forKey: "projects") ?? []).map { ProjectState(path: $0) }
         let savedCLI = preferences.string(forKey: "cliPath") ?? ""
         let legacyCLI = CLIConfiguration.isLegacyPrivateExecutable(savedCLI)
         if legacyCLI { preferences.removeObject(forKey: "cliPath") }
+        let mode = preferences.string(forKey: "executionEnvironmentMode").flatMap(ExecutionEnvironmentMode.init(rawValue:))
         let savedPath = preferences.string(forKey: "searchPath") ?? CLIConfiguration.defaultSearchPath
-        // Existing PATH preferences may predate mise discovery; explicit CLI choices still win.
-        let shimDirectory = "\(NSHomeDirectory())/.local/share/mise/shims"
-        let searchPath = savedPath.split(separator: ":").contains(Substring(shimDirectory))
-            ? savedPath : "\(shimDirectory):\(savedPath)"
+        let searchPath = mode == nil && savedPath == CLIConfiguration.legacyDefaultSearchPath
+            ? CLIConfiguration.defaultSearchPath : savedPath
         configuration = CLIConfiguration(
             executable: legacyCLI ? "" : savedCLI,
             searchPath: searchPath,
-            environmentMode: preferences.string(forKey: "executionEnvironmentMode")
-                .flatMap(ExecutionEnvironmentMode.init(rawValue:))
-                ?? (searchPath == CLIConfiguration.defaultSearchPath ? .projectShell : .fixedPath)
+            environmentMode: mode ?? (searchPath == CLIConfiguration.defaultSearchPath ? .projectShell : .fixedPath)
         )
         activity.projectRoots = projects.map(\.path)
         if let stored = preferences.object(forKey: "projectSections") {
@@ -78,7 +82,21 @@ final class AppStore {
         }
     }
 
-    var resourceCount: Int { projects.flatMap { $0.snapshot?.resources ?? [] }.count }
+    var missingSharedCLI: Bool {
+        // Project shells can each discover a different executable.
+        (configuration.environmentMode == .fixedPath || !configuration.executable.isEmpty)
+            && configuration.resolvedExecutable == nil
+    }
+
+    var needsCLISetup: Bool { activity.cliUnavailable || missingSharedCLI }
+
+    func projectDiagnostic(_ project: ProjectState) -> String? {
+        guard let error = project.error else { return nil }
+        if error.reason == .executableMissing && missingSharedCLI { return nil }
+        return error.message
+    }
+
+    var resourceCount: Int { projects.reduce(0) { $0 + ($1.snapshot?.resources.count ?? 0) } }
 
     // One owner schedules both surfaces. A cancelled loop retains its slot until
     // its current CLI request finishes, including rapid hide/show transitions.
@@ -222,10 +240,10 @@ final class AppStore {
     private func sourceActivity(_ members: [ProjectState]) -> (running: Bool, attention: Bool) {
         let paths = Set(members.map(\.path))
         let resources = members.flatMap { $0.snapshot?.resources ?? [] }
-        let running = operations.values.contains { paths.contains($0.projectPath) } || resources.contains { resource in
-            resource.coordination.map { operations[$0.coordinationId] != nil } ?? false
+        let running = operations.values.contains { $0.projectPath.map(paths.contains) ?? false } || resources.contains { resource in
+            resource.coordination.map { operations[.resource($0.coordinationId)] != nil } ?? false
         }
-        let attention = members.contains { $0.error != nil }
+        let attention = members.contains { projectDiagnostic($0) != nil }
             || resources.contains { $0.needsReconciliation || $0.error != nil }
             || receipts.values.contains { receipt in
                 paths.contains(receipt.projectPath)
@@ -259,6 +277,7 @@ final class AppStore {
         var selected = value
         selected.environmentRevision = configuration.environmentRevision + 1
         configuration = selected
+        activity.invalidate()
         preferences.set(value.environmentMode.rawValue, forKey: "executionEnvironmentMode")
         preferences.set(value.executable, forKey: "cliPath")
         preferences.set(value.searchPath, forKey: "searchPath")
@@ -311,7 +330,7 @@ final class AppStore {
                   let index = projects.firstIndex(where: { $0.path == path }) else { return }
             projects[index].snapshot = nil
             projects[index].checkedAt = Date()
-            projects[index].error = error.localizedDescription
+            projects[index].error = error as? CLIError ?? CLIError(message: error.localizedDescription)
         }
         if refreshes[path] == generation { refreshes[path] = nil }
     }
@@ -332,8 +351,8 @@ final class AppStore {
     private func execute(_ command: DevCommand, resource: DevResource, project: String,
                          action: String, arguments: [String]) {
         guard !quitPending, let id = resource.coordination?.coordinationId,
-              operations[id] == nil, projects.contains(where: { $0.path == project }) else { return }
-        operations[id] = ActiveOperation(command: command, projectPath: project)
+              operations[.resource(id)] == nil, projects.contains(where: { $0.path == project }) else { return }
+        operations[.resource(id)] = ActiveOperation(projectPath: project)
         invalidateRefreshes()
         let config = configuration
         Task {
@@ -357,14 +376,45 @@ final class AppStore {
             receipts[resource.entryId] = receipt
             let actionTitle = resource.actions.first { $0.key == action }?.intent ?? action
             await operationCompleted?(receipt, resource.label, actionTitle)
-            operations[id] = nil
+            finishControl(.resource(id))
             invalidateRefreshes()
-            if quitPending && operations.isEmpty {
-                quitCompletion?(true)
-                quitCompletion = nil
-            } else {
-                await refreshAll()
+            await refreshAll()
+        }
+    }
+
+    func terminate(_ item: ExecutionItem, force: Bool = false) {
+        let id = ControlID.execution(item.id)
+        guard !quitPending, operations[id] == nil else { return }
+        switch item {
+        case .svc(let execution):
+            guard execution.canTerminate else { return }
+        case .harness(let execution):
+            guard execution.canTerminate, !force else { return }
+        }
+        operations[id] = ActiveOperation(projectPath: item.projectPath)
+        let config = configuration
+        Task {
+            do {
+                let arguments = [item.id, "--by", "human"] + (force ? ["--force"] : [])
+                let data = try await request(config, .terminate, nil, arguments)
+                let receipt = try CLIResponse.decode(TerminationReceipt.self, data: data, command: .terminate)
+                guard receipt.executionId == item.id else {
+                    throw CLIError(message: "CLI 返回了其他执行的终止回执。")
+                }
+                activity.report(receipt.message)
+            } catch {
+                activity.report(error.localizedDescription)
             }
+            finishControl(id)
+            if !quitPending { await activity.refresh(configuration) }
+        }
+    }
+
+    private func finishControl(_ id: ControlID) {
+        operations[id] = nil
+        if quitPending && operations.isEmpty {
+            quitCompletion?(true)
+            quitCompletion = nil
         }
     }
 
